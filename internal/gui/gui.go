@@ -18,6 +18,7 @@ import (
 	"github.com/ushineko/fynedesygn/glance"
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -34,6 +35,20 @@ type Options struct {
 
 	// Title names the window for the taskbar and for a compositor rule.
 	Title string
+
+	// Menu builds the panel's context menu. Nil means no menu, which for a
+	// glance window means no interface at all.
+	Menu func() *fyne.Menu
+
+	// Version is what the preferences window shows in its title.
+	Version string
+
+	// Store is the settings, shared with the preferences window. Nil means a
+	// panel with nothing to follow, which is what a test has.
+	Store *config.Store
+
+	// Preferences opens the preferences window at start as well as the panel.
+	Preferences bool
 }
 
 // Panel is the window and the cards in it.
@@ -73,6 +88,7 @@ func New(a fyne.App, o Options) *Panel {
 		win: glance.NewWindow(a, glance.Options{
 			Title: o.Title,
 			OnTop: true,
+			Menu:  o.Menu,
 		}),
 		cards: map[string]*card{},
 		opts:  o,
@@ -103,6 +119,30 @@ func New(a fyne.App, o Options) *Panel {
 
 // Window is the glance window, for a caller that wants the menu or the icon.
 func (p *Panel) Window() *glance.Window { return p.win }
+
+/*
+Apply brings the window into line with a changed configuration.
+
+Hiding and showing a section is live: a card is drawn when the user allows it
+*and* its source has something to say, and this is the first of those. The
+card's own callback stops the poll, so a cooler section switched off stops
+running liquidctl every five seconds for nobody.
+
+**Reordering is not live.** The design system's panel adds cards and never
+removes or moves one, so the stack's order is fixed when the window is built.
+A reorder therefore takes effect at the next start, which the preferences
+window says. It is in this spec's gaps.
+*/
+func (p *Panel) Apply(c config.Config) {
+	for key, card := range p.cards {
+		card.card.SetAllowed(c.Shows(key))
+	}
+	for _, s := range p.opts.Sources {
+		if b, ok := s.(*panel.Bandwidth); ok {
+			b.SetInterfaces(c.Interfaces)
+		}
+	}
+}
 
 // Draw brings a section's card up to date. It is called on the UI thread.
 //
@@ -284,9 +324,28 @@ func Start(o Options) error {
 	// would have nowhere to put them.
 	drawn := first(ctx, o.Sources)
 
-	p := New(a, o)
+	// The menu needs the panel it changes and the panel needs the menu before
+	// its window exists, so the closure is made first and the pointer filled
+	// in after. It runs on a tap, long after New has returned.
+	var p *Panel
+	var open func()
+	if o.Store != nil {
+		o.Menu, open = MenuWith(a, o.Store, o.Version, func(c config.Config) {
+			if p != nil {
+				p.Apply(c)
+			}
+		})
+	}
+
+	p = New(a, o)
 	for key, ok := range drawn {
 		p.Draw(key, section(o.Sources, key), ok)
+	}
+	if o.Store != nil {
+		p.Apply(o.Store.Config())
+	}
+	if o.Preferences && open != nil {
+		open()
 	}
 	p.Poll(ctx)
 

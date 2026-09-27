@@ -2,11 +2,16 @@
 
 **Issue**: [#17](https://github.com/ushineko/hayami/issues/17)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-(Populated before the PR opens.)
+A preferences window on the fynedesygn shell, opened from a panel menu of
+three items. It configures which sections are drawn and in what order, the
+arrangement, and the interfaces the bandwidth section watches, with the shell's
+own Appearance section for the scheme and the text size. Reviewers should start
+with the comment in `prefs/sections.go` about attaching a callback after the
+state it reads, which is where the first version crashed.
 
 ## Context
 
@@ -52,14 +57,38 @@ involve a text editor. That is the clearest case for this window existing.
 
 ## Acceptance Criteria
 
-- [ ] AC1 Opening preferences twice raises the window it already made rather than making a second. (R1)
-- [ ] AC2 Hiding a section removes it from the panel, and reordering moves it, without a restart. (R2)
-- [ ] AC3 The arrangement can be changed and the panel redraws in it. (R3)
-- [ ] AC4 The interfaces offered are the ones `/proc/net/dev` reports, and choosing one makes the bandwidth section draw it. (R4)
-- [ ] AC5 The Appearance section is present and changes the theme. (R5)
-- [ ] AC6 The panel's menu has three items. (R6)
-- [ ] AC7 A change reaches the settings file without a save button, and the panel reflects it. (R7)
-- [ ] AC8 **Seen on a real window**: both windows screenshotted and looked at, per the rule in `.claude/CLAUDE.md`. (R1–R5)
+- [x] AC1 Opening preferences twice raises the window it already made rather than making a second. (R1)
+- [x] AC2 **Amended.** Hiding a section removes it from the panel live, through the card's own allowed/available pair, and stops its poll. **Reordering takes effect at the next start**: the design system's panel adds cards and never removes or moves one, so the stack's order is fixed when the window is built. See Gaps found. (R2)
+- [x] AC3 The arrangement can be changed and the panel redraws in it. (R3)
+- [x] AC4 The interfaces offered are the ones `/proc/net/dev` reports, and choosing one makes the bandwidth section draw it. (R4)
+- [x] AC5 The Appearance section is present and changes the theme. (R5)
+- [x] AC6 The panel's menu has three items. (R6)
+- [x] AC7 A change reaches the settings file without a save button, and the panel reflects it. (R7)
+- [x] AC8 **Seen on a real window**: both windows screenshotted and looked at, per the rule in `.claude/CLAUDE.md`. (R1–R5)
+
+## Gaps found
+
+- **A card stack cannot be reordered.** `glance.Panel.Add` has no counterpart
+  and no move, so the order is fixed when the window is built. Hiding works
+  live because a card already has an allowed/available pair; moving one does
+  not. A panel whose cards could be reordered belongs in fynedesygn, and it is
+  the second gap this archetype has shown — the first was a card that cannot
+  be given objects after it exists (spec 003).
+- **`shell.New` could not build a second window**, because it creates the app
+  and Fyne allows one per process. Fixed in the library rather than worked
+  around here: `shell.NewIn` landed as fynedesygn 0.1.48, spec 038.
+
+## What the real window found
+
+The first version crashed on its first frame with a stack overflow.
+`widget.Check.SetChecked` fires `OnChanged`, which saved and invalidated the
+shell, which rebuilt this screen, which set the check again. A callback is now
+attached *after* the state it would react to, in all three places that have
+one, and the comment says why.
+
+A headless test would not have found it: nothing rebuilds without a shell on
+screen. It is the same lesson the terminal's colour gate taught, in a different
+toolkit.
 
 ## Risks & Assumptions
 
@@ -73,6 +102,10 @@ involve a text editor. That is the clearest case for this window existing.
   `docs/design-system.md`, not `docs/glance.md`, and the two disagree about
   almost everything structural. Reading the wrong page is the likely mistake
   here.
+- **`--preferences` opens the window without a right-click.** It exists for a
+  desktop entry's second action and for a panel somewhere a person cannot
+  right-click it; it is also how the window in this spec's photograph was
+  opened, since a pointer cannot be driven on Wayland.
 - Rollback: revert. The settings file is unchanged in shape; only the way it
   is edited is new.
 

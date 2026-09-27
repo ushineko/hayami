@@ -72,6 +72,7 @@ repository's `docs/glance.md`.
 
 ```
 hayami                                    # the desktop panel
+hayami --preferences                      # …and its preferences window
 hayami-tui                                # the terminal panel
 hayami-tui --sections bandwidth --arrangement row
 hayami-tui readings                       # the numbers as JSON, no display needed
@@ -128,6 +129,18 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- Preferences, in a window rather than a menu. A fynedesygn shell window —
+  Sections, Bandwidth, Appearance — opened from a panel menu of three items,
+  which is the difference from the program this replaces: its own menu is six
+  nested submenus and is a settings dialog wearing a menu's clothes. Which
+  sections are drawn, in what order, in which arrangement, and which
+  interfaces the bandwidth section watches, all saved as they are changed. The
+  interfaces are listed from the kernel's own table, so nobody has to know
+  that a virtual network is called `wg0` to be able to watch it (spec 007,
+  #17).
+- `hayami --preferences` opens that window as well as the panel, for a desktop
+  entry's second action and for a panel somewhere a person cannot right-click.
 
 - A cooler section: the processor's temperature from hwmon **by label**, and
   the coolant, pump and fan from `liquidctl`. The approach is hotaru's — read

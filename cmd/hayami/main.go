@@ -20,7 +20,13 @@ import (
 
 func main() {
 	root := cli.GUI(buildinfo.Version(), func(o cli.Options) error {
-		return gui.Start(gui.Options{Sources: o.Sources(nil), Title: "hayami"})
+		return gui.Start(gui.Options{
+			Sources:     o.Sources(nil),
+			Title:       "hayami",
+			Version:     buildinfo.Version(),
+			Store:       o.Store,
+			Preferences: o.Preferences,
+		})
 	})
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "hayami:", err)

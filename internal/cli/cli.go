@@ -26,6 +26,13 @@ type Options struct {
 	Config      config.Config
 	Arrangement view.Arrangement
 
+	// Store is the settings this run read, kept so the window can hand it to
+	// its preferences and follow a change made there.
+	Store *config.Store
+
+	// Preferences opens the preferences window at start as well as the panel.
+	Preferences bool
+
 	// Unreadable is a settings file that could not be parsed. The panel draws
 	// on defaults and says so rather than refusing to start.
 	Unreadable error
