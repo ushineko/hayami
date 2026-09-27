@@ -17,7 +17,16 @@ import (
 // is what someone glancing at a pane actually wants. It is not decoration, and
 // it is held to the no-jitter rule because it sets the section's width.
 type Meter struct {
-	Label   string
+	// Label, Badge and Window are the three parts of a meter's name, kept
+	// apart because they are three columns and not one string.
+	//
+	// "max M 7d" and "work E spend" as single labels put the badges one
+	// column apart, and an eye scanning down a pane for the plan letter has
+	// to find it again on every line. Padded separately they line up.
+	Label  string
+	Badge  string
+	Window string
+
 	Caption string
 
 	// Reset is when the quota starts again, kept apart from the caption
@@ -49,6 +58,18 @@ const (
 	BarFull  = '━'
 	BarEmpty = '─'
 )
+
+// Name is the three parts as one string, for an arrangement that does not lay
+// them out in columns.
+func (m Meter) Name() string {
+	out := m.Label
+	for _, part := range []string{m.Badge, m.Window} {
+		if part != "" {
+			out += " " + part
+		}
+	}
+	return out
+}
 
 // MeterFraction clamps a fraction into the range a bar can draw. A bar wider
 // than its track is a bar that has left the layout.

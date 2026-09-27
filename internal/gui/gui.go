@@ -88,7 +88,10 @@ func New(a fyne.App, o Options) *Panel {
 			c.AddRow(row)
 		}
 		for _, m := range sec.Meters {
-			meter := glance.NewMeter(m.Label, MeterLabelWidth)
+			// The window arranges in one column, not the pane's three: the
+			// design system's meter pins its label to a width of its own and
+			// the card is narrow. Name() is the three parts as one string.
+			meter := glance.NewMeter(m.Name(), MeterLabelWidth)
 			holder.meters = append(holder.meters, meter)
 			c.AddObject(meter.Object())
 		}
@@ -135,8 +138,12 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		if i >= len(c.meters) {
 			break
 		}
-		c.meters[i].SetLabel(m.Label)
-		c.meters[i].Set(m.Fraction, m.Caption, status(m.Status))
+		c.meters[i].SetLabel(m.Name())
+		caption := m.Caption
+		if m.Reset != "" {
+			caption += " · " + m.Reset
+		}
+		c.meters[i].Set(m.Fraction, caption, status(m.Status))
 	}
 }
 

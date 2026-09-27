@@ -49,8 +49,10 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 	for _, group := range byAccount(windows) {
 		lead := nearest(group)
 		s.Meters = append(s.Meters, Meter{
-			Label:    name(group[0], lead),
-			Caption:  figures(group),
+			Label:    group[0].Account,
+			Badge:    group[0].Badge,
+			Window:   lead.Name,
+			Caption:  figures(now, group),
 			Reset:    resets(now, soonest(group)),
 			Fraction: lead.Fraction,
 			Status:   quota(lead.Fraction),
@@ -95,28 +97,18 @@ func nearest(group []UsageWindow) UsageWindow {
 	return lead
 }
 
-// name is an account's label: who it is, which plan, and which window the bar
-// beside it is showing.
+// figures is every window in the group: its name, its figure, and — for a
+// window whose own reset is not the one in the Reset column — how long that
+// window has left.
 //
-// The window matters. A bar with no name is a proportion of something the
-// reader has to work out from the caption, and the program this replaces puts
-// it in the label for that reason.
-func name(w UsageWindow, lead UsageWindow) string {
-	out := w.Account
-	if w.Badge != "" {
-		out += " " + w.Badge
-	}
-	if lead.Name != "" {
-		out += " " + lead.Name
-	}
-	return out
-}
+// One reset goes in the column and it is the soonest, so a seven-day window
+// sitting beside a five-hour one would otherwise say nothing about when it
+// turns over. The monitor writes that as "(5d left)" and it is the answer to a
+// question a reader does actually ask: the five-hour window resets today
+// whatever happens, and the weekly one is the one worth planning around.
+func figures(now time.Time, group []UsageWindow) string {
+	next := soonest(group)
 
-// figures is every window in the group: its name and its figure.
-//
-// The reset is not here. It is a column of its own, for the reason Meter.Reset
-// gives.
-func figures(group []UsageWindow) string {
 	out := ""
 	for _, w := range group {
 		if out != "" {
@@ -126,8 +118,28 @@ func figures(group []UsageWindow) string {
 		if w.Detail != "" {
 			out += " " + w.Detail
 		}
+		if left := remaining(now, w, next); left != "" {
+			out += " (" + left + ")"
+		}
 	}
 	return out
+}
+
+// remaining is how long a window has left, for a window whose reset is not the
+// one already in the Reset column and is far enough away to be worth saying.
+//
+// Days only. A window that turns over this afternoon is covered by the
+// countdown in the column; one that turns over next Tuesday is what this is
+// for, and an hour of precision on it would be false.
+func remaining(now time.Time, w UsageWindow, shown time.Time) string {
+	if w.ResetsAt.IsZero() || w.ResetsAt.Equal(shown) {
+		return ""
+	}
+	days := int(w.ResetsAt.Sub(now).Hours()) / 24
+	if days < 1 {
+		return ""
+	}
+	return itoa(days) + "d left"
 }
 
 // soonest is the next reset among the group's windows, ignoring the ones the
