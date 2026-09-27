@@ -107,6 +107,7 @@ func TestTheBarShowsTheWindowNearestItsLimitAndTheCaptionKeepsTheRest(t *testing
 	assert.InDelta(t, 0.85, s.Meters[0].Fraction, 0.001)
 	assert.Contains(t, s.Meters[0].Caption, "5h: 10 %")
 	assert.Contains(t, s.Meters[0].Caption, "7d: 85 %")
+	assert.Contains(t, s.Meters[0].Label, "7d", "the label names the window the bar is about")
 }
 
 // A quota is one of the few readings with a true threshold, so its colour is a
@@ -133,8 +134,8 @@ func TestAnAccountsBadgeSitsBesideItsName(t *testing.T) {
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 2)
-	assert.Equal(t, "work E", s.Meters[0].Label)
-	assert.Equal(t, "Codex", s.Meters[1].Label)
+	assert.Equal(t, "work E spend", s.Meters[0].Label)
+	assert.Equal(t, "Codex 5h", s.Meters[1].Label)
 }
 
 // Two questions, two forms. "How long have I got" for a window that ends
@@ -199,5 +200,5 @@ func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
 
 	require.Len(t, s.Meters, 1)
 	assert.InDelta(t, 0.20, s.Meters[0].Fraction, 0.001, "the bar is the window nearest its limit")
-	assert.Contains(t, s.Meters[0].Caption, "3h", "the countdown is the next reset")
+	assert.Contains(t, s.Meters[0].Reset, "3h", "the countdown is the next reset")
 }

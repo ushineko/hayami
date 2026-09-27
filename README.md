@@ -105,6 +105,9 @@ make test      # race detector
 make lint
 make build     # both panels
 make vuln      # govulncheck, before every tagged release
+
+tools/shot-tui.sh out.png 150 6 ./hayami-tui --sections usage
+               # photograph a pane in a real terminal (KDE/Wayland)
 ```
 
 ## Where it comes from
@@ -124,6 +127,18 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- A pane has colour and columns. `view.Render` takes a painter — a function
+  from text and a verdict to text — so the terminal can colour through lipgloss
+  while `internal/view` stays free of any toolkit and the window keeps
+  colouring through the design system's own widgets. In `row` the line is four
+  columns: the label, a bar taking what is left, the figures ranged left and
+  the reset hard right. A meter's label names the window its bar is about, and
+  a section's title is no longer repeated on every line (spec 005, #10).
+- `tools/shot-tui.sh` photographs a terminal program in a real terminal of a
+  known size. It found the bug above: `lipgloss.ColorProfile()` answers 0 in a
+  terminal that plainly has colour, and gating on it had switched colour off
+  everywhere while every headless test passed.
 
 - hayami fetches its own usage. Credential stores are found by the convention
   the `claude-max` and `claude-work` wrappers establish, an expired token is

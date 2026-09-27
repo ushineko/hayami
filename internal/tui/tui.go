@@ -37,6 +37,10 @@ type Model struct {
 	opts  Options
 	width int
 
+	// paint is how a status becomes colour. Nil in a terminal that has none,
+	// and nil is also what Render expects when nothing should be painted.
+	paint view.Painter
+
 	// drawn records which sources have something to say, by key. A source
 	// that has never answered is not drawn at all, so a machine without the
 	// hardware looks like a program built without the section.
@@ -45,7 +49,7 @@ type Model struct {
 
 // New builds the model.
 func New(o Options) Model {
-	return Model{opts: o, width: 80, drawn: map[string]bool{}}
+	return Model{opts: o, width: 80, drawn: map[string]bool{}, paint: Painter()}
 }
 
 // tick asks for the next poll of one source.
@@ -154,7 +158,7 @@ func (m Model) Sections() []view.Section {
 
 // View draws the panel.
 func (m Model) View() string {
-	lines := view.Render(m.Sections(), m.opts.Arrangement, m.width)
+	lines := view.RenderWith(m.Sections(), m.opts.Arrangement, m.width, m.paint)
 	out := ""
 	for i, l := range lines {
 		if i > 0 {
