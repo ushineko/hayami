@@ -50,14 +50,24 @@ func TestARowStretchesToThePanesWidth(t *testing.T) {
 		"the value left the right edge when the pane grew")
 }
 
-// Row carries the section's name into the label, because a pane of three lines
-// has no room for a heading above each one.
-func TestARowNamesItsSection(t *testing.T) {
+// A pane of three lines has no room for a heading on each one. A row that is
+// already labelled keeps its own label and nothing else; the section's name is
+// spent only where a row has none.
+func TestARowDoesNotRepeatTheSectionsName(t *testing.T) {
 	s := section("bandwidth", "Bandwidth", row("eno2 down", "317.1", "KiB/s"))
 
 	lines := view.Render([]view.Section{s}, view.ArrangeRow, 60)
 
-	assert.True(t, strings.HasPrefix(lines[0], "Bandwidth eno2 down"))
+	assert.True(t, strings.HasPrefix(lines[0], "eno2 down"),
+		"the section's name was repeated on a row that is already labelled: %q", lines[0])
+}
+
+func TestARowWithNoLabelTakesTheSectionsName(t *testing.T) {
+	s := section("bandwidth", "Bandwidth", row("", "317.1", "KiB/s"))
+
+	lines := view.Render([]view.Section{s}, view.ArrangeRow, 60)
+
+	assert.True(t, strings.HasPrefix(lines[0], "Bandwidth"))
 }
 
 // Grid reflows and drops nothing. The second half of that is the one that

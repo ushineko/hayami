@@ -64,45 +64,53 @@ const ColumnGap = 2
 // arrangement fills it rather than measuring itself, because a panel that is
 // narrower than its pane leaves a ragged edge a person reads as a bug.
 func Render(sections []Section, a Arrangement, width int) []string {
+	return RenderWith(sections, a, width, nil)
+}
+
+// RenderWith is Render with a painter, for a shell that colours.
+//
+// Nothing is painted without one, which is what keeps a pipe, a redirect and
+// every test in this package seeing exactly the text the view built.
+func RenderWith(sections []Section, a Arrangement, width int, p Painter) []string {
 	if width < 1 {
 		width = 1
 	}
 	switch a {
 	case ArrangeGrid:
-		return renderGrid(sections, width)
+		return renderGrid(sections, width, p)
 	case ArrangeRow:
-		return renderRow(sections, width)
+		return renderRow(sections, width, p)
 	default:
-		return renderStack(sections, width)
+		return renderStack(sections, width, p)
 	}
 }
 
 // renderStack is one section above another.
-func renderStack(sections []Section, width int) []string {
+func renderStack(sections []Section, width int, p Painter) []string {
 	var out []string
 	for i, s := range sections {
 		if i > 0 {
 			out = append(out, "")
 		}
-		out = append(out, block(s, width)...)
+		out = append(out, block(s, width, p)...)
 	}
 	return out
 }
 
 // block is one section as lines at a width: the title, then a line per row.
-func block(s Section, width int) []string {
+func block(s Section, width int, p Painter) []string {
 	title := s.Title
 	if s.Gone {
 		title += " (unavailable)"
 	}
-	out := []string{truncate(title, width)}
+	out := []string{p.paint(truncate(title, width), Dim)}
 	for _, r := range s.Rows {
-		out = append(out, line(r, width))
+		out = append(out, line(r, width, p))
 		if r.Detail != "" {
-			out = append(out, rightAlign(r.Detail, width))
+			out = append(out, p.paint(rightAlign(r.Detail, width), Dim))
 		}
 	}
-	out = append(out, meters(s.Meters, width)...)
+	out = append(out, meters(s.Meters, width, p)...)
 	return out
 }
 
@@ -116,7 +124,7 @@ const MeterLabelGap = 1
 // section, which is what makes two windows of the same quota comparable at a
 // glance. The bar takes the whole width, because a bar that stopped short
 // would invent a maximum that is not the one the caption states.
-func meters(ms []Meter, width int) []string {
+func meters(ms []Meter, width int, p Painter) []string {
 	if len(ms) == 0 {
 		return nil
 	}
@@ -127,17 +135,34 @@ func meters(ms []Meter, width int) []string {
 
 	out := make([]string, 0, len(ms)*2)
 	for _, m := range ms {
-		head := m.Label + strings.Repeat(" ",
-			max(MeterLabelGap, labelWidth-runeLen(m.Label)+MeterLabelGap)) + m.Caption
-		out = append(out, truncate(head, width), bar(m.Fraction, width))
+		caption := m.Caption
+		if m.Reset != "" {
+			caption += " · " + m.Reset
+		}
+		head := p.paint(m.Label, Dim) + strings.Repeat(" ",
+			max(MeterLabelGap, labelWidth-runeLen(m.Label)+MeterLabelGap)) +
+			p.paint(caption, m.Status)
+		out = append(out, head, paintBar(m.Fraction, width, m.Status, p))
 	}
 	return out
+}
+
+// paintBar draws a bar with its filled part in the status colour and its track
+// dim, so a glance at the colour says the same thing as a reading of the
+// number.
+func paintBar(fraction float64, width int, status Status, p Painter) string {
+	if width < 1 {
+		return ""
+	}
+	full := int(MeterFraction(fraction)*float64(width) + 0.5)
+	return p.paint(strings.Repeat(string(BarFull), full), status) +
+		p.paint(strings.Repeat(string(BarEmpty), width-full), Dim)
 }
 
 // line is a row at a width: the label left, the value and unit right, and the
 // space between taking the change in width. The value and the unit keep their
 // own widths, so a number that gains a digit does not move the label.
-func line(r Row, width int) string {
+func line(r Row, width int, p Painter) string {
 	right := r.Value
 	if r.Unit != "" {
 		right += " " + r.Unit
@@ -150,7 +175,7 @@ func line(r Row, width int) string {
 		label = truncate(label, max(0, width-runeLen(right)-1))
 		gap = max(1, width-runeLen(label)-runeLen(right))
 	}
-	return label + strings.Repeat(" ", gap) + right
+	return p.paint(label, Dim) + strings.Repeat(" ", gap) + p.paint(right, r.Status)
 }
 
 // rightAlign puts a detail line against the right edge, under the value it
@@ -163,47 +188,97 @@ func rightAlign(s string, width int) string {
 	return s
 }
 
-// renderRow is one line per reading with no titles: the section's name joins
-// its row's label, because a pane of three lines has no room for a heading
-// above each one.
-func renderRow(sections []Section, width int) []string {
+// renderRow is one line per reading, in columns.
+//
+// Four of them: the label, a bar that takes whatever is left, the figures, and
+// the reset hard against the right edge. Columns rather than one right-aligned
+// run, because the eye finds a number by where it is: a reset that lands in a
+// different place on every line has to be read for rather than glanced at.
+//
+// The section's title is not repeated. In a pane of three lines, a heading on
+// each one spends three columns saying what the labels already say; it is
+// carried only for a row that has no label of its own.
+func renderRow(sections []Section, width int, p Painter) []string {
+	labelWidth, figureWidth, resetWidth := rowColumns(sections)
+
 	var out []string
 	for _, s := range sections {
 		for _, r := range s.Rows {
-			labelled := r
-			if r.Label == "" {
-				labelled.Label = s.Title
-			} else {
-				labelled.Label = s.Title + " " + r.Label
-			}
-			out = append(out, line(labelled, width))
+			out = append(out, line(labelled(s, r), width, p))
 		}
-		out = append(out, meterRows(s, width)...)
+		for _, m := range s.Meters {
+			out = append(out, meterRow(s, m, width, labelWidth, figureWidth, resetWidth, p))
+		}
 	}
 	return out
 }
 
-// meterRows draws a meter as one line: the label, the bar stretching to fill
-// what is left, and the caption at the right edge.
-//
-// This is the shape the pane being replaced draws, and the reason the row
-// arrangement exists at all: a line of a session manager's pane showing a
-// quota, with the bar taking whatever width the pane happens to have.
-func meterRows(s Section, width int) []string {
-	out := make([]string, 0, len(s.Meters))
-	for _, m := range s.Meters {
-		label := s.Title + " " + m.Label
-		fixed := runeLen(label) + runeLen(m.Caption) + 2 // a space either side of the bar
-		barWidth := width - fixed
-		if barWidth < 4 {
-			// No room for a bar worth drawing: the caption is the reading and
-			// the bar is the impression, so the bar goes.
-			out = append(out, line(Row{Label: label, Value: m.Caption}, width))
-			continue
-		}
-		out = append(out, label+" "+bar(m.Fraction, barWidth)+" "+m.Caption)
+// labelled gives a row the section's name only when it has none of its own.
+func labelled(s Section, r Row) Row {
+	if r.Label == "" {
+		r.Label = s.Title
 	}
-	return out
+	return r
+}
+
+// rowColumns measures the three fixed columns across every section, so the
+// lines line up with each other rather than each with itself.
+func rowColumns(sections []Section) (label, figures, reset int) {
+	for _, s := range sections {
+		for _, m := range s.Meters {
+			label = max(label, runeLen(m.Label))
+			figures = max(figures, runeLen(m.Caption))
+			reset = max(reset, runeLen(m.Reset))
+		}
+	}
+	return label, figures, reset
+}
+
+// meterRow is one meter as a line: label, bar, figures, reset.
+//
+// The bar takes what the three fixed columns leave. Where that is too little
+// to be worth drawing, the bar goes and the figures stay: the caption is the
+// reading and the bar is the impression.
+func meterRow(s Section, m Meter, width, labelWidth, figureWidth, resetWidth int, p Painter) string {
+	label := padRight(m.Label, labelWidth)
+	if m.Label == "" {
+		label = padRight(s.Title, labelWidth)
+	}
+	// The figures are ranged left in their column so the first one begins at
+	// the same place on every line. Ranging them right would line up their
+	// ends, which is not where an eye looks for them.
+	figures := padRight(m.Caption, figureWidth)
+	reset := padLeft(m.Reset, resetWidth)
+
+	fixed := labelWidth + figureWidth + resetWidth + 3 // a space between each
+	barWidth := width - fixed
+	if barWidth < MinBarWidth {
+		return line(Row{Label: m.Label, Value: strings.TrimSpace(m.Caption + " " + m.Reset),
+			Status: m.Status}, width, p)
+	}
+
+	return p.paint(label, Dim) + " " +
+		paintBar(m.Fraction, barWidth, m.Status, p) + " " +
+		p.paint(figures, m.Status) + " " + p.paint(reset, Dim)
+}
+
+// MinBarWidth is the narrowest a bar may be before it is not worth the room.
+const MinBarWidth = 8
+
+// padRight ranges text left in a column.
+func padRight(s string, width int) string {
+	if n := width - runeLen(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
+}
+
+// padLeft ranges text right in a column.
+func padLeft(s string, width int) string {
+	if n := width - runeLen(s); n > 0 {
+		return strings.Repeat(" ", n) + s
+	}
+	return s
 }
 
 // renderGrid reflows sections into columns.
@@ -212,10 +287,10 @@ func meterRows(s Section, width int) []string {
 // ArrangeStack: a grid that drew a single narrow column would be a stack with worse
 // spacing. Sections fill column-major, so reading down a column follows the
 // order the user set.
-func renderGrid(sections []Section, width int) []string {
+func renderGrid(sections []Section, width int, p Painter) []string {
 	cols := (width + ColumnGap) / (MinColumnWidth + ColumnGap)
 	if cols < 2 || len(sections) < 2 {
-		return renderStack(sections, width)
+		return renderStack(sections, width, p)
 	}
 	if cols > len(sections) {
 		cols = len(sections)
@@ -231,7 +306,7 @@ func renderGrid(sections []Section, width int) []string {
 			if len(columns[c]) > 0 {
 				columns[c] = append(columns[c], "")
 			}
-			columns[c] = append(columns[c], block(sections[i], colWidth)...)
+			columns[c] = append(columns[c], block(sections[i], colWidth, p)...)
 		}
 		height = max(height, len(columns[c]))
 	}

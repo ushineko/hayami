@@ -49,8 +49,9 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 	for _, group := range byAccount(windows) {
 		lead := nearest(group)
 		s.Meters = append(s.Meters, Meter{
-			Label:    name(group[0]),
-			Caption:  caption(now, group),
+			Label:    name(group[0], lead),
+			Caption:  figures(group),
+			Reset:    resets(now, soonest(group)),
 			Fraction: lead.Fraction,
 			Status:   quota(lead.Fraction),
 		})
@@ -94,21 +95,28 @@ func nearest(group []UsageWindow) UsageWindow {
 	return lead
 }
 
-// name is an account's label and its badge.
-func name(w UsageWindow) string {
-	if w.Badge == "" {
-		return w.Account
+// name is an account's label: who it is, which plan, and which window the bar
+// beside it is showing.
+//
+// The window matters. A bar with no name is a proportion of something the
+// reader has to work out from the caption, and the program this replaces puts
+// it in the label for that reason.
+func name(w UsageWindow, lead UsageWindow) string {
+	out := w.Account
+	if w.Badge != "" {
+		out += " " + w.Badge
 	}
-	return w.Account + " " + w.Badge
+	if lead.Name != "" {
+		out += " " + lead.Name
+	}
+	return out
 }
 
-// caption is every window in the group: its name, its figure, and one reset.
+// figures is every window in the group: its name and its figure.
 //
-// One, because three countdowns on a line is a line nobody reads. The soonest
-// one, because the bar and the countdown answer different questions: the bar
-// shows the window nearest its limit, and the countdown answers "when does
-// anything here change", which is always the next one to turn over.
-func caption(now time.Time, group []UsageWindow) string {
+// The reset is not here. It is a column of its own, for the reason Meter.Reset
+// gives.
+func figures(group []UsageWindow) string {
 	out := ""
 	for _, w := range group {
 		if out != "" {
@@ -119,7 +127,7 @@ func caption(now time.Time, group []UsageWindow) string {
 			out += " " + w.Detail
 		}
 	}
-	return out + " · " + resets(now, soonest(group))
+	return out
 }
 
 // soonest is the next reset among the group's windows, ignoring the ones the

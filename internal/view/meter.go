@@ -17,8 +17,15 @@ import (
 // is what someone glancing at a pane actually wants. It is not decoration, and
 // it is held to the no-jitter rule because it sets the section's width.
 type Meter struct {
-	Label    string
-	Caption  string
+	Label   string
+	Caption string
+
+	// Reset is when the quota starts again, kept apart from the caption
+	// because it is a column of its own: in a pane it sits hard against the
+	// right edge, where the eye can find it on every line without reading the
+	// figures first.
+	Reset string
+
 	Fraction float64
 	Status   Status
 }
@@ -117,14 +124,4 @@ func padUntil(s string) string {
 		return strings.Repeat(" ", n) + s
 	}
 	return s
-}
-
-// bar draws the meter at a width.
-func bar(fraction float64, width int) string {
-	if width < 1 {
-		return ""
-	}
-	full := int(MeterFraction(fraction)*float64(width) + 0.5)
-	return strings.Repeat(string(BarFull), full) +
-		strings.Repeat(string(BarEmpty), width-full)
 }

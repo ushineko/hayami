@@ -2,11 +2,17 @@
 
 **Issue**: [#10](https://github.com/ushineko/hayami/issues/10)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-(Populated before the PR opens.)
+`Render` gains a painter — a function from text and status to text — so the
+terminal can colour without `internal/view` knowing what colour is. The row
+arrangement is four columns: label, a bar that takes what is left, the figures
+ranged left, and the reset hard right. A meter's label names the window its bar
+is about, and a section's title is no longer repeated on every line of a pane.
+Reviewers should start with `tools/shot-tui.sh`, which is why this spec found
+the bug it did.
 
 ## Context
 
@@ -47,13 +53,39 @@ and neither shell decides that for itself.
 
 ## Acceptance Criteria
 
-- [ ] AC1 `Render` with no painter returns exactly what it returns today; the existing tests are the assertion and none of them change. (R1)
-- [ ] AC2 A painter is called once per coloured piece, with the status the view gave it. (R1, R2)
-- [ ] AC3 `NO_COLOR` or a terminal that reports no colour yields a plain pane. (R2)
-- [ ] AC4 No line in `row` begins with the section's title where its rows are labelled. (R3)
-- [ ] AC5 A meter's label names its leading window. (R4)
-- [ ] AC6 In `row`, the reset ends at the right edge and the figures begin at the same column on every line. (R5)
-- [ ] AC7 The window's tests and the parity test pass unchanged. (R6)
+- [x] AC1 `Render` with no painter returns exactly what it returns today; the existing tests are the assertion and none of them change. (R1)
+- [x] AC2 A painter is called once per coloured piece, with the status the view gave it. (R1, R2)
+- [x] AC3 `NO_COLOR` or a terminal that reports no colour yields a plain pane. (R2)
+- [x] AC4 No line in `row` begins with the section's title where its rows are labelled. (R3)
+- [x] AC5 A meter's label names its leading window. (R4)
+- [x] AC6 In `row`, the reset ends at the right edge and the figures begin at the same column on every line. (R5)
+- [x] AC7 The window's tests and the parity test pass unchanged. (R6)
+
+## Gaps found
+
+None. `view.Painter` is this repository's own and the design system needed no
+change.
+
+## What the photograph found
+
+The first version gated colour on `lipgloss.ColorProfile() != 0`, which reads
+as "does this terminal have colour". **Photographed in alacritty with
+`TERM=alacritty`, that call answers `0` — the value meaning no colour at all —
+on the same line that renders green.** Colour was therefore off everywhere,
+and every test passed: under `go test` there is no terminal, so lipgloss
+degrades every style to plain text and a good reading paints identically to a
+bad one.
+
+Two things follow, and both are in the code as comments. The gate now asks
+only whether the person said `NO_COLOR`, because styles degrade on their own
+where there is no colour. And `internal/tui`'s test deliberately does not
+compare one verdict's colour with another's: a test that did would either fail
+against correct code or pass against code that painted nothing, which is how
+the bug got in. That claim belongs to the photograph.
+
+`tools/shot-tui.sh` is the harness: it starts a real terminal of a known size,
+runs the program in it, and grabs the window — the terminal's half of the rule
+that anything visual is tested on a real window.
 
 ## Risks & Assumptions
 
@@ -64,6 +96,9 @@ and neither shell decides that for itself.
 - **Colour is not information.** Every figure a colour emphasises is also in
   the text, because a pane is read over ssh, in a pipe, by somebody who cannot
   distinguish red from green, and into a file.
+- **A headless test cannot see colour.** That is not a gap in the suite, it is
+  the reason `tools/shot-tui.sh` exists, and pretending otherwise is what put
+  this spec in the backlog.
 - Rollback: revert. The row arrangement returns to the shape in the
   screenshot, which works.
 
