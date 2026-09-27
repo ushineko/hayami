@@ -29,7 +29,7 @@ linters:
       # store: ...". wrapcheck stays on for genuinely external errors, which is
       # where the missing context actually hurts.
       ignore-package-globs:
-        - github.com/ushineko/ototo/*
+        - github.com/ushineko/hayami/*
       ignore-sigs:
         - .Errorf(
         - errors.New(

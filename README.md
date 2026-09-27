@@ -8,8 +8,8 @@ A panel for Linux showing peripheral battery, network bandwidth,
 liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
 frameless always-on-top window, and in a terminal as a pane.
 
-> **Status**: nothing works yet. The repository holds its conventions and its
-> first spec. The program it replaces,
+> **Status**: the spine works. One section — bandwidth — draws in both panels,
+> in all three arrangements, from settings both read. The program it replaces,
 > `ag-scripts/peripheral-battery-monitor`, is the behavioural reference and is
 > still the one to run.
 
@@ -67,6 +67,35 @@ The window is a glance window from
 content, always on top, read without being touched. Its rules are that
 repository's `docs/glance.md`.
 
+## Running it
+
+```
+hayami                                    # the desktop panel
+hayami-tui                                # the terminal panel
+hayami-tui --sections bandwidth --arrangement row
+hayami-tui --readings                     # the numbers as JSON, no display needed
+hayami-tui --once                         # one frame, for a prompt or a status line
+```
+
+`--sections` and `--arrangement` override the settings file for that run and
+never write back to it. The window takes neither: a desktop panel is
+configured from its own settings, and a flag that changed what it drew for one
+run would be a setting nobody could find again.
+
+Settings live in `~/.config/hayami/settings.yaml`:
+
+```yaml
+hayami:
+    sections:
+        - bandwidth
+    arrangement: stack
+    interfaces:
+        - eno2
+```
+
+No interface is watched until one is named. Guessing would be this program
+deciding what is interesting about somebody's network.
+
 ## Development
 
 ```
@@ -96,3 +125,10 @@ MIT. See [LICENSE](LICENSE).
 ### Unreleased
 
 - The repository, its conventions and its Makefile.
+- A panel with one section in it. `internal/core` reads `/proc/net/dev`,
+  `internal/view` describes a section and lays it out as a stack, a grid or a
+  row, `internal/config` holds the choice in YAML, and both panels arrange the
+  same sections: `hayami` as a glance window and `hayami-tui` on Bubble Tea,
+  the second building without cgo. `--sections` and `--arrangement` override
+  the settings for one run, `--readings` prints the numbers as JSON and
+  `--once` draws a single frame (spec 001, #1).
