@@ -130,7 +130,7 @@ func meters(ms []Meter, width int, p Painter) []string {
 	}
 	labelWidth := 0
 	for _, m := range ms {
-		labelWidth = max(labelWidth, runeLen(m.Label))
+		labelWidth = max(labelWidth, runeLen(m.Name()))
 	}
 
 	out := make([]string, 0, len(ms)*2)
@@ -139,8 +139,8 @@ func meters(ms []Meter, width int, p Painter) []string {
 		if m.Reset != "" {
 			caption += " · " + m.Reset
 		}
-		head := p.paint(m.Label, Dim) + strings.Repeat(" ",
-			max(MeterLabelGap, labelWidth-runeLen(m.Label)+MeterLabelGap)) +
+		head := p.paint(m.Name(), Info) + strings.Repeat(" ",
+			max(MeterLabelGap, labelWidth-runeLen(m.Name())+MeterLabelGap)) +
 			p.paint(caption, m.Status)
 		out = append(out, head, paintBar(m.Fraction, width, m.Status, p))
 	}
@@ -199,7 +199,7 @@ func rightAlign(s string, width int) string {
 // each one spends three columns saying what the labels already say; it is
 // carried only for a row that has no label of its own.
 func renderRow(sections []Section, width int, p Painter) []string {
-	labelWidth, figureWidth, resetWidth := rowColumns(sections)
+	c := rowColumns(sections)
 
 	var out []string
 	for _, s := range sections {
@@ -207,7 +207,7 @@ func renderRow(sections []Section, width int, p Painter) []string {
 			out = append(out, line(labelled(s, r), width, p))
 		}
 		for _, m := range s.Meters {
-			out = append(out, meterRow(s, m, width, labelWidth, figureWidth, resetWidth, p))
+			out = append(out, meterRow(s, m, width, c, p))
 		}
 	}
 	return out
@@ -223,41 +223,79 @@ func labelled(s Section, r Row) Row {
 
 // rowColumns measures the three fixed columns across every section, so the
 // lines line up with each other rather than each with itself.
-func rowColumns(sections []Section) (label, figures, reset int) {
+func rowColumns(sections []Section) (c columns) {
 	for _, s := range sections {
 		for _, m := range s.Meters {
-			label = max(label, runeLen(m.Label))
-			figures = max(figures, runeLen(m.Caption))
-			reset = max(reset, runeLen(m.Reset))
+			c.label = max(c.label, runeLen(m.Label))
+			c.badge = max(c.badge, runeLen(m.Badge))
+			c.window = max(c.window, runeLen(m.Window))
+			c.figures = max(c.figures, runeLen(m.Caption))
+			c.reset = max(c.reset, runeLen(m.Reset))
 		}
 	}
-	return label, figures, reset
+	return c
 }
 
-// meterRow is one meter as a line: label, bar, figures, reset.
+// columns are the fixed widths a pane's lines share.
+type columns struct{ label, badge, window, figures, reset int }
+
+// name lays a meter's three name parts out in their columns.
 //
-// The bar takes what the three fixed columns leave. Where that is too little
-// to be worth drawing, the bar goes and the figures stay: the caption is the
-// reading and the bar is the impression.
-func meterRow(s Section, m Meter, width, labelWidth, figureWidth, resetWidth int, p Painter) string {
-	label := padRight(m.Label, labelWidth)
-	if m.Label == "" {
-		label = padRight(s.Title, labelWidth)
+// Three columns rather than one, so the badges line up under each other and
+// the window names do too. An eye scanning a pane for the plan letter should
+// find it in the same place on every line rather than hunting for it after a
+// name whose length it cannot predict.
+func (c columns) name(m Meter) string {
+	out := padRight(m.Label, c.label)
+	if c.badge > 0 {
+		out += " " + padRight(m.Badge, c.badge)
+	}
+	if c.window > 0 {
+		out += " " + padRight(m.Window, c.window)
+	}
+	return out
+}
+
+// width is the room the fixed columns take, with a space between each.
+func (c columns) width() int {
+	out := c.label + c.figures + c.reset + 3
+	if c.badge > 0 {
+		out += c.badge + 1
+	}
+	if c.window > 0 {
+		out += c.window + 1
+	}
+	return out
+}
+
+// meterRow is one meter as a line: name, bar, figures, reset.
+//
+// The name is white rather than dim. It is not decoration: it says which
+// account and which window the bar beside it is about, and a reader who cannot
+// tell two lines apart has no use for either. The track is what is dim, and
+// the reset, which is the one thing a glance can skip.
+//
+// The bar takes what the fixed columns leave. Where that is too little to be
+// worth drawing, the bar goes and the figures stay: the caption is the reading
+// and the bar is the impression.
+func meterRow(s Section, m Meter, width int, c columns, p Painter) string {
+	name := c.name(m)
+	if m.Label == "" && m.Badge == "" && m.Window == "" {
+		name = padRight(s.Title, c.label)
 	}
 	// The figures are ranged left in their column so the first one begins at
 	// the same place on every line. Ranging them right would line up their
 	// ends, which is not where an eye looks for them.
-	figures := padRight(m.Caption, figureWidth)
-	reset := padLeft(m.Reset, resetWidth)
+	figures := padRight(m.Caption, c.figures)
+	reset := padLeft(m.Reset, c.reset)
 
-	fixed := labelWidth + figureWidth + resetWidth + 3 // a space between each
-	barWidth := width - fixed
+	barWidth := width - c.width()
 	if barWidth < MinBarWidth {
-		return line(Row{Label: m.Label, Value: strings.TrimSpace(m.Caption + " " + m.Reset),
+		return line(Row{Label: m.Name(), Value: strings.TrimSpace(m.Caption + " " + m.Reset),
 			Status: m.Status}, width, p)
 	}
 
-	return p.paint(label, Dim) + " " +
+	return p.paint(name, Info) + " " +
 		paintBar(m.Fraction, barWidth, m.Status, p) + " " +
 		p.paint(figures, m.Status) + " " + p.paint(reset, Dim)
 }

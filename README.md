@@ -128,6 +128,17 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- A meter's name is three columns rather than one string — the account, its
+  plan letter and the window its bar is about — so the badges line up under
+  each other down a pane instead of landing wherever the name before them
+  ended. The name is drawn white: it says which account and which window, and
+  a reader who cannot tell two lines apart has no use for either.
+- A window whose reset is not the one in the countdown column says how long it
+  has left, as the monitor does: `7d: 21 % (3d left)`. One reset goes in the
+  column and it is the soonest, so the weekly window would otherwise say
+  nothing about when it turns over — and that is the one worth planning
+  around.
+
 - **Fix**: a pane's bar is a rule rather than a slab. `█` on `░` was a band of
   colour the width of the pane, next to which the numbers — the actual reading
   — looked like a caption. It is `━` on `─` now, which is the weight the

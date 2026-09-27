@@ -90,8 +90,8 @@ func TestAnAccountIsOneMeterHoweverManyWindowsItHas(t *testing.T) {
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 2)
-	assert.Contains(t, s.Meters[0].Label, "max")
-	assert.Contains(t, s.Meters[1].Label, "Codex")
+	assert.Equal(t, "max", s.Meters[0].Label)
+	assert.Equal(t, "Codex", s.Meters[1].Label)
 }
 
 // The bar shows the window nearest its limit: the one that can bite you today.
@@ -107,7 +107,7 @@ func TestTheBarShowsTheWindowNearestItsLimitAndTheCaptionKeepsTheRest(t *testing
 	assert.InDelta(t, 0.85, s.Meters[0].Fraction, 0.001)
 	assert.Contains(t, s.Meters[0].Caption, "5h: 10 %")
 	assert.Contains(t, s.Meters[0].Caption, "7d: 85 %")
-	assert.Contains(t, s.Meters[0].Label, "7d", "the label names the window the bar is about")
+	assert.Equal(t, "7d", s.Meters[0].Window, "the name says which window the bar is about")
 }
 
 // A quota is one of the few readings with a true threshold, so its colour is a
@@ -134,8 +134,12 @@ func TestAnAccountsBadgeSitsBesideItsName(t *testing.T) {
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 2)
-	assert.Equal(t, "work E spend", s.Meters[0].Label)
-	assert.Equal(t, "Codex 5h", s.Meters[1].Label)
+	assert.Equal(t, "work", s.Meters[0].Label)
+	assert.Equal(t, "E", s.Meters[0].Badge)
+	assert.Equal(t, "spend", s.Meters[0].Window)
+	assert.Equal(t, "Codex", s.Meters[1].Label)
+	assert.Empty(t, s.Meters[1].Badge, "an account with no plan gets no letter rather than a guess")
+	assert.Equal(t, "work E spend", s.Meters[0].Name())
 }
 
 // Two questions, two forms. "How long have I got" for a window that ends
@@ -201,4 +205,34 @@ func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
 	require.Len(t, s.Meters, 1)
 	assert.InDelta(t, 0.20, s.Meters[0].Fraction, 0.001, "the bar is the window nearest its limit")
 	assert.Contains(t, s.Meters[0].Reset, "3h", "the countdown is the next reset")
+}
+
+// One reset goes in the column and it is the soonest, so a seven-day window
+// beside a five-hour one would otherwise say nothing about when it turns over.
+// The five-hour one resets today whatever happens; the weekly one is the one
+// worth planning around.
+func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
+	now := at(9, 0)
+	s := view.Usage(now, []view.UsageWindow{
+		{Account: "max", Name: "5h", Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
+		{Account: "max", Name: "7d", Fraction: 0.21, ResetsAt: now.Add(5*24*time.Hour + time.Hour)},
+	}, now)
+
+	require.Len(t, s.Meters, 1)
+	assert.Contains(t, s.Meters[0].Caption, "7d: 21 % (5d left)")
+	assert.NotContains(t, s.Meters[0].Caption, "5h: 4 % (",
+		"the window whose reset is already in the column repeats nothing")
+	assert.Contains(t, s.Meters[0].Reset, "3h")
+}
+
+// A window that turns over this afternoon is covered by the countdown in the
+// column; days are the only unit worth spending room on here.
+func TestAWindowLessThanADayAwaySaysNothingExtra(t *testing.T) {
+	now := at(9, 0)
+	s := view.Usage(now, []view.UsageWindow{
+		{Account: "max", Name: "5h", Fraction: 0.04, ResetsAt: now.Add(2 * time.Hour)},
+		{Account: "max", Name: "7d", Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
+	}, now)
+
+	assert.NotContains(t, s.Meters[0].Caption, "left")
 }

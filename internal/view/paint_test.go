@@ -20,16 +20,19 @@ func TestAPainterIsToldWhatEachPieceIs(t *testing.T) {
 		return text
 	}
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "work E spend", Caption: "spend: 85 %", Reset: "1 Oct",
-			Fraction: 0.85, Status: view.Warn},
+		{Label: "work", Badge: "E", Window: "spend", Caption: "spend: 85 %",
+			Reset: "1 Oct", Fraction: 0.85, Status: view.Warn},
 	}}
 
 	view.RenderWith([]view.Section{s}, view.ArrangeRow, 80, painter)
 
 	require.NotEmpty(t, seen[view.Warn], "the bar and its figures carry the verdict")
-	require.NotEmpty(t, seen[view.Dim], "a label and a track are not readings")
+	require.NotEmpty(t, seen[view.Dim], "a track is not a reading")
 	assert.Contains(t, strings.Join(seen[view.Warn], ""), "85 %")
-	assert.Contains(t, strings.Join(seen[view.Dim], ""), "work E spend")
+	assert.Contains(t, strings.Join(seen[view.Info], ""), "work",
+		"a meter's name says which account and which window; it is not decoration")
+	assert.Contains(t, strings.Join(seen[view.Dim], ""), "Oct",
+		"the reset is the one thing a glance can skip")
 }
 
 // Nothing is painted without a painter. Every other test in this package is
@@ -96,4 +99,25 @@ func TestTheBarIsReadableWithoutColour(t *testing.T) {
 	assert.Contains(t, line, string(view.BarEmpty))
 	assert.NotEqual(t, view.BarFull, view.BarEmpty,
 		"one glyph in two colours is a bar that vanishes in a pipe")
+}
+
+// A name is three columns, not one string. "max M 7d" and "work E spend" as
+// single labels put the badges one column apart, and an eye scanning down a
+// pane for the plan letter has to find it again on every line.
+func TestTheNamePartsLineUpDownThePane(t *testing.T) {
+	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
+		{Label: "max", Badge: "M", Window: "7d", Caption: "a", Reset: "x", Fraction: 0.1},
+		{Label: "work", Badge: "E", Window: "spend", Caption: "b", Reset: "y", Fraction: 0.2},
+		{Label: "Codex", Window: "limit", Caption: "c", Reset: "z", Fraction: 0.3},
+	}}
+
+	lines := view.Render([]view.Section{s}, view.ArrangeRow, 100)
+
+	require.Len(t, lines, 3)
+	assert.Equal(t, strings.Index(lines[0], "M"), strings.Index(lines[1], "E"),
+		"the badges are in different columns")
+	assert.Equal(t, strings.Index(lines[0], "7d"), strings.Index(lines[1], "spend"),
+		"the window names are in different columns")
+	assert.Equal(t, strings.Index(lines[1], "spend"), strings.Index(lines[2], "limit"),
+		"an account with no badge shifted its window name")
 }
