@@ -42,6 +42,7 @@ func (f flags) resolve() (Options, *config.Store, error) {
 		return Options{}, nil, err
 	}
 	opts, err := Resolve(store, f.sections, f.arrangement)
+	opts.Store = store
 	if err != nil {
 		return opts, store, &UsageError{err}
 	}
@@ -99,6 +100,7 @@ func TUI(version string) *cobra.Command {
 // what it drew for one run would be a setting nobody could find again.
 func GUI(version string, start func(Options) error) *cobra.Command {
 	var f flags
+	var preferences bool
 
 	root := &cobra.Command{
 		Use:           "hayami",
@@ -113,11 +115,16 @@ func GUI(version string, start func(Options) error) *cobra.Command {
 				return err
 			}
 			warn(cmd, opts)
+			opts.Preferences = preferences
 			return start(opts)
 		},
 	}
 	root.PersistentFlags().StringVar(&f.settings, "settings", "",
 		"the settings file; empty means the usual place")
+	// A desktop entry's second action, and the way in for somebody whose
+	// panel is somewhere they cannot right-click it.
+	root.Flags().BoolVar(&preferences, "preferences", false,
+		"open the preferences window as well as the panel")
 	return root
 }
 
