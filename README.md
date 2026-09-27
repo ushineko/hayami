@@ -74,7 +74,8 @@ repository's `docs/glance.md`.
 hayami                                    # the desktop panel
 hayami-tui                                # the terminal panel
 hayami-tui --sections bandwidth --arrangement row
-hayami-tui --readings                     # the numbers as JSON, no display needed
+hayami-tui readings                       # the numbers as JSON, no display needed
+hayami-tui arrangements                   # what --arrangement takes
 hayami-tui --once                         # one frame, for a prompt or a status line
 ```
 
@@ -127,6 +128,12 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- Both panels are cobra command trees, as the other ushineko programs are.
+  `hayami-tui readings` and `hayami-tui arrangements` are subcommands where
+  `--readings` was a flag, both binaries answer `--version`, and a misuse of
+  the command line exits 2 rather than 1, so a script can tell it from a
+  command that ran and failed.
 
 - A meter's name is three columns rather than one string — the account, its
   plan letter and the window its bar is about — so the badges line up under
