@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # The desktop panel is a Fyne window and needs the X and GL headers to
+      # build at all. The terminal panel does not, which is why it is a
+      # separate binary and is built with CGO off below.
+      - name: Install the window's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Lint
+        run: make lint
+
+      - name: Build
+        run: make build
+
+      # A terminal panel that needs a display library is a terminal panel with
+      # a bug. Asserting it here is cheaper than finding it on a server.
+      - name: The terminal panel builds without cgo
+        run: CGO_ENABLED=0 go build ./cmd/hayami-tui

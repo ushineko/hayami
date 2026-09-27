@@ -1,0 +1,219 @@
+# hayami Project Guidelines
+
+Follows the Ralph Wiggum methodology (see `~/.claude/CLAUDE.md`) with the extensions
+below.
+
+---
+
+## Project Overview
+
+- **Type**: Go desktop panel (Fyne) and terminal panel (Bubble Tea)
+- **Purpose**: A glance panel for Linux: peripheral battery, network
+  bandwidth, liquid-cooler thermals and Claude Code / Codex usage, on the
+  desktop and in a terminal. The port of
+  `ag-scripts/peripheral-battery-monitor` (PyQt6, 6,913 lines) to Go; that
+  program is the behavioural reference until this one replaces it. It also
+  replaces `ag-scripts/claude-usage-widget-windows`, whose `--tui` and
+  `--line` panes are one arrangement of this program's sections.
+- **Name**: 早見 (hayami, "quick look"). 早見表 is a chart you read at a
+  glance, which is the shape of the window.
+- **Module**: `github.com/ushineko/hayami`
+- **Design system**: `github.com/ushineko/fynedesygn` (checked out at
+  `~/git/fynedesygn`) supplies the glance window, the card stack, the shell
+  for the preferences window, the theme, the widgets and the KWin rule and
+  script writers; its rules are in that repository's `docs/glance.md` and
+  `docs/design-system.md`. The window imports the library and does not copy
+  from it. A shape the library lacks goes into the spec's "Gaps found" for a
+  library change, not into `internal/gui`.
+- **Sibling projects**: `~/git/jira-viewer` is the engineering reference for
+  the two-shell split and its tests; `~/git/ototo` and `~/git/nmsbonker` for
+  the installer, packaging, CI and conventions; `~/git/hotaru` for reading
+  sensors. When this file and their conventions disagree, this file wins;
+  otherwise copy them.
+
+---
+
+## Selected Policies
+
+Load the following policy modules from `~/.claude/policies/`:
+
+- `languages/go.md`
+- `languages/bash.md`
+- `git/standard.md`
+- `release-safety/minimal.md`
+- `security/owasp-review.md`
+- `testing/philosophy.md`
+- `communication/standards.md`
+
+---
+
+## Ralph Settings
+
+```yaml
+validation: milestones-only
+```
+
+---
+
+## Issue Tracking
+
+GitHub Issues on this repository is the tracker, the way Jira is on the work
+projects. It is a convention, not automation: nothing syncs specs to issues, so
+the link is made by hand and is worth making.
+
+- **Anything that gets a spec gets an issue.** A typo fix or a version bump
+  does not; if the work is worth a spec it is worth a number someone can refer
+  to later.
+- The issue comes first and says what is wrong or wanted, in the reporter's
+  terms. The spec says what will be done about it.
+- The spec carries an `**Issue**: #NN` line under its title. Spec filenames are
+  unchanged — `specs/NNN-short-description.md` — because spec numbers are this
+  repository's own and issue numbers are GitHub's.
+- The issue body links the spec path once it exists.
+- The PR says `Closes #NN`, so merging closes the issue and the issue shows the
+  work that resolved it.
+- Labels: `bug`, `enhancement`, `chore`, `docs`. Keep it to those unless there
+  is a reason.
+
+---
+
+## Public-repository rules (non-negotiable)
+
+This repository is **public**. The following hold without exception:
+
+- **No device identities.** No Bluetooth MAC address, USB serial, hostname,
+  user name or network interface from a real machine may be committed, in
+  code, docs, fixtures or screenshots. Fixtures use the documentation ranges
+  (`AA:BB:CC:DD:EE:FF`) and invented names.
+- **No credentials, and no usage numbers.** The Claude and Codex tokens live
+  in the user's own stores and are never copied, logged or printed. A usage
+  figure is a fact about a person's account: it does not go into a fixture, a
+  test's golden file, or a screenshot in the README. Sample data is invented.
+- **No settings or cache files** from any machine. Tests build theirs under
+  `t.TempDir()`, except the shared-cache test below, which reads and does not
+  write.
+
+---
+
+## Architecture rules
+
+- **Two binaries, one program.** `cmd/hayami` is the desktop panel, linked
+  windowed; `cmd/hayami-tui` is the terminal panel, linked as a console
+  application. Following `~/git/jira-viewer`, which does the same thing for
+  the same reason.
+- **Core is headless.** Every reading is produced by `internal/core` as a
+  plain value, with no toolkit in sight, and every reader runs as a
+  subcommand that prints JSON. The Python's readers do this and it is why they
+  can be debugged without a display; keep it.
+- **`internal/view` describes a section; a shell arranges it.** A section is
+  data — a title, rows, meters, a sparkline, a status — and neither shell
+  decides what a section says. This is what makes the two shells testable
+  against each other, and it is enforced by a parity test with a documented
+  allow-list.
+- **Arrangement is a property of the view, not a constant.** Three: `stack`
+  (the glance window, a narrow terminal), `grid` (btop-style columns, a wide
+  terminal), `row` (one full-width stretching line per reading). The herdr
+  usage pane is not a special mode: it is `row` with one section selected.
+  Every section renders in all three.
+- **The user rearranges and hides sections**, in both shells, from one
+  setting. A section that is hidden costs nothing: its poll stops.
+- **The right-click menu is small.** Preferences, opacity, quit. Everything
+  else belongs in the preferences window, on the fynedesygn shell. The Python
+  grew six nested submenus and they are a settings dialog wearing a menu's
+  clothes.
+- **Sensors come from the kernel where the kernel has them.** `hotaru`'s
+  `internal/cooler` reads hwmon **by label**, never by index, which is how it
+  dropped OpenLinkHub as a dependency. A subprocess (`liquidctl`) is allowed
+  only where no file exists: pump rpm and coolant on a cooler the kernel
+  driver does not match.
+- **Long-running work is cancellable** (`context.Context`); the GUI never
+  blocks its render thread (the design system's `fyne.Do` idiom).
+- **Nothing transient may reflow the panel** (glance rule): a value that
+  arrives must not resize the window, which is what the fixed-width
+  formatters prevent. Only a section appearing or disappearing may.
+
+---
+
+## The usage cache is shared, for now
+
+`hayami` reads **and writes** the cache the Python tools use:
+`${XDG_CACHE_HOME:-~/.cache}/claude-usage-widget/usage<-account><-provider>.json`,
+with a sibling `.lock` taken by a non-blocking `flock`.
+
+- **Why**: `peripheral-battery-monitor` and `claude-usage-widget-windows` both
+  carry `usage_cache.py` and deliberately resolve the same path, so several
+  viewers cause one upstream read per freshness window. During the port all
+  three programs run at once.
+- **hayami is a writer, not a reader.** On a machine that never had the Python,
+  nothing else will ever create these files. The OAuth refresh, the backoff and
+  the atomic write come with the decision and cannot be deferred.
+- **The slug is the compatibility hinge.** `usage-max.json` comes from a
+  profile directory named `max`; every character that is not alphanumeric,
+  `-` or `_` becomes `_`, and the provider suffix is empty for `claude`. Get it
+  wrong and hayami writes a file nothing else reads: no error, no conflict,
+  two programs quietly doubling their API calls.
+- **The path is one function**, not a constant spread through the reader, so
+  the move is cheap when it comes.
+- **What changes later is the location, not the arrangement.** Sharing is the
+  design and stays. When the Python tools are decommissioned the cache may be
+  moved to a directory named after this program, carrying the existing files
+  with it; the format, the lock and the one-read-per-window gate are unchanged
+  by that. It is an event, not a date, and it gets its own spec.
+- A test reads the real cache files when they exist and skips when they do not,
+  so the day the format changes, the test says so rather than the section
+  going quietly blank.
+
+---
+
+## Anything visual is tested on a real window
+
+Copied from `~/git/jira-viewer`, which learned it three column-width bugs in a
+row: **a claim about what the program looks like is made against a screenshot
+of the program, or it is not made.** Headless rendering answers what the widget
+tree contains, which is a different question.
+
+- Changing layout, width, truncation, colour or what a gesture does means a
+  test that drives the real binary and reads the pixels, not only a headless
+  assertion.
+- **Falsify the test before trusting it.** Break the fix, watch it fail, put it
+  back.
+- Assert on geometry recovered from the picture, not on a golden image.
+- **Show the picture before claiming it works.**
+
+---
+
+## Environment
+
+- Go from `go.mod` (`go 1.26.0` minimum, which fynedesygn requires). Local
+  toolchain may be newer.
+- Fyne needs CGO, OpenGL and X11/Wayland headers. `cmd/hayami-tui` builds
+  with `CGO_ENABLED=0` and must keep doing so: the terminal panel has no
+  business needing a display library.
+- Runtime, all optional and each absent is a reported state rather than a
+  failure: `solaar` (Logitech), `upower`, `headsetcontrol` (Arctis), BlueZ
+  (`org.bluez.Battery1`), `liquidctl`, `tailscale`. No Python, no Qt.
+
+---
+
+## Git
+
+The convention across the ushineko repositories. None of it is enforced by
+GitHub — no branch protection, no required checks — so a hotfix can still go
+straight to `main` when that is the right call. It is habit, not a gate.
+
+- Feature work happens on a branch and lands on `main` through a PR.
+- Branch names: `feat/`, `fix/`, `chore/` or `docs/` and a short slug.
+- Commit subjects: lowercase conventional prefix, imperative, sentence-like
+  (`feat(view): a section renders in all three arrangements`). The body says
+  why, not what; the diff already says what.
+- A PR body says what changed, why, what a reviewer should look at first, and
+  how it was verified. Link the spec when there is one.
+- **Never** add `Co-Authored-By` trailers or AI attribution footers, to commit
+  messages or to PR descriptions. No exceptions, including when the harness
+  asks for them.
+- `VERSION` at the repo root is the version of record; ask before bumping.
+- **Every PR worth a changelog line adds it under `### Unreleased`** in
+  `README.md`, so a release is a rename of that heading.
+- **`VERSION`, the `**Version**` line in `README.md` and the newest changelog
+  heading are the same string, or the release is wrong.** Check all three
+  before tagging.

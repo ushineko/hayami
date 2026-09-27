@@ -1,0 +1,15 @@
+# Build artifacts
+/hayami
+/hayami-tui
+/dist/
+*.exe
+
+# Coverage
+coverage.out
+count.out
+
+# makepkg's working directories and its output, when the package is built
+# from this checkout.
+packaging/arch/pkg/
+packaging/arch/src/
+packaging/arch/*.pkg.tar.zst
