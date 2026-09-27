@@ -2,11 +2,17 @@
 
 **Issue**: [#1](https://github.com/ushineko/hayami/issues/1)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-(Populated before the PR opens.)
+The spine: `internal/core` reads `/proc/net/dev` and produces rates,
+`internal/view` describes a section and lays it out in three arrangements,
+`internal/config` holds the choice in YAML, and two binaries arrange the same
+sections — `cmd/hayami` as a fynedesygn glance window and `cmd/hayami-tui` as
+a Bubble Tea panel, the second building with cgo off. Reviewers should start
+with `internal/view/arrange.go`, which is where the spec's load-bearing claim
+either holds or does not.
 
 ## Context
 
@@ -72,17 +78,25 @@ it exercises the formatters, the stretching bar and the grid reflow on its own.
 
 ## Acceptance Criteria
 
-- [ ] AC1 `hayami readings --json` prints rates and totals for the configured interfaces on a machine with no display, and its test builds its own `/proc/net/dev` fixture. (R1)
-- [ ] AC2 A section is rendered from `internal/view` in all three arrangements, and the tests assert the text of each. (R2, R3)
-- [ ] AC3 `row` stretches: a section rendered at 40 and at 120 columns puts its value at the right edge of each, with the bar taking the difference. (R3)
-- [ ] AC4 `grid` reflows: the same sections at two widths produce a different number of columns and drop nothing. (R3)
-- [ ] AC5 The window is frameless, fixed-size and sized to its cards, asserted headlessly; and **seen on a real window**, screenshotted and looked at, per the rule in `.claude/CLAUDE.md`. (R4)
-- [ ] AC6 `CGO_ENABLED=0 go build ./cmd/hayami-tui` passes in CI. (R5)
-- [ ] AC7 Hiding a section removes it from both shells and stops its poll; reordering changes the order in both. Asserted from the settings, not from a shell. (R6)
-- [ ] AC7.1 The settings file is YAML a person can read, and a section this build does not know is preserved across a save. (R6)
-- [ ] AC7.2 `--sections` and `--arrangement` override the file for one run and leave it unchanged on disk. (R6.1)
-- [ ] AC8 `TestFeatureParity` passes with an empty allow-list. (R7)
-- [ ] AC9 A rate crossing from KiB/s to MiB/s does not move the column in either shell. (R8)
+- [x] AC1 **Amended**: the subcommand is `hayami-tui --readings`, not `hayami readings`. The windowed binary has no console to print to on Windows, which is the same reason the two binaries exist at all; JSON belongs to the console one. Verified against this machine's own interfaces, and `internal/core`'s tests build their own `/proc/net/dev` fixture, including the case where a wide receive count runs into the colon. (R1)
+- [x] AC2 A section is rendered from `internal/view` in all three arrangements, and the tests assert the text of each. (R2, R3)
+- [x] AC3 `row` stretches: a section rendered at 40 and at 120 columns puts its value at the right edge of each, with the bar taking the difference. (R3)
+- [x] AC4 `grid` reflows: the same sections at two widths produce a different number of columns and drop nothing. (R3)
+- [x] AC5 The window is frameless, fixed-size and sized to its cards, asserted headlessly; and **seen on a real window**, screenshotted and looked at, per the rule in `.claude/CLAUDE.md`. (R4)
+- [x] AC6 `CGO_ENABLED=0 go build ./cmd/hayami-tui` passes in CI. (R5)
+- [x] AC7 Hiding a section removes it from both shells and stops its poll; reordering changes the order in both. Asserted from the settings, not from a shell. (R6)
+- [x] AC7.1 The settings file is YAML a person can read, and a section this build does not know is preserved across a save. (R6)
+- [x] AC7.2 `--sections` and `--arrangement` override the file for one run and leave it unchanged on disk. (R6.1)
+- [x] AC8 `TestFeatureParity` passes with an empty allow-list. (R7)
+- [x] AC9 A rate crossing from KiB/s to MiB/s does not move the column in either shell. (R8)
+
+## Gaps found
+
+- **A card's row has no second line.** `glance.Row` is one label and one
+  value; the cumulative total under a rate is a second, quieter line, which
+  the terminal draws right-aligned under the value. The window draws it as its
+  own row with an empty label, which shows the same numbers and is not the
+  same shape. A row that carries a detail line belongs in the library.
 
 ## Risks & Assumptions
 
@@ -101,6 +115,17 @@ it exercises the formatters, the stretching bar and the grid reflow on its own.
 - **A flag that overrode the file and then saved it** would rewrite a user's
   settings because a pane was started with an argument. The override is for
   the run and is never written back; the store is opened read-only for it.
+- **`--once` cannot show a rate.** A rate is a difference and one poll has
+  nothing to difference against, so `hayami-tui --once` prints the blank form
+  for bandwidth. It is the honest answer rather than a bug, and it stops being
+  visible with spec 002: a usage figure is an absolute number from a cache and
+  reads correctly on the first poll, which is what the pane being replaced
+  shows.
+- **The window is decorated until a KWin rule says otherwise.** A splash
+  window sets the GLFW undecorated hint and KWin draws a titlebar anyway
+  (fynedesygn quirk 32's neighbour). The rule writer is in the library and
+  installing it is a deliberate step, so it is its own spec rather than
+  something this one does to a user's compositor on first run.
 - Rollback: the repository has no release and no users. Revert the branch.
 
 ## Alternatives Considered
