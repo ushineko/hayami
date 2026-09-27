@@ -124,6 +124,14 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- hayami joins the usage cache the Python tools already share, rather than
+  keeping one of its own: the same directory, filenames, gate, non-blocking
+  lock and the rule that a failed fetch never clobbers good data. The payload
+  stays opaque, so a field this build has never heard of survives a write. A
+  test runs the Python's own slug function and compares, and another reads the
+  real cache files on the machine and skips where there are none (spec 002,
+  #4).
+
 - The repository, its conventions and its Makefile.
 - A panel with one section in it. `internal/core` reads `/proc/net/dev`,
   `internal/view` describes a section and lays it out as a stack, a grid or a
