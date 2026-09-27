@@ -21,10 +21,14 @@ jobs:
       # The desktop panel is a Fyne window and needs the X and GL headers to
       # build at all. The terminal panel does not, which is why it is a
       # separate binary and is built with CGO off below.
+      # Fyne over GLFW: OpenGL, X11 and Wayland headers. This Fyne builds GLFW
+      # with both back ends, so the Wayland ones are not optional even on a
+      # runner that has no display at all.
       - name: Install the window's build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev xorg-dev
+          sudo apt-get install -y --no-install-recommends \
+            gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols
 
       - name: Test
         run: go test -race ./...
