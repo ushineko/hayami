@@ -120,3 +120,42 @@ func TestTheSectionRendersInEveryArrangement(t *testing.T) {
 		assert.Contains(t, joined, "86", "in %s", a)
 	}
 }
+
+// AC4. A device with several cells is one row and a quiet line beneath it.
+func TestADeviceWithCellsIsOneRowAndADetailLine(t *testing.T) {
+	d := reading("AirPods Pro", 80)
+	d.Cells = []view.PeripheralCell{
+		{Name: "L", Level: 80},
+		{Name: "R", Level: 90},
+		{Name: "case", Level: 50},
+	}
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
+
+	require.Len(t, s.Rows, 1, "a pair of earbuds became more than one row")
+	assert.Equal(t, "L 80  R 90  case 50", s.Rows[0].Detail)
+	assert.Contains(t, s.Rows[0].Value, "80")
+}
+
+// AC3. A device with one battery has no detail line to draw.
+func TestADeviceWithOneBatteryHasNoCellLine(t *testing.T) {
+	s := view.Peripherals(view.PeripheralsReading{
+		Devices: []view.PeripheralReading{reading("G502 X PLUS", 86)},
+	})
+	require.Len(t, s.Rows, 1)
+	assert.Empty(t, s.Rows[0].Detail)
+}
+
+// The cells and what the battery is doing are both said, not one instead of
+// the other.
+func TestCellsAndChargingAreBothSaid(t *testing.T) {
+	d := reading("AirPods Pro", 40)
+	d.Charge = view.Filling
+	d.Cells = []view.PeripheralCell{{Name: "L", Level: 40}, {Name: "R", Level: 45}}
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
+	require.Len(t, s.Rows, 1)
+
+	assert.Contains(t, s.Rows[0].Detail, "L 40")
+	assert.Contains(t, s.Rows[0].Detail, "charging")
+}
