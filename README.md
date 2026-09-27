@@ -34,7 +34,7 @@ and the choice holds in both shells.
 
 | Section | Reads |
 |---|---|
-| Peripherals | HID++ over `hidraw` for Logitech, `headsetcontrol` for Arctis; `upower` and BlueZ `org.bluez.Battery1` for the rest and Apple's accessory protocol for AirPods are not written yet |
+| Peripherals | HID++ over `hidraw` for Logitech, `headsetcontrol` for Arctis, Apple's accessory protocol for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface |
 | Cooler | hwmon by label for the processor; `liquidctl` for the pump and the coolant, where the kernel has no driver |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces |
@@ -131,6 +131,25 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- AirPods, over Apple's accessory protocol. BlueZ exposes no battery for them
+  — the code that would is behind its `Experimental` setting — so the device
+  is asked directly on an L2CAP channel, which needs no system configuration
+  and gives a level per ear and for the case. A pair of earbuds is one device
+  on the desk and is one row on the panel: it carries the lower of the two
+  ears, because that is the one that stops working first, with the cells on a
+  quiet line beneath it (spec 009, #23).
+- Every other Bluetooth device that reports a battery is read from
+  `org.bluez.Battery1`, generically — a device with that interface gets a row
+  with its own name, and one without gets none. The program this replaces
+  parses `upower -i` instead; BlueZ carries the same numbers with the device's
+  name and state beside them, and is an interface rather than a report.
+- Two findings that no test away from the hardware could make: `SockaddrL2`
+  takes an address in written order and reverses it itself, so reversing it
+  first dials nothing and the kernel calls that `ECONNREFUSED`; and Go
+  preempts goroutines with signals, so `poll(2)` returns `EINTR` as a matter
+  of course and a reader that treats it as a failure calls a working device
+  broken.
 
 - The peripherals section, which is the one the program is named after. The
   Logitech mouse is read by speaking **HID++ over `hidraw`** rather than by

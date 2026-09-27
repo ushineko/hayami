@@ -1,5 +1,10 @@
 package view
 
+import (
+	"strconv"
+	"strings"
+)
+
 // The battery bands, in percent.
 //
 // The reference's, and round numbers because a battery has no alarm to measure
@@ -45,6 +50,22 @@ type PeripheralReading struct {
 	// headset that has gone quiet is whether what it said last is still true,
 	// not what it says now.
 	Stale bool
+
+	// Cells are the separate batteries inside a device that has more than
+	// one, already named and in the order to draw them. Empty for the
+	// ordinary device with a single battery.
+	//
+	// Level is the row's number and these are the line beneath it: a pair of
+	// earbuds is one device on the desk and should be one row on the panel,
+	// but which ear is low is exactly what the wearer wants to know.
+	Cells []PeripheralCell
+}
+
+// PeripheralCell is one battery inside a device: an earbud, a case.
+type PeripheralCell struct {
+	// Name is short because these sit several to a line: "L", "R", "case".
+	Name  string
+	Level int
 }
 
 // PeripheralsReading is every device the poll knows about.
@@ -105,7 +126,23 @@ func peripheral(d PeripheralReading, unit int) Row {
 }
 
 // note is the quiet line under a row, where there is something to say.
+//
+// The cells come first when there are any: for a pair of earbuds they are the
+// detail, and "charging" is said beside them rather than instead of them.
 func note(d PeripheralReading) string {
+	state := chargeNote(d)
+
+	if cells := cellNote(d.Cells); cells != "" {
+		if state != "" {
+			return cells + "  " + state
+		}
+		return cells
+	}
+	return state
+}
+
+// chargeNote is what the row says about what the battery is doing.
+func chargeNote(d PeripheralReading) string {
 	switch {
 	case d.Stale:
 		return "not answering"
@@ -116,4 +153,13 @@ func note(d PeripheralReading) string {
 	default:
 		return ""
 	}
+}
+
+// cellNote lists the cells: "L 100  R 100  case 80".
+func cellNote(cells []PeripheralCell) string {
+	var parts []string
+	for _, c := range cells {
+		parts = append(parts, c.Name+" "+strconv.Itoa(c.Level))
+	}
+	return strings.Join(parts, "  ")
 }

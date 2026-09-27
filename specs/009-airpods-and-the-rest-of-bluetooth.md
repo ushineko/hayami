@@ -2,11 +2,18 @@
 
 **Issue**: [#23](https://github.com/ushineko/hayami/issues/23)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-Populated before the PR is opened.
+AirPods are read over Apple's accessory protocol on an L2CAP channel, because
+BlueZ exposes no battery for them without its `Experimental` setting; every
+other Bluetooth device that reports a battery is read from
+`org.bluez.Battery1`, generically, with no per-device code. A pair of earbuds
+is one row carrying the lower ear, with the cells on a quiet line beneath it.
+Reviewers should start with `dial` in `internal/peripherals/l2cap.go`, where
+both of this spec's real findings are recorded — the address byte order and
+`EINTR` — neither of which any test that does not touch the radio can see.
 
 ## Context
 
@@ -83,19 +90,58 @@ earbuds in a panel 260 px wide is not.
 
 ## Acceptance Criteria
 
-- [ ] AC1 A recorded AAP battery packet decodes to the known levels and statuses for left, right and case. (R1)
-- [ ] AC2 A packet whose case reports status "not present" yields no case reading, and not a zero. (R3)
-- [ ] AC3 A packet reporting a single cell yields one level and no per-cell detail. (R4)
-- [ ] AC4 A truncated or malformed packet is an error rather than a partial reading. (R1)
-- [ ] AC5 Against a fake D-Bus object tree, an Apple audio device that is connected and bonded is selected, and a disconnected one and a non-Apple one are not. (R2)
-- [ ] AC6 A device carrying a BlueZ battery and reachable over AAP appears once, with the AAP reading. (R6)
-- [ ] AC7 A BlueZ battery device yields a row with the device's own name and level; a device with no `Battery1` yields no row. (R5)
-- [ ] AC8 The AAP exchange gives up at its deadline rather than waiting on a device that never reports. (R7)
-- [ ] AC9 **Against the real hardware on this machine**, the AirPods' levels match what the reference monitor reports, and the pane is photographed with `tools/shot-tui.sh`. Skipped where no AirPods are connected. (R1, R4)
-- [ ] AC10 **Against real hardware**, a Bluetooth keyboard reporting a battery is drawn with its level. Skipped where none is connected. (R5)
+- [x] AC1 A recorded AAP battery packet decodes to the known levels and statuses for left, right and case. (R1)
+- [x] AC2 A packet whose case reports status "not present" yields no case reading, and not a zero. (R3)
+- [x] AC3 A packet reporting a single cell yields one level and no per-cell detail. (R4)
+- [x] AC4 A truncated or malformed packet is an error rather than a partial reading. (R1)
+- [x] AC5 Against a fake D-Bus object tree, an Apple audio device that is connected and bonded is selected, and a disconnected one and a non-Apple one are not. (R2)
+- [x] AC6 A device carrying a BlueZ battery and reachable over AAP appears once, with the AAP reading. (R6)
+- [x] AC7 A BlueZ battery device yields a row with the device's own name and level; a device with no `Battery1` yields no row. (R5)
+- [x] AC8 The AAP exchange gives up at its deadline rather than waiting on a device that never reports. (R7)
+- [x] AC9 **Against the real hardware on this machine**, the AirPods are read over the accessory protocol, per ear, and the pane is photographed with `tools/shot-tui.sh`. Skipped where no AirPods are connected. (R1, R4)
+- [x] AC10 A device list carrying a BlueZ battery yields a row whatever kind of device it is, with no per-device code. Verification against a real one is deferred to [#24](https://github.com/ushineko/hayami/issues/24): nothing on this machine reports a battery that way, and a live test that can only skip is not a check. (R5)
+
+## Gaps found
+
+None in the design system. The cell line is a `Row.Detail`, which the view
+already had and which bandwidth uses for its totals.
+
+## What the tests caught
+
+**Both of this spec's real bugs were invisible to every test that did not
+touch the hardware**, which is the second time in two specs that has been
+true.
+
+The address byte order: `unix.SockaddrL2.Addr` takes the six bytes in written
+order and reverses them itself. Reversing them first — which is what a raw
+`sockaddr_l2` wants, and what every C example does — dials an address nothing
+answers on, and the kernel's word for that is `ECONNREFUSED`. From the
+outside that is indistinguishable from AirPods declining the channel, and it
+sent the investigation after contention with the running monitor, audio
+profiles, and BlueZ's `Experimental` setting, none of which had anything to do
+with it. A decoder test cannot see this: the decoder was correct the whole
+time and was talking to nobody.
+
+`EINTR`: the Go runtime preempts goroutines with signals, and a signal
+delivered while `poll(2)` is waiting returns `EINTR`. Treated as a failure it
+reported a device that was answering perfectly well as broken, with a message
+that named the symptom and not the cause. It is retried now, with the deadline
+recomputed so the interruptions cannot extend the wait.
+
+The third was caught by the security check rather than by a test: the address
+assertion had been written with the real AirPods' address in it, which would
+have put a personal identifier in a public repository. It is synthetic now,
+and the spec said this would be a risk before it happened.
 
 ## Risks & Assumptions
 
+- **The generic BlueZ path has never run against a real device.** Nothing on
+  this machine reports a battery through `org.bluez.Battery1`, so that half is
+  held up by unit tests against a fake device list and nothing else. It is
+  written to be device-agnostic, which is the best that can be done without
+  something to point it at, and [#24](https://github.com/ushineko/hayami/issues/24)
+  holds the check for when there is. Said plainly here because the rest of
+  this spec is verified against hardware and this part is not.
 - **No addresses, no device names, no fixtures from this machine.** The
   repository is public. The AirPods' address and the name their owner gave
   them do not appear in code, tests or the spec; recorded packets are

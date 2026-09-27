@@ -40,10 +40,11 @@ type Peripherals struct {
 	// knows what it said before it did.
 	seen map[string]remembered
 
-	// logitech and headsets are the two sources, replaced by a test so
+	// logitech, headsets and bluetooth are the sources, replaced by a test so
 	// neither a real device nor a real subprocess is touched.
-	logitech func() ([]peripherals.Battery, error)
-	headsets func(context.Context) ([]peripherals.Battery, error)
+	logitech  func() ([]peripherals.Battery, error)
+	headsets  func(context.Context) ([]peripherals.Battery, error)
+	bluetooth func() ([]peripherals.Battery, error)
 
 	// now is the clock, for the same reason.
 	now func() time.Time
@@ -58,11 +59,13 @@ type remembered struct {
 // NewPeripherals builds the peripherals source.
 func NewPeripherals() *Peripherals {
 	logitech := peripherals.NewLogitech()
+	bluetooth := peripherals.NewBluetooth()
 	return &Peripherals{
-		seen:     make(map[string]remembered),
-		logitech: logitech.Batteries,
-		headsets: peripherals.Headsets,
-		now:      time.Now,
+		seen:      make(map[string]remembered),
+		logitech:  logitech.Batteries,
+		headsets:  peripherals.Headsets,
+		bluetooth: bluetooth.Batteries,
+		now:       time.Now,
 	}
 }
 
@@ -99,6 +102,20 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		errs = append(errs, err)
 	}
 
+	bluetooth, err := p.bluetooth()
+	switch {
+	case err == nil:
+		found = append(found, bluetooth...)
+	case errors.Is(err, peripherals.ErrNoBluez):
+		// Also not a problem. A machine with no Bluetooth has no Bluetooth
+		// rows, which is what it should look like.
+	default:
+		// A partial answer is still an answer: Batteries returns what it read
+		// alongside the errors for what it could not.
+		found = append(found, bluetooth...)
+		errs = append(errs, err)
+	}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.reading = p.merge(found)
@@ -118,6 +135,7 @@ func (p *Peripherals) merge(found []peripherals.Battery) view.PeripheralsReading
 			Level:    b.Level,
 			HasLevel: b.HasLevel,
 			Charge:   charge(b.State),
+			Cells:    cells(b.Cells),
 		}
 
 		// A device that is connected and not saying how full it is keeps the
@@ -153,6 +171,22 @@ func (p *Peripherals) merge(found []peripherals.Battery) view.PeripheralsReading
 	// be found again.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return view.PeripheralsReading{Devices: out}
+}
+
+// cells translates a device's separate batteries into the view's.
+//
+// The names are made here rather than in the view because what a cell is
+// called is the reader's business: the view is told "L" and draws it, and does
+// not know that a left earbud is component 0x04 in somebody's protocol.
+func cells(in []peripherals.CellReading) []view.PeripheralCell {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]view.PeripheralCell, 0, len(in))
+	for _, c := range in {
+		out = append(out, view.PeripheralCell{Name: c.Cell.String(), Level: c.Level})
+	}
+	return out
 }
 
 // charge translates the reader's state into the view's.

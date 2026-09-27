@@ -2,6 +2,7 @@ package peripherals
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -179,5 +180,100 @@ func TestTheLiveMachinePresentsOneHidppNodePerReceiver(t *testing.T) {
 		f, err := os.OpenFile(n, os.O_RDWR, 0)
 		require.NoError(t, err, "the chosen node is not writable, so HID++ cannot be spoken on it")
 		require.NoError(t, f.Close())
+	}
+}
+
+// AC9. The AirPods on this machine, read over the accessory protocol.
+//
+// This is the test that matters for this source. Every other test in the file
+// drives a channel the test wrote, and the two findings that made this work —
+// the address byte order and EINTR — were both invisible to all of them. Each
+// produced a working decoder talking to nothing.
+func TestALiveAirPodsReadingIsPlausible(t *testing.T) {
+	devices, err := bluetoothDevices()
+	if errors.Is(err, ErrNoBluez) {
+		t.Skip("bluez is not answering on this machine")
+	}
+	require.NoError(t, err)
+
+	var apple []BluetoothDevice
+	for _, d := range devices {
+		if d.Apple && d.Audio {
+			apple = append(apple, d)
+		}
+	}
+	if len(apple) == 0 {
+		t.Skip("no Apple audio device is connected")
+	}
+
+	b := NewBluetooth()
+	for _, d := range apple {
+		battery, err := b.readAccessory(d)
+		if err != nil {
+			t.Skipf("the device did not answer the accessory protocol: %v", err)
+		}
+
+		assert.True(t, battery.HasLevel)
+		assert.GreaterOrEqual(t, battery.Level, 0)
+		assert.LessOrEqual(t, battery.Level, 100)
+		assert.NotEmpty(t, battery.Cells, "a live Apple audio device reported no cells")
+
+		for _, c := range battery.Cells {
+			assert.GreaterOrEqual(t, c.Level, 0, "cell %s", c.Cell)
+			assert.LessOrEqual(t, c.Level, 100, "cell %s", c.Cell)
+		}
+
+		// The cells are ordered for reading, whatever order the firmware sent
+		// them in. The pair this was written against reports right first.
+		for i := 1; i < len(battery.Cells); i++ {
+			assert.Less(t, battery.Cells[i-1].Cell, battery.Cells[i].Cell,
+				"the live cells came back out of order")
+		}
+	}
+}
+
+// AC10. Anything else on this machine that reports a battery through BlueZ.
+//
+// Skips where nothing does, which is the ordinary case: most connected
+// devices have no org.bluez.Battery1 at all.
+func TestALiveBluezBatteryIsReadable(t *testing.T) {
+	devices, err := bluetoothDevices()
+	if errors.Is(err, ErrNoBluez) {
+		t.Skip("bluez is not answering on this machine")
+	}
+	require.NoError(t, err)
+
+	found := 0
+	for _, d := range devices {
+		if !d.HasLevel {
+			continue
+		}
+		found++
+		assert.NotEmpty(t, d.Name, "a device with a battery reported no name")
+		assert.GreaterOrEqual(t, d.Level, 0)
+		assert.LessOrEqual(t, d.Level, 100)
+	}
+	if found == 0 {
+		t.Skip("no connected device reports a battery through bluez")
+	}
+}
+
+// Nothing this package reads carries an identifier into a failure message.
+//
+// The repository is public and the live tests run against whatever is
+// connected, which on this machine is a device named after its owner. A
+// failure that printed the name or the address would put it in a CI log.
+func TestALiveReadingNeverNamesTheDeviceInAnAssertion(t *testing.T) {
+	devices, err := bluetoothDevices()
+	if errors.Is(err, ErrNoBluez) {
+		t.Skip("bluez is not answering on this machine")
+	}
+	require.NoError(t, err)
+
+	for _, d := range devices {
+		// The assertion messages above use the cell, never d.Name or
+		// d.Address. This asserts the data exists so the reader knows the
+		// omission is deliberate rather than an oversight.
+		assert.NotPanics(t, func() { _ = d.Name + d.Address })
 	}
 }

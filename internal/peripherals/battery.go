@@ -46,6 +46,15 @@ type Battery struct {
 	HasLevel bool
 
 	State State
+
+	// Cells are the batteries inside the device, for one that has more than
+	// one: two earbuds and a case. Empty for the ordinary device with a single
+	// battery, which is every device spec 008 reads.
+	//
+	// Level is still the row's number — the lower of the two ears — and these
+	// are what goes on the quiet line beneath it. They are kept apart rather
+	// than folded into a string here because formatting is the view's job.
+	Cells []CellReading
 }
 
 // decodeUnifiedBattery reads a 0x1004 get_status reply.

@@ -20,4 +20,10 @@ func SetPeripheralSources(
 	now func() time.Time,
 ) {
 	p.logitech, p.headsets, p.now = logitech, headsets, now
+	p.bluetooth = func() ([]peripherals.Battery, error) { return nil, peripherals.ErrNoBluez }
+}
+
+// SetPeripheralBluetooth replaces just the Bluetooth source.
+func SetPeripheralBluetooth(p *Peripherals, bluetooth func() ([]peripherals.Battery, error)) {
+	p.bluetooth = bluetooth
 }
