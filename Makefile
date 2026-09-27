@@ -69,10 +69,12 @@ test: ## Run the tests with the race detector
 coverage: ## Run the tests and open a coverage report
 	go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out
 
+LDFLAGS=-X github.com/ushineko/hayami/internal/buildinfo.version=$(VERSION)
+
 .PHONY: build
 build: ## Build both panels for the host platform
-	CGO_ENABLED=1 go build -trimpath -o hayami ./cmd/hayami
-	CGO_ENABLED=0 go build -trimpath -o hayami-tui ./cmd/hayami-tui
+	CGO_ENABLED=1 go build -trimpath -ldflags='$(LDFLAGS)' -o hayami ./cmd/hayami
+	CGO_ENABLED=0 go build -trimpath -ldflags='$(LDFLAGS)' -o hayami-tui ./cmd/hayami-tui
 
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities, before every tagged release
