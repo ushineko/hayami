@@ -9,9 +9,8 @@ liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
 frameless always-on-top window, and in a terminal as a pane.
 
 > **Status**: two sections draw in both panels, in all three arrangements, from
-> settings both read: bandwidth, and usage from the cache the Python tools
-> keep. hayami does not fetch usage for itself yet, so a machine that never
-> ran those tools sees an empty usage section. The program it replaces,
+> settings both read: bandwidth, and usage — fetched by hayami itself, through
+> the cache it shares with the tools it replaces. The program it replaces,
 > `ag-scripts/peripheral-battery-monitor`, is the behavioural reference and is
 > still the one to run.
 
@@ -125,6 +124,16 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- hayami fetches its own usage. Credential stores are found by the convention
+  the `claude-max` and `claude-work` wrappers establish, an expired token is
+  refreshed and **written back** to Claude Code's own store, and Codex is asked
+  through its app-server with the reply reshaped into what the shared cache
+  holds. A machine that never ran the Python tools now shows its usage.
+- The usage section is denser: one meter per account rather than one per
+  window, with the bar showing the window nearest its limit and the caption
+  carrying the rest. A plan badge beside the name, and a date rather than a
+  countdown for a window that resets more than a day away (spec 004, #8).
 
 - The usage section. `hayami-tui --sections usage` shows what the shared cache
   holds — every Claude profile, its five-hour and seven-day windows or its
