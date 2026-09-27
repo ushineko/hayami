@@ -150,6 +150,13 @@ MIT. See [LICENSE](LICENSE).
 - Keyboards over `upower` and AirPods over Apple's accessory protocol are not
   in this: there is no hardware here to hold them to.
 
+- **Fix**: `hayami-tui --once` drew only whichever section polled first. It
+  batches a poll per section and quit on the first answer, so the frame held
+  whichever won the race — and with the default sections that was bandwidth
+  answering "nothing yet", which made `--once` print nothing at all. It waits
+  for every section now, bounded, because a prompt that hangs is worse than a
+  prompt missing a reading (#21).
+
 - Preferences, in a window rather than a menu. A fynedesygn shell window —
   Sections, Bandwidth, Appearance — opened from a panel menu of three items,
   which is the difference from the program this replaces: its own menu is six
