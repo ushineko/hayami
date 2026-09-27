@@ -2,11 +2,20 @@
 
 **Issue**: [#19](https://github.com/ushineko/hayami/issues/19)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-Populated before the PR is opened.
+`internal/peripherals` speaks HID++ to a Logitech receiver over `hidraw` —
+choosing the node by its report descriptor, recognising both error forms, and
+retrying a request five times because a real device answers one in only
+fourteen — and reads `headsetcontrol -o json` for the headset.
+`internal/panel.Peripherals` remembers what each device last said so one that
+goes quiet keeps its level and is drawn dim, and drops that level when the
+device or its charge state changes. `view.Peripherals` draws a row per device
+at the reference's bands. Reviewers should start with `requestAttempts` in
+`internal/peripherals/hidpp.go`, which is the finding that only the live test
+could have made.
 
 ## Context
 
@@ -40,12 +49,15 @@ Three things that probe found, which the implementation has to know:
   came back as report `0x11`. A matcher that keys on the report ID drops the
   answer it asked for.
 - The driver here is `hid-generic`, not `hid-logitech-dj`, so paired devices
-  get no sysfs children and device indices have to be found over HID++.
-  Receiver register `0x02` gives the connected count; an index with nothing
-  paired to it does not answer **at all**. Discovery is therefore bounded by a
-  timeout rather than ended by a reply, and the first probe — written with a
-  1.5 second one — took eight seconds to find a mouse that answers in five
-  milliseconds. The timeout is the design.
+  get no sysfs children and device indices have to be found over HID++. Every
+  index answers: a paired one with its feature index, an empty one with a
+  HID++ **1.0** error, `8f 00 08 08`, in about a millisecond. The first probe
+  written against this took eight seconds, because its matcher knew only the
+  2.0 error form — feature index `0xFF` — and sat out its timeout on each of
+  the five empty indices. The protocol was never slow; the reader was deaf to
+  half of what it was told. A HID++ reader has to recognise **both** error
+  forms, and a timeout is a backstop for a device that is asleep rather than
+  the mechanism discovery runs on.
 
 `headsetcontrol` is the opposite story: it has gained `-o json` and an
 `api_version` since the reference was written, and it now prints
@@ -77,9 +89,11 @@ program already does.
 - R2 The HID++ endpoint is chosen by its report descriptor, never by node
   number. A machine with no Logitech receiver is a machine with no Logitech
   row, not an error.
-- R3 Device discovery is bounded. An index with nothing paired to it costs a
-  short timeout, not a long one, and a found index is remembered so the next
-  poll asks it directly.
+- R3 Device discovery reads the reply it is given. Both HID++ error forms —
+  1.0's sub-id `0x8F` and 2.0's feature index `0xFF` — end a request rather
+  than being ignored, so an empty index costs a millisecond. A timeout remains,
+  as a backstop for a device that does not answer at all, and a found index is
+  remembered so the next poll asks it directly.
 - R4 The headset is read from `headsetcontrol -o json`. `headsetcontrol`
   missing, failing, or reporting a device that is offline is a row that is not
   drawn or is drawn stale, never a section that fails.
@@ -95,15 +109,52 @@ program already does.
 
 ## Acceptance Criteria
 
-- [ ] AC1 A HID++ battery reply of known bytes decodes to a known level and status, and a reply arriving as a long report decodes the same as a short one. (R1)
-- [ ] AC2 Given a directory of report descriptors the test writes, the vendor-usage node is chosen and the mouse and keyboard nodes are not. No descriptor is no device and no error. (R2)
-- [ ] AC3 A discovery against a fake endpoint that answers on one index and ignores the rest completes within its bound, and the second poll asks only the index it found. (R3)
-- [ ] AC4 A recorded `headsetcontrol -o json` reply yields the device's name and level; the same reply with `BATTERY_UNAVAILABLE` yields no level. A `headsetcontrol` that is absent yields no row. (R4)
-- [ ] AC5 A device that answers and then stops keeps its level with `Gone` set; a device that never answered is absent from the section. (R5)
-- [ ] AC6 A remembered level survives an unchanged poll, and is dropped both when the name changes and when charging flips to discharging. (R6)
-- [ ] AC7 A level is red at 20 and below, amber to 50 and green above; a charging device says so and is not coloured for it. (R7)
-- [ ] AC8 The parity test passes with `peripherals` in `panel.Keys()`, and the preferences window lists it. (R8)
-- [ ] AC9 **Against the real hardware on this machine**, `hayami-tui --sections peripherals` reports the same level `solaar show` does, and the pane is photographed with `tools/shot-tui.sh`. Skipped where the hardware is absent. (R1, R4)
+- [x] AC1 A HID++ battery reply of known bytes decodes to a known level and status, and a reply arriving as a long report decodes the same as a short one. (R1)
+- [x] AC2 Given a directory of report descriptors the test writes, the vendor-usage node is chosen and the mouse and keyboard nodes are not. No descriptor is no device and no error. (R2)
+- [x] AC3 A discovery against a fake endpoint that answers on one index and returns each error form on the others finds the one device without waiting, an endpoint that answers nothing at all is bounded by the timeout, and the second poll asks only the index it found. (R3)
+- [x] AC4 A recorded `headsetcontrol -o json` reply yields the device's name and level; the same reply with `BATTERY_UNAVAILABLE` yields no level. A `headsetcontrol` that is absent yields no row. (R4)
+- [x] AC5 A device that answers and then stops keeps its level with `Gone` set; a device that never answered is absent from the section. (R5)
+- [x] AC6 A remembered level survives an unchanged poll, and is dropped both when the name changes and when charging flips to discharging. (R6)
+- [x] AC7 A level is red at 20 and below, amber to 50 and green above; a charging device says so and is not coloured for it. (R7)
+- [x] AC8 The parity test passes with `peripherals` in `panel.Keys()`, and the preferences window lists it. (R8)
+- [x] AC9 **Against the real hardware on this machine**, `hayami-tui --sections peripherals` reports the same level `solaar show` does, and the pane is photographed with `tools/shot-tui.sh`. Skipped where the hardware is absent. (R1, R4)
+
+## Gaps found
+
+None. The dimming a stale device needs is `view.Dim`, which the painter
+already had; `view.Section.Gone` turned out to be the wrong shape for this —
+it marks a whole section, and here it is one device of several that has gone
+quiet — so a stale row carries `Dim` as its own status instead. Nothing was
+wanted from the design system that it does not have.
+
+## What the tests caught
+
+Three things, and the order they were caught in is the argument for the way
+they are written.
+
+**The vendor match, caught by a unit test before it ever ran.**
+`strings.TrimLeft(fields[1], "0")` on the kernel's `0000046D` returns `46D`,
+not `046D`: TrimLeft strips every leading zero, including the vendor's own.
+Compared against `"046D"` it matched nothing, so **no Logitech node would ever
+have been found on any machine**. The section would have drawn the headset and
+silently never the mouse, and it would have looked like a hardware problem.
+The field is parsed as a number now.
+
+**A device going quiet was being reported as a failure.** A sleeping wireless
+mouse answers nothing, every poll, for as long as nobody touches it — that is
+its ordinary state, not an error. Returned up the stack it would have put a
+line in the log every fifteen seconds and buried the real failures among them.
+Silence has its own sentinel now and the section draws the device stale.
+
+**One request is not enough, caught only by the live test.** Every test in the
+package drives an endpoint the test wrote, every one of them passed, and the
+real mouse answered a single request **fourteen times in twenty** — and, after
+six seconds of idle, needed up to *four* attempts. Nothing in the protocol says
+so and nothing in the code suggests it. At one attempt the panel would have
+shown a mouse flapping between a reading and "not answering" on most polls,
+on a desk where nothing was wrong. This is the case the integration-boundary
+rule exists for, and it is worth being precise about what saved it: not the
+decoder tests, which were green throughout, but a test that opened the device.
 
 ## Risks & Assumptions
 
@@ -125,6 +176,16 @@ program already does.
   charge and a level band; the band is what a device without a fuel gauge
   actually knows. Drawing the band as a percentage would invent precision, so
   the row says what the device said.
+- **The retry budget is a measurement of one receiver.** Five attempts covers
+  what a Lightspeed receiver and a G502 X PLUS needed, with margin. It is
+  recorded at `requestAttempts` with both measurements and their conditions, so
+  the next person can see it is a number that was taken rather than chosen.
+  Only silence is retried, so a device that is off costs one request: the
+  receiver refuses its index, and a refusal is an answer.
+- **A device that is off is not a device that is asleep**, and the program
+  cannot tell them apart in the moment — the receiver says "unknown device" for
+  both. That is what `PeripheralsForget` settles: quiet is quiet for ten
+  minutes and gone after.
 - Rollback: revert. The section is drawn only when the settings name it, and
   nothing else in the program changes.
 

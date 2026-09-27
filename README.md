@@ -8,11 +8,13 @@ A panel for Linux showing peripheral battery, network bandwidth,
 liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
 frameless always-on-top window, and in a terminal as a pane.
 
-> **Status**: two sections draw in both panels, in all three arrangements, from
-> settings both read: bandwidth, and usage — fetched by hayami itself, through
-> the cache it shares with the tools it replaces. The program it replaces,
+> **Status**: four sections draw in both panels, in all three arrangements,
+> from settings both read: bandwidth, usage — fetched by hayami itself, through
+> the cache it shares with the tools it replaces — the cooler, and the
+> peripherals. The program it replaces,
 > `ag-scripts/peripheral-battery-monitor`, is the behavioural reference and is
-> still the one to run.
+> still the one to run: its keyboard and AirPods readings have no equivalent
+> here yet.
 
 ## Contents
 
@@ -32,7 +34,7 @@ and the choice holds in both shells.
 
 | Section | Reads |
 |---|---|
-| Peripherals | `solaar` for Logitech, `upower` and BlueZ `org.bluez.Battery1` for the rest, `headsetcontrol` for Arctis, Apple's accessory protocol for AirPods |
+| Peripherals | HID++ over `hidraw` for Logitech, `headsetcontrol` for Arctis; `upower` and BlueZ `org.bluez.Battery1` for the rest and Apple's accessory protocol for AirPods are not written yet |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface |
 | Cooler | hwmon by label for the processor; `liquidctl` for the pump and the coolant, where the kernel has no driver |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces |
@@ -129,6 +131,24 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- The peripherals section, which is the one the program is named after. The
+  Logitech mouse is read by speaking **HID++ over `hidraw`** rather than by
+  running `solaar`: the CLI takes three and a half seconds to answer and wraps
+  a Python library that cannot be imported from Go, and the protocol under
+  both is a seven-byte request answered in about five milliseconds. The
+  headset comes from `headsetcontrol -o json`, which has replaced the short
+  output the program this succeeds still parses. A row per device, appearing
+  and disappearing as the hardware does; a device that stops answering keeps
+  its last level and is drawn dim, because the question about a headset that
+  has gone quiet is whether what it said last is still true (spec 008, #19).
+- The live test is why this works. A single HID++ request is answered
+  fourteen times in twenty, and after a few seconds of idle it takes up to
+  four attempts — a fact the protocol does not mention and no test against a
+  fake endpoint can see. Every one of those was green while the real mouse
+  would have flickered in and out of the panel on most polls.
+- Keyboards over `upower` and AirPods over Apple's accessory protocol are not
+  in this: there is no hardware here to hold them to.
 
 - Preferences, in a window rather than a menu. A fynedesygn shell window —
   Sections, Bandwidth, Appearance — opened from a panel menu of three items,

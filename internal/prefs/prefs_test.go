@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/prefs"
 )
 
@@ -67,4 +69,30 @@ func TestAChangeReachesTheStoreWithoutASaveButton(t *testing.T) {
 
 	assert.Equal(t, []string{"usage", "cooler"}, s.Config().Sections)
 	assert.Equal(t, 1, called)
+}
+
+// AC8. Every section this build knows is offered by name, including the one
+// added last.
+//
+// The list is built from panel.Keys(), so this passes for free — which is
+// exactly why it is asserted rather than assumed. A section wired into the
+// panel and not into the preferences would be one a reader could see and not
+// turn off, and nothing else in the suite would notice.
+func TestEveryKnownSectionIsOfferedByName(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	w := prefs.New(a, prefs.Options{Store: store(t, "hayami:\n    sections:\n        - usage\n")})
+
+	var offered []string
+	for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
+		if c, ok := o.(*widget.Check); ok {
+			offered = append(offered, c.Text)
+		}
+	}
+
+	for _, key := range panel.Keys() {
+		assert.Contains(t, offered, key)
+	}
+	assert.Contains(t, offered, "peripherals")
 }
