@@ -79,10 +79,11 @@ func (b *Bandwidth) Data() any { return b.Readings() }
 func Sources(keys, interfaces []string, read func() (map[string]core.Counters, error)) []Source {
 	var out []Source
 	for _, key := range keys {
-		// A switch rather than an if, because this is the list of every
-		// section the program has and it grows with each spec.
-		if key == "bandwidth" {
+		switch key {
+		case "bandwidth":
 			out = append(out, NewBandwidth(interfaces, read))
+		case "usage":
+			out = append(out, NewUsage())
 		}
 	}
 	return out
@@ -90,4 +91,4 @@ func Sources(keys, interfaces []string, read func() (map[string]core.Counters, e
 
 // Keys are the keys of every source this build knows, for the command line's
 // help and for the parity test.
-func Keys() []string { return []string{"bandwidth"} }
+func Keys() []string { return []string{"bandwidth", "usage"} }

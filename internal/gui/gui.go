@@ -43,16 +43,28 @@ type Panel struct {
 	opts  Options
 }
 
-// card is one section's card and the rows in it, kept so a poll repaints
+// card is one section's card and the pieces in it, kept so a poll repaints
 // rather than rebuilding. A glance window is redrawn several times a minute
 // and rebuilding at that rate would fight the no-reflow rule.
 type card struct {
-	card *glance.Card
-	rows []*glance.Row
+	card   *glance.Card
+	rows   []*glance.Row
+	meters []*glance.Meter
 }
+
+// MeterLabelWidth pins a card's meter labels to one column, so several meters
+// stacked in a card line their captions up and two windows of the same quota
+// can be compared at a glance.
+const MeterLabelWidth float32 = 84
 
 // New builds the window with a card per source. Cards are not drawn until
 // their source answers, so the window does not flash empty on the way up.
+//
+// **Poll the sources before calling this.** A card is built with the rows and
+// meters its section has at that moment, and the library takes objects at
+// build time: a card built from an empty section stays empty. Start does the
+// first poll for this reason, and the window is the real size on its first
+// frame rather than growing into it.
 func New(a fyne.App, o Options) *Panel {
 	if o.Title == "" {
 		o.Title = "hayami"
@@ -74,6 +86,11 @@ func New(a fyne.App, o Options) *Panel {
 			row := glance.NewRow(r.Label, r.Value)
 			holder.rows = append(holder.rows, row)
 			c.AddRow(row)
+		}
+		for _, m := range sec.Meters {
+			meter := glance.NewMeter(m.Label, MeterLabelWidth)
+			holder.meters = append(holder.meters, meter)
+			c.AddObject(meter.Object())
 		}
 		p.cards[s.Key()] = holder
 		p.win.Panel().Add(c)
@@ -101,11 +118,25 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	rows := flatten(sec.Rows)
 	if len(rows) != len(c.rows) {
 		p.rebuild(c, rows)
-		return
+	} else {
+		for i, r := range rows {
+			c.rows[i].SetLabel(r.Label)
+			c.rows[i].Set(reading(r))
+		}
 	}
-	for i, r := range rows {
-		c.rows[i].SetLabel(r.Label)
-		c.rows[i].Set(reading(r))
+
+	// A meter the card was not built with cannot be added now: the library
+	// takes objects at build time and a card rebuilt on a poll would reflow
+	// the window several times a minute. A section that gains a meter after
+	// the window is up is a restart, and the only thing that does that today
+	// is an account appearing, which is rare enough to live with. It is in
+	// the spec's gaps.
+	for i, m := range sec.Meters {
+		if i >= len(c.meters) {
+			break
+		}
+		c.meters[i].SetLabel(m.Label)
+		c.meters[i].Set(m.Fraction, m.Caption, status(m.Status))
 	}
 }
 
@@ -206,14 +237,50 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 	}
 }
 
+// first polls every source once and reports which of them answered.
+//
+// It runs before the window exists, so it blocks: there is nothing to keep
+// responsive yet, and a panel that opened before its first reading would
+// resize in front of the person who opened it.
+func first(ctx context.Context, sources []panel.Source) map[string]bool {
+	out := make(map[string]bool, len(sources))
+	for _, s := range sources {
+		drawn, err := s.Poll(ctx)
+		if err != nil {
+			drawn = false
+		}
+		out[s.Key()] = drawn
+	}
+	return out
+}
+
+// section finds a source's current drawing by key.
+func section(sources []panel.Source, key string) view.Section {
+	for _, s := range sources {
+		if s.Key() == key {
+			return s.Section()
+		}
+	}
+	return view.Section{}
+}
+
 // Start builds the window, starts the polls and runs until it closes.
 func Start(o Options) error {
 	a := app.NewWithID(AppID)
 	a.Settings().SetTheme(fdtheme.New(fdtheme.BreezeDark, fdtheme.Options{}))
 
-	p := New(a, o)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// The first reading before the first frame: a card is built with the
+	// pieces its section has, so a section polled after the window is built
+	// would have nowhere to put them.
+	drawn := first(ctx, o.Sources)
+
+	p := New(a, o)
+	for key, ok := range drawn {
+		p.Draw(key, section(o.Sources, key), ok)
+	}
 	p.Poll(ctx)
 
 	p.win.ShowAndRun()

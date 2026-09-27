@@ -8,8 +8,10 @@ A panel for Linux showing peripheral battery, network bandwidth,
 liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
 frameless always-on-top window, and in a terminal as a pane.
 
-> **Status**: the spine works. One section — bandwidth — draws in both panels,
-> in all three arrangements, from settings both read. The program it replaces,
+> **Status**: two sections draw in both panels, in all three arrangements, from
+> settings both read: bandwidth, and usage from the cache the Python tools
+> keep. hayami does not fetch usage for itself yet, so a machine that never
+> ran those tools sees an empty usage section. The program it replaces,
 > `ag-scripts/peripheral-battery-monitor`, is the behavioural reference and is
 > still the one to run.
 
@@ -123,6 +125,14 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- The usage section. `hayami-tui --sections usage` shows what the shared cache
+  holds — every Claude profile, its five-hour and seven-day windows or its
+  spend, and Codex with its allowance windows and individual limit — as meters
+  with a bar, a percentage and a countdown. `view.Meter` draws in all three
+  arrangements and stretches to the pane in `row`, which is what replaces the
+  widget's own terminal modes. Nothing is fetched yet: the section shows what
+  the Python tools keep fresh (spec 003, #6).
 
 - hayami joins the usage cache the Python tools already share, rather than
   keeping one of its own: the same directory, filenames, gate, non-blocking

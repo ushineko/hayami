@@ -102,6 +102,35 @@ func block(s Section, width int) []string {
 			out = append(out, rightAlign(r.Detail, width))
 		}
 	}
+	out = append(out, meters(s.Meters, width)...)
+	return out
+}
+
+// MeterLabelGap is the space between a meter's label and its caption.
+const MeterLabelGap = 1
+
+// meters draws a section's meters: a label and a caption on one line, the bar
+// on the next.
+//
+// The labels are padded to the widest of them so the captions line up down the
+// section, which is what makes two windows of the same quota comparable at a
+// glance. The bar takes the whole width, because a bar that stopped short
+// would invent a maximum that is not the one the caption states.
+func meters(ms []Meter, width int) []string {
+	if len(ms) == 0 {
+		return nil
+	}
+	labelWidth := 0
+	for _, m := range ms {
+		labelWidth = max(labelWidth, runeLen(m.Label))
+	}
+
+	out := make([]string, 0, len(ms)*2)
+	for _, m := range ms {
+		head := m.Label + strings.Repeat(" ",
+			max(MeterLabelGap, labelWidth-runeLen(m.Label)+MeterLabelGap)) + m.Caption
+		out = append(out, truncate(head, width), bar(m.Fraction, width))
+	}
 	return out
 }
 
@@ -149,6 +178,30 @@ func renderRow(sections []Section, width int) []string {
 			}
 			out = append(out, line(labelled, width))
 		}
+		out = append(out, meterRows(s, width)...)
+	}
+	return out
+}
+
+// meterRows draws a meter as one line: the label, the bar stretching to fill
+// what is left, and the caption at the right edge.
+//
+// This is the shape the pane being replaced draws, and the reason the row
+// arrangement exists at all: a line of a session manager's pane showing a
+// quota, with the bar taking whatever width the pane happens to have.
+func meterRows(s Section, width int) []string {
+	out := make([]string, 0, len(s.Meters))
+	for _, m := range s.Meters {
+		label := s.Title + " " + m.Label
+		fixed := runeLen(label) + runeLen(m.Caption) + 2 // a space either side of the bar
+		barWidth := width - fixed
+		if barWidth < 4 {
+			// No room for a bar worth drawing: the caption is the reading and
+			// the bar is the impression, so the bar goes.
+			out = append(out, line(Row{Label: label, Value: m.Caption}, width))
+			continue
+		}
+		out = append(out, label+" "+bar(m.Fraction, barWidth)+" "+m.Caption)
 	}
 	return out
 }

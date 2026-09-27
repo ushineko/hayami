@@ -44,15 +44,21 @@ type Row struct {
 	Detail string
 }
 
-// Section is a titled group of rows, which is what a card is in the window and
-// a block is in the terminal.
+// Section is a titled group of rows and meters, which is what a card is in the
+// window and a block is in the terminal.
+//
+// Rows and Meters are separate rather than one list of a common interface,
+// because they are laid out differently in every arrangement: a row's value
+// goes to the right edge and a meter's bar takes the width that is left. A
+// section may hold either or both, and meters are drawn under the rows.
 type Section struct {
 	// Key names the section in the settings and on the command line. It is
 	// stable; Title is not, and may be translated or may carry a device's
 	// name.
-	Key   string
-	Title string
-	Rows  []Row
+	Key    string
+	Title  string
+	Rows   []Row
+	Meters []Meter
 
 	// Gone marks a section whose source was answering and has stopped. Its
 	// rows keep their last values and are drawn dim, because the reader's
