@@ -2,11 +2,17 @@
 
 **Issue**: [#8](https://github.com/ushineko/hayami/issues/8)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-(Populated before the PR opens.)
+hayami fetches its own usage: credential stores found by convention, the usage
+endpoint asked with the access token, an expired token refreshed and written
+back to Claude Code's own store, and Codex through its app-server with the
+reply reshaped into what the shared cache holds. The section now gives an
+account one meter rather than one per window, with a plan badge and a date for
+a long window. Reviewers should start with `internal/claude/refresh.go`: it is
+the only code in this project that writes outside its own directories.
 
 ## Context
 
@@ -77,18 +83,40 @@ badge that completes the line needs the credential store open.
 
 ## Acceptance Criteria
 
-- [ ] AC1 Stores are found under a root a test sets, including the default one, and named as the Python names them. (R1)
-- [ ] AC2 A credential file missing or malformed leaves that account out and the others in. (R2)
-- [ ] AC3 A fetch sends the bearer token and the beta header, against a test server. (R3)
-- [ ] AC4 A 429 with `Retry-After` reaches the cache's gate. (R3)
-- [ ] AC5 A refresh writes the new token back, and a field the test put in the file that this build does not know is still there afterwards. (R4)
-- [ ] AC6 A refresh that fails leaves the store exactly as it was, byte for byte. (R4)
-- [ ] AC7 A 401 is recorded as needing a login and does not fetch again before the gate. (R5)
-- [ ] AC8 With no `codex` executable the section is absent, with no error shown. (R6)
-- [ ] AC9 No test can find a token in anything the program writes or prints. (R7)
-- [ ] AC10 An account with two windows draws one meter, its bar the nearer to its limit. (R8)
-- [ ] AC11 The badge appears beside the name and comes from the file, not the API. (R9)
-- [ ] AC12 A monthly window shows a date and a five-hour window shows a countdown. (R10)
+- [x] AC1 Stores are found under a root a test sets, including the default one, and named as the Python names them. (R1)
+- [x] AC2 A credential file missing or malformed leaves that account out and the others in. (R2)
+- [x] AC3 A fetch sends the bearer token and the beta header, against a test server. (R3)
+- [x] AC4 A 429 with `Retry-After` reaches the cache's gate. (R3)
+- [x] AC5 A refresh writes the new token back, and a field the test put in the file that this build does not know is still there afterwards. (R4)
+- [x] AC6 A refresh that fails leaves the store exactly as it was, byte for byte. (R4)
+- [x] AC7 A 401 is recorded as needing a login and does not fetch again before the gate. (R5)
+- [x] AC8 With no `codex` executable the section is absent, with no error shown. (R6)
+- [x] AC9 No test can find a token in anything the program writes or prints. (R7)
+- [x] AC10 An account with two windows draws one meter, its bar the nearer to its limit. (R8)
+- [x] AC11 The badge appears beside the name and comes from the file, not the API. (R9)
+- [x] AC12 A monthly window shows a date and a five-hour window shows a countdown. (R10)
+
+## Gaps found
+
+- **The caption still sets the width, and Codex's is long.** Three windows and
+  an amount on one line make the card 523 px wide where the monitor's is 265.
+  The rule is the design system's and correct — a meter's caption is what
+  decides a panel's width — but a meter that could carry a quiet second line,
+  the way a row carries a detail, would let the amounts move off the caption.
+  That is a library change, and it is not this spec's.
+
+## What was measured rather than assumed
+
+- The Codex normaliser was checked against the real app-server: its output is
+  the same shape, key for key, as the entry the Python had written to the
+  cache. A reshaping that was merely plausible would have left the widget
+  unable to read what hayami wrote.
+- The fetch was watched doing its job: `usage-max.json` was rewritten the
+  second the panel started, while `usage-work.json` and `usage-codex.json`
+  were left alone because another program had written them a minute earlier
+  and the gate was shut. That is the cooperation working across programs.
+- The credential files were unchanged afterwards, by checksum. No refresh was
+  due, so the write-back path is covered by its tests and not by that run.
 
 ## Risks & Assumptions
 
@@ -105,6 +133,11 @@ badge that completes the line needs the credential store open.
 - **The app-server is a subprocess with a protocol.** It is given a deadline
   and killed if it misses it, because a panel that hung on a JSON-RPC read
   would take its whole poll loop with it.
+- **The refresh has not run against the real endpoint.** The tokens on this
+  machine were valid, so the path is proven by tests against a server of the
+  suite's own and not by use. The failure cases are the ones that matter and
+  they are asserted byte for byte; the success case will first run on somebody's
+  machine.
 - Rollback: revert. Until this lands the section reads the cache the Python
   fills, which keeps working either way.
 

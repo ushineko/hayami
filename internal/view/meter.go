@@ -86,6 +86,30 @@ func Until(now, then time.Time) string {
 // NoUntil is a countdown with no time to count to, at the width one takes.
 func NoUntil() string { return padUntil("--") }
 
+// LongWindow is where a countdown stops being the useful form.
+//
+// A day. "in 3d 23h" is arithmetic a reader has to do; "resets Oct 1" is the
+// answer. Below a day the countdown is the answer and a date is not: nobody
+// plans around "resets today".
+const LongWindow = 24 * time.Hour
+
+// Resets is when a window starts again, as a countdown for a short one and a
+// date for a long one, both at the same width.
+//
+// The monitor draws the monthly credit cap as "Resets Oct 1" and the
+// five-hour window as "Resets in 3h 4m", and it is right: the two questions
+// are different. One is "how long have I got", the other is "when does this
+// start over".
+func Resets(now, then time.Time) string {
+	if then.IsZero() {
+		return NoUntil()
+	}
+	if then.Sub(now) >= LongWindow {
+		return padUntil(then.Format("2 Jan"))
+	}
+	return Until(now, then)
+}
+
 // padUntil right-aligns a word in the countdown column, so it lines up under
 // the numbers rather than beside them.
 func padUntil(s string) string {

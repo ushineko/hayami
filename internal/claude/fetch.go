@@ -18,7 +18,11 @@ import (
 // way any client does.
 const (
 	UsageURL = "https://api.anthropic.com/api/oauth/usage"
-	TokenURL = "https://console.anthropic.com/api/oauth/token"
+
+	// TokenURL is where a refresh is asked for. It is an address, not a
+	// secret: the client id below is Claude Code's own and is published in
+	// every copy of it.
+	TokenURL = "https://console.anthropic.com/api/oauth/token" //nolint:gosec // an endpoint, not a credential
 
 	// ClientID is Claude Code's own OAuth client. The refresh is the one
 	// Claude Code would make; presenting a different client would be asking

@@ -120,6 +120,9 @@ func Cached(now time.Time, ttl time.Duration, account, provider string, force bo
 	return out, err
 }
 
+// Served is a cached entry as a result, for a caller that read one itself.
+func Served(e Entry) Result { return served(e) }
+
 // served is a cached entry as a result.
 func served(e Entry) Result {
 	r := Result{Data: e.Data}

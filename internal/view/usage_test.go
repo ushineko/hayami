@@ -80,19 +80,78 @@ func TestACaptionDoesNotChangeWidthWithItsNumbers(t *testing.T) {
 		"a countdown that has not arrived is a different width from one that has")
 }
 
-// A quota is one of the few readings with a true threshold, so its colour is a
-// signal rather than decoration.
-func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
+// An account is one meter, not one per window. Two accounts and Codex would
+// otherwise be six bars and twice the height, in a panel 260 px wide.
+func TestAnAccountIsOneMeterHoweverManyWindowsItHas(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "Claude max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
-		{Account: "Claude max", Name: "7d", Fraction: 0.85, ResetsAt: at(11, 0)},
-		{Account: "Claude max", Name: "spend", Fraction: 0.99, ResetsAt: at(11, 0)},
+		{Account: "max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
+		{Account: "max", Name: "7d", Fraction: 0.85, ResetsAt: at(12, 0)},
+		{Account: "Codex", Name: "5h", Fraction: 0.20, ResetsAt: at(11, 0)},
 	}, at(9, 0))
 
-	require.Len(t, s.Meters, 3)
-	assert.Equal(t, view.Good, s.Meters[0].Status)
-	assert.Equal(t, view.Warn, s.Meters[1].Status)
-	assert.Equal(t, view.Bad, s.Meters[2].Status)
+	require.Len(t, s.Meters, 2)
+	assert.Contains(t, s.Meters[0].Label, "max")
+	assert.Contains(t, s.Meters[1].Label, "Codex")
+}
+
+// The bar shows the window nearest its limit: the one that can bite you today.
+// Every window's figure is still in the caption, so nothing is lost but five
+// bars.
+func TestTheBarShowsTheWindowNearestItsLimitAndTheCaptionKeepsTheRest(t *testing.T) {
+	s := view.Usage(at(9, 0), []view.UsageWindow{
+		{Account: "max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
+		{Account: "max", Name: "7d", Fraction: 0.85, ResetsAt: at(12, 0)},
+	}, at(9, 0))
+
+	require.Len(t, s.Meters, 1)
+	assert.InDelta(t, 0.85, s.Meters[0].Fraction, 0.001)
+	assert.Contains(t, s.Meters[0].Caption, "5h: 10 %")
+	assert.Contains(t, s.Meters[0].Caption, "7d: 85 %")
+}
+
+// A quota is one of the few readings with a true threshold, so its colour is a
+// signal rather than decoration. The verdict follows the bar.
+func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
+	verdict := func(f float64) view.Status {
+		s := view.Usage(at(9, 0), []view.UsageWindow{
+			{Account: "max", Name: "5h", Fraction: f, ResetsAt: at(11, 0)},
+		}, at(9, 0))
+		return s.Meters[0].Status
+	}
+
+	assert.Equal(t, view.Good, verdict(0.10))
+	assert.Equal(t, view.Warn, verdict(0.85))
+	assert.Equal(t, view.Bad, verdict(0.99))
+}
+
+// The badge comes from the credential file, and an account with none is drawn
+// without one rather than with a guess.
+func TestAnAccountsBadgeSitsBesideItsName(t *testing.T) {
+	s := view.Usage(at(9, 0), []view.UsageWindow{
+		{Account: "work", Badge: "E", Name: "spend", Fraction: 0.5, ResetsAt: at(11, 0)},
+		{Account: "Codex", Name: "5h", Fraction: 0.1, ResetsAt: at(11, 0)},
+	}, at(9, 0))
+
+	require.Len(t, s.Meters, 2)
+	assert.Equal(t, "work E", s.Meters[0].Label)
+	assert.Equal(t, "Codex", s.Meters[1].Label)
+}
+
+// Two questions, two forms. "How long have I got" for a window that ends
+// today; "when does this start over" for one that ends next month.
+func TestAShortWindowCountsDownAndALongOneNamesItsDate(t *testing.T) {
+	now := at(9, 0)
+
+	assert.Contains(t, view.Resets(now, now.Add(3*time.Hour)), "in")
+	assert.Contains(t, view.Resets(now, now.Add(3*time.Hour)), "3h")
+
+	october := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
+	assert.Contains(t, view.Resets(now, october), "1 Oct")
+	assert.NotContains(t, view.Resets(now, october), "in ")
+
+	assert.Equal(t, len([]rune(view.Resets(now, october))),
+		len([]rune(view.Resets(now, now.Add(3*time.Hour)))),
+		"a date and a countdown must be the same width")
 }
 
 // A reading older than any pane's poll should say so. A stale panel that looks
@@ -100,7 +159,7 @@ func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
 func TestAStaleReadingSaysItsAge(t *testing.T) {
 	now := at(12, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "Claude max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
+		{Account: "max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
 	}, now.Add(-3*time.Hour))
 
 	require.Len(t, s.Rows, 1)
@@ -110,7 +169,7 @@ func TestAStaleReadingSaysItsAge(t *testing.T) {
 func TestAFreshReadingSaysNothingAboutItsAge(t *testing.T) {
 	now := at(12, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "Claude max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
+		{Account: "max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
 	}, now.Add(-time.Minute))
 
 	assert.Empty(t, s.Rows)
@@ -125,4 +184,20 @@ func TestAWindowsDetailReachesItsCaption(t *testing.T) {
 
 	require.Len(t, s.Meters, 1)
 	assert.Contains(t, s.Meters[0].Caption, "403.51 / 1200.00")
+}
+
+// The bar and the countdown answer different questions. The bar shows the
+// window nearest its limit; the countdown answers "when does anything here
+// change", which is the next window to turn over whether or not it is the one
+// the bar is about.
+func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
+	now := at(9, 0)
+	s := view.Usage(now, []view.UsageWindow{
+		{Account: "max", Name: "5h", Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
+		{Account: "max", Name: "7d", Fraction: 0.20, ResetsAt: now.Add(96 * time.Hour)},
+	}, now)
+
+	require.Len(t, s.Meters, 1)
+	assert.InDelta(t, 0.20, s.Meters[0].Fraction, 0.001, "the bar is the window nearest its limit")
+	assert.Contains(t, s.Meters[0].Caption, "3h", "the countdown is the next reset")
 }
