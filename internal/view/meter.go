@@ -1,0 +1,106 @@
+package view
+
+import (
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Meter is a proportion of something that has a limit: a quota used, a window
+// of time elapsed. It is the one shape here that is a bar.
+//
+// A reading with no limit is a Row. A temperature and a rate have nothing to
+// fill up, and drawing one as a bar invents a maximum.
+//
+// The caption does the work the bar cannot. A bar says "most of it"; the
+// caption says which window, how much of it, and when it starts again, which
+// is what someone glancing at a pane actually wants. It is not decoration, and
+// it is held to the no-jitter rule because it sets the section's width.
+type Meter struct {
+	Label    string
+	Caption  string
+	Fraction float64
+	Status   Status
+}
+
+// BarRunes are what a bar is drawn with: a filled cell and an empty one.
+//
+// Half-blocks and eighths would be smoother and are not used. A pane is read
+// at a glance from across a desk, and a bar whose last cell is an eighth full
+// reads as the same bar as one whose last cell is empty.
+const (
+	BarFull  = '█'
+	BarEmpty = '░'
+)
+
+// MeterFraction clamps a fraction into the range a bar can draw. A bar wider
+// than its track is a bar that has left the layout.
+func MeterFraction(f float64) float64 {
+	if f < 0 {
+		return 0
+	}
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// Percent formats a percentage at a fixed width, so a caption does not move
+// when a number gains a digit.
+//
+// Three characters and a sign: "  5 %", " 48 %", "100 %". The space before the
+// sign is the monitor's own spacing and is what makes a column of them line up.
+func Percent(fraction float64) string {
+	return fmt.Sprintf("%3.0f %%", MeterFraction(fraction)*100)
+}
+
+// NoPercent is a percentage that has not arrived, at the width one takes.
+func NoPercent() string { return "  -- %" }
+
+// UntilWidth is the width every countdown is padded to.
+//
+// Fixed because a countdown sits in a caption, and a caption that shrinks from
+// two digits of hours to one drags the rest of the line with it. The widest
+// form is "in 999d 23h"; everything shorter is padded to match, including the
+// two that are words rather than numbers.
+const UntilWidth = 11
+
+// Until is a countdown at a fixed width: "in   4h 32m", "in   4d  8h".
+//
+// Past its time it says "now". A window whose reset has passed and whose
+// numbers have not yet been re-read is ordinary, and it is the truth about
+// what is on screen.
+func Until(now, then time.Time) string {
+	d := then.Sub(now)
+	if d <= 0 {
+		return padUntil("now")
+	}
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	if h >= 24 {
+		return fmt.Sprintf("in %3dd %2dh", h/24, h%24)
+	}
+	return fmt.Sprintf("in %3dh %2dm", h, m)
+}
+
+// NoUntil is a countdown with no time to count to, at the width one takes.
+func NoUntil() string { return padUntil("--") }
+
+// padUntil right-aligns a word in the countdown column, so it lines up under
+// the numbers rather than beside them.
+func padUntil(s string) string {
+	if n := UntilWidth - runeLen(s); n > 0 {
+		return strings.Repeat(" ", n) + s
+	}
+	return s
+}
+
+// bar draws the meter at a width.
+func bar(fraction float64, width int) string {
+	if width < 1 {
+		return ""
+	}
+	full := int(MeterFraction(fraction)*float64(width) + 0.5)
+	return strings.Repeat(string(BarFull), full) +
+		strings.Repeat(string(BarEmpty), width-full)
+}

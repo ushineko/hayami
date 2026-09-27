@@ -28,7 +28,7 @@ func TestAMachineWithNoSettingsFileGetsTheDefaults(t *testing.T) {
 
 	c := s.Config()
 
-	assert.Equal(t, []string{"bandwidth"}, c.Sections)
+	assert.Equal(t, []string{"bandwidth", "usage"}, c.Sections)
 	assert.Equal(t, "stack", c.Arrangement)
 	assert.Empty(t, c.Interfaces,
 		"guessing an interface would be this program deciding what is interesting about someone's network")
