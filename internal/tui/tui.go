@@ -45,12 +45,39 @@ type Model struct {
 	// that has never answered is not drawn at all, so a machine without the
 	// hardware looks like a program built without the section.
 	drawn map[string]bool
+
+	// reported records which sources have finished their first poll, which is
+	// a different question from whether they have anything to say: a source
+	// that answers "nothing" has still answered. Only --once reads it, and it
+	// is what that flag waits for.
+	reported map[string]bool
 }
 
 // New builds the model.
 func New(o Options) Model {
-	return Model{opts: o, width: 80, drawn: map[string]bool{}, paint: Painter()}
+	return Model{
+		opts:     o,
+		width:    80,
+		drawn:    map[string]bool{},
+		reported: map[string]bool{},
+		paint:    Painter(),
+	}
 }
+
+// OnceDeadline bounds the single frame.
+//
+// --once is for a prompt or a status line, and a prompt that hangs is worse
+// than a prompt that is missing a reading. Every source is waited for, but not
+// past this: what has arrived is drawn and the rest are left out, which is the
+// same thing the panel shows for a source that has nothing to say.
+//
+// Five seconds is above what the slow sources actually take — liquidctl
+// answers well inside a second, a silent peripheral costs its retries, a
+// cached usage read is immediate — and below what anybody would sit through.
+const OnceDeadline = 5 * time.Second
+
+// giveUp ends the single frame whether or not every source has answered.
+type giveUp struct{}
 
 // tick asks for the next poll of one source.
 type tick struct{ key string }
@@ -64,9 +91,12 @@ type polled struct {
 // Init polls every source at once, so the first frame is the real one rather
 // than an empty panel that fills in.
 func (m Model) Init() tea.Cmd {
-	cmds := make([]tea.Cmd, 0, len(m.opts.Sources))
+	cmds := make([]tea.Cmd, 0, len(m.opts.Sources)+1)
 	for _, s := range m.opts.Sources {
 		cmds = append(cmds, poll(s))
+	}
+	if m.opts.Once {
+		cmds = append(cmds, tea.Tick(OnceDeadline, func(time.Time) tea.Msg { return giveUp{} }))
 	}
 	return tea.Batch(cmds...)
 }
@@ -111,12 +141,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case polled:
 		m.drawn[msg.key] = msg.drawn
 		if m.opts.Once {
-			return m, tea.Quit
+			// Every source, not the first one. Init batches a poll per source
+			// and they answer in whatever order they finish; quitting on the
+			// first message drew whichever won the race and dropped the rest,
+			// which with the default sections is bandwidth answering "nothing
+			// yet" and a frame with no sections in it at all.
+			m.reported[msg.key] = true
+			if len(m.reported) >= len(m.opts.Sources) {
+				return m, tea.Quit
+			}
+			return m, nil
 		}
 		if s := m.source(msg.key); s != nil {
 			return m, after(s)
 		}
 		return m, nil
+
+	case giveUp:
+		return m, tea.Quit
 
 	case drawnAll:
 		for _, s := range msg.sources {
