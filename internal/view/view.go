@@ -60,6 +60,10 @@ type Section struct {
 	Rows   []Row
 	Meters []Meter
 
+	// Trail is a series to plot under the rows, oldest first. Empty for a
+	// section that has nothing to plot, which is most of them.
+	Trail []float64
+
 	// Gone marks a section whose source was answering and has stopped. Its
 	// rows keep their last values and are drawn dim, because the reader's
 	// question is whether they are still true.

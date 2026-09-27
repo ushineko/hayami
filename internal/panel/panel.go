@@ -84,6 +84,8 @@ func Sources(keys, interfaces []string, read func() (map[string]core.Counters, e
 			out = append(out, NewBandwidth(interfaces, read))
 		case "usage":
 			out = append(out, NewUsage())
+		case "cooler":
+			out = append(out, NewCooler())
 		}
 	}
 	return out
@@ -91,4 +93,4 @@ func Sources(keys, interfaces []string, read func() (map[string]core.Counters, e
 
 // Keys are the keys of every source this build knows, for the command line's
 // help and for the parity test.
-func Keys() []string { return []string{"bandwidth", "usage"} }
+func Keys() []string { return []string{"bandwidth", "usage", "cooler"} }

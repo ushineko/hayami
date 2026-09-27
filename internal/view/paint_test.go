@@ -33,6 +33,13 @@ func TestAPainterIsToldWhatEachPieceIs(t *testing.T) {
 		"a meter's name says which account and which window; it is not decoration")
 	assert.Contains(t, strings.Join(seen[view.Dim], ""), "Oct",
 		"the reset is the one thing a glance can skip")
+
+	// A row's label is white for the same reason a meter's name is.
+	rows := view.Section{Key: "cooler", Title: "Cooler",
+		Rows: []view.Row{{Label: "Coolant", Value: " 46.0", Unit: "°C", Status: view.Good}}}
+	seen = map[view.Status][]string{}
+	view.RenderWith([]view.Section{rows}, view.ArrangeStack, 40, painter)
+	assert.Contains(t, strings.Join(seen[view.Info], ""), "Coolant")
 }
 
 // Nothing is painted without a painter. Every other test in this package is

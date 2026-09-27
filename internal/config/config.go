@@ -48,7 +48,7 @@ type Config struct {
 // deciding what is interesting about someone's network.
 func Default() Config {
 	return Config{
-		Sections:    []string{"bandwidth", "usage"},
+		Sections:    []string{"bandwidth", "usage", "cooler"},
 		Arrangement: "stack",
 	}
 }
