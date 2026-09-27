@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -69,6 +70,17 @@ func pad(s string) string {
 	}
 	return s
 }
+
+// Quantity formats a measured value at the fixed number width: "  56.0",
+// " 993.2". One decimal always, because a value that sometimes drops its
+// decimal is a value that sometimes moves the label beside it.
+func Quantity(v float64) string { return pad(fmt.Sprintf("%.1f", v)) }
+
+// NoQuantity is a measurement that has not arrived.
+func NoQuantity() string { return pad(Blank) }
+
+// Count formats a whole number at the same width: a fan speed, a sample count.
+func Count(v int) string { return pad(strconv.Itoa(v)) }
 
 // UnitWidth is the width every unit in a column is padded to, so the unit
 // column does not move either. It is computed from the units that can occur

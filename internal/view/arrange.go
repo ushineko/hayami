@@ -111,8 +111,19 @@ func block(s Section, width int, p Painter) []string {
 		}
 	}
 	out = append(out, meters(s.Meters, width, p)...)
+	if line := Sparkline(s.Trail, width, SparkMinSpan); line != "" {
+		out = append(out, p.paint(line, Info))
+	}
 	return out
 }
+
+// SparkMinSpan is the narrowest range a sparkline's scale may have, in the
+// units of whatever it is plotting.
+//
+// One degree. Below it a coolant that has not moved is amplified into eight
+// heights of noise, and a reader would take a hundredth of a degree for a
+// trend.
+const SparkMinSpan = 1.0
 
 // MeterLabelGap is the space between a meter's label and its caption.
 const MeterLabelGap = 1
@@ -175,7 +186,10 @@ func line(r Row, width int, p Painter) string {
 		label = truncate(label, max(0, width-runeLen(right)-1))
 		gap = max(1, width-runeLen(label)-runeLen(right))
 	}
-	return p.paint(label, Dim) + strings.Repeat(" ", gap) + p.paint(right, r.Status)
+	// The label is white, as a meter's name is. It says what the number beside
+	// it is, and a reader who cannot tell two rows apart has no use for
+	// either. What is dim is the furniture: a track, a heading, a reset.
+	return p.paint(label, Info) + strings.Repeat(" ", gap) + p.paint(right, r.Status)
 }
 
 // rightAlign puts a detail line against the right edge, under the value it
@@ -209,8 +223,27 @@ func renderRow(sections []Section, width int, p Painter) []string {
 		for _, m := range s.Meters {
 			out = append(out, meterRow(s, m, width, c, p))
 		}
+		if trail := trailRow(s, width, c, p); trail != "" {
+			out = append(out, trail)
+		}
 	}
 	return out
+}
+
+// trailRow is a section's series as one line: the section's name in the label
+// column, then the plot taking the rest.
+//
+// Named, because in a pane a bare row of block characters is a row nobody can
+// attribute. It is the one line in this arrangement that is not a reading, and
+// it earns its place for the reason the archetype gives: a trend is what a
+// reader takes from a panel they never touch.
+func trailRow(s Section, width int, c columns, p Painter) string {
+	label := padRight(s.Title, c.label)
+	plot := Sparkline(s.Trail, width-runeLen(label)-1, SparkMinSpan)
+	if plot == "" {
+		return ""
+	}
+	return p.paint(label, Dim) + " " + p.paint(plot, Info)
 }
 
 // labelled gives a row the section's name only when it has none of its own.
@@ -225,6 +258,12 @@ func labelled(s Section, r Row) Row {
 // lines line up with each other rather than each with itself.
 func rowColumns(sections []Section) (c columns) {
 	for _, s := range sections {
+		if len(s.Trail) > 0 {
+			c.label = max(c.label, runeLen(s.Title))
+		}
+		for _, r := range s.Rows {
+			c.label = max(c.label, runeLen(r.Label))
+		}
 		for _, m := range s.Meters {
 			c.label = max(c.label, runeLen(m.Label))
 			c.badge = max(c.badge, runeLen(m.Badge))

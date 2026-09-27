@@ -129,6 +129,21 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- A cooler section: the processor's temperature from hwmon **by label**, and
+  the coolant, pump and fan from `liquidctl`. The approach is hotaru's — read
+  by label, never by hwmon index, because the numbers move between boots — and
+  it means no daemon is needed for what the kernel already has. liquidctl
+  reports every device it can see, so the cooler is chosen as the one that
+  reports a *liquid* temperature: a power supply's case temperature under a
+  heading that says coolant would be the wrong number under the right label.
+  The coolant is coloured by the hardware's own bands and the processor is not
+  coloured at all, because a high boost temperature is normal and a colour
+  that is always on is not a signal (spec 006, #15).
+- `view.Sparkline` plots a series as one line of block runes, so a pane gets
+  the trend the window has had all along. Scaled to the series' own range,
+  with a floor under it so a steady reading is drawn steady rather than
+  amplified into noise.
+
 - Both panels are cobra command trees, as the other ushineko programs are.
   `hayami-tui readings` and `hayami-tui arrangements` are subcommands where
   `--readings` was a flag, both binaries answer `--version`, and a misuse of

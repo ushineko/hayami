@@ -2,11 +2,17 @@
 
 **Issue**: [#15](https://github.com/ushineko/hayami/issues/15)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-(Populated before the PR opens.)
+`internal/cooler` reads the processor from hwmon by label and the coolant,
+pump and fan from `liquidctl --json status`, picking the device that reports a
+liquid temperature. `view.Sparkline` plots a series as one line of block runes
+for the terminal, and `view.Series` holds five minutes of coolant. The coolant
+is coloured by the hardware's own bands and the processor is not coloured at
+all. Reviewers should start with `internal/cooler/liquidctl.go`, where the
+device is chosen.
 
 ## Context
 
@@ -62,12 +68,27 @@ reader takes from a panel they never touch.
 
 ## Acceptance Criteria
 
-- [ ] AC1 A temperature is read from a hwmon tree the test builds, by label, and the same tree renumbered gives the same answer. (R1)
-- [ ] AC2 A `liquidctl` reply carrying both a cooler and a power supply yields the cooler's numbers. (R2)
-- [ ] AC3 With no `liquidctl` the section still draws the processor; with neither source it is not drawn. (R3)
-- [ ] AC4 A sparkline of a known series is a known string, and an empty series draws nothing. (R4)
-- [ ] AC5 The coolant is green, amber and red at the hardware's bands; the processor is never coloured. (R5)
-- [ ] AC6 The series holds its capacity and drops the oldest. (R6)
+- [x] AC1 A temperature is read from a hwmon tree the test builds, by label, and the same tree renumbered gives the same answer. (R1)
+- [x] AC2 A `liquidctl` reply carrying both a cooler and a power supply yields the cooler's numbers. (R2)
+- [x] AC3 With no `liquidctl` the section still draws the processor; with neither source it is not drawn. (R3)
+- [x] AC4 A sparkline of a known series is a known string, and an empty series draws nothing. (R4)
+- [x] AC5 The coolant is green, amber and red at the hardware's bands; the processor is never coloured. (R5)
+- [x] AC6 The series holds its capacity and drops the oldest. (R6)
+
+## Gaps found
+
+None. The design system's sparkline serves the window; the terminal's is this
+repository's own and belongs here, because it is made of characters.
+
+## What the tests caught
+
+`json.Unmarshal` decodes JSON `null` into a `float64` without complaining and
+leaves the zero behind, so a device reporting `"Fan speed": null` — one with
+nothing to say about its fan — was read as **a fan that had stopped**. Null is
+now checked for rather than unmarshalled. Nothing about this is visible from
+reading the code, and the test that found it exists because "absent is not
+zero" is a rule this repository has already been bitten by twice: once for a
+rate that had not arrived, once for a window a provider did not report.
 
 ## Risks & Assumptions
 
@@ -82,6 +103,9 @@ reader takes from a panel they never touch.
   seen since it started, so it says nothing for the first few polls and
   nothing at all after a restart. That is honest and worth saying in the
   panel's own terms rather than filling with a flat line.
+- **A row's label is white now, as a meter's name already was.** It says what
+  the number beside it is; what is dim is the furniture — a track, a heading,
+  a reset.
 - Rollback: revert. The section is drawn only when the settings name it.
 
 ## Alternatives Considered
