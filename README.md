@@ -128,6 +128,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: a pane's bar is a rule rather than a slab. `█` on `░` was a band of
+  colour the width of the pane, next to which the numbers — the actual reading
+  — looked like a caption. It is `━` on `─` now, which is the weight the
+  program this replaces draws. Heavy against light rather than one glyph in two
+  colours, so the bar still says something in a pipe and under `NO_COLOR`,
+  which rich's own bar does not.
+
 - A pane has colour and columns. `view.Render` takes a painter — a function
   from text and a verdict to text — so the terminal can colour through lipgloss
   while `internal/view` stays free of any toolkit and the window keeps

@@ -80,3 +80,20 @@ func TestAPaneTooNarrowForABarStillCarriesItsFigures(t *testing.T) {
 
 	assert.Contains(t, line, "4 %")
 }
+
+// The bar has to say something without colour. A pane is read over ssh, in a
+// pipe and by people who cannot tell red from green, and a bar drawn in one
+// glyph and two colours — which is what rich does — says nothing to any of
+// them.
+func TestTheBarIsReadableWithoutColour(t *testing.T) {
+	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
+		{Label: "max", Caption: "5h: 40 %", Reset: "in 2h", Fraction: 0.4},
+	}}
+
+	line := view.Render([]view.Section{s}, view.ArrangeRow, 80)[0]
+
+	assert.Contains(t, line, string(view.BarFull))
+	assert.Contains(t, line, string(view.BarEmpty))
+	assert.NotEqual(t, view.BarFull, view.BarEmpty,
+		"one glyph in two colours is a bar that vanishes in a pipe")
+}

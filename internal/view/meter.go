@@ -30,14 +30,24 @@ type Meter struct {
 	Status   Status
 }
 
-// BarRunes are what a bar is drawn with: a filled cell and an empty one.
+// BarFull and BarEmpty are what a bar is drawn with.
 //
-// Half-blocks and eighths would be smoother and are not used. A pane is read
-// at a glance from across a desk, and a bar whose last cell is an eighth full
-// reads as the same bar as one whose last cell is empty.
+// A rule, not a block. `█` on `░` is a slab of colour the width of the pane,
+// and next to it the numbers — which are the reading — look like a caption.
+// The program this replaces draws rich's ProgressBar, which is `━`, and beside
+// the two panes the difference is not subtle: the same information, and one of
+// them shouts.
+//
+// The two glyphs differ in weight as well as in colour, which rich's do not:
+// its bar is one character in two colours, so in a pipe or under NO_COLOR it
+// says nothing at all. Heavy against light survives both.
+//
+// Eighths would be smoother and are not used. A pane is read at a glance from
+// across a desk, and a bar whose last cell is an eighth full reads as the same
+// bar as one whose last cell is empty.
 const (
-	BarFull  = '█'
-	BarEmpty = '░'
+	BarFull  = '━'
+	BarEmpty = '─'
 )
 
 // MeterFraction clamps a fraction into the range a bar can draw. A bar wider
