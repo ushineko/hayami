@@ -57,8 +57,13 @@ it exercises the formatters, the stretching bar and the grid reflow on its own.
   arrangement the settings name, refreshing on the same cadence, and builds
   with `CGO_ENABLED=0`.
 - R6 Settings hold which sections are shown, in what order, and the
-  arrangement, in one file both shells read. A section that is hidden stops
-  its poll.
+  arrangement, in one YAML file both shells read, through
+  `fynedesygn/settings` with `settings/yamlcodec`. A section that is hidden
+  stops its poll.
+- R6.1 `cmd/hayami-tui` takes `--sections` and `--arrangement` on the command
+  line, overriding the file for that run and never writing back. A herdr pane
+  is `hayami-tui --sections usage`, and a pane's flags are the pane's, not the
+  desktop panel's.
 - R7 A parity test holds the two shells to the same set of sections, with a
   documented allow-list for anything one shell has and the other cannot.
 - R8 Values do not jitter: a rate that changes magnitude does not change the
@@ -74,6 +79,8 @@ it exercises the formatters, the stretching bar and the grid reflow on its own.
 - [ ] AC5 The window is frameless, fixed-size and sized to its cards, asserted headlessly; and **seen on a real window**, screenshotted and looked at, per the rule in `.claude/CLAUDE.md`. (R4)
 - [ ] AC6 `CGO_ENABLED=0 go build ./cmd/hayami-tui` passes in CI. (R5)
 - [ ] AC7 Hiding a section removes it from both shells and stops its poll; reordering changes the order in both. Asserted from the settings, not from a shell. (R6)
+- [ ] AC7.1 The settings file is YAML a person can read, and a section this build does not know is preserved across a save. (R6)
+- [ ] AC7.2 `--sections` and `--arrangement` override the file for one run and leave it unchanged on disk. (R6.1)
 - [ ] AC8 `TestFeatureParity` passes with an empty allow-list. (R7)
 - [ ] AC9 A rate crossing from KiB/s to MiB/s does not move the column in either shell. (R8)
 
@@ -91,6 +98,9 @@ it exercises the formatters, the stretching bar and the grid reflow on its own.
   drifting, and it is worth more than any single feature in this spec.
 - **Nothing here touches credentials, hardware or the network.** That is
   deliberate: the spine is proven before anything that can damage or leak.
+- **A flag that overrode the file and then saved it** would rewrite a user's
+  settings because a pane was started with an argument. The override is for
+  the run and is never written back; the store is opened read-only for it.
 - Rollback: the repository has no release and no users. Revert the branch.
 
 ## Alternatives Considered
@@ -102,6 +112,12 @@ it exercises the formatters, the stretching bar and the grid reflow on its own.
   same sections, and the moment it is "cut down" it starts deciding what a
   section says, which is what `internal/view` exists to prevent.
 - Starting with the usage section, since it is what the herdr pane needs
-  today. Rejected: it is the section with the most protocol surface and the
-  only one that writes to a store another program owns. It goes last, and by
-  then the spine will have been exercised by three simpler sections.
+  today. Rejected for *this* spec, not for the project: usage has the most
+  protocol surface of the four and is the only one that writes to a store
+  another program owns and refreshes someone's OAuth token. It should not be
+  the section that also debugs the grid layout. It is spec 002, so the herdr
+  pane is the second thing that works rather than the last.
+- Settings in Fyne's preference store. Rejected for the reason
+  `fynedesygn/settings` exists: that store is flat, untyped and lives in a
+  directory named for the toolkit. These settings are meant to be read, edited
+  and copied between machines.

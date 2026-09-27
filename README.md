@@ -45,7 +45,14 @@ mode, which is why there is no separate widget for the terminal:
 - **grid** — columns that reflow to the width, in the manner of `btop`.
 - **row** — one full-width line per reading, its bar stretching to the pane.
   This is what a `herdr` pane wants, and it replaces
-  `claude-usage-widget-windows`'s `--tui` and `--line`.
+  `claude-usage-widget-windows`'s `--tui` and `--line`:
+
+  ```
+  hayami-tui --sections usage
+  ```
+
+  `--sections` and `--arrangement` override the settings file for that run and
+  never write back to it, so a pane's arguments are the pane's own.
 
 ## Architecture
 
