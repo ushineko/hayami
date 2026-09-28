@@ -24,6 +24,11 @@ type UsageWindow struct {
 	// Detail is anything the bar cannot carry, such as a limit's used and
 	// limit values.
 	Detail string
+
+	// Span is how long the window is, and is what decides which window gets
+	// the bar. Zero means the provider did not say, which is read as longer
+	// than any window that did.
+	Span time.Duration
 }
 
 // UsageStale is how old a reading may be before its age is worth saying.
@@ -40,14 +45,21 @@ const UsageStale = 5 * time.Minute
 // Codex into six bars and twice the height. The monitor this comes from gives
 // an account one line, and putting the two side by side is what settled it.
 //
-// The bar is the window nearest its limit, because that is the one that can
-// bite you today. The caption carries every window's figure in order, so
+// **The bar is the shortest window**, because that is the one that can stop
+// work this afternoon. The caption carries every window's figure in order, so
 // nothing is lost — only the five other bars.
+//
+// It used to be the window furthest along, which sounds like the same thing
+// and is not: an account three quarters through its week and a tenth of the
+// way through its five hours put the week on the bar, and the week is not what
+// runs out at four o'clock. Read down a panel of three accounts and the old
+// rule gave three bars about three different windows — seven days, a monthly
+// spend, a Business limit — which is not a column anybody can compare.
 func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 	s := Section{Key: "usage", Title: "Usage"}
 
 	for _, group := range byAccount(windows) {
-		lead := nearest(group)
+		lead := leading(group)
 		left, right := spread(now, group, lead)
 		s.Meters = append(s.Meters, Meter{
 			Label:      group[0].Account,
@@ -89,15 +101,35 @@ func byAccount(windows []UsageWindow) [][]UsageWindow {
 	return out
 }
 
-// nearest is the window closest to its limit: the one the bar shows.
-func nearest(group []UsageWindow) UsageWindow {
+// leading is the window the bar shows: the shortest the account has.
+//
+// "The shortest there is" rather than "the five-hour one", because an account
+// may not have one — a Team account reports a monthly spend and no windows at
+// all — and a bar is better about the longest window than about nothing. A
+// window with no stated length sorts last for the same reason: an allowance
+// with no period is not a window that turns over this afternoon.
+func leading(group []UsageWindow) UsageWindow {
 	lead := group[0]
 	for _, w := range group[1:] {
-		if w.Fraction > lead.Fraction {
+		if shorter(w, lead) {
 			lead = w
 		}
 	}
 	return lead
+}
+
+// shorter reports whether a is the better candidate for the bar than b.
+func shorter(a, b UsageWindow) bool {
+	switch {
+	case a.Span == b.Span:
+		return false
+	case a.Span == 0:
+		return false
+	case b.Span == 0:
+		return true
+	default:
+		return a.Span < b.Span
+	}
 }
 
 // figures is every window in the group: its name, its figure, and — for a

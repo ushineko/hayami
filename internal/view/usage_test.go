@@ -94,31 +94,83 @@ func TestAnAccountIsOneMeterHoweverManyWindowsItHas(t *testing.T) {
 	assert.Equal(t, "Codex", s.Meters[1].Label)
 }
 
-// The bar shows the window nearest its limit: the one that can bite you today.
-// Every window's figure is still there, so nothing is lost but five bars.
+// The bar shows the shortest window, and it does so even when another window
+// is much further along -- which is the whole of the change, because the rule
+// it replaces would have picked the other one here.
 //
-// The caption carries the window the bar is about and the rest go in the stats
+// Every window's figure is still there, so nothing is lost but five bars. The
+// caption carries the window the bar is about and the rest go in the stats
 // row, because a caption carrying all of them sets the width of the whole
 // window. Line() is every figure in reading order, which is what a pane draws
 // and what this asserts: the claim is that nothing was lost, not where it
 // went.
-func TestTheBarShowsTheWindowNearestItsLimitAndNothingIsLost(t *testing.T) {
+func TestTheBarShowsTheShortestWindowAndNothingIsLost(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
-		{Account: "max", Name: "7d", Fraction: 0.85, ResetsAt: at(12, 0)},
+		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
+		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 1)
-	assert.InDelta(t, 0.85, s.Meters[0].Fraction, 0.001)
+	assert.InDelta(t, 0.10, s.Meters[0].Fraction, 0.001,
+		"the bar is the five-hour window, not the one furthest along")
 	assert.Contains(t, s.Meters[0].Line(), "5h: 10 %")
 	assert.Contains(t, s.Meters[0].Line(), "7d: 85 %")
-	assert.Equal(t, "7d", s.Meters[0].Window, "the name says which window the bar is about")
+	assert.Equal(t, "5h", s.Meters[0].Window, "the name says which window the bar is about")
 
 	// The caption is only the window the bar is about. The other one is
 	// below it, which is what keeps the meter narrow.
-	assert.Contains(t, s.Meters[0].Caption, "7d: 85 %")
-	assert.NotContains(t, s.Meters[0].Caption, "5h: 10 %")
-	assert.Contains(t, s.Meters[0].StatsLeft, "5h: 10 %")
+	assert.Contains(t, s.Meters[0].Caption, "5h: 10 %")
+	assert.NotContains(t, s.Meters[0].Caption, "7d: 85 %")
+	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 85 %")
+}
+
+// The order the windows arrive in is not the order they are ranked in. The
+// provider decides the first, and a reader who saw the bar change meaning
+// because a payload put its windows the other way round would be right to
+// call it a bug.
+func TestTheOrderTheWindowsArriveInDoesNotDecideTheBar(t *testing.T) {
+	for _, windows := range [][]view.UsageWindow{
+		{
+			{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
+			{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
+		},
+		{
+			{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
+			{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
+		},
+	} {
+		s := view.Usage(at(9, 0), windows, at(9, 0))
+
+		require.Len(t, s.Meters, 1)
+		assert.Equal(t, "5h", s.Meters[0].Window)
+	}
+}
+
+// A window with no stated length sorts last, because an allowance with no
+// period is not something that turns over this afternoon. Codex reports its
+// Business limit this way and the monthly spend has no window at all.
+func TestAWindowWithNoLengthDoesNotTakeTheBarFromOneThatHasOne(t *testing.T) {
+	s := view.Usage(at(9, 0), []view.UsageWindow{
+		{Account: "Codex", Name: "limit", Fraction: 0.34, ResetsAt: at(11, 0)},
+		{Account: "Codex", Name: "5h", Span: 5 * time.Hour, Fraction: 0.02, ResetsAt: at(11, 0)},
+	}, at(9, 0))
+
+	require.Len(t, s.Meters, 1)
+	assert.Equal(t, "5h", s.Meters[0].Window)
+	assert.InDelta(t, 0.02, s.Meters[0].Fraction, 0.001)
+}
+
+// An account whose only window has no length still gets a bar about it. A
+// Team account reports a monthly spend and no windows at all, and a bar about
+// the longest thing there is beats no bar.
+func TestAnAccountWithOnlyAnUnboundedWindowStillGetsABar(t *testing.T) {
+	s := view.Usage(at(9, 0), []view.UsageWindow{
+		{Account: "work", Name: "spend", Fraction: 0.85, ResetsAt: at(12, 0)},
+	}, at(9, 0))
+
+	require.Len(t, s.Meters, 1)
+	assert.Equal(t, "spend", s.Meters[0].Window)
+	assert.InDelta(t, 0.85, s.Meters[0].Fraction, 0.001)
 }
 
 // A quota is one of the few readings with a true threshold, so its colour is a
@@ -205,19 +257,23 @@ func TestAWindowsDetailIsDrawnBesideItsFigure(t *testing.T) {
 }
 
 // The bar and the countdown answer different questions. The bar shows the
-// window nearest its limit; the countdown answers "when does anything here
-// change", which is the next window to turn over whether or not it is the one
-// the bar is about.
+// shortest window; the countdown answers "when does anything here change",
+// which is the next window to turn over whether or not it is the one the bar
+// is about.
+//
+// They coincide most of the time -- the shortest window is usually the next
+// to reset -- so the case worth a test is the one where they do not: a
+// five-hour window that has just turned over and a weekly one about to.
 func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
-		{Account: "max", Name: "7d", Fraction: 0.20, ResetsAt: now.Add(96 * time.Hour)},
+		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(4 * time.Hour)},
+		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.20, ResetsAt: now.Add(2 * time.Hour)},
 	}, now)
 
 	require.Len(t, s.Meters, 1)
-	assert.InDelta(t, 0.20, s.Meters[0].Fraction, 0.001, "the bar is the window nearest its limit")
-	assert.Contains(t, s.Meters[0].Reset, "3h", "the countdown is the next reset")
+	assert.InDelta(t, 0.04, s.Meters[0].Fraction, 0.001, "the bar is the shortest window")
+	assert.Contains(t, s.Meters[0].Reset, "2h", "the countdown is the next reset")
 }
 
 // One reset goes in the column and it is the soonest, so a seven-day window
@@ -227,12 +283,13 @@ func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
 func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
-		{Account: "max", Name: "7d", Fraction: 0.21, ResetsAt: now.Add(5*24*time.Hour + time.Hour)},
+		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
+		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21,
+			ResetsAt: now.Add(5*24*time.Hour + time.Hour)},
 	}, now)
 
 	require.Len(t, s.Meters, 1)
-	assert.Contains(t, s.Meters[0].Caption, "7d: 21 % (5d left)")
+	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (5d left)")
 	assert.NotContains(t, s.Meters[0].Caption, "5h: 4 % (",
 		"the window whose reset is already in the column repeats nothing")
 	assert.Contains(t, s.Meters[0].Reset, "3h")
@@ -243,9 +300,9 @@ func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
 func TestAWindowLessThanADayAwaySaysNothingExtra(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.04, ResetsAt: now.Add(2 * time.Hour)},
-		{Account: "max", Name: "7d", Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
+		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(2 * time.Hour)},
+		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
 	}, now)
 
-	assert.NotContains(t, s.Meters[0].Caption, "left")
+	assert.NotContains(t, s.Meters[0].Line(), "left")
 }
