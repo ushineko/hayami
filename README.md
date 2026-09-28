@@ -161,6 +161,17 @@ MIT. See [LICENSE](LICENSE).
   The state is said under every cell now, not only under a battery that is
   charging. Needed `glance.Cell` and `glance.CellGrid`, which is fynedesygn
   v0.1.56 (its spec 040, its #106).
+- **Fix**: the panel's face stops at the panel, dialogs included. The two
+  windows had it the wrong way round: the panel owned the application's theme,
+  on the reasoning that a card is a canvas object a subtree override cannot
+  reach. True, and the wrong conclusion — because a dialog, a dropdown and the
+  context menu are *overlays*, added to the canvas's overlay stack rather than
+  to any window's content, so nothing can override them and they wear the
+  application's theme whatever it is. Opening the font chooser from the
+  preferences window drew a see-through list of font names at eight points.
+  The panel carries its own theme now and the application's is left to the
+  window that has overlays (fynedesygn v0.1.58, its spec 042, its #110 and its
+  quirk 38).
 - **Fix**: a preferences section keeps the window's own face. Opening the
   window looked right and clicking any section in it switched that section to
   the panel's font and the panel's transparency, which is how it was reported.

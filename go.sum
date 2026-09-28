@@ -98,6 +98,8 @@ github.com/ushineko/fynedesygn v0.1.56 h1:VH8Al91yIJ5zWUwmQy4aQvya0XpzjRBpfoO6nw
 github.com/ushineko/fynedesygn v0.1.56/go.mod h1:WdsB3ChGjUhbmFS5N9ErLnerCEC85pBkYU4GSr8FDGw=
 github.com/ushineko/fynedesygn v0.1.57 h1:Zd2eUh2I/r0/Q1H4EQpSqm1cWD6xhpuQYZJgucdeQGU=
 github.com/ushineko/fynedesygn v0.1.57/go.mod h1:WdsB3ChGjUhbmFS5N9ErLnerCEC85pBkYU4GSr8FDGw=
+github.com/ushineko/fynedesygn v0.1.58 h1:uQ39I9zQqABkNOdox+7nJQM4wTLEMH0eQd7RrZJZUAc=
+github.com/ushineko/fynedesygn v0.1.58/go.mod h1:WdsB3ChGjUhbmFS5N9ErLnerCEC85pBkYU4GSr8FDGw=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=

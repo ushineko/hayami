@@ -169,7 +169,7 @@ func New(a fyne.App, o Options) *Panel {
 			// the card is narrow. Name() is the three parts as one string.
 			meter := glance.NewMeter(m.Name(), MeterLabelWidth)
 			holder.meters = append(holder.meters, meter)
-			c.AddObject(meter.Object())
+			c.Add(meter)
 		}
 
 		// A section of cells gets a grid. Cells and rows are separate for the
@@ -187,7 +187,7 @@ func New(a fyne.App, o Options) *Panel {
 				holder.cells = append(holder.cells, cell)
 				holder.grid.Add(cell)
 			}
-			c.AddObject(holder.grid.Object())
+			c.Add(holder.grid)
 		}
 
 		// A section with a trend to plot gets one. The pane has drawn these
@@ -226,7 +226,7 @@ A reorder therefore takes effect at the next start, which the preferences
 window says. It is in this spec's gaps.
 */
 func (p *Panel) Apply(c config.Config) {
-	p.applyOpacity(c)
+	p.applyTheme(c)
 
 	// And repaint in it. A card restyles its title and its rows; a meter and
 	// a sparkline go in as plain canvas objects and have to be told, and
@@ -312,7 +312,7 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	if c.spark != nil && len(sec.Trails) > 0 {
 		c.spark.Clear()
 		for _, t := range sec.Trails {
-			c.spark.AddSeries(t.Name, trailColour(t, sec.Gone), view.SparkMinSpan)
+			c.spark.AddSeries(t.Name, p.trailColour(t, sec.Gone), view.SparkMinSpan)
 			for _, v := range t.Samples {
 				c.spark.Add(t.Name, v)
 			}
@@ -420,16 +420,26 @@ func reading(r view.Row) glance.Reading {
 // the theme's disabled colour for a section whose source has stopped
 // answering.
 //
+// **Resolved in the panel's theme, not the application's.** A sparkline is
+// given colours rather than a status, so this is the one place the panel
+// picks a colour by hand -- and the application's theme is the preferences
+// window's, which would put that window's scheme on the panel's plot.
+//
 // The dim case is the design system's disabled role rather than a status,
 // because there is no dim status: fd.Status is a verdict, and "we have not
 // heard from this in a minute" is not one. The pane makes the same choice in
 // its own vocabulary, and the two shells must not disagree about what a stale
 // plot looks like.
-func trailColour(t view.Trail, gone bool) color.Color {
-	if gone {
-		return fynetheme.Color(fynetheme.ColorNameDisabled)
+func (p *Panel) trailColour(t view.Trail, gone bool) color.Color {
+	th := p.win.Panel().Theme()
+	variant := fynetheme.VariantDark
+	if p.app != nil {
+		variant = p.app.Settings().ThemeVariant()
 	}
-	return widgets.StatusColor(status(t.Status))
+	if gone {
+		return th.Color(fynetheme.ColorNameDisabled, variant)
+	}
+	return th.Color(widgets.StatusColorName(status(t.Status)), variant)
 }
 
 // status maps this program's verdict onto the design system's. They are the
@@ -566,46 +576,32 @@ func Appearance(a fyne.App, store *config.Store) fdtheme.Appearance {
 	return fdtheme.LoadAppearanceFrom(store.Settings(), a.Preferences())
 }
 
-// applyOpacity fades the cards to the setting's value.
-//
-// It re-wraps the app's theme rather than keeping one of its own, so the card
-// opacity composes with whatever the user chose in Appearance: the scheme
-// decides the colour and this decides how much of it survives.
-//
-// glance wraps the theme again when it shows the window, to make the window's
-// own background transparent. The two compose in either order — one names the
-// background and the other names the card — which is why this can be applied
-// whenever the setting changes and not only before the window exists.
 /*
-applyOpacity puts the panel's own appearance on the application's theme.
+applyTheme gives the panel its own face and leaves the application's alone.
 
-**The application's, deliberately.** A Fyne theme is application-wide and only
-one window can own it; the one that should is the one whose widgets cannot be
-overridden, and that is this one — a card, a row and a meter are canvas objects
-that read the app's theme directly. The preferences window is standard widgets
-and draws in its own appearance instead (shell.Options.OwnAppearance).
+**The application's belongs to the preferences window, deliberately.** That is
+the window with *overlays* — a font chooser, a dropdown, the context menu —
+and an overlay is added to the canvas's overlay stack rather than to a window's
+content, so nothing can override one. Whatever the application's theme is, an
+overlay wears it.
 
-An earlier version had this the other way round, with the panel carrying a
-subtree override. It does not work and it does not fail cleanly: the containers
-measure at the override's size while the text draws at the application's, so
-the padding changes, the text does not, and the card titles are clipped by the
-difference.
+It used to be the other way round, on the reasoning that a card is a canvas
+object and a subtree override does not reach one. That was true and it was the
+wrong conclusion: it meant the application's theme was the panel's, so opening
+the font chooser from the preferences window drew the whole dialog in the
+panel's face and the panel's card fade — a see-through list of font names at
+eight points. The design system carries the panel's face explicitly now
+(fynedesygn spec 042), so the panel needs nothing from the application.
+
+The card fade goes here, on the panel's own theme, for the same reason: it is
+the cards' and has no business anywhere else.
 */
-func (p *Panel) applyOpacity(c config.Config) {
+func (p *Panel) applyTheme(c config.Config) {
 	if p.app == nil {
 		return
 	}
 	a := c.PanelAppearance(Appearance(p.app, p.opts.Store))
-	p.app.Settings().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
-}
-
-// baseTheme unwraps a theme this package has already faded, so applying a new
-// opacity does not fade an already-faded card a second time.
-func baseTheme(t fyne.Theme) fyne.Theme {
-	if faded, ok := t.(cardOpacity); ok {
-		return faded.Theme
-	}
-	return t
+	p.win.Panel().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
 }
 
 /*

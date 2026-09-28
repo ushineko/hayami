@@ -47,25 +47,14 @@ func Menu(a fyne.App, store *config.Store, version string, onChange func(config.
 func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) { //nolint:revive // the callback is the panel's only way back
 	var window *prefs.Window
 
-	/*
-		applied is every route by which the panel's theme changes.
-
-		All of them go through here because all of them end in
-		app.Settings().SetTheme, and a theme set on the application rebuilds
-		every window from it -- taking with it the subtree override that
-		keeps the preferences window out of the panel's face. Whatever
-		changed, that override has to be made again afterwards.
-
-		The opacity submenu is the case that is easy to miss: it never
-		touches a font, but it fades the cards by re-wrapping the
-		application's theme, which is the same event as far as the other
-		window is concerned.
-	*/
+	// applied is every route by which the panel's theme changes: the Window
+	// screen, the Appearance screen the panel falls back to, and the opacity
+	// submenu. They are one function because the panel does not care which of
+	// them it was.
 	applied := func(c config.Config) {
 		if onChange != nil {
 			onChange(c)
 		}
-		relayout(window)
 	}
 
 	open := func() {
@@ -190,19 +179,4 @@ func themeWith(
 		}
 		return a.Theme()
 	}
-}
-
-// relayout draws the preferences window in its own appearance again.
-//
-// A window that owns its appearance keeps it in a subtree override, and an
-// override is built from the objects that were there when it was built. The
-// application's theme changing rebuilds the window from the application's
-// theme, so the override has to be made again afterwards; asking the shell
-// for the appearance it already has is what does that.
-func relayout(w *prefs.Window) {
-	if w == nil {
-		return
-	}
-	s := w.Shell()
-	s.SetAppearance(s.Appearance())
 }

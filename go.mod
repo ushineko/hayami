@@ -9,7 +9,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/ushineko/fynedesygn v0.1.57
+	github.com/ushineko/fynedesygn v0.1.58
 	golang.org/x/sys v0.48.0
 )
 
