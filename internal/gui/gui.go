@@ -77,6 +77,12 @@ type card struct {
 	// spark is the section's trend, for a section that has one. Nil for the
 	// rest, which is most of them.
 	spark *glance.Sparkline
+
+	// grid is the section's cells, for a section whose readings are blocks
+	// rather than lines. Nil for the rest, which is every section but the
+	// peripherals.
+	grid  *glance.CellGrid
+	cells []*glance.Cell
 }
 
 // SparkCapacity is how many samples the window's plot holds.
@@ -85,6 +91,21 @@ type card struct {
 // that covered a different span in each shell would be two different readings
 // with one name.
 const SparkCapacity = panel.CoolerTrail
+
+/*
+CellSlack is how many spare cells a card of cells is built with.
+
+The library takes objects at build time and a card rebuilt on a poll would
+reflow the window several times a minute, so a cell that was not built cannot
+be added. For a meter that is livable -- an account appearing is rare. For a
+peripheral it is not: a mouse is switched on, a headset comes off its cradle,
+a pair of earbuds is taken out of the case, and a window that had to be
+restarted to see any of it is a window nobody would keep open.
+
+Four, which is what the archetype has slots for and more than this machine has
+ever had at once. They cost nothing while they are hidden.
+*/
+const CellSlack = 4
 
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
@@ -149,6 +170,24 @@ func New(a fyne.App, o Options) *Panel {
 			meter := glance.NewMeter(m.Name(), MeterLabelWidth)
 			holder.meters = append(holder.meters, meter)
 			c.AddObject(meter.Object())
+		}
+
+		// A section of cells gets a grid. Cells and rows are separate for the
+		// reason the view keeps them separate: they are laid out differently,
+		// and nothing so far has both.
+		if len(sec.Cells) > 0 {
+			holder.grid = glance.NewCellGrid()
+			for i := range len(sec.Cells) + CellSlack {
+				blank := view.NoQuantity()
+				if i < len(sec.Cells) {
+					blank = sec.Cells[i].Value
+				}
+				cell := glance.NewCell("", blank)
+				cell.SetShown(i < len(sec.Cells))
+				holder.cells = append(holder.cells, cell)
+				holder.grid.Add(cell)
+			}
+			c.AddObject(holder.grid.Object())
 		}
 
 		// A section with a trend to plot gets one. The pane has drawn these
@@ -234,6 +273,13 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		}
 	}
 
+	// A cell the card was not built with cannot be added now, for the reason
+	// the meters below give: the library takes objects at build time. A
+	// peripheral appearing is not rare, though, which is why a card is built
+	// with room and the surplus cells are hidden rather than missing -- see
+	// drawCells.
+	p.drawCells(c, sec.Cells)
+
 	// A meter the card was not built with cannot be added now: the library
 	// takes objects at build time and a card rebuilt on a poll would reflow
 	// the window several times a minute. A section that gains a meter after
@@ -289,6 +335,33 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		requested size again.
 	*/
 	p.win.Panel().Resize()
+}
+
+/*
+drawCells brings a card's cells up to date.
+
+A cell the card was not built with cannot be added: the library takes objects
+at build time, and a card rebuilt on a poll would reflow the window several
+times a minute. Unlike a meter, though, a section gaining one is an ordinary
+event -- a mouse is switched on, a headset comes off its cradle -- so the
+surplus is drawn as a hidden cell rather than dropped, and a device that
+appears fills one. A device that goes away hides its own again.
+
+CellSlack is how many spare there are. A window that has to be restarted to see
+a peripheral is a window nobody would keep open.
+*/
+func (p *Panel) drawCells(c *card, cells []view.Cell) {
+	for i, cell := range c.cells {
+		if i >= len(cells) {
+			cell.SetShown(false)
+			continue
+		}
+		cl := cells[i]
+		cell.SetName(cl.Label)
+		cell.SetNote(cl.Note)
+		cell.Set(reading(view.Row{Value: cl.Value, Unit: cl.Unit, Status: cl.Status}))
+		cell.SetShown(true)
+	}
 }
 
 // flatten turns a row with a detail line into two rows.
@@ -553,6 +626,9 @@ func (p *Panel) restyle() {
 	for _, c := range p.cards {
 		for _, m := range c.meters {
 			m.Restyle()
+		}
+		if c.grid != nil {
+			c.grid.Restyle()
 		}
 		if c.spark != nil {
 			c.spark.Refresh()
