@@ -139,6 +139,14 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the preferences window is solid again. The design system asks GLFW
+  for a transparent framebuffer so the panel can be see-through, and a GLFW
+  hint is sticky global state: it was never put back, so every window the
+  program opened afterwards was born transparent too. Opening the preferences
+  from the panel drew it, and the font chooser it opens, with the desktop
+  legible straight through them. Fixed upstream -- fynedesygn v0.1.60, its spec
+  044 and its #114 -- and the panel is still translucent, which is the half
+  that had to keep working.
 - **Fix**: the usage bar is the window that bites today. It was the window
   furthest along, which sounds like the same thing and is not: an account a
   tenth of the way through five hours and three quarters of the way through a
