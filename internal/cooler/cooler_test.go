@@ -113,3 +113,31 @@ func TestASpeedTheDeviceDidNotReportIsAbsentRatherThanZero(t *testing.T) {
 	assert.False(t, got.HasFan)
 	assert.False(t, got.HasPump)
 }
+
+// Without a match liquidctl opens every device it can drive -- here a power
+// supply and an RGB controller as well as the cooler -- and each is a hidraw
+// node held open for as long as the read takes. This machine has a documented
+// history of contention on those, and the symptom is not an error: it is a
+// coolant temperature that goes missing for a poll or two at random.
+func TestTheCoolerIsNarrowedToTheCoolerByDefault(t *testing.T) {
+	t.Setenv(cooler.MatchEnv, "")
+	os.Unsetenv(cooler.MatchEnv)
+
+	assert.Equal(t, cooler.DefaultMatch, cooler.Match())
+}
+
+// A machine with another cooler says so rather than editing a constant.
+func TestTheMatchComesFromTheEnvironmentWhenItIsSet(t *testing.T) {
+	t.Setenv(cooler.MatchEnv, "corsair")
+
+	assert.Equal(t, "corsair", cooler.Match())
+}
+
+// An empty value is a deliberate "do not narrow", which is how a machine this
+// default does not name gets every device looked at again. It has to be
+// distinguishable from unset, which is why it is LookupEnv and not Getenv.
+func TestAnEmptyMatchLooksAtEveryDevice(t *testing.T) {
+	t.Setenv(cooler.MatchEnv, "")
+
+	assert.Empty(t, cooler.Match())
+}

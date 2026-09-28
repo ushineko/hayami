@@ -104,3 +104,59 @@ func (s *Series) Len() int {
 	}
 	return len(s.samples)
 }
+
+/*
+Averaged is a series that plots a trailing mean rather than what it was given.
+
+For a reading that is too spiky to plot as it arrives. The processor is the
+case it exists for: it jumps to a hundred degrees on any compile and swings
+about thirty-five where the coolant moves under one, so a line drawn through
+the raw samples is noise and a reader takes nothing from it. The monitor this
+program replaces averages twelve samples at five seconds -- a minute -- and
+says in as many words why: raw CPU is unplottable at this size.
+
+A partial window is averaged as it stands, so the trace starts on the first
+sample rather than after a minute of blank plot. It is the honest shape: the
+mean of what has been seen is what it claims to be, however little that is.
+*/
+type Averaged struct {
+	window *Series
+	means  *Series
+}
+
+// NewAveraged builds a series that keeps capacity means, each over the last
+// window samples.
+func NewAveraged(capacity, window int) *Averaged {
+	return &Averaged{window: NewSeries(window), means: NewSeries(capacity)}
+}
+
+// Add records a raw sample and stores the mean of the window it now ends.
+func (a *Averaged) Add(v float64) {
+	if a == nil {
+		return
+	}
+	a.window.Add(v)
+
+	var sum float64
+	samples := a.window.Samples()
+	for _, s := range samples {
+		sum += s
+	}
+	a.means.Add(sum / float64(len(samples)))
+}
+
+// Mean is the series of means, oldest first.
+func (a *Averaged) Mean() []float64 {
+	if a == nil {
+		return nil
+	}
+	return a.means.Samples()
+}
+
+// Len is how many means there are.
+func (a *Averaged) Len() int {
+	if a == nil {
+		return 0
+	}
+	return a.means.Len()
+}

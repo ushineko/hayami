@@ -30,6 +30,15 @@ type CoolerReading struct {
 	// process has watched for a while, which is the honest state after a
 	// restart.
 	Trail []float64
+
+	// CPUTrail is the processor's, already averaged.
+	//
+	// **Averaged, not raw.** A processor spikes to a hundred degrees on any
+	// compile and swings about thirty-five where the coolant moves under one,
+	// which is unplottable at this size: the line is noise and the eye takes
+	// nothing from it. The monitor plots a trailing mean over sixty seconds
+	// and says so, and this is that mean.
+	CPUTrail []float64
 }
 
 // Cooler turns a reading into a section.
@@ -50,7 +59,22 @@ func Cooler(r CoolerReading) Section {
 	if r.HasPump || r.HasFan {
 		s.Rows = append(s.Rows, speeds(r, unit))
 	}
-	s.Trail = r.Trail
+	// The coolant first, because a plot draws its series in the order it is
+	// given them and the coolant is the primary trace: it is what the eye
+	// should land on, and the processor is context for it.
+	if len(r.Trail) > 0 {
+		s.Trails = append(s.Trails, Trail{
+			Name:    "Coolant",
+			Samples: r.Trail,
+			Status:  coolant(r.Coolant),
+		})
+	}
+	if len(r.CPUTrail) > 0 {
+		// Info, which is the muted colour. A plot with two traces of equal
+		// weight has no primary, and the processor is not the reading anyone
+		// is watching for: it is the thing the coolant is reacting to.
+		s.Trails = append(s.Trails, Trail{Name: "CPU", Samples: r.CPUTrail, Status: Info})
+	}
 	return s
 }
 

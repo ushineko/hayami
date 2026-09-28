@@ -105,16 +105,33 @@ func block(s Section, width int, p Painter) []string {
 	}
 	out := []string{p.paint(truncate(title, width), Dim)}
 	for _, r := range s.Rows {
+		if s.Gone {
+			// The numbers are kept and the verdict is dropped. A green row
+			// for a temperature nobody has measured this minute asserts
+			// something the panel does not know.
+			r.Status = Dim
+		}
 		out = append(out, line(r, width, p))
 		if r.Detail != "" {
 			out = append(out, p.paint(rightAlign(r.Detail, width), Dim))
 		}
 	}
 	out = append(out, meters(s.Meters, width, p)...)
-	if line := Sparkline(s.Trail, width, SparkMinSpan); line != "" {
-		out = append(out, p.paint(line, Info))
+	for _, t := range s.Trails {
+		if line := Sparkline(t.Samples, width, SparkMinSpan); line != "" {
+			out = append(out, p.paint(line, trailStatus(t, s.Gone)))
+		}
 	}
 	return out
+}
+
+// trailStatus is a trail's colour, dropped to Dim for a section whose source
+// has stopped answering -- for the same reason its rows are.
+func trailStatus(t Trail, gone bool) Status {
+	if gone {
+		return Dim
+	}
+	return t.Status
 }
 
 // SparkMinSpan is the narrowest range a sparkline's scale may have, in the
@@ -226,27 +243,40 @@ func renderRow(sections []Section, width int, p Painter) []string {
 		for _, m := range s.Meters {
 			out = append(out, meterRow(s, m, width, c, p))
 		}
-		if trail := trailRow(s, width, c, p); trail != "" {
-			out = append(out, trail)
+		for _, t := range s.Trails {
+			if trail := trailRow(s, t, width, c, p); trail != "" {
+				out = append(out, trail)
+			}
 		}
 	}
 	return out
 }
 
-// trailRow is a section's series as one line: the section's name in the label
-// column, then the plot taking the rest.
+// trailRow is one of a section's series as one line: the trail's name in the
+// label column, then the plot taking the rest.
 //
 // Named, because in a pane a bare row of block characters is a row nobody can
-// attribute. It is the one line in this arrangement that is not a reading, and
-// it earns its place for the reason the archetype gives: a trend is what a
-// reader takes from a panel they never touch.
-func trailRow(s Section, width int, c columns, p Painter) string {
-	label := padRight(s.Title, c.label)
-	plot := Sparkline(s.Trail, width-runeLen(label)-1, SparkMinSpan)
+// attribute -- and a section with two of them could not be read at all. It is
+// the one line in this arrangement that is not a reading, and it earns its
+// place for the reason the archetype gives: a trend is what a reader takes
+// from a panel they never touch.
+func trailRow(s Section, t Trail, width int, c columns, p Painter) string {
+	label := padRight(trailLabel(s, t), c.label)
+	plot := Sparkline(t.Samples, width-runeLen(label)-1, SparkMinSpan)
 	if plot == "" {
 		return ""
 	}
-	return p.paint(label, Dim) + " " + p.paint(plot, Info)
+	return p.paint(label, Dim) + " " + p.paint(plot, trailStatus(t, s.Gone))
+}
+
+// trailLabel names a plot's line. A section with one trail is named for the
+// section, which is what it has always been; a section with two names each
+// trail, because "Cooler" twice is two lines a reader cannot tell apart.
+func trailLabel(s Section, t Trail) string {
+	if len(s.Trails) < 2 || t.Name == "" {
+		return s.Title
+	}
+	return t.Name
 }
 
 // labelled gives a row the section's name only when it has none of its own.
@@ -261,8 +291,8 @@ func labelled(s Section, r Row) Row {
 // lines line up with each other rather than each with itself.
 func rowColumns(sections []Section) (c columns) {
 	for _, s := range sections {
-		if len(s.Trail) > 0 {
-			c.label = max(c.label, runeLen(s.Title))
+		for _, t := range s.Trails {
+			c.label = max(c.label, runeLen(trailLabel(s, t)))
 		}
 		for _, r := range s.Rows {
 			c.label = max(c.label, runeLen(r.Label))

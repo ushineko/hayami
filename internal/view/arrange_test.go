@@ -134,3 +134,29 @@ func TestASectionWhoseSourceIsGoneSaysSoAndKeepsItsValues(t *testing.T) {
 	assert.Contains(t, lines, "(unavailable)")
 	assert.Contains(t, lines, "317.1 KiB/s")
 }
+
+// And the verdict is dropped with it. A green row for a temperature nobody
+// has measured this minute asserts something the panel does not know, which
+// is the same reason a stale peripheral keeps its number and loses its
+// colour.
+func TestASectionWhoseSourceIsGoneDrawsItsValuesDim(t *testing.T) {
+	seen := map[view.Status][]string{}
+	painter := func(text string, st view.Status) string {
+		seen[st] = append(seen[st], text)
+		return text
+	}
+	s := view.Section{Key: "cooler", Title: "Cooler",
+		Rows:   []view.Row{{Label: "Coolant", Value: " 38.9", Unit: "°C", Status: view.Good}},
+		Trails: []view.Trail{{Name: "Coolant", Samples: []float64{38, 39}, Status: view.Good}},
+	}
+
+	view.RenderWith([]view.Section{s}, view.ArrangeStack, 40, painter)
+	require.NotEmpty(t, seen[view.Good], "a live section carries its verdict")
+
+	s.Gone = true
+	seen = map[view.Status][]string{}
+	view.RenderWith([]view.Section{s}, view.ArrangeStack, 40, painter)
+
+	assert.Empty(t, seen[view.Good], "a stale reading keeps its number and loses its colour")
+	assert.Contains(t, strings.Join(seen[view.Dim], ""), "38.9")
+}

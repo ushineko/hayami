@@ -11,6 +11,29 @@ off and must keep doing so.
 */
 package view
 
+// Trail is one series plotted under a section's rows.
+//
+// **Each trail is scaled to its own range**, never to a shared axis. The
+// cooler is the case that settled it: the processor swings thirty-five degrees
+// where the coolant moves under one, so a shared degrees-Celsius axis flattens
+// the coolant to a couple of pixels and destroys the signal the plot exists
+// for. The consequence is worth being explicit about -- heights are not
+// comparable between trails -- and it is why the real numbers are in the rows
+// above and the plot carries no axis at all.
+type Trail struct {
+	// Name identifies the series to a shell that keeps its plot between
+	// polls rather than rebuilding it.
+	Name string
+
+	// Samples are the readings, oldest first.
+	Samples []float64
+
+	// Status is the trail's colour. A secondary trace takes Info, which is
+	// the muted one: a plot with two traces of equal weight has no primary,
+	// and the coolant is what the eye should land on.
+	Status Status
+}
+
 // Status is a verdict on a reading. It is the same vocabulary the design
 // system uses, kept here rather than imported so this package and the terminal
 // panel stay free of Fyne.
@@ -60,9 +83,9 @@ type Section struct {
 	Rows   []Row
 	Meters []Meter
 
-	// Trail is a series to plot under the rows, oldest first. Empty for a
-	// section that has nothing to plot, which is most of them.
-	Trail []float64
+	// Trails are the series to plot under the rows, oldest first within each.
+	// Empty for a section with nothing to plot, which is most of them.
+	Trails []Trail
 
 	// Gone marks a section whose source was answering and has stopped. Its
 	// rows keep their last values and are drawn dim, because the reader's

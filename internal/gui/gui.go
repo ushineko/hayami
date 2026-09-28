@@ -9,6 +9,7 @@ package gui
 
 import (
 	"context"
+	"image/color"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -18,6 +19,7 @@ import (
 	fd "github.com/ushineko/fynedesygn"
 	"github.com/ushineko/fynedesygn/glance"
 	fdtheme "github.com/ushineko/fynedesygn/theme"
+	"github.com/ushineko/fynedesygn/widgets"
 
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
@@ -83,11 +85,6 @@ type card struct {
 // that covered a different span in each shell would be two different readings
 // with one name.
 const SparkCapacity = panel.CoolerTrail
-
-// sparkSeries names the one series a section plots. The design system's
-// sparkline can hold several — the monitor draws two — and hayami has no
-// section that needs a second yet.
-const sparkSeries = "trail"
 
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
@@ -158,9 +155,12 @@ func New(a fyne.App, o Options) *Panel {
 		// since spec 006 and the window never has, which is a parity gap the
 		// parity test could not see: it compares which sections each shell
 		// draws, not what they draw in them.
-		if len(sec.Trail) > 0 {
+		//
+		// One plot however many series: the design system's sparkline holds
+		// several and scales each to its own range, which is what makes the
+		// coolant and the processor readable on one line.
+		if len(sec.Trails) > 0 {
 			holder.spark = glance.NewSparkline(SparkCapacity)
-			holder.spark.AddSeries(sparkSeries, fynetheme.Color(fynetheme.ColorNamePrimary), view.SparkMinSpan)
 			c.AddObject(holder.spark)
 		}
 
@@ -218,6 +218,12 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	if !drawn {
 		return
 	}
+
+	// A source that was answering and has stopped keeps its last values and
+	// draws them dim, marker and all. The card does the whole of it; this
+	// only has to say which state it is in, and to say it before the rows are
+	// set so a row written afterwards is not left bright.
+	c.card.SetStale(sec.Gone)
 	rows := flatten(sec.Rows)
 	if len(rows) != len(c.rows) {
 		p.rebuild(c, rows)
@@ -250,13 +256,20 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	}
 
 	// The plot is given the whole series rather than the newest sample: the
-	// section keeps the trail and this is a view of it, so a window that
+	// section keeps the trails and this is a view of them, so a window that
 	// missed a poll or was rebuilt still draws the same shape the pane does.
-	if c.spark != nil && len(sec.Trail) > 0 {
+	//
+	// The series are registered on every draw because their colour follows
+	// the reading -- the coolant's band, and Dim for a section whose source
+	// has stopped answering -- and because a section that gains a trail
+	// should not have to wait for a restart to plot it.
+	if c.spark != nil && len(sec.Trails) > 0 {
 		c.spark.Clear()
-		c.spark.AddSeries(sparkSeries, fynetheme.Color(fynetheme.ColorNamePrimary), view.SparkMinSpan)
-		for _, v := range sec.Trail {
-			c.spark.Add(sparkSeries, v)
+		for _, t := range sec.Trails {
+			c.spark.AddSeries(t.Name, trailColour(t, sec.Gone), view.SparkMinSpan)
+			for _, v := range t.Samples {
+				c.spark.Add(t.Name, v)
+			}
 		}
 	}
 
@@ -328,6 +341,22 @@ func reading(r view.Row) glance.Reading {
 		text += " " + r.Unit
 	}
 	return glance.Known(text, status(r.Status))
+}
+
+// trailColour is what a plot's line is drawn in: the trail's own status, or
+// the theme's disabled colour for a section whose source has stopped
+// answering.
+//
+// The dim case is the design system's disabled role rather than a status,
+// because there is no dim status: fd.Status is a verdict, and "we have not
+// heard from this in a minute" is not one. The pane makes the same choice in
+// its own vocabulary, and the two shells must not disagree about what a stale
+// plot looks like.
+func trailColour(t view.Trail, gone bool) color.Color {
+	if gone {
+		return fynetheme.Color(fynetheme.ColorNameDisabled)
+	}
+	return widgets.StatusColor(status(t.Status))
 }
 
 // status maps this program's verdict onto the design system's. They are the
