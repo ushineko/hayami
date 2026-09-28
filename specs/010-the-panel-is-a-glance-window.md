@@ -6,14 +6,15 @@
 
 ## Executive Summary
 
-`internal/desktop` installs, removes and reads hayami's KWin rule — frameless,
-always on top, translucent — and sets the running window's opacity live over
-KWin's D-Bus. The menu gains the opacity item its own documentation has
-claimed since spec 001, the preferences gain a Window section that installs
-the rule, and `hayami window install|remove|status` does the same from a
-shell, so a person whose panel has no titlebar can undo it without one.
-Reviewers should start with the package comment in `internal/desktop`, which
-says why a rule and a script are two mechanisms and not one.
+The panel asks the toolkit for translucency, which it turns out to grant, so
+the desktop shows through the space between cards on any desktop and with no
+compositor involved. The cards are faded separately by a theme, to a
+percentage the user sets, so the readings stay legible. `internal/desktop`
+installs and removes a KWin rule for the one thing only KWin can do — the
+titlebar — and `hayami window install|remove|status` does the same from a
+shell. Reviewers should start with `withCardOpacity` in
+`internal/gui/theme.go` and the package comment in `internal/desktop`, which
+says which of these is the toolkit's and which is the compositor's.
 
 ## Context
 
@@ -27,15 +28,28 @@ does not exist:
 
 There are two items.
 
-**Neither want is the toolkit's to grant**, which is why setting a flag does
-not fix this and why the flag that looks right is a trap.
-`glance.Options.Translucent` exists, and the design system says where its own
-KWin rule is documented that it cannot work here: *"Fyne's desktop backend
-never requests a transparent framebuffer, so nothing in the process can draw
-through the window (quirk 32)."* The same for the titlebar — `Decorated`
-already defaults to false and the window is already created with
-`CreateSplashWindow`, and KWin decorates it anyway. Both are the compositor's
-to give.
+**One of the two is the toolkit's and one is the compositor's**, and the first
+draft of this spec got that backwards.
+
+It was written believing neither was the toolkit's, on the strength of a
+sentence in `kwin.Rule`'s documentation: *"Fyne's desktop backend never
+requests a transparent framebuffer, so nothing in the process can draw through
+the window (quirk 32)."* That sentence is about Fyne. It is not about
+`glance`, which works around exactly that by setting GLFW's transparent
+framebuffer hint itself, probing whether it was granted, and swapping in a
+theme with a transparent background. Reading a comment in one file as though
+it described another is how a whole design came to be pointed at the
+compositor.
+
+Measured instead of assumed: `Options.Translucent` is **granted** here —
+`Translucent()` answers true and the desktop shows through the space between
+cards. So translucency is native, needs no compositor and works on any
+desktop.
+
+The titlebar really is the compositor's. `Decorated` already defaults to false,
+the window is already created with `CreateSplashWindow`, and KWin decorates it
+anyway — which the design system's `NoBorder` field says in as many words.
+That is the one thing a rule is for.
 
 Measured on the machine this was written on, because all of it turns on which
 display server the window actually talks to:
@@ -56,38 +70,43 @@ forced, so the user can still override it from the window menu. 95 % is the
 number that program has run at for its whole 1.x life, so it is the default
 here.
 
-**There are two mechanisms and they are not interchangeable**, which is the
-thing to get right:
+**The panel has two backgrounds and they want different things.** The window's
+own is the space *between* cards, and the design system makes it fully
+transparent — that is what a glance window is. The cards are what the readings
+sit on, and that transparency deliberately leaves them alone, because a card as
+see-through as the gap around it is a card nobody can read a number off.
 
-- A **rule** is persistent. It survives a restart and a compositor restart,
-  and it is the only way to be frameless and on top. It is also a write into
-  `~/.config/kwinrulesrc`, which is the user's file and nothing this program
-  owns, so it happens when the user asks and not on a first run.
-- A **script** over D-Bus is live and temporary. It changes the opacity of the
-  running window now and leaves nothing behind. It is what a menu item should
-  do, because a menu is for trying a value.
+So the opacity the user sets is the **card's**, applied by a theme. Ninety-five
+per cent is barely a fade and that is the point: the desktop behind is
+suggested rather than shown, and the figures stay as legible as they are on an
+opaque panel. It is drawn by the toolkit, so it works on any desktop, and there
+is one mechanism rather than two — the menu and the preferences set the same
+setting and the panel re-fades as soon as either does.
 
-So the menu's opacity is live and the preferences' is persistent, and that is
-not an inconsistency — it is the difference between the two things Plasma
-offers, made visible.
+The rule is left with the one thing only it can do: the titlebar, and
+always-on-top alongside it. A toolkit request for on-top is one the window
+manager may decline and a rule survives a compositor restart, so asking twice
+is cheap insurance rather than a duplicate. The rule carries **no opacity** —
+it used to, and a rule that faded the window as well would fade it twice.
 
 ## Requirements
 
 - R1 `internal/desktop` installs, removes and looks up hayami's KWin rule —
-  frameless, always on top, and an opacity — and asks KWin to reload after a
-  write. It is headless, with no toolkit in it.
-- R2 It also sets the opacity of the running window live, over KWin's D-Bus,
-  without writing anything to disk.
+  frameless and always on top, and nothing else — and asks KWin to reload
+  after a write. It is headless, with no toolkit in it.
+- R2 The panel asks the toolkit for translucency and gets it, so the desktop
+  shows through the space between cards with no compositor involved.
 - R3 The rule is installed only when the user asks. A first run changes
   nothing outside the program's own settings.
 - R4 The rule is identifiable in System Settings and removable, and removing
   it gives the titlebar back. Nothing else in `kwinrulesrc` is disturbed.
-- R5 The settings file carries the opacity. It is a percentage, and the
-  default is the reference's 95.
+- R5 The settings file carries the card opacity. It is a percentage, the
+  default is the reference's 95, and it fades the card and its border and
+  never the text.
 - R6 The menu has the third item its own documentation claims: an opacity
-  submenu, applying live.
-- R7 The preferences window can install and remove the rule and set the
-  opacity that is written into it.
+  submenu, which saves and takes effect at once.
+- R7 The preferences window can install and remove the rule, and set the card
+  opacity.
 - R8 A desktop that is not Plasma is not broken by any of it: no KWin, no
   D-Bus or a refused call is a control that says so, not an error and not a
   panel that will not start.
@@ -96,35 +115,37 @@ offers, made visible.
 
 ## Acceptance Criteria
 
-- [x] AC1 A rule written into a `kwinrulesrc` the test owns carries the app ID, `noborder`, `above` and the opacity, forced or applied-initially as each should be. (R1, R5)
+- [x] AC1 A rule written into a `kwinrulesrc` the test owns carries the app ID, `noborder` and `above`, both forced, and **no opacity**. (R1)
 - [x] AC2 Installing into a file that already holds unrelated rules leaves every one of them, and their numbering, intact. (R4)
 - [x] AC3 Installing twice updates the existing rule rather than adding a second. (R1)
 - [x] AC4 Removing takes the rule out and leaves the unrelated ones; removing one that is not there is not an error. (R4)
-- [x] AC5 A lookup reports the rule's presence and the opacity it carries. (R1, R7)
-- [x] AC6 The live opacity call names KWin's own interface and carries a script that matches only this app ID. (R2)
-- [x] AC7 With no KWin and no session bus, install, remove, lookup and the live call each report that plainly and none of them panics or fails the panel. (R8)
+- [x] AC5 A lookup reports whether the rule is installed. (R1, R7)
+- [x] AC6 The card is faded by exactly the percentage asked for, the window's own background is left alone, the border fades with the card and the text never does. (R2, R5)
+- [x] AC7 With no KWin and no session bus, install, remove and lookup each report that plainly, the rule is still written, and none of them panics or fails the panel. (R8)
 - [x] AC8 The settings file round-trips the opacity, and a file without one gets the default. (R5)
-- [x] AC9 The menu has three items, and the opacity submenu ticks the value in the settings. (R6)
+- [x] AC9 The menu has three items, and the opacity submenu ticks the value in the settings and saves the one chosen. (R6)
 - [x] AC10 The preferences window offers the rule and the opacity, and a change reaches the store. (R7)
 - [x] AC11 The command line installs, removes and reports the rule. (R9)
-- [x] AC12 **On this machine**, installing the rule gives a frameless panel at the chosen opacity, and removing it gives the titlebar back. Photographed both ways. Skipped where KWin is absent. (R1, R4)
+- [x] AC12 **On this machine**, the panel is translucent with no rule installed at all, installing the rule takes the titlebar away, and removing it gives the titlebar back. Photographed. Skipped where KWin is absent. (R1, R2, R4)
 
 ## Gaps found
 
-**`fynedesygn/glance/kwin.Rule` forces the opacity, and its documentation says
-it does not.** The field's comment reads *"It is applied initially rather than
-forced, so the user can still override it from the window menu"*, and the rule
-it writes carries `opacityactiverule=2`, which is forced. The reference's own
-rule uses `4`. The practical difference is that KWin's window menu cannot
-override hayami's opacity, so the panel's own menu is the only way to try a
-value — which works, but is not what either the library or the reference
-intended.
+**`kwin.Rule`'s documentation describes the wrong thing in the wrong place.**
+Its `Opacity` field says *"This is the only way a glance window is
+translucent: Fyne's desktop backend never requests a transparent framebuffer,
+so nothing in the process can draw through the window (quirk 32)."* That is
+true of Fyne and false of `glance`, which sets the GLFW hint itself in
+`grantTranslucent` and swaps in a transparent theme. The sentence sits in the
+file a reader consults when deciding how to be translucent, and it points them
+away from the feature the same library already provides. Worth a fynedesygn
+issue; it cost this spec a complete redesign.
 
-Not worked around here: reimplementing the rule writer to change one line
-would be this repository copying from the design system, which is the thing
-the project rules forbid. `TestEverythingInTheRuleIsForced` asserts what the
-library actually does and says in its comment that it should fail the day this
-is fixed, so the workaround is a failing test rather than a silent divergence.
+**There is no card opacity in the design system.** `WithTransparentBackground`
+zeroes `ColorNameBackground` and leaves `ColorNameButton` alone, which is
+right — but a panel that wants its cards *partly* see-through has to write its
+own theme wrapper, as `internal/gui/theme.go` does. It is nine lines and it is
+plausibly a `glance.Options.CardOpacity`. Worth raising there rather than
+being copied by the next program that wants it.
 
 ## What the tests caught
 
@@ -161,19 +182,25 @@ was better than the assertion, and the assertion was the thing that changed.
 - **95 % is a measurement of habit, not of anything.** It is what the
   reference has run at. It is the default because it is familiar, and it is
   recorded as such rather than as a finding.
-- **The two mechanisms can disagree.** A live opacity from the menu and a
-  persistent one in the rule are different values until the user saves one,
-  and after a restart the rule's is what applies. That is the honest behaviour
-  of the two things Plasma offers and is said in the interface rather than
-  hidden.
+- **Translucency is a request the driver can refuse.** `grantTranslucent`
+  probes for it and an opaque window is what a refusal gives, which is the
+  honest outcome and not a failure. It is reported on some drivers, so a
+  machine where the panel is simply opaque is a machine where this was
+  refused, not one where something is broken.
+- **The panel is not resizable and is as wide as its widest reading.** That is
+  the design system's rule — a glance window is whatever its content measures
+  — and on this machine the usage section's captions make it 655 px against
+  268 px without them. Narrowing it is a change to what usage *says* and
+  belongs in its own spec.
 - Rollback: revert, and remove the rule. The command line can do the second
   without the program.
 
 ## Alternatives Considered
 
-- `glance.Options.Translucent`. Rejected: the design system documents that
-  Fyne's desktop backend never asks for a transparent framebuffer, so it
-  cannot work.
+- Doing the translucency with KWin as well, through the rule's own opacity.
+  Rejected after the first draft did exactly that: the toolkit grants
+  translucency here, so routing it through the compositor makes the feature
+  Plasma-only for no reason and fades the window twice if both are set.
 - `glance.Window.SetOpacity`. Rejected here: it writes an X11 property and
   this panel is a native Wayland client, so it returns
   `ErrOpacityNeedsCompositor`. It is left for the X11 sessions where it does

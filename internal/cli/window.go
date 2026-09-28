@@ -25,7 +25,7 @@ from a shell.
 func windowCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "window",
-		Short: "The panel's KWin rule: frameless, on top, translucent",
+		Short: "The panel's KWin rule: no titlebar, always on top",
 		Args:  cobra.NoArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
@@ -48,7 +48,7 @@ func windowStatusCmd() *cobra.Command {
 				cmd.Println("No window rule. The panel has its titlebar.")
 				return nil
 			}
-			cmd.Printf("Frameless and on top, at %d %% opacity.\n", current.Opacity)
+			cmd.Println("Frameless and on top.")
 			return nil
 		},
 	}
@@ -56,17 +56,16 @@ func windowStatusCmd() *cobra.Command {
 
 // windowInstallCmd puts the rule in place.
 func windowInstallCmd() *cobra.Command {
-	opacity := desktop.DefaultOpacity
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Make the panel frameless, on top and translucent",
+		Short: "Take the panel's titlebar away and keep it on top",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			err := desktop.Install(PanelAppID, opacity)
+			err := desktop.Install(PanelAppID)
 			if err != nil && !errors.Is(err, desktop.ErrNoKWin) {
 				return err
 			}
-			cmd.Printf("Installed, at %d %% opacity.\n", opacity)
+			cmd.Println("Installed. The panel has no titlebar and stays on top.")
 			if err != nil {
 				// The rule is written; KWin was not there to be told. It
 				// applies when one starts, which is worth saying rather than
@@ -76,7 +75,6 @@ func windowInstallCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().IntVar(&opacity, "opacity", opacity, "how opaque the panel is, as a percentage")
 	return cmd
 }
 

@@ -56,6 +56,11 @@ type Panel struct {
 	win   *glance.Window
 	cards map[string]*card
 	opts  Options
+
+	// app is kept so the card opacity can be re-applied when the setting
+	// changes: it is a property of the theme, and the theme belongs to the
+	// app rather than to the window.
+	app fyne.App
 }
 
 // card is one section's card and the pieces in it, kept so a poll repaints
@@ -89,9 +94,17 @@ func New(a fyne.App, o Options) *Panel {
 			Title: o.Title,
 			OnTop: true,
 			Menu:  o.Menu,
+
+			// The one of the three the toolkit can grant. GLFW gives the
+			// window a framebuffer with an alpha channel and the design
+			// system makes the window's own background transparent, so the
+			// desktop shows through the space between cards. The titlebar is
+			// KWin's to remove and nothing here can ask for it.
+			Translucent: true,
 		}),
 		cards: map[string]*card{},
 		opts:  o,
+		app:   a,
 	}
 
 	for _, s := range o.Sources {
@@ -134,6 +147,7 @@ A reorder therefore takes effect at the next start, which the preferences
 window says. It is in this spec's gaps.
 */
 func (p *Panel) Apply(c config.Config) {
+	p.applyOpacity(c)
 	for key, card := range p.cards {
 		card.card.SetAllowed(c.Shows(key))
 	}
@@ -351,4 +365,31 @@ func Start(o Options) error {
 
 	p.win.ShowAndRun()
 	return nil
+}
+
+// applyOpacity fades the cards to the setting's value.
+//
+// It re-wraps the app's theme rather than keeping one of its own, so the card
+// opacity composes with whatever the user chose in Appearance: the scheme
+// decides the colour and this decides how much of it survives.
+//
+// glance wraps the theme again when it shows the window, to make the window's
+// own background transparent. The two compose in either order — one names the
+// background and the other names the card — which is why this can be applied
+// whenever the setting changes and not only before the window exists.
+func (p *Panel) applyOpacity(c config.Config) {
+	if p.app == nil {
+		return
+	}
+	base := baseTheme(p.app.Settings().Theme())
+	p.app.Settings().SetTheme(withCardOpacity(base, c.OpacityOrDefault()))
+}
+
+// baseTheme unwraps a theme this package has already faded, so applying a new
+// opacity does not fade an already-faded card a second time.
+func baseTheme(t fyne.Theme) fyne.Theme {
+	if faded, ok := t.(cardOpacity); ok {
+		return faded.Theme
+	}
+	return t
 }

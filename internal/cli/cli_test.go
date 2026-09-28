@@ -113,17 +113,19 @@ func TestTheWindowRuleCanBeDrivenFromTheCommandLine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "No window rule")
 
-	out, err = runGUI(t, "window", "install", "--opacity", "80")
+	out, err = runGUI(t, "window", "install")
 	require.NoError(t, err)
-	assert.Contains(t, out, "80 %")
+	assert.Contains(t, out, "no titlebar")
 
 	body, err := os.ReadFile(filepath.Join(dir, "kwinrulesrc"))
 	require.NoError(t, err)
-	assert.Contains(t, string(body), "opacityactive=80")
+	assert.Contains(t, string(body), "noborder=true")
+	assert.NotContains(t, string(body), "opacityactive",
+		"the rule should not carry an opacity: the panel fades its own cards")
 
 	out, err = runGUI(t, "window", "status")
 	require.NoError(t, err)
-	assert.Contains(t, out, "80 %")
+	assert.Contains(t, out, "Frameless and on top")
 
 	out, err = runGUI(t, "window", "remove")
 	require.NoError(t, err)

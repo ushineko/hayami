@@ -54,47 +54,45 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	// settings, because the rule is the truth: a user who removes it in System
 	// Settings has removed it, and a checkbox remembering otherwise would be
 	// this program disagreeing with the desktop about what is on screen.
-	rule.OnChanged = func(on bool) { w.setRule(s, on, int(slider.Value)) }
+	rule.OnChanged = func(on bool) { w.setRule(s, on) }
 
 	slider.OnChanged = func(v float64) { value.SetText(fmt.Sprintf("%d %%", int(v))) }
-	slider.OnChangeEnded = func(v float64) { w.setOpacity(s, int(v), rule.Checked) }
+	slider.OnChangeEnded = func(v float64) { w.setOpacity(int(v)) }
 
 	return container.NewVBox(
 		widgets.Dim("What the compositor grants. A glance window is read without being touched, "+
 			"so it has no titlebar and sits above other windows."),
 		rule,
 		widgets.Dim("Installs a KWin rule you can see and remove in System Settings. "+
-			"Plasma only; another desktop leaves the panel as it is."),
+			"Plasma only, and only for the titlebar: nothing else here needs it."),
 		widget.NewSeparator(),
-		widgets.Dim("How much of the desktop shows through."),
+		widgets.Dim("How solid the cards are. The space around them is always clear, "+
+			"so the desktop shows through the panel whatever this says."),
 		container.NewBorder(nil, nil, nil, value, slider),
-		widgets.Dim("Saved here and applied by the rule. The panel's own menu changes it "+
-			"straight away without saving, for trying a value."),
+		widgets.Dim("Drawn by the panel itself, so it works on any desktop."),
 	)
 }
 
 // setRule installs or removes the rule and says what happened.
-func (w *Window) setRule(s *shell.Shell, on bool, opacity int) {
+func (w *Window) setRule(s *shell.Shell, on bool) {
 	var err error
 	if on {
-		err = desktop.Install(PanelAppID, opacity)
+		err = desktop.Install(PanelAppID)
 	} else {
 		err = desktop.Remove(PanelAppID)
 	}
 	w.report(s, err, on)
 }
 
-// setOpacity saves the opacity, and rewrites the rule when there is one so the
-// saved value and the installed value cannot drift apart.
-func (w *Window) setOpacity(s *shell.Shell, opacity int, installed bool) {
+// setOpacity saves the opacity, which is all it has to do.
+//
+// The panel watches its own settings and re-fades its cards, and nothing about
+// this reaches the compositor: the opacity is the toolkit's and works on any
+// desktop, unlike the rule above it on this screen.
+func (w *Window) setOpacity(opacity int) {
 	c := w.opts.Store.Config()
 	c.Opacity = opacity
 	w.save(c)
-
-	if !installed {
-		return
-	}
-	w.report(s, desktop.Install(PanelAppID, opacity), true)
 }
 
 // report says how a compositor call went.

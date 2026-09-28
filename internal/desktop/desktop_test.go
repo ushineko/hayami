@@ -38,47 +38,34 @@ func read(t *testing.T, path string) string {
 }
 
 // AC1. The rule carries what a glance window needs.
-func TestTheRuleIsFramelessOnTopAndTranslucent(t *testing.T) {
+func TestTheRuleIsFramelessAndOnTopAndNothingElse(t *testing.T) {
 	path := rules(t, "")
 
 	// The reconfigure afterwards needs KWin and there is none under test; the
 	// rule is still written, which is what this asserts.
-	_ = desktop.Install(appID, 88)
+	_ = desktop.Install(appID)
 
 	body := read(t, path)
 	assert.Contains(t, body, appID)
 	assert.Contains(t, body, "noborder=true")
 	assert.Contains(t, body, "above=true")
-	assert.Contains(t, body, "opacityactive=88")
-	assert.Contains(t, body, "opacityinactive=88")
+	assert.NotContains(t, body, "opacityactive",
+		"the rule should not carry an opacity: the panel fades its own cards")
 	assert.Contains(t, body, desktop.Description,
 		"a rule the user cannot identify is one they cannot remove")
 }
 
-// AC1. Everything in the rule is forced.
+// AC1. What the rule carries is forced.
 //
-// Frameless and on top should be: a glance window the user can accidentally
-// push behind something is not one.
-//
-// The opacity is forced too, and that is **not** what this program asked for
-// or what the reference does. fynedesygn's Rule.Opacity says it is "applied
-// initially rather than forced, so the user can still override it from the
-// window menu", and the rule it writes says `opacityactiverule=2`, which is
-// forced. The reference's own rule uses 4. The practical difference is that
-// KWin's window menu cannot override hayami's opacity, so the panel's menu is
-// the only way to try a value.
-//
-// This asserts what the library does rather than what it says, so that the day
-// it is fixed this test fails and says why. See "Gaps found" in the spec.
-func TestEverythingInTheRuleIsForced(t *testing.T) {
+// A glance window the user can accidentally push behind something is not one,
+// and a titlebar that comes back when KWin feels like it is not frameless.
+func TestWhatTheRuleCarriesIsForced(t *testing.T) {
 	path := rules(t, "")
-	_ = desktop.Install(appID, 90)
+	_ = desktop.Install(appID)
 
 	body := read(t, path)
 	assert.Contains(t, body, "noborderrule=2", "frameless should be forced")
 	assert.Contains(t, body, "aboverule=2", "on top should be forced")
-	assert.Contains(t, body, "opacityactiverule=2",
-		"if this fails, fynedesygn now writes the applied-initially rule its doc promises")
 }
 
 // AC2. Installing leaves every rule the user already had, and their numbering.
@@ -102,7 +89,7 @@ noborder=true
 wmclass=a-second-program
 `
 	path := rules(t, existing)
-	_ = desktop.Install(appID, 95)
+	_ = desktop.Install(appID)
 
 	body := read(t, path)
 	assert.Contains(t, body, "Something the user set up")
@@ -116,17 +103,15 @@ wmclass=a-second-program
 func TestInstallingTwiceUpdatesTheRule(t *testing.T) {
 	path := rules(t, "")
 
-	_ = desktop.Install(appID, 95)
-	_ = desktop.Install(appID, 70)
+	_ = desktop.Install(appID)
+	_ = desktop.Install(appID)
 
 	body := read(t, path)
-	assert.Equal(t, 1, countOf(body, "opacityactive=70"))
-	assert.Zero(t, countOf(body, "opacityactive=95"), "the first opacity survived")
+	assert.Equal(t, 1, countOf(body, appID), "installing twice left two rules")
 
 	current, err := desktop.Current(appID)
 	require.NoError(t, err)
 	assert.True(t, current.Installed)
-	assert.Equal(t, 70, current.Opacity)
 }
 
 func countOf(body, sub string) int {
@@ -152,7 +137,7 @@ wmclass=somebody-elses-program
 `
 	path := rules(t, existing)
 
-	_ = desktop.Install(appID, 95)
+	_ = desktop.Install(appID)
 	_ = desktop.Remove(appID)
 
 	body := read(t, path)
@@ -187,35 +172,13 @@ func TestNoRulesFileAtAllIsNoRule(t *testing.T) {
 	assert.False(t, current.Installed)
 }
 
-// An opacity that is not a percentage is refused before anything is written.
-func TestAnOpacityThatIsNotAPercentageIsRefused(t *testing.T) {
-	path := rules(t, "")
-
-	require.Error(t, desktop.Install(appID, 101))
-	require.Error(t, desktop.Install(appID, -1))
-	require.Error(t, desktop.SetOpacity(appID, 101))
-
-	_, err := os.Stat(path)
-	assert.True(t, os.IsNotExist(err), "a refused opacity wrote a rules file anyway")
-}
-
-// AC7. With no session bus, the live call says so plainly rather than
-// panicking or hanging.
-func TestWithNoSessionBusTheLiveCallSaysSo(t *testing.T) {
-	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
-
-	err := desktop.SetOpacity(appID, 80)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, desktop.ErrNoKWin)
-}
-
 // AC7. And the rule is still written when the compositor cannot be told, so it
 // applies the next time one starts.
 func TestARuleIsWrittenEvenWhenKWinCannotBeTold(t *testing.T) {
 	path := rules(t, "")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
 
-	err := desktop.Install(appID, 95)
+	err := desktop.Install(appID)
 	assert.ErrorIs(t, err, desktop.ErrNoKWin)
 	assert.Contains(t, read(t, path), appID,
 		"the rule should be on disk even when kwin is not there to reload it")

@@ -1,20 +1,24 @@
 /*
 Package desktop is what the compositor grants that the toolkit cannot ask for.
 
-A glance window is frameless, above other windows and shown through, and on
-Plasma none of those three is the toolkit's to give. Fyne asks GLFW for an
-undecorated window and KWin decorates it anyway; Fyne's desktop backend never
-requests a transparent framebuffer, so nothing drawn in this process can be
-see-through; and this panel is a native Wayland client, so the X11 property
-that would set its own opacity is not there to write.
+A glance window is frameless, above other windows and shown through. Only the
+first of those is here, and the reason is worth stating because the obvious
+assumption is wrong in both directions:
 
-All three are KWin's, and KWin offers them two different ways:
+  - **Translucency is the toolkit's** and is done natively. GLFW grants a
+    framebuffer with an alpha channel, the design system makes the window's
+    background transparent, and the cards are faded by a theme. None of that
+    needs a compositor, so it works on any desktop and not only on Plasma.
+  - **The titlebar is the compositor's.** Fyne asks GLFW for an undecorated
+    window and KWin decorates it anyway, and nothing in the process can
+    overrule that. It is the one thing a rule is needed for.
+  - **Always on top** is asked for by the toolkit and granted here, and the
+    rule asks again. A rule survives a compositor restart and a toolkit
+    request is one the window manager may decline, so the second ask is cheap
+    insurance rather than a duplicate.
 
-  - A **rule** is persistent. It survives a restart and a compositor restart
-    and is the only route to frameless and on-top. It is also a write into the
-    user's own kwinrulesrc, so it happens when they ask.
-  - A **script** over D-Bus is live and leaves nothing behind. It is what a
-    menu item does, because a menu is for trying a value.
+The rule is a write into the user's own kwinrulesrc, which holds every window
+rule they have, so it happens when they ask and never on a first run.
 
 Nothing here imports a toolkit. Both front ends use it.
 */
@@ -34,11 +38,16 @@ import (
 // is going into a file beside every other rule they have.
 const Description = "hayami — frameless, on top, translucent"
 
-// DefaultOpacity is the panel's opacity as a percentage.
+// DefaultOpacity is how opaque the panel's cards are, as a percentage.
 //
 // Ninety-five, which is what the program this replaces has run at for its
 // whole 1.x life. It is a measurement of habit rather than of anything, and it
 // is the default because it is the familiar one.
+//
+// It is applied by the toolkit, not by KWin: the window's background is
+// already fully transparent and this is the card on top of it. It lives here
+// rather than in the GUI package because the settings and the command line
+// both need it and neither imports a toolkit.
 const DefaultOpacity = 95
 
 // ErrNoKWin is Plasma not being there: another compositor, no session bus, or
@@ -52,26 +61,23 @@ var ErrNoKWin = errors.New("kwin is not answering")
 type Rule struct {
 	// Installed is whether the rule is in the user's kwinrulesrc at all.
 	Installed bool
-
-	// Opacity is the percentage the installed rule carries. Meaningless when
-	// Installed is false.
-	Opacity int
 }
 
-// ruleFor builds the rule for an app ID at an opacity.
+// ruleFor builds the rule for an app ID.
 //
-// `above` and `noborder` are forced, because a glance window that the user can
-// accidentally push behind something is not one. The opacity is applied
-// initially rather than forced, so the window menu can still override it —
-// which is the reference's choice and the reason a person can experiment
-// without editing anything.
-func ruleFor(appID string, opacity int) kwin.Rule {
+// Forced, because a glance window the user can accidentally push behind
+// something is not one.
+//
+// **No opacity.** The rule used to carry one and does not need to: the panel
+// fades its own cards through the theme, which works on any desktop rather
+// than only on Plasma, and a rule that also faded the window would fade it
+// twice.
+func ruleFor(appID string) kwin.Rule {
 	return kwin.Rule{
 		AppID:       appID,
 		Description: Description,
 		AlwaysOnTop: true,
 		NoBorder:    true,
-		Opacity:     opacity,
 		SkipTaskbar: true,
 		SkipPager:   true,
 	}
@@ -81,11 +87,8 @@ func ruleFor(appID string, opacity int) kwin.Rule {
 //
 // Installing twice updates the rule rather than adding a second, which is the
 // design system's behaviour and is asserted rather than assumed.
-func Install(appID string, opacity int) error {
-	if opacity < 0 || opacity > 100 {
-		return fmt.Errorf("an opacity of %d is not a percentage", opacity)
-	}
-	if err := kwin.Install(ruleFor(appID, opacity)); err != nil {
+func Install(appID string) error {
+	if err := kwin.Install(ruleFor(appID)); err != nil {
 		return fmt.Errorf("installing the window rule: %w", err)
 	}
 	return reconfigure()
@@ -104,64 +107,11 @@ func Remove(appID string) error {
 
 // Current reports whether the rule is installed and what opacity it carries.
 func Current(appID string) (Rule, error) {
-	r, found, err := kwin.Lookup(appID)
+	_, found, err := kwin.Lookup(appID)
 	if err != nil {
 		return Rule{}, fmt.Errorf("reading the window rules: %w", err)
 	}
-	if !found {
-		return Rule{}, nil
-	}
-	return Rule{Installed: true, Opacity: r.Opacity}, nil
-}
-
-/*
-SetOpacity changes the running window's opacity now, without writing anything.
-
-This is the menu's mechanism. It loads a script into KWin, runs it and unloads
-it; the script walks the window list and sets the opacity of the windows whose
-resource class is this app's. Nothing survives a restart, which is the point:
-the persistent value lives in the rule and is set from the preferences.
-
-A desktop that is not Plasma answers ErrNoKWin, and the caller says so rather
-than failing.
-*/
-func SetOpacity(appID string, opacity int) error {
-	if opacity < 0 || opacity > 100 {
-		return fmt.Errorf("an opacity of %d is not a percentage", opacity)
-	}
-
-	conn, err := session()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-
-	path, err := writeScript(kwin.OpacityScript(appID, float32(opacity)/100))
-	if err != nil {
-		return err
-	}
-	defer remove(path)
-
-	load := kwin.LoadScriptCall()
-	var id int
-	err = conn.Object(load.Destination, dbus.ObjectPath(load.Path)).
-		Call(load.Interface+"."+load.Method, 0, path, Description).Store(&id)
-	if err != nil {
-		return fmt.Errorf("%w: loading the opacity script: %w", ErrNoKWin, err)
-	}
-
-	run := kwin.RunCall(id)
-	if err := conn.Object(run.Destination, dbus.ObjectPath(run.Path)).
-		Call(run.Interface+"."+run.Method, 0).Err; err != nil {
-		return fmt.Errorf("%w: running the opacity script: %w", ErrNoKWin, err)
-	}
-
-	unload := kwin.UnloadScriptCall()
-	// The unload is best effort. The opacity is already applied, and a script
-	// left loaded is untidy rather than broken.
-	_ = conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
-		Call(unload.Interface+"."+unload.Method, 0, Description).Err
-	return nil
+	return Rule{Installed: found}, nil
 }
 
 // reconfigure asks KWin to read its rules again, which is what makes a written
