@@ -116,6 +116,7 @@ func block(s Section, width int, p Painter) []string {
 			out = append(out, p.paint(rightAlign(r.Detail, width), Dim))
 		}
 	}
+	out = append(out, cells(s.Cells, width, p)...)
 	out = append(out, meters(s.Meters, width, p)...)
 	for _, t := range s.Trails {
 		if line := Sparkline(t.Samples, width, SparkMinSpan); line != "" {
@@ -240,6 +241,9 @@ func renderRow(sections []Section, width int, p Painter) []string {
 		for _, r := range s.Rows {
 			out = append(out, line(labelled(s, r), width, p))
 		}
+		for _, c := range s.Cells {
+			out = append(out, cellLine(c, width, p))
+		}
 		for _, m := range s.Meters {
 			out = append(out, meterRow(s, m, width, c, p))
 		}
@@ -296,6 +300,9 @@ func rowColumns(sections []Section) (c columns) {
 		}
 		for _, r := range s.Rows {
 			c.label = max(c.label, runeLen(r.Label))
+		}
+		for _, cell := range s.Cells {
+			c.label = max(c.label, runeLen(cell.Label)+2+runeLen(cell.Note))
 		}
 		for _, m := range s.Meters {
 			c.label = max(c.label, runeLen(m.Label))

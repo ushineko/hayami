@@ -16,6 +16,13 @@ const (
 	BatteryCritical = 20
 )
 
+// Discharging is what a battery that is merely running says.
+//
+// Named because it is the one state that is also the default, and the one
+// place that needs to recognise it -- a device already listing its separate
+// batteries has no width left for a word that says nothing had happened.
+const Discharging = "Discharging"
+
 // Charge is what a peripheral's battery is doing, in the view's own words.
 //
 // The view does not import the reader, so the state crosses as this rather
@@ -73,67 +80,87 @@ type PeripheralsReading struct {
 	Devices []PeripheralReading
 }
 
-// Peripherals turns a reading into a section.
-//
-// A row per device, appearing and disappearing as the hardware does. The
-// program this replaces draws two fixed cells, each configured to a device
-// type through a submenu, which is an artefact of a panel 260 pixels wide and
-// not something a reader ever asked for.
-//
-// Charging is **said and not coloured**. A device on its cable is not a
-// warning however empty it is — it is being dealt with — and colouring it
-// would put a red row on the panel for the one battery nobody needs to think
-// about.
+/*
+Peripherals turns a reading into a section of cells.
+
+A cell per device: the name over the level, the level large and in the middle,
+and what the battery is doing under it. The monitor's shape, and the right one
+for a battery -- the number *is* the reading and the name is only which one.
+
+This replaces a row per device, which was argued for here and was wrong. What
+that argument got right is kept and is worth restating: a cell per device,
+appearing and disappearing with the hardware, rather than the monitor's two
+fixed slots each pointed at a device type through a submenu. The slots were an
+artefact of a panel 260 pixels wide and are not something a reader ever asked
+for. The *row* was the part that did not survive being looked at beside the
+program it replaces.
+
+Charging is **said and not coloured**. A device on its cable is not a warning
+however empty it is -- it is being dealt with -- and colouring it would put a
+red cell on the panel for the one battery nobody needs to think about.
+*/
 func Peripherals(r PeripheralsReading) Section {
 	s := Section{Key: "peripherals", Title: "Peripherals"}
-	unit := UnitWidth("%")
-
 	for _, d := range r.Devices {
-		s.Rows = append(s.Rows, peripheral(d, unit))
+		s.Cells = append(s.Cells, peripheral(d))
 	}
 	return s
 }
 
-// peripheral is one device's row.
-func peripheral(d PeripheralReading, unit int) Row {
-	row := Row{Label: d.Name, Unit: PadUnit("%", unit), Detail: note(d)}
+// peripheral is one device's cell.
+func peripheral(d PeripheralReading) Cell {
+	cell := Cell{Label: d.Name, Unit: "%", Note: note(d)}
 
 	if !d.HasLevel {
-		// No level, so no verdict. The unit stays for the column's sake: the
-		// one device that is quiet should not move the ones that are not.
-		row.Value = NoQuantity()
-		row.Status = Dim
-		return row
+		// No level, so no verdict, and no unit either: a cell centres its
+		// reading rather than aligning it in a column, so there is nothing
+		// for a lone percent sign to hold a place in.
+		cell.Value, cell.Unit = strings.TrimSpace(NoQuantity()), ""
+		cell.Status = Dim
+		return cell
 	}
 
-	row.Value = Count(d.Level)
+	cell.Value = strings.TrimSpace(Count(d.Level))
 	switch {
 	case d.Stale:
-		// The number is kept and the verdict is dropped. A red row for a
+		// The number is kept and the verdict is dropped. A red cell for a
 		// battery nobody has heard from in ten minutes asserts something the
 		// panel does not know.
-		row.Status = Dim
+		cell.Status = Dim
 	case d.Charge != Draining:
-		row.Status = Info
+		cell.Status = Info
 	case d.Level <= BatteryCritical:
-		row.Status = Bad
+		cell.Status = Bad
 	case d.Level <= BatteryLow:
-		row.Status = Warn
+		cell.Status = Warn
 	default:
-		row.Status = Good
+		cell.Status = Good
 	}
-	return row
+	return cell
 }
 
-// note is the quiet line under a row, where there is something to say.
-//
-// The cells come first when there are any: for a pair of earbuds they are the
-// detail, and "charging" is said beside them rather than instead of them.
+/*
+note is the line under a cell's reading, and there is always one.
+
+The row form said this only for a battery that was charging, which left the
+ordinary case -- a battery discharging normally -- looking exactly like a
+device nobody had heard from. The monitor says "Discharging", "Wired",
+"Charging" or "Disconnected" under every cell and it is right to: the state is
+a third of what a cell is for, and a blank third reads as a cell that has not
+finished loading.
+
+The separate batteries of a device that has several come first when there are
+any: for a pair of earbuds they *are* the detail, and the state is said beside
+them rather than instead of them -- except when the state is the ordinary one.
+"L 80  R 90  case 50  Discharging" does not fit the width of a cell and the
+last word of it is the one worth least: a battery that is going down is what a
+battery does, and for this device the three numbers are the reading.
+*/
 func note(d PeripheralReading) string {
 	state := chargeNote(d)
 
 	if cells := cellNote(d.Cells); cells != "" {
-		if state != "" {
+		if state != "" && state != Discharging {
 			return cells + "  " + state
 		}
 		return cells
@@ -141,21 +168,29 @@ func note(d PeripheralReading) string {
 	return state
 }
 
-// chargeNote is what the row says about what the battery is doing.
+// chargeNote is what the cell says about what the battery is doing.
 func chargeNote(d PeripheralReading) string {
 	switch {
 	case d.Stale:
-		return "not answering"
+		return "Not answering"
 	case d.Charge == Filling:
-		return "charging"
+		return "Charging"
 	case d.Charge == Charged:
-		return "charged"
+		return "Charged"
+	case !d.HasLevel:
+		// A device that is there and has not said how full it is. The monitor
+		// calls this "Wired" for a keyboard on its cable and "Disconnected"
+		// for a headset on its cradle; neither is knowable from here, so it
+		// says the one thing that is true of both -- and says it in two
+		// words, because a cell is as wide as a device name and a state that
+		// has to be truncated is a state nobody reads.
+		return "No reading"
 	default:
-		return ""
+		return Discharging
 	}
 }
 
-// cellNote lists the cells: "L 100  R 100  case 80".
+// cellNote lists the separate batteries: "L 100  R 100  case 80".
 func cellNote(cells []PeripheralCell) string {
 	var parts []string
 	for _, c := range cells {

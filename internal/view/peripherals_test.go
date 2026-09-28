@@ -32,8 +32,8 @@ func TestALevelIsColouredAtTheBands(t *testing.T) {
 		s := view.Peripherals(view.PeripheralsReading{
 			Devices: []view.PeripheralReading{reading("A Device", c.level)},
 		})
-		require.Len(t, s.Rows, 1)
-		assert.Equal(t, c.want, s.Rows[0].Status, "at %d %%", c.level)
+		require.Len(t, s.Cells, 1)
+		assert.Equal(t, c.want, s.Cells[0].Status, "at %d %%", c.level)
 	}
 }
 
@@ -47,10 +47,10 @@ func TestAChargingDeviceIsSaidAndNotColoured(t *testing.T) {
 	d.Charge = view.Filling
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Rows, 1)
+	require.Len(t, s.Cells, 1)
 
-	assert.Equal(t, view.Info, s.Rows[0].Status, "a charging device was coloured for being empty")
-	assert.Equal(t, "charging", s.Rows[0].Detail)
+	assert.Equal(t, view.Info, s.Cells[0].Status, "a charging device was coloured for being empty")
+	assert.Equal(t, "Charging", s.Cells[0].Note)
 }
 
 // AC7. Charged is its own word. A device that has finished is not still
@@ -61,8 +61,8 @@ func TestAChargedDeviceSaysCharged(t *testing.T) {
 	d.Charge = view.Charged
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Rows, 1)
-	assert.Equal(t, "charged", s.Rows[0].Detail)
+	require.Len(t, s.Cells, 1)
+	assert.Equal(t, "Charged", s.Cells[0].Note)
 }
 
 // AC5. A stale device keeps its number and loses its verdict. A red row for a
@@ -73,32 +73,60 @@ func TestAStaleDeviceKeepsItsNumberAndLosesItsVerdict(t *testing.T) {
 	d.Stale = true
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Rows, 1)
+	require.Len(t, s.Cells, 1)
 
-	assert.Equal(t, view.Dim, s.Rows[0].Status)
-	assert.Contains(t, s.Rows[0].Value, "15")
-	assert.Equal(t, "not answering", s.Rows[0].Detail)
+	assert.Equal(t, view.Dim, s.Cells[0].Status)
+	assert.Contains(t, s.Cells[0].Value, "15")
+	assert.Equal(t, "Not answering", s.Cells[0].Note)
 }
 
-// AC5. A device with no level at all has no verdict either, and keeps its unit
-// so the column does not move when one device goes quiet.
-func TestADeviceWithNoLevelHasNoVerdictAndKeepsItsColumn(t *testing.T) {
+// AC5. A device with no level at all has no verdict either, and says so rather
+// than drawing a percentage it does not have.
+//
+// The column rule the row form was held to does not apply here: a cell centres
+// its reading in a column of its own, so there is nothing for a lone percent
+// sign to hold a place in and a unit on a blank reading is furniture.
+func TestADeviceWithNoLevelSaysSoRatherThanShowingAPercentage(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{
 		Devices: []view.PeripheralReading{
 			{Name: "Arctis"},
 			reading("G502 X PLUS", 86),
 		},
 	})
-	require.Len(t, s.Rows, 2)
+	require.Len(t, s.Cells, 2)
 
-	assert.Equal(t, view.Dim, s.Rows[0].Status)
-	assert.Equal(t, s.Rows[1].Unit, s.Rows[0].Unit, "a quiet device moved the unit column")
-	assert.Equal(t, len(s.Rows[1].Value), len(s.Rows[0].Value), "a quiet device moved the number column")
+	assert.Equal(t, view.Dim, s.Cells[0].Status)
+	assert.Empty(t, s.Cells[0].Unit, "a percent sign with no number in front of it")
+	assert.Equal(t, "%", s.Cells[1].Unit)
+	assert.NotEmpty(t, s.Cells[0].Note, "a cell with no reading must still say why")
 }
 
-// A section with no devices has no rows, so the shells draw no heading.
-func TestNoDevicesIsNoRows(t *testing.T) {
+// The state is said under every cell, not only the ones doing something
+// unusual.
+//
+// The row form said it only for a battery that was charging, which left the
+// ordinary case -- a battery discharging normally -- looking exactly like a
+// device nobody had heard from. A blank third of a cell reads as one that has
+// not finished loading.
+func TestEveryCellSaysWhatItsBatteryIsDoing(t *testing.T) {
+	quiet := view.PeripheralReading{Name: "Keychron K4 HE"}
+	stale := reading("Headset", 30)
+	stale.Stale = true
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+		reading("G502 X PLUS", 67), quiet, stale,
+	}})
+
+	require.Len(t, s.Cells, 3)
+	assert.Equal(t, "Discharging", s.Cells[0].Note, "the ordinary case is still a case")
+	assert.NotEmpty(t, s.Cells[1].Note)
+	assert.Equal(t, "Not answering", s.Cells[2].Note)
+}
+
+// A section with no devices has no cells, so the shells draw no heading.
+func TestNoDevicesIsNoCells(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{})
+	assert.Empty(t, s.Cells)
 	assert.Empty(t, s.Rows)
 	assert.Equal(t, "peripherals", s.Key)
 }
@@ -121,8 +149,11 @@ func TestTheSectionRendersInEveryArrangement(t *testing.T) {
 	}
 }
 
-// AC4. A device with several cells is one row and a quiet line beneath it.
-func TestADeviceWithCellsIsOneRowAndADetailLine(t *testing.T) {
+// AC4. A device with several batteries is one cell and a quiet line beneath
+// it. A pair of earbuds is one device on the desk and should be one block on
+// the panel; which ear is low is exactly what the wearer wants to know, and
+// that is what the line is for.
+func TestADeviceWithSeveralBatteriesIsOneCell(t *testing.T) {
 	d := reading("AirPods Pro", 80)
 	d.Cells = []view.PeripheralCell{
 		{Name: "L", Level: 80},
@@ -132,18 +163,19 @@ func TestADeviceWithCellsIsOneRowAndADetailLine(t *testing.T) {
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
 
-	require.Len(t, s.Rows, 1, "a pair of earbuds became more than one row")
-	assert.Equal(t, "L 80  R 90  case 50", s.Rows[0].Detail)
-	assert.Contains(t, s.Rows[0].Value, "80")
+	require.Len(t, s.Cells, 1, "a pair of earbuds became more than one cell")
+	assert.Equal(t, "L 80  R 90  case 50", s.Cells[0].Note)
+	assert.Contains(t, s.Cells[0].Value, "80")
 }
 
-// AC3. A device with one battery has no detail line to draw.
-func TestADeviceWithOneBatteryHasNoCellLine(t *testing.T) {
+// AC3. A device with one battery lists no separate batteries; its note is the
+// state alone.
+func TestADeviceWithOneBatteryListsNoCells(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{
 		Devices: []view.PeripheralReading{reading("G502 X PLUS", 86)},
 	})
-	require.Len(t, s.Rows, 1)
-	assert.Empty(t, s.Rows[0].Detail)
+	require.Len(t, s.Cells, 1)
+	assert.Equal(t, "Discharging", s.Cells[0].Note)
 }
 
 // The cells and what the battery is doing are both said, not one instead of
@@ -154,8 +186,21 @@ func TestCellsAndChargingAreBothSaid(t *testing.T) {
 	d.Cells = []view.PeripheralCell{{Name: "L", Level: 40}, {Name: "R", Level: 45}}
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Rows, 1)
+	require.Len(t, s.Cells, 1)
 
-	assert.Contains(t, s.Rows[0].Detail, "L 40")
-	assert.Contains(t, s.Rows[0].Detail, "charging")
+	assert.Contains(t, s.Cells[0].Note, "L 40")
+	assert.Contains(t, s.Cells[0].Note, "Charging")
+}
+
+// But the ordinary state is not said beside them. "L 80  R 90  case 50
+// Discharging" does not fit a cell, and the last word of it is the one worth
+// least: for this device the three numbers are the reading.
+func TestAnOrdinaryStateIsNotSaidBesideTheSeparateBatteries(t *testing.T) {
+	d := reading("AirPods Pro", 80)
+	d.Cells = []view.PeripheralCell{{Name: "L", Level: 80}, {Name: "R", Level: 90}}
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
+
+	require.Len(t, s.Cells, 1)
+	assert.Equal(t, "L 80  R 90", s.Cells[0].Note)
 }

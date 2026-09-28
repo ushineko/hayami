@@ -11,6 +11,44 @@ off and must keep doing so.
 */
 package view
 
+/*
+Cell is one device as a block rather than as a line: a name, a reading, and
+what the thing is doing.
+
+The shape the monitor draws and the one this program went without for a while.
+A row puts the name at the left and the percentage at the right margin in the
+same weight, which reads as a list of facts; a cell puts the percentage in the
+middle and large, with the name over it and the state under it, and the
+percentage is what the eye lands on. For a battery that is the right answer,
+because the number *is* the reading and the name is only which one.
+
+What the row form got right is kept: a cell per device, appearing and
+disappearing with the hardware, rather than the monitor's two fixed slots with
+a submenu each. That was an artefact of a panel 260 pixels wide and is not
+something a reader ever asked for.
+*/
+type Cell struct {
+	// Label is the device's own name, over the reading.
+	Label string
+
+	// Value and Unit are the reading, kept apart for the reason a Row keeps
+	// them apart: they are aligned separately.
+	Value string
+	Unit  string
+
+	Status Status
+
+	// Note is the quiet line under the reading: "Discharging", "Charging",
+	// "Wired", "Disconnected", or the separate batteries of a device that has
+	// more than one.
+	//
+	// **Always said.** The row form said it only for a battery that was
+	// charging, which left the ordinary case -- a battery discharging
+	// normally -- looking the same as a device nobody had heard from. The
+	// state is a third of what a cell is for.
+	Note string
+}
+
 // Trail is one series plotted under a section's rows.
 //
 // **Each trail is scaled to its own range**, never to a shared axis. The
@@ -82,6 +120,12 @@ type Section struct {
 	Title  string
 	Rows   []Row
 	Meters []Meter
+
+	// Cells are readings drawn as blocks rather than as lines, laid out
+	// across the width. A section has rows or cells; nothing so far has both,
+	// and they are separate for the reason rows and meters are -- they are
+	// laid out differently in every arrangement.
+	Cells []Cell
 
 	// Trails are the series to plot under the rows, oldest first within each.
 	// Empty for a section with nothing to plot, which is most of them.
