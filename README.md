@@ -145,6 +145,11 @@ MIT. See [LICENSE](LICENSE).
   length. The panel carries a theme of its own over its own subtree, taking the
   scheme and the faces from Appearance and departing from it in the one respect
   that was asked for. It goes down to 8 pt (#33).
+- The navigation's shape is the user's: icons and labels, icons alone or no
+  navigation at all, down the left or across the top. The shell draws the
+  control and binds the shortcut for whichever shapes a program lists, and this
+  one lists them all — four sections is few enough that icons alone are
+  legible.
 - The preferences window has no Refresh button. It rebuilt the current screen,
   and every screen here holds settings and saves as it is changed, so there was
   nothing to re-fetch and the button visibly did nothing.

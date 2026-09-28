@@ -161,3 +161,28 @@ func TestClosingThePreferencesPutsThemAway(t *testing.T) {
 	}
 	assert.NotNil(t, w.Shell().Window, "the window did not survive being put away")
 }
+
+// The navigation's shape is the user's.
+//
+// The shell draws its own control for the shapes a program lists and binds its
+// shortcut; a program that lists none gets the one shape it has always had and
+// no way to change it. Four sections is few enough that icons alone are
+// legible, and a top strip is a reasonable choice on a wide screen.
+func TestTheNavigationsShapeIsOffered(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	w := prefs.New(a, prefs.Options{Store: store(t, "")})
+
+	// The shell's own control appears in the header once shapes are listed.
+	var buttons []string
+	for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
+		if b, ok := o.(*widget.Button); ok {
+			buttons = append(buttons, b.Text)
+		}
+	}
+	assert.NotEmpty(t, buttons, "the header has no controls at all")
+
+	// And Refresh is not among them: every screen here saves as it is changed.
+	assert.NotContains(t, buttons, "Refresh")
+}

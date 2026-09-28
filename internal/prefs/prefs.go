@@ -80,6 +80,13 @@ func New(a fyne.App, o Options) *Window {
 		// here holds settings and saves as it is changed, so there is nothing
 		// to re-fetch and the button visibly did nothing.
 		NoRefresh: true,
+
+		// The navigation's shape is the user's. Four sections is few enough
+		// that icons alone are legible and a top strip is a reasonable choice
+		// on a wide screen, so the shell draws its own control for these and
+		// binds its shortcut.
+		NavModes:      []shell.NavMode{shell.NavLabels, shell.NavIcons, shell.NavHidden},
+		NavPlacements: []shell.NavPlacement{shell.NavLeft, shell.NavTop},
 		Sections: []shell.Section{
 			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
 			shell.NewSection("Bandwidth", fynetheme.ComputerIcon, w.buildBandwidth),
