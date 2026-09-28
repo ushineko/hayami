@@ -193,11 +193,14 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 			break
 		}
 		c.meters[i].SetLabel(m.Name())
-		caption := m.Caption
-		if m.Reset != "" {
-			caption += " · " + m.Reset
-		}
-		c.meters[i].Set(m.Fraction, caption, status(m.Status))
+
+		// The figures go in the slots rather than into one caption. A row
+		// with a stretch in it is as wide as its widest pair; the same
+		// figures concatenated made this window 655 px wide against 268 px
+		// for the rest of the panel.
+		c.meters[i].Set(m.Fraction, m.Caption, status(m.Status))
+		c.meters[i].SetTrailing(m.Reset)
+		c.meters[i].SetStats(m.StatsLeft, m.StatsRight)
 	}
 }
 

@@ -48,14 +48,17 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 
 	for _, group := range byAccount(windows) {
 		lead := nearest(group)
+		left, right := spread(now, group, lead)
 		s.Meters = append(s.Meters, Meter{
-			Label:    group[0].Account,
-			Badge:    group[0].Badge,
-			Window:   lead.Name,
-			Caption:  figures(now, group),
-			Reset:    resets(now, soonest(group)),
-			Fraction: lead.Fraction,
-			Status:   quota(lead.Fraction),
+			Label:      group[0].Account,
+			Badge:      group[0].Badge,
+			Window:     lead.Name,
+			Caption:    figure(now, lead, soonest(group)),
+			StatsLeft:  left,
+			StatsRight: right,
+			Reset:      resets(now, soonest(group)),
+			Fraction:   lead.Fraction,
+			Status:     quota(lead.Fraction),
 		})
 	}
 
@@ -106,21 +109,42 @@ func nearest(group []UsageWindow) UsageWindow {
 // turns over. The monitor writes that as "(5d left)" and it is the answer to a
 // question a reader does actually ask: the five-hour window resets today
 // whatever happens, and the weekly one is the one worth planning around.
-func figures(now time.Time, group []UsageWindow) string {
-	next := soonest(group)
+/*
+spread splits an account's other figures across the two ends of the stats row.
 
-	out := ""
+The caption keeps the window the bar is about — the one nearest its limit, the
+one that can bite you today. Everything else goes below it: the other windows'
+percentages at the left, and the lead window's own amounts at the right, which
+is where the archetype puts them.
+
+This is the whole of the width fix. The same figures in one caption made the
+window 655 px wide; across a row with a stretch in the middle they cost the
+width of the longest pair.
+*/
+func spread(now time.Time, group []UsageWindow, lead UsageWindow) (left, right string) {
+	next := soonest(group)
 	for _, w := range group {
-		if out != "" {
-			out += "  "
+		if w.Name == lead.Name {
+			continue
 		}
-		out += w.Name + ": " + strings.TrimSpace(Percent(w.Fraction))
-		if w.Detail != "" {
-			out += " " + w.Detail
+		if left != "" {
+			left += "  "
 		}
-		if left := remaining(now, w, next); left != "" {
-			out += " (" + left + ")"
-		}
+		left += figure(now, w, next)
+	}
+	return left, strings.TrimSpace(lead.Detail)
+}
+
+// figure is one window's name, its percentage, and how long it has left when
+// that is not what the countdown column already says.
+//
+// The parenthetical is spec 004's and stays: a window whose reset is not the
+// one in the countdown would otherwise say nothing about when it turns over,
+// and the weekly window is the one worth planning around.
+func figure(now time.Time, w UsageWindow, next time.Time) string {
+	out := w.Name + ": " + strings.TrimSpace(Percent(w.Fraction))
+	if left := remaining(now, w, next); left != "" {
+		out += " (" + left + ")"
 	}
 	return out
 }

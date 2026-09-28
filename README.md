@@ -139,6 +139,17 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the panel fits its corner. It was 655 px wide and 268 px without its
+  usage section, so one section was more than doubling the width of the whole
+  window: every figure went in one caption, and a caption sets the width of the
+  meter, the panel and the window. The figures are spread across columns now,
+  as the program this replaces spreads them — the window the bar is about in
+  the caption, the others under it, the amounts opposite them, the reset in a
+  column of its own. **340 px** (spec 011, #28).
+- Nothing is lost by it. A pane still draws one line per meter with every
+  figure in reading order, and a window whose reset is not the one counting
+  down still says how long it has left.
+
 - **Fix**: the panel is a glance window at last. It has had a titlebar and no
   opacity since spec 001, and the menu's own doc comment has been describing an
   opacity item nobody had built (spec 010, #26).

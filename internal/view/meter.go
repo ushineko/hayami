@@ -29,6 +29,22 @@ type Meter struct {
 
 	Caption string
 
+	// StatsLeft and StatsRight are the figures that do not fit in the
+	// caption, for a shell that has somewhere to put them.
+	//
+	// They exist because a caption carrying every figure sets the width of
+	// the whole window: one of them measured 655 px against 268 px for the
+	// rest of the panel. The window draws these at the two ends of a row
+	// under the bar, where a row is as wide as its widest pair rather than as
+	// wide as everything in it laid end to end. A pane has one line per meter
+	// and folds them back into the caption, which is what it has always
+	// drawn.
+	//
+	// Held to the no-jitter rule, like the caption: they are drawn in a
+	// monospace column and a value that changes width drags its neighbour.
+	StatsLeft  string
+	StatsRight string
+
 	// Reset is when the quota starts again, kept apart from the caption
 	// because it is a column of its own: in a pane it sits hard against the
 	// right edge, where the eye can find it on every line without reading the
@@ -155,4 +171,25 @@ func padUntil(s string) string {
 		return strings.Repeat(" ", n) + s
 	}
 	return s
+}
+
+// Line is every figure a meter carries, on one line, in the order they are
+// read.
+//
+// It is what a pane draws, because a pane has one line per meter. The window
+// does not use it: it has a row under the bar with an end each, and putting
+// them there is the difference between a meter that fits its panel and one
+// that sets the width of the whole window.
+func (m Meter) Line() string {
+	out := m.Caption
+	for _, s := range []string{m.StatsLeft, m.StatsRight} {
+		if s == "" {
+			continue
+		}
+		if out != "" {
+			out += "  "
+		}
+		out += s
+	}
+	return out
 }
