@@ -156,7 +156,8 @@ MIT. See [LICENSE](LICENSE).
   program this replaces draws them.
 - **Fix**: the window no longer keeps its high-water mark. Nothing re-measured
   it when a card's contents shrank, so a row that went away left a band of
-  empty window that never closed.
+  panel background below the last card — eighteen pixels of it — that never
+  closed again.
 
 - The panel draws in the appearance you chose. It hard-coded its scheme and
   its face, so the Appearance screen in the preferences changed the
