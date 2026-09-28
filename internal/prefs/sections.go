@@ -23,10 +23,10 @@ func (w *Window) buildSections(s *shell.Shell) fyne.CanvasObject {
 	}
 
 	return container.NewVBox(
-		widgets.Dim("Which readings the panel draws, and in what order."),
+		widgets.DimWrapped("Which readings the panel draws, and in what order."),
 		container.NewVBox(rows...),
 		widget.NewSeparator(),
-		widgets.Dim("How they are laid out. The window is always a stack; this is what a pane uses."),
+		widgets.DimWrapped("How they are laid out. The window is always a stack; this is what a pane uses."),
 		w.arrangement(s),
 	)
 }

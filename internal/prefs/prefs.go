@@ -81,6 +81,11 @@ func New(a fyne.App, o Options) *Window {
 		// to re-fetch and the button visibly did nothing.
 		NoRefresh: true,
 
+		// This window draws in the appearance chosen on its own Appearance
+		// screen; the panel draws in the one chosen for it, and owns the
+		// application's theme because its cards cannot be overridden.
+		OwnAppearance: true,
+
 		// The navigation's shape is the user's. Four sections is few enough
 		// that icons alone are legible and a top strip is a reasonable choice
 		// on a wide screen, so the shell draws its own control for these and

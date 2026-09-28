@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	fd "github.com/ushineko/fynedesygn"
+	"github.com/ushineko/fynedesygn/dialogs"
 	"github.com/ushineko/fynedesygn/shell"
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 	"github.com/ushineko/fynedesygn/widgets"
@@ -42,26 +43,8 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	c := w.opts.Store.Config()
 	opacity := c.OpacityOrDefault()
 
-	appearance := fdtheme.LoadAppearanceFrom(w.opts.Store.Settings(), fyne.CurrentApp().Preferences())
-	size := c.FontSizeOr(appearance.TextSize)
-
-	fontValue := widget.NewLabel(fmt.Sprintf("%g pt", size))
-	fontValue.Importance = widget.LowImportance
-
-	sizes := fdtheme.TextSizes()
-	names := make([]string, 0, len(sizes))
-	for _, v := range sizes {
-		names = append(names, fmt.Sprintf("%g", v))
-	}
-	font := widget.NewSelect(names, func(name string) {
-		for _, v := range sizes {
-			if fmt.Sprintf("%g", v) == name {
-				w.setFontSize(v)
-				fontValue.SetText(fmt.Sprintf("%g pt", v))
-			}
-		}
-	})
-	font.SetSelected(fmt.Sprintf("%g", size))
+	panel := c.PanelAppearance(fdtheme.LoadAppearanceFrom(
+		w.opts.Store.Settings(), fyne.CurrentApp().Preferences()))
 
 	value := widget.NewLabel(fmt.Sprintf("%d %%", opacity))
 	value.Importance = widget.LowImportance
@@ -82,23 +65,17 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	slider.OnChangeEnded = func(v float64) { w.setOpacity(int(v)) }
 
 	return container.NewVBox(
-		widgets.Dim("How big the panel's own text is. The preferences window keeps its own "+
-			"size: they are read at different distances."),
-		container.NewBorder(nil, nil, nil, fontValue, font),
+		widgets.DimWrapped("The panel's own faces and size. This window keeps its own."),
+		w.faces(s, panel),
 		widget.NewSeparator(),
-		widgets.Dim("What the compositor grants. A glance window is read without being touched, "+
-			"so it has no titlebar and sits above other windows."),
+		widgets.DimWrapped("What the compositor grants."),
 		rule,
-		widgets.Dim("Installs a KWin rule you can see and remove in System Settings. "+
-			"Plasma only, and only for the titlebar: nothing else here needs it."),
-		widgets.Dim("Turning it on takes effect at once. Turning it off takes effect when "+
-			"the panel next starts, because a window that has lost its titlebar "+
-			"cannot be given one back."),
+		widgets.DimWrapped("A KWin rule, in System Settings. Plasma only."),
+		widgets.DimWrapped("On now; off at the next start."),
 		widget.NewSeparator(),
-		widgets.Dim("How solid the cards are. The space around them is always clear, "+
-			"so the desktop shows through the panel whatever this says."),
+		widgets.DimWrapped("How solid the cards are; the space around them is always clear."),
 		container.NewBorder(nil, nil, nil, value, slider),
-		widgets.Dim("Drawn by the panel itself, so it works on any desktop."),
+		widgets.DimWrapped("Drawn by the panel, on any desktop."),
 	)
 }
 
@@ -156,4 +133,85 @@ func (w *Window) report(s *shell.Shell, err error, on bool) {
 	default:
 		s.Report("Changing the window", err)
 	}
+}
+
+/*
+faces is the panel's two font choosers and its size.
+
+**Two faces, not one.** The panel draws labels in the interface family and
+readings in the monospace one, and they are chosen separately for the reason
+the design system keeps them apart: a label is read as words and a reading is
+read as a column, and a column needs every digit the same width. A
+proportional family chosen as the monospace face is not a matter of taste, it
+is a mistake — which is why the chooser for it offers only the families that
+measured as monospace.
+
+The choosers are the design system's own, so they show a sample in the
+highlighted family and change nothing until Choose. A dropdown of three
+hundred names in a face that tells you nothing about any of them is not a
+choice, it is a lottery.
+*/
+func (w *Window) faces(s *shell.Shell, panel fdtheme.Appearance) fyne.CanvasObject {
+	var face, mono *widget.Button
+
+	face = widget.NewButton(faceLabel(panel.Font), func() {
+		dialogs.ChooseFont(s.Window, "The panel's interface font", panel.Font, panel, false,
+			func(name string) {
+				face.SetText(faceLabel(name))
+				w.setFace(name, "")
+			})
+	})
+	mono = widget.NewButton(faceLabel(panel.Mono), func() {
+		dialogs.ChooseFont(s.Window, "The panel's monospace font", panel.Mono, panel, true,
+			func(name string) {
+				mono.SetText(faceLabel(name))
+				w.setFace("", name)
+			})
+	})
+
+	value := widget.NewLabel(fmt.Sprintf("%g pt", panel.TextSize))
+	value.Importance = widget.LowImportance
+
+	sizes := fdtheme.TextSizes()
+	names := make([]string, 0, len(sizes))
+	for _, v := range sizes {
+		names = append(names, fmt.Sprintf("%g", v))
+	}
+	size := widget.NewSelect(names, func(name string) {
+		for _, v := range sizes {
+			if fmt.Sprintf("%g", v) == name {
+				value.SetText(fmt.Sprintf("%g pt", v))
+				w.setFontSize(v)
+			}
+		}
+	})
+	size.SetSelected(fmt.Sprintf("%g", panel.TextSize))
+
+	return container.NewVBox(
+		container.NewBorder(nil, nil, widgets.Dim("Interface"), nil, face),
+		container.NewBorder(nil, nil, widgets.Dim("Monospace"), nil, mono),
+		container.NewBorder(nil, nil, widgets.Dim("Size"), value, size),
+	)
+}
+
+// faceLabel names a family on a chooser's button, as the design system's own
+// appearance screen does: the ellipsis says the button opens something.
+func faceLabel(name string) string {
+	if name == "" {
+		name = fdtheme.DefaultFontName
+	}
+	return name + "…"
+}
+
+// setFace saves one of the panel's two families. An empty name leaves that one
+// alone, so the two callers do not have to read the config first.
+func (w *Window) setFace(face, mono string) {
+	c := w.opts.Store.Config()
+	if face != "" {
+		c.Font = face
+	}
+	if mono != "" {
+		c.Mono = mono
+	}
+	w.save(c)
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/ushineko/fynedesygn/settings"
 	_ "github.com/ushineko/fynedesygn/settings/yamlcodec" // registers .yaml
+	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/desktop"
 	"github.com/ushineko/hayami/internal/view"
@@ -41,6 +42,20 @@ type Config struct {
 
 	// Interfaces are the network interfaces the bandwidth section watches.
 	Interfaces []string `json:"interfaces"`
+
+	// Font and Mono are the panel's own faces: the interface family and the
+	// monospace one.
+	//
+	// The panel's own, not the preferences window's. Empty means the family
+	// chosen in Appearance, which is what a settings file written before
+	// these existed carries.
+	//
+	// They are two settings and not one because the panel uses both, for the
+	// reason the design system keeps them apart: a label is read as words and
+	// a reading is read as a column, and a column needs every digit the same
+	// width.
+	Font string `json:"font"`
+	Mono string `json:"mono"`
 
 	// FontSize is the panel's text size, in points.
 	//
@@ -72,6 +87,23 @@ func (c Config) FontSizeOr(appearance float32) float32 {
 		return appearance
 	}
 	return c.FontSize
+}
+
+// PanelAppearance is the appearance the panel draws in: the one chosen in
+// Appearance, with whatever the panel has been given of its own laid over it.
+//
+// A field the panel has not been given falls through to the appearance, so a
+// panel that has only been given a size still follows the scheme and the faces
+// the user picked for everything else.
+func (c Config) PanelAppearance(a fdtheme.Appearance) fdtheme.Appearance {
+	if c.Font != "" {
+		a.Font = c.Font
+	}
+	if c.Mono != "" {
+		a.Mono = c.Mono
+	}
+	a.TextSize = c.FontSizeOr(a.TextSize)
+	return a
 }
 
 // OpacityOrDefault is the opacity to use, resolving the unset zero.

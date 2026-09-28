@@ -190,6 +190,12 @@ window says. It is in this spec's gaps.
 */
 func (p *Panel) Apply(c config.Config) {
 	p.applyOpacity(c)
+
+	// And repaint in it. A card restyles its title and its rows; a meter and
+	// a sparkline go in as plain canvas objects and have to be told, and
+	// without this a panel given a size of its own drew its meters' labels in
+	// the size the application had when they were built.
+	p.restyle()
 	for key, card := range p.cards {
 		card.card.SetAllowed(c.Shows(key))
 	}
@@ -478,35 +484,27 @@ func Appearance(a fyne.App, store *config.Store) fdtheme.Appearance {
 // own background transparent. The two compose in either order — one names the
 // background and the other names the card — which is why this can be applied
 // whenever the setting changes and not only before the window exists.
+/*
+applyOpacity puts the panel's own appearance on the application's theme.
+
+**The application's, deliberately.** A Fyne theme is application-wide and only
+one window can own it; the one that should is the one whose widgets cannot be
+overridden, and that is this one — a card, a row and a meter are canvas objects
+that read the app's theme directly. The preferences window is standard widgets
+and draws in its own appearance instead (shell.Options.OwnAppearance).
+
+An earlier version had this the other way round, with the panel carrying a
+subtree override. It does not work and it does not fail cleanly: the containers
+measure at the override's size while the text draws at the application's, so
+the padding changes, the text does not, and the card titles are clipped by the
+difference.
+*/
 func (p *Panel) applyOpacity(c config.Config) {
 	if p.app == nil {
 		return
 	}
-	base := baseTheme(p.app.Settings().Theme())
-	p.app.Settings().SetTheme(withCardOpacity(base, c.OpacityOrDefault()))
-	p.applyFont(c)
-}
-
-/*
-applyFont gives the panel its own text size.
-
-A Fyne theme is application-wide, so setting one would change the preferences
-window too — and the two are read at different distances. The design system's
-panel carries a theme of its own for exactly this, over its own subtree.
-
-The size is the only thing that differs: the scheme and the faces come from
-the appearance, so a panel still follows what was chosen in Appearance and
-departs from it in one respect the user asked to depart in.
-*/
-func (p *Panel) applyFont(c config.Config) {
-	a := Appearance(p.app, p.opts.Store)
-	if size := c.FontSizeOr(a.TextSize); size != a.TextSize {
-		a.TextSize = size
-		p.win.Panel().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
-		return
-	}
-	// The same size as everything else: no theme of its own to carry.
-	p.win.Panel().SetTheme(nil)
+	a := c.PanelAppearance(Appearance(p.app, p.opts.Store))
+	p.app.Settings().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
 }
 
 // baseTheme unwraps a theme this package has already faded, so applying a new

@@ -139,6 +139,17 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- The panel has its own faces and size, chosen with the design system's own
+  font choosers: an interface family, a monospace family and a size, all
+  separate from the preferences window's. The panel owns the application's
+  theme, because its cards are canvas objects that cannot be themed per
+  subtree, and the preferences window draws in its own appearance instead
+  (#33).
+- **Fix**: the meters drew their labels in whatever size the application had
+  when they were built. A card restyles its title and its rows; a meter goes in
+  as a plain canvas object and has to be told, so the usage section ignored the
+  panel's size while every other section followed it.
+
 - The panel has a text size of its own, separate from the preferences window's.
   A Fyne theme is application-wide, so the two shared one — and they are read at
   different distances: a panel from across a desk, a settings window at arm's
