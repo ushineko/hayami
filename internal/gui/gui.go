@@ -181,23 +181,33 @@ func New(a fyne.App, o Options) *Panel {
 			c.Add(meter)
 		}
 
-		// A section of cells gets a grid. Cells and rows are separate for the
-		// reason the view keeps them separate: they are laid out differently,
-		// and nothing so far has both.
-		if len(sec.Cells) > 0 {
-			holder.grid = glance.NewCellGrid()
-			for i := range len(sec.Cells) + CellSlack {
-				blank := view.NoQuantity()
-				if i < len(sec.Cells) {
-					blank = sec.Cells[i].Value
-				}
-				cell := glance.NewCell("", blank)
-				cell.SetShown(i < len(sec.Cells))
-				holder.cells = append(holder.cells, cell)
-				holder.grid.Add(cell)
+		// Every card gets a grid, whether or not it has cells yet. Cells and
+		// rows are separate for the reason the view keeps them separate: they
+		// are laid out differently, and nothing so far has both.
+		//
+		// **Whether or not**, because the alternative was a card that could
+		// never hold one. The library takes objects at build time, this runs
+		// once before the window exists, and a first poll that found nothing
+		// therefore left the peripherals card empty for the life of the
+		// program -- no grid, and no CellSlack either, because the slack pads
+		// a grid that was created. A wireless mouse that has been still
+		// answers nothing about one poll in fourteen, so restarting the panel
+		// at the wrong moment was enough to do it.
+		//
+		// An empty grid costs nothing: the library's layout reports a zero
+		// size while no cell is shown, so a card of rows is unchanged.
+		holder.grid = glance.NewCellGrid()
+		for i := range len(sec.Cells) + CellSlack {
+			blank := view.NoQuantity()
+			if i < len(sec.Cells) {
+				blank = sec.Cells[i].Value
 			}
-			c.Add(holder.grid)
+			cell := glance.NewCell("", blank)
+			cell.SetShown(i < len(sec.Cells))
+			holder.cells = append(holder.cells, cell)
+			holder.grid.Add(cell)
 		}
+		c.Add(holder.grid)
 
 		// A section with a trend to plot gets one. The pane has drawn these
 		// since spec 006 and the window never has, which is a parity gap the
