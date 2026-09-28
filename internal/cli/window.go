@@ -89,7 +89,7 @@ func windowRemoveCmd() *cobra.Command {
 			if err != nil && !errors.Is(err, desktop.ErrNoKWin) {
 				return fmt.Errorf("%w", err)
 			}
-			cmd.Println("Removed. The panel has its titlebar back.")
+			cmd.Println("Removed. The panel gets its titlebar back when it next starts.")
 			return nil
 		},
 	}

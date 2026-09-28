@@ -107,7 +107,7 @@ func Install(appID string) error {
 	if err := kwin.Install(ruleFor(appID)); err != nil {
 		return fmt.Errorf("installing the window rule: %w", err)
 	}
-	return reconfigure()
+	return settle(appID, true)
 }
 
 // Remove takes the rule out and asks KWin to reload, giving the titlebar back.
@@ -118,7 +118,7 @@ func Remove(appID string) error {
 	if err := removeAll(appID); err != nil {
 		return err
 	}
-	return reconfigure()
+	return settle(appID, false)
 }
 
 /*
@@ -161,6 +161,71 @@ func Current(appID string) (Rule, error) {
 		}
 	}
 	return Rule{}, nil
+}
+
+/*
+settle makes the change take effect, on the next window and on this one.
+
+**Two steps, because a rule alone is not enough.** KWin applies a rule to the
+windows it creates after it reads one, and leaves the windows already on screen
+exactly as they were. So writing the rule and asking for a reconfigure changes
+what happens next time and nothing a person can see now — a toggle that
+appeared to do nothing, which is how this was reported.
+
+The rule is what survives a restart. The script is what makes the control
+honest in the moment. Neither replaces the other.
+
+A desktop that is not Plasma answers neither and that is not a failure.
+*/
+func settle(appID string, on bool) error {
+	if err := reconfigure(); err != nil {
+		return err
+	}
+	return apply(appID, on)
+}
+
+/*
+apply sets the decoration on the windows that are already open.
+
+It runs a script inside KWin: load it, run it, unload it. The script matches
+the panel's title as well as the app ID, because every window in this program
+carries the same one and a script keyed on the app ID alone would take the
+titlebar off the preferences window — which is the bug the rule's own title
+match exists to avoid.
+*/
+func apply(appID string, on bool) error {
+	conn, err := session()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	path, err := writeScript(kwin.DecorationScript(appID, PanelTitle, on, on))
+	if err != nil {
+		return err
+	}
+	defer remove(path)
+
+	load := kwin.LoadScriptCall()
+	var id int
+	err = conn.Object(load.Destination, dbus.ObjectPath(load.Path)).
+		Call(load.Interface+"."+load.Method, 0, path, Description).Store(&id)
+	if err != nil {
+		return fmt.Errorf("%w: loading the window script: %w", ErrNoKWin, err)
+	}
+
+	run := kwin.RunCall(id)
+	if err := conn.Object(run.Destination, dbus.ObjectPath(run.Path)).
+		Call(run.Interface+"."+run.Method, 0).Err; err != nil {
+		return fmt.Errorf("%w: running the window script: %w", ErrNoKWin, err)
+	}
+
+	// Best effort: the change is applied, and a script left loaded is untidy
+	// rather than broken.
+	unload := kwin.UnloadScriptCall()
+	_ = conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
+		Call(unload.Interface+"."+unload.Method, 0, Description).Err
+	return nil
 }
 
 // reconfigure asks KWin to read its rules again, which is what makes a written

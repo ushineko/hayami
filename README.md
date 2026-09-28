@@ -139,6 +139,15 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the frameless toggle takes effect on the panel in front of you. KWin
+  applies a window rule to the windows it creates *afterwards* and leaves the
+  ones already on screen alone, so turning it on changed a file and nothing
+  visible — a control that appeared to do nothing. It now also asks KWin to set
+  the property on the running window (#33).
+- Turning it **off** still waits for the next start, and the interface says so
+  rather than claiming otherwise: a window that has lost its titlebar cannot be
+  given one back while it is open.
+
 - **Fix**: the preferences window keeps its titlebar. The KWin rule matched the
   app ID, and every window in the program carries the same one. It matches the
   panel's title as well now — and takes out any rule an older version wrote,

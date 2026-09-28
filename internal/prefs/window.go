@@ -65,6 +65,9 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 		rule,
 		widgets.Dim("Installs a KWin rule you can see and remove in System Settings. "+
 			"Plasma only, and only for the titlebar: nothing else here needs it."),
+		widgets.Dim("Turning it on takes effect at once. Turning it off takes effect when "+
+			"the panel next starts, because a window that has lost its titlebar "+
+			"cannot be given one back."),
 		widget.NewSeparator(),
 		widgets.Dim("How solid the cards are. The space around them is always clear, "+
 			"so the desktop shows through the panel whatever this says."),
@@ -107,7 +110,11 @@ func (w *Window) report(s *shell.Shell, err error, on bool) {
 	case err == nil && on:
 		s.OK("The panel is frameless and on top.")
 	case err == nil:
-		s.OK("The panel has its titlebar back.")
+		// Deliberately not "the titlebar is back". KWin takes decoration away
+		// from a window already on screen and will not give it back: that
+		// happens when the window is next created. Saying otherwise sends the
+		// user looking for a change that is not going to arrive.
+		s.OK("Removed. The panel gets its titlebar back when it next starts.")
 	case errors.Is(err, desktop.ErrNoKWin):
 		s.Flash("This desktop is not Plasma, so the panel is unchanged.", fd.StatusWarn)
 	default:
