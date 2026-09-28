@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fdtheme "github.com/ushineko/fynedesygn/theme"
+
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/gui"
 )
@@ -94,4 +96,35 @@ func TestThePanelTakesAResize(t *testing.T) {
 
 	assert.False(t, p.Window().Window().FixedSize(),
 		"a fixed-size panel cannot be resized by the window manager at all")
+}
+
+// The panel draws in the appearance the user chose.
+//
+// It used to hard-code the scheme and the default face, so the Appearance
+// screen in the preferences changed the preferences window and nothing else —
+// a font chooser with no effect on the panel sitting next to it.
+func TestThePanelFollowsTheSavedAppearance(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	s := store(t)
+
+	saved := fdtheme.DefaultAppearance()
+	saved.Scheme = "Nord"
+	saved.TextSize = 18
+	saved.SaveTo(s.Settings())
+
+	got := gui.Appearance(a, s)
+	assert.Equal(t, "Nord", got.Scheme)
+	assert.InDelta(t, 18, got.TextSize, 0.01)
+}
+
+// A panel with no settings yet takes the design system's own defaults rather
+// than nothing at all.
+func TestAPanelWithNoSettingsTakesTheDefaults(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	got := gui.Appearance(a, store(t))
+	assert.Equal(t, fdtheme.DefaultAppearance().Scheme, got.Scheme)
 }

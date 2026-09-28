@@ -139,6 +139,12 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- The panel draws in the appearance you chose. It hard-coded its scheme and
+  its face, so the Appearance screen in the preferences changed the
+  preferences window and nothing else — a font chooser with no effect on the
+  panel sitting beside it. Scheme, interface font, monospace font and text
+  size now reach the panel, as they are changed, without a restart (#32).
+
 - The window manager can resize the panel. It was fixed to its content, which
   told the window manager it would not take a resize at all — so a frameless
   panel's own Resize menu item was greyed out and there was no way to ask for a

@@ -135,6 +135,15 @@ func (s *Store) Unreadable() error {
 	return s.store.Unreadable()
 }
 
+// Settings is the store underneath, for the parts of the settings file this
+// package does not own.
+//
+// The design system keeps the appearance — scheme, fonts, text size, scale —
+// in its own section of the same file, and reads and writes it through this
+// type. hayami neither parses nor validates any of it; it hands the store
+// over and lets the library do both.
+func (s *Store) Settings() *settings.Store { return s.store }
+
 // Flush writes any pending change now, for a program about to exit.
 func (s *Store) Flush() error {
 	if err := s.store.Flush(); err != nil {

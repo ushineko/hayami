@@ -5,6 +5,8 @@ import (
 
 	"fyne.io/fyne/v2"
 
+	fdtheme "github.com/ushineko/fynedesygn/theme"
+
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/prefs"
 )
@@ -42,7 +44,7 @@ func Menu(a fyne.App, store *config.Store, version string, onChange func(config.
 // MenuWith is Menu, and also the function that opens the preferences window,
 // for a caller that offers another way in: a command-line flag, a desktop
 // entry's second action, or a panel somewhere a person cannot right-click.
-func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) {
+func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) { //nolint:revive // the callback is the panel's only way back
 	var window *prefs.Window
 
 	open := func() {
@@ -53,6 +55,7 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 			window = prefs.New(a, prefs.Options{
 				Store:   store,
 				Version: version,
+				Theme:   themeFor(store, onChange),
 				OnChange: func() {
 					if onChange != nil {
 						onChange(store.Config())
@@ -107,4 +110,30 @@ func opacityItem(store *config.Store, onChange func(config.Config)) *fyne.MenuIt
 	item := fyne.NewMenuItem("Opacity", nil)
 	item.ChildMenu = fyne.NewMenu("", items...)
 	return item
+}
+
+/*
+themeFor builds the theme hook the preferences window hands to the shell.
+
+Two things happen here and both are necessary.
+
+The appearance decides the scheme, the face and the size, and the card opacity
+is this program's own, applied over the top — because setting a theme replaces
+whatever was wrapped around the last one, so without this, choosing a font
+would quietly undo the fade.
+
+Then the panel is told. A glance window paints from its own objects rather
+than from the canvas, so a new theme reaches the preferences window and leaves
+the panel drawn in the old face until something else rebuilds it. The
+notification is queued rather than made here: this runs *while* the shell is
+working out what theme to apply, and a panel that restyled at that moment
+would restyle to the theme it already had.
+*/
+func themeFor(store *config.Store, notify func(config.Config)) func(fdtheme.Appearance) fyne.Theme {
+	return func(a fdtheme.Appearance) fyne.Theme {
+		if notify != nil {
+			go fyne.Do(func() { notify(store.Config()) })
+		}
+		return withCardOpacity(a.Theme(), store.Config().OpacityOrDefault())
+	}
 }

@@ -18,6 +18,7 @@ import (
 	fynetheme "fyne.io/fyne/v2/theme"
 
 	"github.com/ushineko/fynedesygn/shell"
+	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/config"
 )
@@ -37,6 +38,19 @@ type Options struct {
 	// OnChange is called after every change, on the UI thread, so the panel
 	// can follow without a restart.
 	OnChange func()
+
+	// Theme turns the chosen appearance into the theme to apply.
+	//
+	// It exists because the Appearance screen is the design system's own and
+	// saves through the shell rather than through this program's settings, so
+	// OnChange never sees it. The shell calls this whenever the appearance
+	// changes, which makes it the one hook that does — and the panel needs it
+	// twice over: to re-apply the card opacity, which setting a theme
+	// replaces, and to repaint cards that draw from their own objects rather
+	// than from the canvas.
+	//
+	// Nil means the appearance's own theme, unwrapped.
+	Theme func(a fdtheme.Appearance) fyne.Theme
 }
 
 // Window is the preferences window.
@@ -52,6 +66,7 @@ func New(a fyne.App, o Options) *Window {
 		AppID:   AppID,
 		Name:    "hayami preferences",
 		Version: o.Version,
+		Theme:   o.Theme,
 		Sections: []shell.Section{
 			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
 			shell.NewSection("Bandwidth", fynetheme.ComputerIcon, w.buildBandwidth),

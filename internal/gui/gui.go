@@ -343,7 +343,7 @@ func section(sources []panel.Source, key string) view.Section {
 // Start builds the window, starts the polls and runs until it closes.
 func Start(o Options) error {
 	a := app.NewWithID(AppID)
-	a.Settings().SetTheme(fdtheme.New(fdtheme.BreezeDark, fdtheme.Options{}))
+	Appearance(a, o.Store).Apply(a)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -362,6 +362,9 @@ func Start(o Options) error {
 		o.Menu, open = MenuWith(a, o.Store, o.Version, func(c config.Config) {
 			if p != nil {
 				p.Apply(c)
+				// The cards repaint from their own objects, so a change of
+				// face or scheme reaches them only when they are told.
+				p.win.Panel().Restyle()
 			}
 		})
 	}
@@ -380,6 +383,25 @@ func Start(o Options) error {
 
 	p.win.ShowAndRun()
 	return nil
+}
+
+/*
+Appearance is the scheme, the fonts and the text size the user chose.
+
+The panel used to hard-code BreezeDark and a default face, which meant the
+Appearance screen in the preferences window changed the preferences window and
+nothing else — a font chooser that had no effect on the thing it was next to.
+It is the same file and the design system already keeps the section, reads it
+and writes it; all this does is ask.
+
+A store that is not there is a panel started before its settings exist, and
+the design system's own defaults are the right answer to that.
+*/
+func Appearance(a fyne.App, store *config.Store) fdtheme.Appearance {
+	if store == nil {
+		return fdtheme.DefaultAppearance()
+	}
+	return fdtheme.LoadAppearanceFrom(store.Settings(), a.Preferences())
 }
 
 // applyOpacity fades the cards to the setting's value.
