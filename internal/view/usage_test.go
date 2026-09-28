@@ -95,9 +95,14 @@ func TestAnAccountIsOneMeterHoweverManyWindowsItHas(t *testing.T) {
 }
 
 // The bar shows the window nearest its limit: the one that can bite you today.
-// Every window's figure is still in the caption, so nothing is lost but five
-// bars.
-func TestTheBarShowsTheWindowNearestItsLimitAndTheCaptionKeepsTheRest(t *testing.T) {
+// Every window's figure is still there, so nothing is lost but five bars.
+//
+// The caption carries the window the bar is about and the rest go in the stats
+// row, because a caption carrying all of them sets the width of the whole
+// window. Line() is every figure in reading order, which is what a pane draws
+// and what this asserts: the claim is that nothing was lost, not where it
+// went.
+func TestTheBarShowsTheWindowNearestItsLimitAndNothingIsLost(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
 		{Account: "max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
 		{Account: "max", Name: "7d", Fraction: 0.85, ResetsAt: at(12, 0)},
@@ -105,9 +110,15 @@ func TestTheBarShowsTheWindowNearestItsLimitAndTheCaptionKeepsTheRest(t *testing
 
 	require.Len(t, s.Meters, 1)
 	assert.InDelta(t, 0.85, s.Meters[0].Fraction, 0.001)
-	assert.Contains(t, s.Meters[0].Caption, "5h: 10 %")
-	assert.Contains(t, s.Meters[0].Caption, "7d: 85 %")
+	assert.Contains(t, s.Meters[0].Line(), "5h: 10 %")
+	assert.Contains(t, s.Meters[0].Line(), "7d: 85 %")
 	assert.Equal(t, "7d", s.Meters[0].Window, "the name says which window the bar is about")
+
+	// The caption is only the window the bar is about. The other one is
+	// below it, which is what keeps the meter narrow.
+	assert.Contains(t, s.Meters[0].Caption, "7d: 85 %")
+	assert.NotContains(t, s.Meters[0].Caption, "5h: 10 %")
+	assert.Contains(t, s.Meters[0].StatsLeft, "5h: 10 %")
 }
 
 // A quota is one of the few readings with a true threshold, so its colour is a
@@ -180,15 +191,17 @@ func TestAFreshReadingSaysNothingAboutItsAge(t *testing.T) {
 	assert.Empty(t, s.Rows)
 }
 
-// A limit's own numbers belong in the caption: the bar says "most of it" and
-// the caption says how much of what.
-func TestAWindowsDetailReachesItsCaption(t *testing.T) {
+// A limit's own numbers are still drawn: the bar says "most of it" and the
+// figures say how much of what. They sit at the right-hand end of the stats
+// row, which is where the archetype puts them.
+func TestAWindowsDetailIsDrawnBesideItsFigure(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
 		{Account: "Codex", Name: "limit", Fraction: 0.34, ResetsAt: at(11, 0), Detail: "403.51 / 1200.00"},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 1)
-	assert.Contains(t, s.Meters[0].Caption, "403.51 / 1200.00")
+	assert.Equal(t, "403.51 / 1200.00", s.Meters[0].StatsRight)
+	assert.Contains(t, s.Meters[0].Line(), "403.51 / 1200.00")
 }
 
 // The bar and the countdown answer different questions. The bar shows the

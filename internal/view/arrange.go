@@ -146,7 +146,10 @@ func meters(ms []Meter, width int, p Painter) []string {
 
 	out := make([]string, 0, len(ms)*2)
 	for _, m := range ms {
-		caption := m.Caption
+		// A pane has one line for a meter, so the figures the window spreads
+		// across a row go back into the caption here. This is the string the
+		// pane has always drawn.
+		caption := m.Line()
 		if m.Reset != "" {
 			caption += " · " + m.Reset
 		}
