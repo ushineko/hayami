@@ -154,6 +154,15 @@ MIT. See [LICENSE](LICENSE).
   changed height, at random. It is narrowed with `--match` now, and a failed
   poll keeps its last values dimmed. The plot carries the processor as a
   trailing mean over a minute beside the coolant, each scaled to its own range.
+- **Fix**: the peripherals section says what is on the desk now. A device this
+  panel has never had a level from — a headset switched off with its receiver
+  still in — drew a cell that was a name, a dash and a word saying there was
+  nothing to say, and, being sorted by name, drew it in front of the mouse. It
+  has no cell now. A device that gave a level and has gone quiet still keeps
+  one, dim, under "Offline", which is what the monitor does and what a wireless
+  mouse needs: one poll in fourteen comes back empty when the mouse has been
+  still. The cells are ordered by what the device is rather than by its name,
+  so the mouse is first (spec 012, #34).
 - **Fix**: a peripheral is a cell rather than a line. The section drew one
   label-and-value row per device and argued that the monitor's blocks were an
   artefact of a narrow panel; put side by side with that program it was wrong,

@@ -368,7 +368,9 @@ func (p *Panel) drawCells(c *card, cells []view.Cell) {
 		cl := cells[i]
 		cell.SetName(cl.Label)
 		cell.SetNote(cl.Note)
-		cell.Set(reading(view.Row{Value: cl.Value, Unit: cl.Unit, Status: cl.Status}))
+		rd := reading(view.Row{Value: cl.Value, Unit: cl.Unit, Status: cl.Status})
+		rd.Stale = cl.Stale
+		cell.Set(rd)
 		cell.SetShown(true)
 	}
 }

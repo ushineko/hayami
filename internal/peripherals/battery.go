@@ -47,6 +47,11 @@ type Battery struct {
 
 	State State
 
+	// Kind is what sort of device this is, where the source could say. It is
+	// not part of the reading and is only used to order the panel's cells;
+	// a source that cannot tell leaves it KindOther.
+	Kind Kind
+
 	// Cells are the batteries inside the device, for one that has more than
 	// one: two earbuds and a case. Empty for the ordinary device with a single
 	// battery, which is every device spec 008 reads.

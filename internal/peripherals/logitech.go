@@ -166,8 +166,21 @@ func read(e endpoint, timeout time.Duration, index byte) (Battery, error) {
 		return Battery{}, err
 	}
 
-	b.Name = name(e, timeout, index)
+	b.Name, b.Kind = identify(e, timeout, index)
 	return b, nil
+}
+
+// identify asks the device what it is called and what it is.
+//
+// Both come from feature 0x0005, which is looked up once and used twice: the
+// name is a label and the kind is where the cell goes, and neither is worth a
+// second round trip to the receiver for.
+func identify(e endpoint, timeout time.Duration, index byte) (string, Kind) {
+	feature, err := featureIndex(e, timeout, index, featureDeviceName)
+	if err != nil {
+		return defaultName, KindOther
+	}
+	return name(e, timeout, index, feature), kind(e, timeout, index, feature)
 }
 
 // readUnified reads feature 0x1004.
@@ -202,12 +215,8 @@ func readStatus(e endpoint, timeout time.Duration, index byte) (Battery, error) 
 // labelled "Logitech" that carries the right number is better than no row —
 // but it is *not* used to tell devices apart, which is why a blank one here
 // does not stop the reading.
-func name(e endpoint, timeout time.Duration, index byte) string {
-	feature, err := featureIndex(e, timeout, index, featureDeviceName)
-	if err != nil {
-		return defaultName
-	}
-	params, err := request(e, timeout, index, feature, 0x00)
+func name(e endpoint, timeout time.Duration, index, feature byte) string {
+	params, err := request(e, timeout, index, feature, functionDeviceName)
 	if err != nil || len(params) < 1 {
 		return defaultName
 	}
@@ -222,7 +231,7 @@ func name(e endpoint, timeout time.Duration, index byte) string {
 		// The offset fits a byte because length is bounded by maxNameLength
 		// above, which is well under one.
 		offset := byte(len(out) & 0xFF)
-		chunk, err := request(e, timeout, index, feature, 0x01, offset)
+		chunk, err := request(e, timeout, index, feature, functionDeviceNameChunk, offset)
 		if err != nil || len(chunk) == 0 {
 			break
 		}
@@ -241,8 +250,54 @@ func name(e endpoint, timeout time.Duration, index byte) string {
 
 // featureDeviceName is feature 0x0005, which carries the name the device calls
 // itself — "G502 X PLUS" rather than "Logitech USB Receiver", which is all the
-// kernel knows.
+// kernel knows — and, on its third function, what sort of device it is.
 const featureDeviceName = 0x0005
+
+// The functions of feature 0x0005: the name's length, a chunk of the name at an
+// offset, and the device type.
+const (
+	functionDeviceName      = 0x00
+	functionDeviceNameChunk = 0x01
+	functionDeviceType      = 0x02
+)
+
+// The device types feature 0x0005 reports, as Logitech numbers them.
+//
+// Named rather than inline because the mapping below is the only thing in this
+// program that has an opinion about what a trackball is, and a reader checking
+// it against the protocol should not have to count the constants.
+const (
+	typeKeyboard  = 0x00
+	typeNumpad    = 0x02
+	typeMouse     = 0x03
+	typeTouchpad  = 0x04
+	typeTrackball = 0x05
+)
+
+// kind asks the device what sort of device it is.
+//
+// A device that will not say is KindOther, which orders it after the ones that
+// did. This is a label like the name and not part of the reading: it is not
+// worth failing a battery over, and a mouse whose type request was lost is
+// still a mouse with a percentage.
+func kind(e endpoint, timeout time.Duration, index, feature byte) Kind {
+	params, err := request(e, timeout, index, feature, functionDeviceType)
+	if err != nil || len(params) < 1 {
+		return KindOther
+	}
+
+	switch params[0] {
+	case typeMouse, typeTouchpad, typeTrackball:
+		return KindMouse
+	case typeKeyboard, typeNumpad:
+		return KindKeyboard
+	default:
+		// A remote, a presenter, the receiver itself, and anything Logitech
+		// has numbered since. None of them is a device this panel orders
+		// specially.
+		return KindOther
+	}
+}
 
 // defaultName is what a device that will not say is called.
 const defaultName = "Logitech"

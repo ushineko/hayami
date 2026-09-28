@@ -1,6 +1,8 @@
 package view
 
 import (
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -39,23 +41,74 @@ const (
 	Charged
 )
 
+/*
+Kind is what sort of device a reading belongs to, in the view's own words.
+
+It is here because the order of the cells is a property of the view, and it
+crosses as this rather than as the reader's type for the reason Charge does:
+the view does not import the reader.
+
+It carries no other meaning. A cell does not say what sort of device it is —
+the name already does, and better — so this is read by the sort and by nothing
+else that draws.
+*/
+type Kind int
+
+const (
+	// KindOther is the zero value: a device whose sort is not known, or is
+	// known and is none of the below.
+	KindOther Kind = iota
+	KindMouse
+	KindKeyboard
+	KindHeadset
+)
+
+/*
+Rank is where a kind's cells go, lowest first.
+
+**The mouse is first.** A desk has one, it is there whenever the machine is,
+and its battery is the one a glance at this panel is usually after; the things
+that come and go should come and go around it rather than in front of it.
+Ordering by name alone put "Arctis Nova Pro Wireless" in the first cell on the
+machine this was written on, which is the device its owner thinks about least.
+
+Then the keyboard, for the same reason and one step weaker, then the headset,
+then everything else. Within a kind it is still by name, so a cell moves only
+when the hardware does.
+*/
+func (k Kind) Rank() int {
+	switch k {
+	case KindMouse:
+		return 0
+	case KindKeyboard:
+		return 1
+	case KindHeadset:
+		return 2
+	default:
+		return 3
+	}
+}
+
 // PeripheralReading is one device, measured and not yet formatted.
+//
+// Every reading has a level, because a cell without one has nothing to draw.
+// The panel is what guarantees it: see PeripheralsReading.
 type PeripheralReading struct {
-	// Name is the device's own name, which is the row's label.
+	// Name is the device's own name, which is the cell's label.
 	Name string
 
-	// Level is a percentage. HasLevel is false for a device that is there and
-	// has not said how full it is — a headset on its cradle — which is not
-	// the same as a device that is flat.
-	Level    int
-	HasLevel bool
+	// Level is a percentage.
+	Level int
 
 	Charge Charge
 
+	// Kind orders the cells and is drawn nowhere.
+	Kind Kind
+
 	// Stale marks a device that answered before and did not this time. Its
-	// last level is kept and drawn dim, because the reader's question about a
-	// headset that has gone quiet is whether what it said last is still true,
-	// not what it says now.
+	// last level is kept and the cell is drawn dim, which is what the monitor
+	// does with a second, darker palette and the word "(Offline)": the number
+	// stays legible and stops asserting itself.
 	Stale bool
 
 	// Cells are the separate batteries inside a device that has more than
@@ -75,7 +128,23 @@ type PeripheralCell struct {
 	Level int
 }
 
-// PeripheralsReading is every device the poll knows about.
+/*
+PeripheralsReading is every device worth a cell, in the order to draw them.
+
+**A device this panel has never had a level from is not a cell.** A headset
+whose receiver is plugged in with the headset switched off is reported as
+present and silent, and drawn it is a name, a dash and a word explaining that
+there is nothing to say — a third of a panel 260 pixels wide spent on the
+absence of a fact, and, once the cells are ordered, spent in front of the
+mouse. The design system's own degradation model has a name for this case:
+"source never present: not a Reading at all."
+
+**A device that has answered and has gone quiet is still a cell**, dim, with
+the last level it gave. That is the next case in the same model — "was read,
+source has gone" — and it is what the monitor does. It matters most for the
+device most likely to go quiet: a wireless mouse that has been still for a
+minute answers nothing, which is a mouse idle and not a mouse gone.
+*/
 type PeripheralsReading struct {
 	Devices []PeripheralReading
 }
@@ -107,26 +176,39 @@ func Peripherals(r PeripheralsReading) Section {
 	return s
 }
 
+/*
+OrderPeripherals puts devices in the order their cells are drawn: by kind, and
+by name within a kind. See Kind.Rank for why the mouse is first.
+
+The rule is here and not in the panel, because which cell comes first is a
+decision about what the section says and this package is where those are made.
+It is applied by the panel rather than by Peripherals, because the panel's
+reading is also the JSON the command line prints, and one ordered section
+beside an unordered dump of the same devices is two answers to one question.
+*/
+func OrderPeripherals(devices []PeripheralReading) []PeripheralReading {
+	out := slices.Clone(devices)
+	slices.SortFunc(out, func(a, b PeripheralReading) int {
+		if n := cmp.Compare(a.Kind.Rank(), b.Kind.Rank()); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return out
+}
+
 // peripheral is one device's cell.
 func peripheral(d PeripheralReading) Cell {
-	cell := Cell{Label: d.Name, Unit: "%", Note: note(d)}
-
-	if !d.HasLevel {
-		// No level, so no verdict, and no unit either: a cell centres its
-		// reading rather than aligning it in a column, so there is nothing
-		// for a lone percent sign to hold a place in.
-		cell.Value, cell.Unit = strings.TrimSpace(NoQuantity()), ""
-		cell.Status = Dim
-		return cell
+	cell := Cell{
+		Label: d.Name, Unit: "%", Note: note(d),
+		Value: strings.TrimSpace(Count(d.Level)), Stale: d.Stale,
 	}
 
-	cell.Value = strings.TrimSpace(Count(d.Level))
+	// The verdict is kept on a stale cell rather than dropped. The shells dim
+	// it, which is the whole of what "this is the last number heard" needs to
+	// say; blanking the verdict as well would take a low battery's colour away
+	// at the moment it is least likely to be charged.
 	switch {
-	case d.Stale:
-		// The number is kept and the verdict is dropped. A red cell for a
-		// battery nobody has heard from in ten minutes asserts something the
-		// panel does not know.
-		cell.Status = Dim
 	case d.Charge != Draining:
 		cell.Status = Info
 	case d.Level <= BatteryCritical:
@@ -169,22 +251,21 @@ func note(d PeripheralReading) string {
 }
 
 // chargeNote is what the cell says about what the battery is doing.
+//
+// A device that has gone quiet says so instead of saying what its battery was
+// doing when it last spoke, because that is no longer the question. The
+// monitor writes "(Offline)" in the same place and for the same reason; the
+// brackets are its own and are not carried, since nothing else on this panel
+// is bracketed.
 func chargeNote(d PeripheralReading) string {
-	switch {
-	case d.Stale:
-		return "Not answering"
-	case d.Charge == Filling:
+	if d.Stale {
+		return "Offline"
+	}
+	switch d.Charge {
+	case Filling:
 		return "Charging"
-	case d.Charge == Charged:
+	case Charged:
 		return "Charged"
-	case !d.HasLevel:
-		// A device that is there and has not said how full it is. The monitor
-		// calls this "Wired" for a keyboard on its cable and "Disconnected"
-		// for a headset on its cradle; neither is knowable from here, so it
-		// says the one thing that is true of both -- and says it in two
-		// words, because a cell is as wide as a device name and a state that
-		// has to be truncated is a state nobody reads.
-		return "No reading"
 	default:
 		return Discharging
 	}

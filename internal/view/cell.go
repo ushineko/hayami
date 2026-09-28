@@ -86,7 +86,7 @@ func cellLines(row []Cell, columns []int, p Painter) []string {
 		}
 		c := row[i]
 		names = append(names, p.paint(centre(c.Label, column), Info))
-		values = append(values, p.paint(centre(quantity(c), column), c.Status))
+		values = append(values, p.paint(centre(quantity(c), column), cellStatus(c)))
 		notes = append(notes, p.paint(centre(c.Note, column), Dim))
 	}
 
@@ -135,4 +135,17 @@ func cellLine(c Cell, width int, p Painter) string {
 		Unit:   c.Unit,
 		Status: c.Status,
 	}, width, p)
+}
+
+// cellStatus is the colour a cell's reading is painted.
+//
+// Dimming wins over the verdict, as it does for a Row in the design system: a
+// warning that is no longer being refreshed should not keep shouting. The
+// pane has one dim and the window has a darker shade of each status colour;
+// both say the same thing, which is that this number is the last one heard.
+func cellStatus(c Cell) Status {
+	if c.Stale {
+		return Dim
+	}
+	return c.Status
 }

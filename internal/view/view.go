@@ -47,6 +47,15 @@ type Cell struct {
 	// normally -- looking the same as a device nobody had heard from. The
 	// state is a third of what a cell is for.
 	Note string
+
+	// Stale marks a last-known value whose source has stopped answering. It
+	// dims the cell; it does not blank it and it does not drop the verdict.
+	//
+	// This is the design system's own degradation model
+	// (glance.Reading.Stale): a value that was read and whose source has gone
+	// stays legible and stops shouting. The monitor does the same thing with
+	// a second, darker palette and the word "(Offline)" under the number.
+	Stale bool
 }
 
 // Trail is one series plotted under a section's rows.

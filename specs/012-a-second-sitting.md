@@ -115,11 +115,68 @@ spec records it under Gaps found rather than working around it in
 process-wide, and no per-window mechanism can scope it. The Window screen says
 so.
 
+### 6. The section says what is on the desk now
+
+Two things, found by looking at the finished cells beside the monitor.
+
+**A device this panel has never had a level from is not a cell.** An Arctis
+whose receiver is plugged in with the headset switched off is reported as
+present and silent, and stays that way for a whole session. Drawn, it is a
+name, a dash and a word explaining that there is nothing to say — a third of a
+panel 260 pixels wide spent on the absence of a fact, and, once the cells are
+ordered, spent in front of the mouse. The design system's degradation model
+names this case: *source never present: not a Reading at all*.
+
+**A device that has answered and has gone quiet keeps its cell**, dim, with the
+last level it gave — the next case in the same model, *was read, source has
+gone*. This is not a softening of the rule above but the other half of it, and
+it is what the monitor does: `update_single_device` holds a `last_info` per
+slot, draws it when a poll returns nothing, in a second and darker palette,
+with `(Offline)` where the state would be. The carry-over for a device that is
+connected and not saying how full it is is the monitor's too, guarded on the
+same two conditions — the same device, and no crossing between charging and
+discharging — and a crossing clears the memory rather than dimming it, because
+then the old level is not stale but wrong.
+
+It matters most for the device most likely to go quiet. A wireless mouse that
+has been still for a minute answers nothing: measured on the receiver this was
+written against, one poll in fourteen came back empty after the reader's five
+attempts had been spent, and a panel with no memory drops the cell and reflows
+on a desk where nothing is wrong.
+
+The one place parity is not possible is the bound. The monitor keeps a reading
+indefinitely because its slots are fixed, so a device that never comes back
+costs the slot it already had; these cells appear and disappear with the
+hardware, so an unbounded memory is a panel that accumulates every peripheral
+ever switched on near it. `PeripheralsForget` stays at ten minutes.
+
+**The mouse is first.** The cells are ordered by name, which put "Arctis Nova
+Pro Wireless" in the first cell on the machine this was written on: the device
+its owner thinks about least, ahead of the one that is there whenever the
+machine is. The order is by kind — mouse, keyboard, headset, then everything
+else — and by name within a kind, so a cell moves only when the hardware does.
+The monitor has the same order and does not need a rule for it: its two slots
+default to Mouse on the left and Headphone on the right.
+
+That needs a device kind, which nothing reads today. Each source has one:
+
+- **HID++** answers it on feature `0x0005`, the same feature the name comes
+  from, so it costs no extra round trip to the receiver.
+- **BlueZ** has an `Icon` on `org.bluez.Device1`. The icon and not the class of
+  device: the class is a bit field this program would have to decode, the icon
+  is BlueZ's own decoding of it, and a device over LE has an icon and no class.
+  A device with no icon at all falls back to its audio profiles.
+- **headsetcontrol** reports headsets, which is what the program is for.
+
+The kind is read for the ordering and is drawn nowhere. The cell's name already
+says what the device is, and better.
+
 ## Acceptance criteria
 
 - [x] `view.Peripherals` produces cells — name, level, state — and no rows.
-- [x] A device with no level draws its name and its state, and does not draw a
-      percentage it does not have.
+- [x] A device this panel has never had a level from is not drawn at all; one
+      that gave a level and has gone quiet keeps its cell, dim, with that level
+      and its verdict, under "Offline", until `PeripheralsForget`.
 - [x] A device with several batteries draws them as the quiet line under its
       cell, as it does today.
 - [x] Both shells draw the peripherals section as cells, and the parity test
@@ -141,6 +198,13 @@ so.
       `hayami.fontSize` set to something else, verified from a screenshot of the
       real window at two sizes.
 - [x] The panel still draws at `hayami.fontSize`.
+- [x] The mouse's cell is first, then the keyboard, then the headset, then the
+      rest; within a kind it is by name.
+- [x] A device's kind is read from its own source — the HID++ device type,
+      BlueZ's icon with the audio profiles as a fallback, and every
+      headsetcontrol device — and is drawn nowhere.
+- [x] The ordering and the filtering are visible in a photograph of the real
+      window, not only in the tests.
 - [x] `go test ./...` passes; `cmd/hayami-tui` still builds with `CGO_ENABLED=0`.
 
 ## Gaps found
@@ -156,6 +220,11 @@ so.
   A machine with more than eight peripherals would need a restart to see the
   ninth. The real fix is a card that can take an object after it is built, and
   that is a library change nobody has needed yet.
+- **`describe` panicked on a device with no `UUIDs`.** `dbus.Variant.Store` on
+  a variant that was never set panics rather than returning an error, and an
+  absent property is the ordinary shape of a D-Bus dictionary. Nothing had hit
+  it because BlueZ sends `UUIDs` on every device it has resolved; a test that
+  built a device by hand did. Guarded here.
 - **`appearance.scale` cannot be scoped to one window.** It goes through
   `FYNE_SCALE`, which is process-wide. The Window screen says so.
 
@@ -180,6 +249,17 @@ so.
 - **The cell shape was a library change**, as the repository's rule required:
   fynedesygn spec 040 (#106, PR #107) added `glance.Cell` and
   `glance.CellGrid`, released as v0.1.56, and this branch bumps to it.
+- **Dropping the memory makes a missed poll visible.** A device that misses a
+  poll now loses its cell and the panel reflows, where before it went dim and
+  stayed put. This is the trade the section is being asked for and the reader
+  who asked for it will see it; what makes it tolerable is that the reader
+  already retries five times before calling a device silent, which was measured
+  against a mouse left alone and is the layer that can tell asleep from absent.
+- **A kind that is wrong orders a cell wrongly and says nothing false.** It is
+  read for the sort and drawn nowhere, so the worst case is a mouse in the
+  second cell. The HID++ type was checked against the real receiver on this
+  machine and the icons against the six devices paired to it — including one
+  with no icon at all, which is why there is a fallback.
 - **Rollback**: revert the commit. Nothing here writes outside the program's own
   settings file, and no setting changes meaning.
 

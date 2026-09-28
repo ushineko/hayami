@@ -56,6 +56,29 @@ type BluetoothDevice struct {
 	// on.
 	Apple bool
 	Audio bool
+
+	// Kind is what sort of device BlueZ takes this to be, from the icon it
+	// gives the device. Only the panel's ordering uses it.
+	Kind Kind
+}
+
+/*
+deviceKinds map BlueZ's icon names onto the kinds the panel orders by.
+
+The icon and not the class of device. Both are on org.bluez.Device1 and the
+class is a bit field this program would have to decode; the icon is the name of
+a freedesktop icon and BlueZ has already done the decoding to pick it. It is
+also what BlueZ gives a device over LE, which has no class at all.
+
+An icon that is not here is KindOther, which is most of them: a phone, a car,
+a speaker. They are not peripherals with batteries this panel draws, and
+nothing would be done differently if they were named.
+*/
+var deviceKinds = map[string]Kind{
+	"input-mouse":      KindMouse,
+	"input-keyboard":   KindKeyboard,
+	"audio-headset":    KindHeadset,
+	"audio-headphones": KindHeadset,
 }
 
 // bluetoothDevices lists every connected device BlueZ knows about.
@@ -98,6 +121,7 @@ func describe(device map[string]dbus.Variant, interfaces map[string]map[string]d
 		Apple:   strings.Contains(stringOf(device["Modalias"]), appleVendor),
 		Audio:   isAudio(device),
 	}
+	out.Kind = kindOf(out, device)
 
 	// The battery interface is a sibling of Device1 on the same object, and
 	// most devices do not have one.
@@ -107,6 +131,23 @@ func describe(device map[string]dbus.Variant, interfaces map[string]map[string]d
 		}
 	}
 	return out
+}
+
+// kindOf is what sort of device this is, by its icon and then by its profiles.
+//
+// The profiles are the fallback because a device may have no icon at all: a
+// pair of Bose headphones paired to the machine this was written on has an
+// Audio Sink and no Icon property, and BlueZ gives one to a device only when it
+// can pick one. Where there is nothing to go on it is KindOther, which orders
+// the device last and says nothing false about it.
+func kindOf(out BluetoothDevice, device map[string]dbus.Variant) Kind {
+	if k, ok := deviceKinds[strings.ToLower(stringOf(device["Icon"]))]; ok {
+		return k
+	}
+	if out.Audio {
+		return KindHeadset
+	}
+	return KindOther
 }
 
 // deviceName is what to call a device: the alias if its owner set one,
@@ -127,8 +168,16 @@ func isAudio(device map[string]dbus.Variant) bool {
 	if strings.HasPrefix(stringOf(device["Icon"]), "audio-") {
 		return true
 	}
+	// Guarded rather than only error-checked: Store on a Variant that was
+	// never set panics instead of failing, and an absent property is the
+	// ordinary shape of a D-Bus dictionary rather than a fault.
+	profiles, ok := device["UUIDs"]
+	if !ok || profiles.Value() == nil {
+		return false
+	}
+
 	var uuids []string
-	if err := device["UUIDs"].Store(&uuids); err == nil {
+	if err := profiles.Store(&uuids); err == nil {
 		for _, u := range uuids {
 			if audioUUIDs[strings.ToLower(u)] {
 				return true

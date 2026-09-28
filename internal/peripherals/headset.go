@@ -75,7 +75,9 @@ func ParseHeadsets(reply []byte) ([]Battery, error) {
 
 	var found []Battery
 	for _, d := range r.Devices {
-		b := Battery{Name: headsetName(d)}
+		// The kind is not read from anywhere: everything headsetcontrol
+		// reports is a headset, which is what the program is for.
+		b := Battery{Name: headsetName(d), Kind: KindHeadset}
 
 		switch strings.ToUpper(d.Battery.Status) {
 		case "BATTERY_AVAILABLE":

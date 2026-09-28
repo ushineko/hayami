@@ -12,7 +12,7 @@ import (
 
 // reading is one device at a level.
 func reading(name string, level int) view.PeripheralReading {
-	return view.PeripheralReading{Name: name, Level: level, HasLevel: true}
+	return view.PeripheralReading{Name: name, Level: level}
 }
 
 // AC7. The bands are the reference's: red at 20 and below, amber to 50, green
@@ -65,40 +65,84 @@ func TestAChargedDeviceSaysCharged(t *testing.T) {
 	assert.Equal(t, "Charged", s.Cells[0].Note)
 }
 
-// AC5. A stale device keeps its number and loses its verdict. A red row for a
-// battery nobody has heard from in ten minutes asserts something the panel
-// does not know.
-func TestAStaleDeviceKeepsItsNumberAndLosesItsVerdict(t *testing.T) {
-	d := reading("G502 X PLUS", 15) // low enough to be red if it were current
+// AC2. A stale cell keeps its number and its verdict, and is marked for the
+// shells to dim.
+//
+// Dropping the verdict as well would take a low battery's colour away at the
+// moment it is least likely to be getting charged. The design system dims a
+// stale reading over whatever colour it had, which says the one thing that
+// needs saying: this is the last number heard.
+func TestAStaleCellKeepsItsNumberAndItsVerdict(t *testing.T) {
+	d := reading("G502 X PLUS", 15) // low enough to be red
 	d.Stale = true
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
 	require.Len(t, s.Cells, 1)
 
-	assert.Equal(t, view.Dim, s.Cells[0].Status)
+	assert.True(t, s.Cells[0].Stale)
+	assert.Equal(t, view.Bad, s.Cells[0].Status, "the verdict was dropped as well as dimmed")
 	assert.Contains(t, s.Cells[0].Value, "15")
-	assert.Equal(t, "Not answering", s.Cells[0].Note)
+	assert.Equal(t, "Offline", s.Cells[0].Note)
 }
 
-// AC5. A device with no level at all has no verdict either, and says so rather
-// than drawing a percentage it does not have.
-//
-// The column rule the row form was held to does not apply here: a cell centres
-// its reading in a column of its own, so there is nothing for a lone percent
-// sign to hold a place in and a unit on a blank reading is furniture.
-func TestADeviceWithNoLevelSaysSoRatherThanShowingAPercentage(t *testing.T) {
-	s := view.Peripherals(view.PeripheralsReading{
-		Devices: []view.PeripheralReading{
-			{Name: "Arctis"},
-			reading("G502 X PLUS", 86),
-		},
-	})
-	require.Len(t, s.Cells, 2)
+// AC2. A stale cell is painted dim in the pane, whatever its verdict. Dimming
+// wins over the verdict, as it does for a row in the design system.
+func TestAStaleCellIsPaintedDim(t *testing.T) {
+	d := reading("G502 X PLUS", 15)
+	d.Stale = true
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
 
-	assert.Equal(t, view.Dim, s.Cells[0].Status)
-	assert.Empty(t, s.Cells[0].Unit, "a percent sign with no number in front of it")
-	assert.Equal(t, "%", s.Cells[1].Unit)
-	assert.NotEmpty(t, s.Cells[0].Note, "a cell with no reading must still say why")
+	seen := map[view.Status][]string{}
+	painter := func(text string, st view.Status) string {
+		seen[st] = append(seen[st], text)
+		return text
+	}
+	view.RenderWith([]view.Section{s}, view.ArrangeStack, 40, painter)
+
+	assert.Contains(t, strings.Join(seen[view.Dim], ""), "15")
+	assert.NotContains(t, strings.Join(seen[view.Bad], ""), "15",
+		"a stale reading kept its status colour in the pane")
+}
+
+// AC15. The mouse's cell is first, whatever it is called.
+//
+// A desk has one mouse, it is there whenever the machine is, and its battery is
+// the one a glance is usually after. Ordering by name alone put the headset in
+// the first cell on the machine this was written on, which is the device its
+// owner thinks about least.
+func TestTheMouseComesFirst(t *testing.T) {
+	mouse := reading("G502 X PLUS", 78)
+	mouse.Kind = view.KindMouse
+	headset := reading("Arctis Nova Pro Wireless", 47)
+	headset.Kind = view.KindHeadset
+	keyboard := reading("Keychron K4 HE", 90)
+	keyboard.Kind = view.KindKeyboard
+	other := reading("A Gamepad", 60)
+
+	// Given in the order a name sort would produce, which is the order this
+	// must not be.
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{other, headset, mouse, keyboard})})
+
+	require.Len(t, s.Cells, 4)
+	assert.Equal(t, []string{"G502 X PLUS", "Keychron K4 HE", "Arctis Nova Pro Wireless", "A Gamepad"},
+		[]string{s.Cells[0].Label, s.Cells[1].Label, s.Cells[2].Label, s.Cells[3].Label})
+}
+
+// AC15. Within a kind it is still by name, so a cell moves only when the
+// hardware does.
+func TestTwoDevicesOfOneKindAreOrderedByName(t *testing.T) {
+	first := reading("MX Master 3S", 40)
+	first.Kind = view.KindMouse
+	second := reading("G502 X PLUS", 78)
+	second.Kind = view.KindMouse
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{first, second})})
+
+	require.Len(t, s.Cells, 2)
+	assert.Equal(t, "G502 X PLUS", s.Cells[0].Label)
+	assert.Equal(t, "MX Master 3S", s.Cells[1].Label)
 }
 
 // The state is said under every cell, not only the ones doing something
@@ -109,18 +153,16 @@ func TestADeviceWithNoLevelSaysSoRatherThanShowingAPercentage(t *testing.T) {
 // device nobody had heard from. A blank third of a cell reads as one that has
 // not finished loading.
 func TestEveryCellSaysWhatItsBatteryIsDoing(t *testing.T) {
-	quiet := view.PeripheralReading{Name: "Keychron K4 HE"}
-	stale := reading("Headset", 30)
-	stale.Stale = true
+	filling := reading("Keychron K4 HE", 12)
+	filling.Charge = view.Filling
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
-		reading("G502 X PLUS", 67), quiet, stale,
+		reading("G502 X PLUS", 67), filling,
 	}})
 
-	require.Len(t, s.Cells, 3)
+	require.Len(t, s.Cells, 2)
 	assert.Equal(t, "Discharging", s.Cells[0].Note, "the ordinary case is still a case")
-	assert.NotEmpty(t, s.Cells[1].Note)
-	assert.Equal(t, "Not answering", s.Cells[2].Note)
+	assert.Equal(t, "Charging", s.Cells[1].Note)
 }
 
 // A section with no devices has no cells, so the shells draw no heading.
@@ -137,7 +179,7 @@ func TestTheSectionRendersInEveryArrangement(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{
 		Devices: []view.PeripheralReading{
 			reading("G502 X PLUS", 86),
-			{Name: "Arctis Nova Pro Wireless"},
+			reading("Arctis Nova Pro Wireless", 47),
 		},
 	})
 

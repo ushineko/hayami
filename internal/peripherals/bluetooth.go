@@ -78,7 +78,7 @@ func (b *Bluetooth) read(d BluetoothDevice) (Battery, error) {
 	if !d.HasLevel {
 		return Battery{}, ErrNoBatteryPacket
 	}
-	return Battery{Name: d.Name, Level: d.Level, HasLevel: true}, nil
+	return Battery{Name: d.Name, Level: d.Level, HasLevel: true, Kind: d.Kind}, nil
 }
 
 // readAccessory runs the accessory protocol against one device.
@@ -98,5 +98,10 @@ func (b *Bluetooth) readAccessory(d BluetoothDevice) (Battery, error) {
 	if err != nil {
 		return Battery{}, err
 	}
-	return batteryOf(d.Name, cells)
+	battery, err := batteryOf(d.Name, cells)
+	if err != nil {
+		return Battery{}, err
+	}
+	battery.Kind = d.Kind
+	return battery, nil
 }
