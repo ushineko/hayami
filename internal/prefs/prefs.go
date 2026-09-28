@@ -55,6 +55,7 @@ func New(a fyne.App, o Options) *Window {
 		Sections: []shell.Section{
 			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
 			shell.NewSection("Bandwidth", fynetheme.ComputerIcon, w.buildBandwidth),
+			shell.NewSection("Window", fynetheme.ViewFullScreenIcon, w.buildWindow),
 			shell.AppearanceSection("Saved as you change it."),
 		},
 	})

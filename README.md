@@ -70,6 +70,13 @@ The window is a glance window from
 content, always on top, read without being touched. Its rules are that
 repository's `docs/glance.md`.
 
+It draws its own translucency: the space between cards is clear and the cards
+are faded to a percentage you set, on any desktop. The titlebar is the one
+thing only the compositor can remove, so on Plasma that comes from a KWin rule
+hayami installs when asked — from the preferences window, or with
+`hayami window install`. Without it the panel is translucent and has a
+titlebar.
+
 ## Running it
 
 ```
@@ -132,42 +139,21 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
-- AirPods, over Apple's accessory protocol. BlueZ exposes no battery for them
-  — the code that would is behind its `Experimental` setting — so the device
-  is asked directly on an L2CAP channel, which needs no system configuration
-  and gives a level per ear and for the case. A pair of earbuds is one device
-  on the desk and is one row on the panel: it carries the lower of the two
-  ears, because that is the one that stops working first, with the cells on a
-  quiet line beneath it (spec 009, #23).
-- Every other Bluetooth device that reports a battery is read from
-  `org.bluez.Battery1`, generically — a device with that interface gets a row
-  with its own name, and one without gets none. The program this replaces
-  parses `upower -i` instead; BlueZ carries the same numbers with the device's
-  name and state beside them, and is an interface rather than a report.
-- Two findings that no test away from the hardware could make: `SockaddrL2`
-  takes an address in written order and reverses it itself, so reversing it
-  first dials nothing and the kernel calls that `ECONNREFUSED`; and Go
-  preempts goroutines with signals, so `poll(2)` returns `EINTR` as a matter
-  of course and a reader that treats it as a failure calls a working device
-  broken.
-
-- The peripherals section, which is the one the program is named after. The
-  Logitech mouse is read by speaking **HID++ over `hidraw`** rather than by
-  running `solaar`: the CLI takes three and a half seconds to answer and wraps
-  a Python library that cannot be imported from Go, and the protocol under
-  both is a seven-byte request answered in about five milliseconds. The
-  headset comes from `headsetcontrol -o json`, which has replaced the short
-  output the program this succeeds still parses. A row per device, appearing
-  and disappearing as the hardware does; a device that stops answering keeps
-  its last level and is drawn dim, because the question about a headset that
-  has gone quiet is whether what it said last is still true (spec 008, #19).
-- The live test is why this works. A single HID++ request is answered
-  fourteen times in twenty, and after a few seconds of idle it takes up to
-  four attempts — a fact the protocol does not mention and no test against a
-  fake endpoint can see. Every one of those was green while the real mouse
-  would have flickered in and out of the panel on most polls.
-- Keyboards over `upower` and AirPods over Apple's accessory protocol are not
-  in this: there is no hardware here to hold them to.
+- **Fix**: the panel is a glance window at last. It has had a titlebar and no
+  opacity since spec 001, and the menu's own doc comment has been describing an
+  opacity item nobody had built (spec 010, #26).
+- The translucency is the toolkit's own: GLFW grants a framebuffer with an
+  alpha channel and the window's background is drawn clear, so the desktop
+  shows through the space between cards **on any desktop**, with no compositor
+  involved. The cards are faded separately, to a percentage the user sets, so
+  the readings stay legible over whatever is behind them.
+- The titlebar is the one thing only the compositor can take away, so that —
+  and always-on-top beside it — is all the KWin rule carries. Installing it is
+  something the user asks for: it writes into `~/.config/kwinrulesrc`, which
+  holds every window rule on the machine.
+- `hayami window install`, `remove` and `status` do the same from a shell,
+  because a panel with no titlebar and no controls of its own should not be
+  undoable only from System Settings.
 
 - **Fix**: `hayami-tui --once` drew only whichever section polled first. It
   batches a poll per section and quit on the first answer, so the frame held

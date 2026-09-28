@@ -125,6 +125,7 @@ func GUI(version string, start func(Options) error) *cobra.Command {
 	// panel is somewhere they cannot right-click it.
 	root.Flags().BoolVar(&preferences, "preferences", false,
 		"open the preferences window as well as the panel")
+	root.AddCommand(windowCmd())
 	return root
 }
 
