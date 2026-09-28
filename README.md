@@ -139,6 +139,15 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the panel is invisible between its cards again, not filled. The
+  design system asks for a framebuffer with an alpha channel and got one, but
+  Fyne clears every window from the *application* theme's background and that
+  had stopped being transparent, so the alpha was granted and immediately
+  filled in. Opening the preferences window put it back a second way, by
+  setting the app's theme as it was built. Fixed upstream -- fynedesygn
+  v0.1.61, its spec 045 and its #118 -- and the preferences window stays solid,
+  which is the half that has to keep working.
+
 - **Fix**: the preferences window is solid again. The design system asks GLFW
   for a transparent framebuffer so the panel can be see-through, and a GLFW
   hint is sticky global state: it was never put back, so every window the
