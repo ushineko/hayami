@@ -67,6 +67,13 @@ func New(a fyne.App, o Options) *Window {
 		Name:    "hayami preferences",
 		Version: o.Version,
 		Theme:   o.Theme,
+
+		// Not the master window. Closing a master window exits the
+		// application, and this one belongs to a panel: closing the
+		// preferences took the panel with it, which is how it was reported —
+		// "how do I dismiss the preferences window without closing the whole
+		// app?"
+		Secondary: true,
 		Sections: []shell.Section{
 			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
 			shell.NewSection("Bandwidth", fynetheme.ComputerIcon, w.buildBandwidth),
@@ -74,11 +81,27 @@ func New(a fyne.App, o Options) *Window {
 			shell.AppearanceSection("Saved as you change it."),
 		},
 	})
+	w.hideOnClose()
 	return w
 }
 
 // Shell is the window's shell, for a caller that wants its window.
 func (w *Window) Shell() *shell.Shell { return w.shell }
+
+/*
+hideOnClose makes the close button put the window away rather than destroy it.
+
+A closed Fyne window cannot be shown again, and the panel's menu offers
+Preferences every time it is opened. Without this the first close would make
+that menu item do nothing for the rest of the run, which is a worse bug than
+the one it replaces.
+
+The settings are safe either way: every screen saves as it is changed, so
+there is nothing waiting to be written when the window goes away.
+*/
+func (w *Window) hideOnClose() {
+	w.shell.Window.SetCloseIntercept(func() { w.shell.Window.Hide() })
+}
 
 // Show brings the window up, raising it when it is already there.
 //

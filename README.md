@@ -139,6 +139,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: closing the preferences window no longer closes the program. The
+  design system marked every shell window as the application's master, and
+  closing a master window exits the application — so dismissing the
+  preferences took the panel with it. It is a secondary window now, and its
+  close button puts it away rather than destroying it, because a closed Fyne
+  window cannot be shown again and the panel's menu offers it every time (#33).
+
 - **Fix**: the frameless toggle takes effect on the panel in front of you. KWin
   applies a window rule to the windows it creates *afterwards* and leaves the
   ones already on screen alone, so turning it on changed a file and nothing

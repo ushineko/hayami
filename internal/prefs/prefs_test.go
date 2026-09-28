@@ -136,3 +136,28 @@ func TestTheOpacityFromThePreferencesIsSaved(t *testing.T) {
 
 	assert.Equal(t, 75, s.Config().Opacity)
 }
+
+// Closing the preferences window puts it away rather than destroying it.
+//
+// A closed Fyne window cannot be shown again, and the panel's menu offers
+// Preferences every time it is opened — so without the intercept the first
+// close would make that menu item do nothing for the rest of the run, which
+// is a worse bug than the one it replaces.
+func TestClosingThePreferencesPutsThemAway(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	w := prefs.New(a, prefs.Options{Store: store(t, "")})
+	w.Show()
+
+	// What the close button does: the intercept, not a destroy.
+	require.NotNil(t, w.Shell().Window)
+	w.Shell().Window.Hide()
+
+	// And the menu can bring it back, however many times.
+	for range 3 {
+		w.Show()
+		w.Shell().Window.Hide()
+	}
+	assert.NotNil(t, w.Shell().Window, "the window did not survive being put away")
+}
