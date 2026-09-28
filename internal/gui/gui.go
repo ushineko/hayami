@@ -9,8 +9,6 @@ package gui
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -443,14 +441,6 @@ func Start(o Options) error {
 	}
 	p.Poll(ctx)
 
-	go func() {
-		time.Sleep(8 * time.Second)
-		fyne.Do(func() {
-			fmt.Fprintf(os.Stderr, "DBG panel=%v canvas=%v window-content=%v\n",
-				p.win.Panel().Size(), p.win.Window().Canvas().Size(),
-				p.win.Window().Content().Size())
-		})
-	}()
 	p.win.ShowAndRun()
 	return nil
 }
