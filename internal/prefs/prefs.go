@@ -74,6 +74,12 @@ func New(a fyne.App, o Options) *Window {
 		// "how do I dismiss the preferences window without closing the whole
 		// app?"
 		Secondary: true,
+
+		// Refresh rebuilds the current screen, which earns its place when a
+		// screen is a view of something that changes elsewhere. Every screen
+		// here holds settings and saves as it is changed, so there is nothing
+		// to re-fetch and the button visibly did nothing.
+		NoRefresh: true,
 		Sections: []shell.Section{
 			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
 			shell.NewSection("Bandwidth", fynetheme.ComputerIcon, w.buildBandwidth),

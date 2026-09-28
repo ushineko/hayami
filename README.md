@@ -139,6 +139,16 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- The panel has a text size of its own, separate from the preferences window's.
+  A Fyne theme is application-wide, so the two shared one — and they are read at
+  different distances: a panel from across a desk, a settings window at arm's
+  length. The panel carries a theme of its own over its own subtree, taking the
+  scheme and the faces from Appearance and departing from it in the one respect
+  that was asked for. It goes down to 8 pt (#33).
+- The preferences window has no Refresh button. It rebuilt the current screen,
+  and every screen here holds settings and saves as it is changed, so there was
+  nothing to re-fetch and the button visibly did nothing.
+
 - **Fix**: closing the preferences window no longer closes the program. The
   design system marked every shell window as the application's master, and
   closing a master window exits the application — so dismissing the

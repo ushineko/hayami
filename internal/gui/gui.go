@@ -484,6 +484,29 @@ func (p *Panel) applyOpacity(c config.Config) {
 	}
 	base := baseTheme(p.app.Settings().Theme())
 	p.app.Settings().SetTheme(withCardOpacity(base, c.OpacityOrDefault()))
+	p.applyFont(c)
+}
+
+/*
+applyFont gives the panel its own text size.
+
+A Fyne theme is application-wide, so setting one would change the preferences
+window too — and the two are read at different distances. The design system's
+panel carries a theme of its own for exactly this, over its own subtree.
+
+The size is the only thing that differs: the scheme and the faces come from
+the appearance, so a panel still follows what was chosen in Appearance and
+departs from it in one respect the user asked to depart in.
+*/
+func (p *Panel) applyFont(c config.Config) {
+	a := Appearance(p.app, p.opts.Store)
+	if size := c.FontSizeOr(a.TextSize); size != a.TextSize {
+		a.TextSize = size
+		p.win.Panel().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
+		return
+	}
+	// The same size as everything else: no theme of its own to carry.
+	p.win.Panel().SetTheme(nil)
 }
 
 // baseTheme unwraps a theme this package has already faded, so applying a new

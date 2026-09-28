@@ -142,3 +142,33 @@ func TestAnImpossibleOpacityFallsBackToTheDefault(t *testing.T) {
 		assert.Equal(t, desktop.DefaultOpacity, c.OpacityOrDefault(), "at %d", v)
 	}
 }
+
+// The panel keeps a text size of its own, separate from the appearance's.
+//
+// A Fyne theme is application-wide, so without this the panel and the
+// preferences window would share a size — and they are read at different
+// distances.
+func TestThePanelKeepsItsOwnFontSize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+
+	s, err := config.Open(path)
+	require.NoError(t, err)
+
+	c := s.Config()
+	c.FontSize = 9
+	require.NoError(t, s.SetConfig(c))
+	require.NoError(t, s.Flush())
+
+	again, err := config.Open(path)
+	require.NoError(t, err)
+	assert.InDelta(t, 9, again.Config().FontSize, 0.01)
+}
+
+// Unset means "whatever the appearance says", which is what every settings
+// file written before the field existed carries.
+func TestAnUnsetFontSizeFollowsTheAppearance(t *testing.T) {
+	assert.InDelta(t, 14, config.Config{}.FontSizeOr(14), 0.01)
+	assert.InDelta(t, 14, config.Config{FontSize: 0}.FontSizeOr(14), 0.01)
+	assert.InDelta(t, 14, config.Config{FontSize: -3}.FontSizeOr(14), 0.01)
+	assert.InDelta(t, 9, config.Config{FontSize: 9}.FontSizeOr(14), 0.01)
+}

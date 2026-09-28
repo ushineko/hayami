@@ -42,6 +42,17 @@ type Config struct {
 	// Interfaces are the network interfaces the bandwidth section watches.
 	Interfaces []string `json:"interfaces"`
 
+	// FontSize is the panel's text size, in points.
+	//
+	// The panel's own, not the preferences window's. They are read at
+	// different distances — a panel from across a desk, a settings window at
+	// arm's length — and a Fyne theme is application-wide, so the panel
+	// carries a theme of its own to hold this.
+	//
+	// Zero means whatever the appearance says, which is what a settings file
+	// written before this field existed carries.
+	FontSize float32 `json:"fontSize"`
+
 	// Opacity is how opaque the desktop panel is, as a percentage.
 	//
 	// It is only ever applied by the compositor, through the window rule:
@@ -49,6 +60,18 @@ type Config struct {
 	// hayami keeps and KWin acts on. Zero means the default, which is what a
 	// settings file written before this field existed carries.
 	Opacity int `json:"opacity"`
+}
+
+// FontSizeOr is the panel's text size, falling back to the appearance's when
+// the panel has not been given one of its own.
+//
+// Zero is not a legal size, so it is the marker for "not set" — which is what
+// every settings file written before this field existed has.
+func (c Config) FontSizeOr(appearance float32) float32 {
+	if c.FontSize <= 0 {
+		return appearance
+	}
+	return c.FontSize
 }
 
 // OpacityOrDefault is the opacity to use, resolving the unset zero.

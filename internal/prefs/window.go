@@ -10,6 +10,7 @@ import (
 
 	fd "github.com/ushineko/fynedesygn"
 	"github.com/ushineko/fynedesygn/shell"
+	fdtheme "github.com/ushineko/fynedesygn/theme"
 	"github.com/ushineko/fynedesygn/widgets"
 
 	"github.com/ushineko/hayami/internal/desktop"
@@ -41,6 +42,27 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	c := w.opts.Store.Config()
 	opacity := c.OpacityOrDefault()
 
+	appearance := fdtheme.LoadAppearanceFrom(w.opts.Store.Settings(), fyne.CurrentApp().Preferences())
+	size := c.FontSizeOr(appearance.TextSize)
+
+	fontValue := widget.NewLabel(fmt.Sprintf("%g pt", size))
+	fontValue.Importance = widget.LowImportance
+
+	sizes := fdtheme.TextSizes()
+	names := make([]string, 0, len(sizes))
+	for _, v := range sizes {
+		names = append(names, fmt.Sprintf("%g", v))
+	}
+	font := widget.NewSelect(names, func(name string) {
+		for _, v := range sizes {
+			if fmt.Sprintf("%g", v) == name {
+				w.setFontSize(v)
+				fontValue.SetText(fmt.Sprintf("%g pt", v))
+			}
+		}
+	})
+	font.SetSelected(fmt.Sprintf("%g", size))
+
 	value := widget.NewLabel(fmt.Sprintf("%d %%", opacity))
 	value.Importance = widget.LowImportance
 	slider := widget.NewSlider(50, 100)
@@ -60,6 +82,10 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	slider.OnChangeEnded = func(v float64) { w.setOpacity(int(v)) }
 
 	return container.NewVBox(
+		widgets.Dim("How big the panel's own text is. The preferences window keeps its own "+
+			"size: they are read at different distances."),
+		container.NewBorder(nil, nil, nil, fontValue, font),
+		widget.NewSeparator(),
 		widgets.Dim("What the compositor grants. A glance window is read without being touched, "+
 			"so it has no titlebar and sits above other windows."),
 		rule,
@@ -85,6 +111,16 @@ func (w *Window) setRule(s *shell.Shell, on bool) {
 		err = desktop.Remove(PanelAppID)
 	}
 	w.report(s, err, on)
+}
+
+// setFontSize saves the panel's own text size.
+//
+// The panel watches its settings and re-themes itself; nothing here reaches
+// the preferences window, which is the point of the setting.
+func (w *Window) setFontSize(size float32) {
+	c := w.opts.Store.Config()
+	c.FontSize = size
+	w.save(c)
 }
 
 // setOpacity saves the opacity, which is all it has to do.
