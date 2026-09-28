@@ -139,6 +139,36 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the usage bar is the window that bites today. It was the window
+  furthest along, which sounds like the same thing and is not: an account a
+  tenth of the way through five hours and three quarters of the way through a
+  week put the week on the bar, and read down a panel of three accounts it gave
+  three bars about three different windows — seven days, a monthly spend, a
+  Business limit. It is the shortest window an account has, and the providers
+  now carry each window's own duration because a name is not a length
+  (spec 012, #34).
+- **Fix**: the cooler keeps what it knew, and plots the processor. liquidctl
+  was opening every HID device on a bus with a documented history of
+  contention, so a poll came back empty several times an hour — and a poll that
+  failed replaced the reading, so the coolant row went away and the panel
+  changed height, at random. It is narrowed with `--match` now, and a failed
+  poll keeps its last values dimmed. The plot carries the processor as a
+  trailing mean over a minute beside the coolant, each scaled to its own range.
+- **Fix**: a peripheral is a cell rather than a line. The section drew one
+  label-and-value row per device and argued that the monitor's blocks were an
+  artefact of a narrow panel; put side by side with that program it was wrong,
+  and for a battery the number is the reading and the name is only which one.
+  The state is said under every cell now, not only under a battery that is
+  charging. Needed `glance.Cell` and `glance.CellGrid`, which is fynedesygn
+  v0.1.56 (its spec 040, its #106).
+- **Fix**: the panel's face stays in the panel. The preferences window is meant
+  to keep the appearance on its own screen and drew at the panel's size
+  instead — 8 pt against 12, or 20 against 12, always the panel's. The shell
+  asks for a theme every time it lays itself out, the hook answered by telling
+  the panel, the panel set the application's theme, and that rebuilds every
+  window and takes the subtree override with it. So the separation was undone
+  by the act of building the window that wanted it.
+
 - The panel has its own faces and size, chosen with the design system's own
   font choosers: an interface family, a monospace family and a size, all
   separate from the preferences window's. The panel owns the application's

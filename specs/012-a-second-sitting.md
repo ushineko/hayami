@@ -117,31 +117,47 @@ so.
 
 ## Acceptance criteria
 
-- [ ] `view.Peripherals` produces cells — name, level, state — and no rows.
-- [ ] A device with no level draws its name and its state, and does not draw a
+- [x] `view.Peripherals` produces cells — name, level, state — and no rows.
+- [x] A device with no level draws its name and its state, and does not draw a
       percentage it does not have.
-- [ ] A device with several batteries draws them as the quiet line under its
+- [x] A device with several batteries draws them as the quiet line under its
       cell, as it does today.
-- [ ] Both shells draw the peripherals section as cells, and the parity test
+- [x] Both shells draw the peripherals section as cells, and the parity test
       still passes.
-- [ ] `view.Section` carries named series rather than one `Trail`, and the
+- [x] `view.Section` carries named series rather than one `Trail`, and the
       cooler fills two of them.
-- [ ] The processor's series is a trailing mean over sixty seconds; a partial
+- [x] The processor's series is a trailing mean over sixty seconds; a partial
       window is averaged as it stands, so the trace starts on the first sample.
-- [ ] Each series is scaled to its own range in both shells.
-- [ ] `cooler.Cooling` passes `--match`, and the value comes from the
+- [x] Each series is scaled to its own range in both shells.
+- [x] `cooler.Cooling` passes `--match`, and the value comes from the
       environment when it is set.
-- [ ] A cooler poll that fails keeps the previous reading and sets
+- [x] A cooler poll that fails keeps the previous reading and sets
       `Section.Gone`; the rows draw dim with their last values.
-- [ ] A cooler that never answered draws nothing, rather than an empty section.
-- [ ] `view.Usage` puts the shortest window on the bar, for Claude and for
+- [x] A cooler that never answered draws nothing, rather than an empty section.
+- [x] `view.Usage` puts the shortest window on the bar, for Claude and for
       Codex, and the other windows keep their figures in the stats row.
-- [ ] An account with one window puts that window on the bar.
-- [ ] The preferences window draws at `appearance.textSize` with
+- [x] An account with one window puts that window on the bar.
+- [x] The preferences window draws at `appearance.textSize` with
       `hayami.fontSize` set to something else, verified from a screenshot of the
       real window at two sizes.
-- [ ] The panel still draws at `hayami.fontSize`.
-- [ ] `go test ./...` passes; `cmd/hayami-tui` still builds with `CGO_ENABLED=0`.
+- [x] The panel still draws at `hayami.fontSize`.
+- [x] `go test ./...` passes; `cmd/hayami-tui` still builds with `CGO_ENABLED=0`.
+
+## Gaps found
+
+- **`glance.Cell` did not exist.** It does now, and two of its three faults
+  were visible only in a photograph: a cell sized by its reading alone packed
+  four device names into four forty-pixel columns and they ran into each other,
+  and a grid that reported the height of a single column reserved four rows and
+  drew one. Both are fixed upstream; neither was catchable headlessly, which is
+  the rule about photographs earning its place twice in one component.
+- **A card cannot gain a cell after it is built.** The library takes objects at
+  build time, so the card is built with four spare hidden cells (`CellSlack`).
+  A machine with more than eight peripherals would need a restart to see the
+  ninth. The real fix is a card that can take an object after it is built, and
+  that is a library change nobody has needed yet.
+- **`appearance.scale` cannot be scoped to one window.** It goes through
+  `FYNE_SCALE`, which is process-wide. The Window screen says so.
 
 ## Risks & Assumptions
 
@@ -156,11 +172,15 @@ so.
   needs another value, which is why it is read from the environment. A match
   that finds nothing is `ErrNoCooler`, which is already a section that draws
   what the kernel gave it.
-- **The font isolation may be a library bug.** If it is, the fix lands in
-  fynedesygn and this branch takes a version bump. That is a dependency on
-  another repository and is the one part of this spec that may not close in one
-  sitting.
+- **The font isolation was not a library bug**, as it turned out. The shell asks
+  for a theme on every layout, the panel answered by setting the application's
+  theme, and that rebuilds every window and takes the other one's subtree
+  override with it -- so the separation was undone by the act of building the
+  window that wanted it. The fix is here.
+- **The cell shape was a library change**, as the repository's rule required:
+  fynedesygn spec 040 (#106, PR #107) added `glance.Cell` and
+  `glance.CellGrid`, released as v0.1.56, and this branch bumps to it.
 - **Rollback**: revert the commit. Nothing here writes outside the program's own
   settings file, and no setting changes meaning.
 
-## Status: INCOMPLETE
+## Status: COMPLETE
