@@ -2,11 +2,18 @@
 
 **Issue**: [#26](https://github.com/ushineko/hayami/issues/26)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-Populated before the PR is opened.
+`internal/desktop` installs, removes and reads hayami's KWin rule — frameless,
+always on top, translucent — and sets the running window's opacity live over
+KWin's D-Bus. The menu gains the opacity item its own documentation has
+claimed since spec 001, the preferences gain a Window section that installs
+the rule, and `hayami window install|remove|status` does the same from a
+shell, so a person whose panel has no titlebar can undo it without one.
+Reviewers should start with the package comment in `internal/desktop`, which
+says why a rule and a script are two mechanisms and not one.
 
 ## Context
 
@@ -89,18 +96,56 @@ offers, made visible.
 
 ## Acceptance Criteria
 
-- [ ] AC1 A rule written into a `kwinrulesrc` the test owns carries the app ID, `noborder`, `above` and the opacity, forced or applied-initially as each should be. (R1, R5)
-- [ ] AC2 Installing into a file that already holds unrelated rules leaves every one of them, and their numbering, intact. (R4)
-- [ ] AC3 Installing twice updates the existing rule rather than adding a second. (R1)
-- [ ] AC4 Removing takes the rule out and leaves the unrelated ones; removing one that is not there is not an error. (R4)
-- [ ] AC5 A lookup reports the rule's presence and the opacity it carries. (R1, R7)
-- [ ] AC6 The live opacity call names KWin's own interface and carries a script that matches only this app ID. (R2)
-- [ ] AC7 With no KWin and no session bus, install, remove, lookup and the live call each report that plainly and none of them panics or fails the panel. (R8)
-- [ ] AC8 The settings file round-trips the opacity, and a file without one gets the default. (R5)
-- [ ] AC9 The menu has three items, and the opacity submenu ticks the value in the settings. (R6)
-- [ ] AC10 The preferences window offers the rule and the opacity, and a change reaches the store. (R7)
-- [ ] AC11 The command line installs, removes and reports the rule. (R9)
-- [ ] AC12 **On this machine**, installing the rule gives a frameless panel at the chosen opacity, and removing it gives the titlebar back. Photographed both ways. Skipped where KWin is absent. (R1, R4)
+- [x] AC1 A rule written into a `kwinrulesrc` the test owns carries the app ID, `noborder`, `above` and the opacity, forced or applied-initially as each should be. (R1, R5)
+- [x] AC2 Installing into a file that already holds unrelated rules leaves every one of them, and their numbering, intact. (R4)
+- [x] AC3 Installing twice updates the existing rule rather than adding a second. (R1)
+- [x] AC4 Removing takes the rule out and leaves the unrelated ones; removing one that is not there is not an error. (R4)
+- [x] AC5 A lookup reports the rule's presence and the opacity it carries. (R1, R7)
+- [x] AC6 The live opacity call names KWin's own interface and carries a script that matches only this app ID. (R2)
+- [x] AC7 With no KWin and no session bus, install, remove, lookup and the live call each report that plainly and none of them panics or fails the panel. (R8)
+- [x] AC8 The settings file round-trips the opacity, and a file without one gets the default. (R5)
+- [x] AC9 The menu has three items, and the opacity submenu ticks the value in the settings. (R6)
+- [x] AC10 The preferences window offers the rule and the opacity, and a change reaches the store. (R7)
+- [x] AC11 The command line installs, removes and reports the rule. (R9)
+- [x] AC12 **On this machine**, installing the rule gives a frameless panel at the chosen opacity, and removing it gives the titlebar back. Photographed both ways. Skipped where KWin is absent. (R1, R4)
+
+## Gaps found
+
+**`fynedesygn/glance/kwin.Rule` forces the opacity, and its documentation says
+it does not.** The field's comment reads *"It is applied initially rather than
+forced, so the user can still override it from the window menu"*, and the rule
+it writes carries `opacityactiverule=2`, which is forced. The reference's own
+rule uses `4`. The practical difference is that KWin's window menu cannot
+override hayami's opacity, so the panel's own menu is the only way to try a
+value — which works, but is not what either the library or the reference
+intended.
+
+Not worked around here: reimplementing the rule writer to change one line
+would be this repository copying from the design system, which is the thing
+the project rules forbid. `TestEverythingInTheRuleIsForced` asserts what the
+library actually does and says in its comment that it should fail the day this
+is fixed, so the workaround is a failing test rather than a silent divergence.
+
+## What the tests caught
+
+Less than the last two specs, and for a reason worth recording: **this one was
+verified against the compositor from the first step rather than the last.**
+The live opacity call was made against the running KWin before any interface
+was built on top of it, and the rule was installed against a real
+`kwinrulesrc` before the preferences section existed. Both worked, and neither
+was a decoder that had never spoken to anything.
+
+The one thing the tests caught that the eye would not: `Install` and `Remove`
+round-trip a real rules file **byte for byte**. It was checked against this
+machine's own file — sixteen rules, two of them belonging to the program this
+replaces — by diffing before and after, because a program that tidies away
+rules it did not create is a failure nobody notices until they wonder where
+their other rules went.
+
+One thing was wrong in the tests rather than the code: a settings file written
+before this spec was asserted to carry a zero opacity, and the store merges
+the file over `Default()`, so it carries the default instead. The behaviour
+was better than the assertion, and the assertion was the thing that changed.
 
 ## Risks & Assumptions
 

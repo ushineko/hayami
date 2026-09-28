@@ -19,6 +19,7 @@ import (
 	"github.com/ushineko/fynedesygn/settings"
 	_ "github.com/ushineko/fynedesygn/settings/yamlcodec" // registers .yaml
 
+	"github.com/ushineko/hayami/internal/desktop"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -40,6 +41,26 @@ type Config struct {
 
 	// Interfaces are the network interfaces the bandwidth section watches.
 	Interfaces []string `json:"interfaces"`
+
+	// Opacity is how opaque the desktop panel is, as a percentage.
+	//
+	// It is only ever applied by the compositor, through the window rule:
+	// nothing this process draws can be see-through, so this is a number
+	// hayami keeps and KWin acts on. Zero means the default, which is what a
+	// settings file written before this field existed carries.
+	Opacity int `json:"opacity"`
+}
+
+// OpacityOrDefault is the opacity to use, resolving the unset zero.
+//
+// Zero is not a legal opacity — an invisible panel is not a setting anyone
+// chose — so it is the marker for "not set", which is what every settings
+// file written before this field existed has.
+func (c Config) OpacityOrDefault() int {
+	if c.Opacity <= 0 || c.Opacity > 100 {
+		return desktop.DefaultOpacity
+	}
+	return c.Opacity
 }
 
 // Default is what a machine with no settings file gets: everything that exists
@@ -50,6 +71,7 @@ func Default() Config {
 	return Config{
 		Sections:    []string{"bandwidth", "usage", "cooler", "peripherals"},
 		Arrangement: "stack",
+		Opacity:     desktop.DefaultOpacity,
 	}
 }
 

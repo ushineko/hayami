@@ -95,3 +95,58 @@ func TestAnUnreadableSettingsFileIsReportedAndSurvived(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "could not be read")
 }
+
+// AC11. The window rule can be installed, reported and removed from a shell.
+//
+// This exists so a person who has made the panel frameless can undo it
+// **without the panel**: a glance window has no titlebar and no controls of
+// its own, so without this the way back is System Settings or editing
+// kwinrulesrc by hand.
+func TestTheWindowRuleCanBeDrivenFromTheCommandLine(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	// No compositor to tell, which is the ordinary case under test and must
+	// not make any of these fail.
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
+
+	out, err := runGUI(t, "window", "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No window rule")
+
+	out, err = runGUI(t, "window", "install", "--opacity", "80")
+	require.NoError(t, err)
+	assert.Contains(t, out, "80 %")
+
+	body, err := os.ReadFile(filepath.Join(dir, "kwinrulesrc"))
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "opacityactive=80")
+
+	out, err = runGUI(t, "window", "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "80 %")
+
+	out, err = runGUI(t, "window", "remove")
+	require.NoError(t, err)
+	assert.Contains(t, out, "titlebar back")
+
+	out, err = runGUI(t, "window", "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "No window rule")
+}
+
+// runGUI runs a subcommand of the window binary and returns what it printed.
+func runGUI(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+
+	cmd := cli.GUI("1.2.3", func(cli.Options) error {
+		t.Fatal("a window subcommand started the panel")
+		return nil
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(args)
+
+	err := cmd.Execute()
+	return out.String(), err
+}

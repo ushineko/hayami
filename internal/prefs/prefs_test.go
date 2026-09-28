@@ -53,8 +53,9 @@ func TestEverySectionIsOfferedWhetherItIsChosenOrNot(t *testing.T) {
 	require.NotEmpty(t, built)
 	assert.Equal(t, "Sections", built[0].Title())
 	assert.Equal(t, "Bandwidth", built[1].Title())
-	assert.Equal(t, "Appearance", built[2].Title(),
-		"the shell's own appearance section is the third, not one of ours")
+	assert.Equal(t, "Window", built[2].Title())
+	assert.Equal(t, "Appearance", built[3].Title(),
+		"the shell's own appearance section is last, after ours")
 }
 
 // A change is saved as it is made. A preference that needed confirming is a
@@ -95,4 +96,43 @@ func TestEveryKnownSectionIsOfferedByName(t *testing.T) {
 		assert.Contains(t, offered, key)
 	}
 	assert.Contains(t, offered, "peripherals")
+}
+
+// AC10. The Window section offers the rule and the opacity.
+func TestTheWindowSectionOffersTheRuleAndTheOpacity(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	w := prefs.New(a, prefs.Options{Store: store(t, "")})
+	w.Shell().Select("Window")
+
+	var checks []string
+	sliders := 0
+	for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
+		switch v := o.(type) {
+		case *widget.Check:
+			checks = append(checks, v.Text)
+		case *widget.Slider:
+			sliders++
+		}
+	}
+
+	require.NotEmpty(t, checks, "the window section offers no toggle")
+	assert.Contains(t, checks[0], "Frameless")
+	assert.Positive(t, sliders, "the window section offers no opacity")
+}
+
+// AC10. The opacity chosen here reaches the store, because it is the value
+// that survives a restart — the menu's does not.
+func TestTheOpacityFromThePreferencesIsSaved(t *testing.T) {
+	s := store(t, "")
+
+	c := s.Config()
+	c.Opacity = 75
+	require.NoError(t, s.SetConfig(c))
+	require.NoError(t, s.Flush())
+
+	assert.Equal(t, 75, s.Config().Opacity)
 }

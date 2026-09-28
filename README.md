@@ -70,6 +70,12 @@ The window is a glance window from
 content, always on top, read without being touched. Its rules are that
 repository's `docs/glance.md`.
 
+Frameless, on top and translucent are the compositor's to grant, not the
+toolkit's, so on Plasma they come from a KWin rule that hayami installs when
+asked — from the preferences window, or with `hayami window install`. Without
+it the panel is an ordinary window with a titlebar, which is what another
+desktop gets.
+
 ## Running it
 
 ```
@@ -131,6 +137,23 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- **Fix**: the panel is a glance window at last. It has had a titlebar and no
+  opacity since spec 001, and the menu's own doc comment has been describing an
+  opacity item nobody had built. Neither want is the toolkit's to grant — Fyne
+  never asks for a transparent framebuffer, and KWin decorates its undecorated
+  windows anyway — so both come from a KWin rule, and the menu gains its third
+  item at last (spec 010, #26).
+- `hayami window install`, `remove` and `status` do the same from a shell,
+  because a panel with no titlebar and no controls of its own should not be
+  undoable only from System Settings.
+- The opacity is in two places on purpose. The preferences' value is written
+  into the rule and survives a restart; the menu's asks KWin to fade the
+  running window and saves nothing, which is what trying a value should do.
+  Plasma offers two mechanisms and the difference is said rather than hidden.
+- Installing the rule is something the user asks for. It is a write into
+  `~/.config/kwinrulesrc`, which holds every window rule on the machine, so it
+  does not happen on a first run.
 
 - AirPods, over Apple's accessory protocol. BlueZ exposes no battery for them
   — the code that would is behind its `Experimental` setting — so the device
