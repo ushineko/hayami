@@ -58,8 +58,11 @@ const (
 	// KindOther is the zero value: a device whose sort is not known, or is
 	// known and is none of the below.
 	KindOther Kind = iota
+	// KindMouse is the pointing device on the desk.
 	KindMouse
+	// KindKeyboard is a keyboard or a numpad.
 	KindKeyboard
+	// KindHeadset is a headset, headphones or earbuds.
 	KindHeadset
 )
 

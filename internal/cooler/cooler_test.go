@@ -120,8 +120,11 @@ func TestASpeedTheDeviceDidNotReportIsAbsentRatherThanZero(t *testing.T) {
 // history of contention on those, and the symptom is not an error: it is a
 // coolant temperature that goes missing for a poll or two at random.
 func TestTheCoolerIsNarrowedToTheCoolerByDefault(t *testing.T) {
+	// Setenv first so the test framework restores whatever the environment
+	// had; the unset is what the case is actually about, which is a machine
+	// that has never set the variable at all.
 	t.Setenv(cooler.MatchEnv, "")
-	os.Unsetenv(cooler.MatchEnv)
+	require.NoError(t, os.Unsetenv(cooler.MatchEnv))
 
 	assert.Equal(t, cooler.DefaultMatch, cooler.Match())
 }
