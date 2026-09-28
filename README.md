@@ -161,6 +161,15 @@ MIT. See [LICENSE](LICENSE).
   The state is said under every cell now, not only under a battery that is
   charging. Needed `glance.Cell` and `glance.CellGrid`, which is fynedesygn
   v0.1.56 (its spec 040, its #106).
+- **Fix**: a preferences section keeps the window's own face. Opening the
+  window looked right and clicking any section in it switched that section to
+  the panel's font and the panel's transparency, which is how it was reported.
+  A window that owns its appearance keeps it in a subtree override, sections
+  are built when they are first shown, and a subtree installed after an
+  override was built is not covered by it — so every section but the opening
+  one drew in the application's theme, which under that option is deliberately
+  the panel's. Fixed in the design system, which is fynedesygn v0.1.57 (its
+  spec 041, its #108, and its quirk 37).
 - **Fix**: the preferences window is not faded. The card opacity was being
   applied to the theme that window draws itself in, so its every button and
   separator was drawn at ninety-five per cent over a framebuffer the panel had
