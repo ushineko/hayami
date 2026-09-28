@@ -161,6 +161,16 @@ MIT. See [LICENSE](LICENSE).
   The state is said under every cell now, not only under a battery that is
   charging. Needed `glance.Cell` and `glance.CellGrid`, which is fynedesygn
   v0.1.56 (its spec 040, its #106).
+- **Fix**: the panel opens at the size of its readings. It was 298 px wide at
+  every start while its widest card measured 218, and dragging it narrower did
+  not survive a restart: a resizable panel would not pull its window below the
+  window's current width, and before the first layout that width is Fyne's
+  guess rather than anyone's choice. The device cells reach the right-hand edge
+  now too — a grid with room for three and two devices in it left the last
+  third empty — and a card re-measures its title when the text size changes,
+  which is what had titles reading "Peripheral" and "Bandwidtl" after a move
+  from 8 pt to 9. **219 px** (fynedesygn v0.1.59, its spec 043, its #112 and
+  its quirk 39).
 - **Fix**: the panel's face stops at the panel, dialogs included. The two
   windows had it the wrong way round: the panel owned the application's theme,
   on the reasoning that a card is a canvas object a subtree override cannot

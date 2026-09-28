@@ -148,6 +148,15 @@ func New(a fyne.App, o Options) *Panel {
 			// that one was about the panel being the wrong size, this one is
 			// about who gets to change it.
 			Resizable: true,
+
+			// No floor: the window is as wide as its widest card and not a
+			// pixel more. The design system's default floor is 260, which is
+			// a guard against a panel of one short reading looking like a
+			// chip; these cards measure 94, 180, 216 and 218, so the floor
+			// was buying nothing and costing forty-two pixels of empty panel
+			// down the right-hand side. A panel the user can resize does not
+			// need protecting from being narrow, either.
+			MinWidth: glance.NoMinWidth,
 		}),
 		cards: map[string]*card{},
 		opts:  o,
