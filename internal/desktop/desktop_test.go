@@ -205,7 +205,14 @@ noborder=true
 `
 	path := rules(t, legacy)
 
-	require.NoError(t, desktop.Remove(appID))
+	// What is under test is the file the remove leaves behind. Asking KWin to
+	// reload afterwards cannot work where there is no Plasma session -- a CI
+	// runner, another compositor -- and that is not this test failing; the
+	// test beside this one discards the same error for the same reason. It is
+	// still checked, so a remove that fails for any other reason fails here.
+	if err := desktop.Remove(appID); err != nil {
+		require.ErrorIs(t, err, desktop.ErrNoKWin)
+	}
 
 	body := read(t, path)
 	assert.NotContains(t, body, appID,
