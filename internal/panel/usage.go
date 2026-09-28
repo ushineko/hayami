@@ -132,6 +132,7 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 				Fraction: w.Fraction,
 				ResetsAt: w.ResetsAt,
 				Detail:   w.Detail,
+				Span:     w.Span,
 			})
 		}
 		if !result.FetchedAt.IsZero() && (oldest.IsZero() || result.FetchedAt.Before(oldest)) {

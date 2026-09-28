@@ -22,12 +22,27 @@ const CoolerInterval = 5 * time.Second
 // about as far back as a temperature is still worth looking at.
 const CoolerTrail = 60
 
+// CPUAverageWindow is how many samples the processor's trailing mean covers.
+//
+// Twelve at five seconds is a minute, which is the monitor's window and the
+// number it settled on for the same reading on the same machine. Shorter and
+// the trace is still a compile's spike; longer and it stops following
+// anything.
+const CPUAverageWindow = 12
+
 // Cooler is the machine's own temperature: the processor from the kernel, the
 // coolant and the pump from liquidctl.
 type Cooler struct {
 	mu      sync.Mutex
 	reading view.CoolerReading
 	trail   *view.Series
+	cpu     *view.Averaged
+
+	// gone marks a cooler that was answering and has stopped. The reading is
+	// kept as it was and drawn dim rather than being emptied, which is the
+	// monitor's rule and the reason it gives for it: a blip must not make the
+	// window jump around.
+	gone bool
 
 	// sensor and liquid are the two sources, replaced by a test so neither
 	// the real hwmon tree nor a real subprocess is touched.
@@ -39,6 +54,7 @@ type Cooler struct {
 func NewCooler() *Cooler {
 	return &Cooler{
 		trail:  view.NewSeries(CoolerTrail),
+		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
 		sensor: cooler.CPUPackage.Temperature,
 		liquid: cooler.Cooling,
 	}
@@ -72,30 +88,73 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	case errors.Is(err, cooler.ErrNoLiquidctl), errors.Is(err, cooler.ErrNoCooler):
 		// Not a problem. A machine without a liquid cooler is a machine this
 		// program looks at, and the processor is still worth drawing.
+		err = nil
 	default:
 		// A liquidctl that ran and failed is worth neither hiding nor
 		// shouting about: the section draws what it has and the error goes to
 		// the caller, which logs it once.
-		if !out.HasCPU {
-			return false, err
-		}
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if out.HasLiquid {
+	return c.record(out), err
+}
+
+/*
+record keeps what the poll learned, or keeps what it knew.
+
+A reading that lost something it used to have is not a reading: it is the same
+cooler with a question unanswered. liquidctl opens a hidraw node and this
+machine has a history of contention on those, so a poll that comes back without
+the coolant is an ordinary event several times an hour -- and replacing the
+reading with what just arrived would take the row away, shorten the card and
+change the height of the panel, for a second, at random.
+
+So a field that was there and is not is kept and the section is marked Gone,
+which dims every row and says so in the heading. The monitor does the same and
+gives the same reason: keep the last values but dim them, so a blip does not
+make the window jump around.
+
+A field that was never there stays absent. Gone is for a source that answered
+and has stopped, not for hardware this machine does not have.
+*/
+func (c *Cooler) record(out view.CoolerReading) bool {
+	c.gone = false
+
+	if !out.HasCPU && c.reading.HasCPU {
+		out.CPU, out.HasCPU = c.reading.CPU, true
+		c.gone = true
+	}
+	if !out.HasLiquid && c.reading.HasLiquid {
+		out.Coolant, out.HasLiquid = c.reading.Coolant, true
+		out.PumpRPM, out.HasPump = c.reading.PumpRPM, c.reading.HasPump
+		out.FanRPM, out.HasFan = c.reading.FanRPM, c.reading.HasFan
+		c.gone = true
+	}
+
+	// Only a sample that was actually taken goes on the plot. A trail fed the
+	// value it already held would draw a flat line through an outage and call
+	// it a steady temperature.
+	if out.HasLiquid && !c.gone {
 		c.trail.Add(out.Coolant)
 	}
+	if out.HasCPU && !c.gone {
+		c.cpu.Add(out.CPU)
+	}
 	out.Trail = c.trail.Samples()
+	out.CPUTrail = c.cpu.Mean()
+
 	c.reading = out
-	return out.HasCPU || out.HasLiquid, nil
+	return out.HasCPU || out.HasLiquid
 }
 
 // Section turns the reading into rows and a plot.
 func (c *Cooler) Section() view.Section {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return view.Cooler(c.reading)
+	s := view.Cooler(c.reading)
+	s.Gone = c.gone
+	return s
 }
 
 // Data is the reading as plain values, for the JSON the command line prints.

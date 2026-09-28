@@ -129,7 +129,12 @@ func TestTheWindowRuleCanBeDrivenFromTheCommandLine(t *testing.T) {
 
 	out, err = runGUI(t, "window", "remove")
 	require.NoError(t, err)
-	assert.Contains(t, out, "titlebar back")
+
+	// Not "the titlebar is back". KWin takes decoration away from a window
+	// already on screen and will not give it back; that happens when the
+	// window is next created, and saying otherwise sends the user looking for
+	// a change that is not going to arrive.
+	assert.Contains(t, out, "next starts")
 
 	out, err = runGUI(t, "window", "status")
 	require.NoError(t, err)

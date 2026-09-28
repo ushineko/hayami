@@ -32,6 +32,16 @@ import (
 	"github.com/ushineko/fynedesygn/glance/kwin"
 )
 
+// PanelTitle is the panel window's title, and the second thing the rule
+// matches on.
+//
+// **The app ID is not enough.** Every window in the program carries it —
+// Fyne takes the Wayland app_id from the app's unique ID — so a rule keyed on
+// it alone strips the titlebar off the preferences window too, which is a
+// window a person needs to be able to move and close. The design system's
+// Rule.Title exists for exactly this case and says so.
+const PanelTitle = "hayami"
+
 // Description is how the rule identifies itself in System Settings.
 //
 // A rule the user cannot recognise is a rule they cannot remove, and this one
@@ -75,6 +85,7 @@ type Rule struct {
 func ruleFor(appID string) kwin.Rule {
 	return kwin.Rule{
 		AppID:       appID,
+		Title:       PanelTitle,
 		Description: Description,
 		AlwaysOnTop: true,
 		NoBorder:    true,
@@ -88,10 +99,15 @@ func ruleFor(appID string) kwin.Rule {
 // Installing twice updates the rule rather than adding a second, which is the
 // design system's behaviour and is asserted rather than assumed.
 func Install(appID string) error {
+	// Anything written by an older version first, or installing leaves the
+	// two side by side and the older one wins on the windows it matches.
+	if err := removeAll(appID); err != nil {
+		return err
+	}
 	if err := kwin.Install(ruleFor(appID)); err != nil {
 		return fmt.Errorf("installing the window rule: %w", err)
 	}
-	return reconfigure()
+	return settle(appID, true)
 }
 
 // Remove takes the rule out and asks KWin to reload, giving the titlebar back.
@@ -99,19 +115,117 @@ func Install(appID string) error {
 // Removing one that is not there is not an error: the user's intent is that
 // there be no rule, and there is none.
 func Remove(appID string) error {
-	if _, err := kwin.Remove(appID); err != nil {
-		return fmt.Errorf("removing the window rule: %w", err)
+	if err := removeAll(appID); err != nil {
+		return err
 	}
-	return reconfigure()
+	return settle(appID, false)
+}
+
+/*
+removeAll takes out every rule this program has ever written for the app ID.
+
+**Both the titled rule and an untitled one.** The rule used to match on the app
+ID alone, which stripped the titlebar off the preferences window too, because
+every window in the program carries the same Wayland app_id. Adding the title
+fixed that and created a worse problem: a remove keyed on the new match cannot
+see a rule written under the old one, so the old rule stayed in the user's
+kwinrulesrc, kept stripping both windows, and made the preferences checkbox
+look like it did nothing — it was removing a rule while another one held the
+panel frameless.
+
+A program that changes what its rule matches on has to clean up after the
+version of itself that matched differently. There is no third form to worry
+about, and if there ever is, it belongs in this list rather than in a comment.
+*/
+func removeAll(appID string) error {
+	for _, title := range []string{PanelTitle, ""} {
+		if _, err := kwin.RemoveTitled(appID, title); err != nil {
+			return fmt.Errorf("removing the window rule: %w", err)
+		}
+	}
+	return nil
 }
 
 // Current reports whether the rule is installed and what opacity it carries.
 func Current(appID string) (Rule, error) {
-	_, found, err := kwin.Lookup(appID)
-	if err != nil {
-		return Rule{}, fmt.Errorf("reading the window rules: %w", err)
+	// Either form counts as installed. A panel held frameless by a rule an
+	// older version wrote is a panel that is frameless, and a checkbox that
+	// said otherwise would be lying about what is on screen.
+	for _, title := range []string{PanelTitle, ""} {
+		_, found, err := kwin.LookupTitled(appID, title)
+		if err != nil {
+			return Rule{}, fmt.Errorf("reading the window rules: %w", err)
+		}
+		if found {
+			return Rule{Installed: true}, nil
+		}
 	}
-	return Rule{Installed: found}, nil
+	return Rule{}, nil
+}
+
+/*
+settle makes the change take effect, on the next window and on this one.
+
+**Two steps, because a rule alone is not enough.** KWin applies a rule to the
+windows it creates after it reads one, and leaves the windows already on screen
+exactly as they were. So writing the rule and asking for a reconfigure changes
+what happens next time and nothing a person can see now — a toggle that
+appeared to do nothing, which is how this was reported.
+
+The rule is what survives a restart. The script is what makes the control
+honest in the moment. Neither replaces the other.
+
+A desktop that is not Plasma answers neither and that is not a failure.
+*/
+func settle(appID string, on bool) error {
+	if err := reconfigure(); err != nil {
+		return err
+	}
+	return apply(appID, on)
+}
+
+/*
+apply sets the decoration on the windows that are already open.
+
+It runs a script inside KWin: load it, run it, unload it. The script matches
+the panel's title as well as the app ID, because every window in this program
+carries the same one and a script keyed on the app ID alone would take the
+titlebar off the preferences window — which is the bug the rule's own title
+match exists to avoid.
+*/
+func apply(appID string, on bool) error {
+	conn, err := session()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	path, err := writeScript(kwin.DecorationScript(appID, PanelTitle, on, on))
+	if err != nil {
+		return err
+	}
+	defer remove(path)
+
+	load := kwin.LoadScriptCall()
+	var id int
+	err = conn.Object(load.Destination, dbus.ObjectPath(load.Path)).
+		Call(load.Interface+"."+load.Method, 0, path, Description).Store(&id)
+	if err != nil {
+		return fmt.Errorf("%w: loading the window script: %w", ErrNoKWin, err)
+	}
+
+	run := kwin.RunCall(id)
+	if err := conn.Object(run.Destination, dbus.ObjectPath(run.Path)).
+		Call(run.Interface+"."+run.Method, 0).Err; err != nil {
+		return fmt.Errorf("%w: running the window script: %w", ErrNoKWin, err)
+	}
+
+	// Best effort: the change is applied, and a script left loaded is untidy
+	// rather than broken.
+	unload := kwin.UnloadScriptCall()
+	_ = conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
+		Call(unload.Interface+"."+unload.Method, 0, Description).Err
+	return nil
 }
 
 // reconfigure asks KWin to read its rules again, which is what makes a written

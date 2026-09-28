@@ -86,18 +86,22 @@ func TestAnImpossiblePercentageIsClamped(t *testing.T) {
 	assert.Zero(t, alphaOf(withCardOpacity(base, -50), fynetheme.ColorNameButton))
 }
 
-// Fading an already-faded theme fades it once, not twice.
+// The fade is built from the appearance each time, so applying the setting
+// again fades once and not twice.
 //
-// The setting is applied whenever it changes, over whatever theme is current,
-// and the theme that is current is usually one this package already faded.
+// There used to be an unwrapper for this, because the fade was put on whatever
+// theme happened to be current and the current one was usually already faded.
+// The panel builds its own theme from the appearance now, so there is nothing
+// to unwrap and nothing to accumulate -- which is the property worth asserting,
+// rather than the helper that used to be needed.
 func TestApplyingTheOpacityTwiceDoesNotFadeItTwice(t *testing.T) {
 	base := fdtheme.New(fdtheme.BreezeDark, fdtheme.Options{})
 	full := alphaOf(base, fynetheme.ColorNameButton)
 
-	once := withCardOpacity(base, 50)
-	twice := withCardOpacity(baseTheme(once), 50)
-
-	assert.Equal(t, full/2, alphaOf(twice, fynetheme.ColorNameButton))
+	for range 3 {
+		faded := withCardOpacity(base, 50)
+		assert.Equal(t, full/2, alphaOf(faded, fynetheme.ColorNameButton))
+	}
 }
 
 // The colour channels are untouched, so a faded card is the scheme's own

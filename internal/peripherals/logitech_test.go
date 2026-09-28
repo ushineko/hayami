@@ -9,7 +9,11 @@ import (
 )
 
 // receiver answers as a Logitech receiver does: the device at liveIndex has a
-// battery and a name, and every other index is refused.
+// battery, a name and a device type, and every other index is refused.
+//
+// The type is a mouse, because the device these fakes are named after is one.
+// A receiver that did not answer the type at all is the deviceType case in
+// kind_test.go.
 //
 // The refusals are the point. The two error forms are answered differently by
 // design — the 1.0 form for an empty index, which is what the real receiver
@@ -43,6 +47,9 @@ func receiver(liveIndex byte, level byte, name string) func([]byte) [][]byte {
 
 		case feature == featureIdx:
 			return [][]byte{reportOf(reportLong, device, feature, function, level, 0x08, 0x00, 0x00)}
+
+		case feature == nameIdx && function>>4 == functionDeviceType:
+			return [][]byte{reportOf(reportShort, device, feature, function, typeMouse)}
 
 		case feature == nameIdx && function>>4 == 0x00:
 			return [][]byte{reportOf(reportShort, device, feature, function, byte(len(name)))}
@@ -84,6 +91,7 @@ func TestDiscoveryFindsTheOneDeviceWithoutWaitingOnTheEmptyIndices(t *testing.T)
 	assert.Equal(t, "G502 X PLUS", found[0].Name)
 	assert.Equal(t, 86, found[0].Level)
 	assert.True(t, found[0].HasLevel)
+	assert.Equal(t, KindMouse, found[0].Kind, "the device type came back as something else")
 }
 
 // AC3. An endpoint that answers nothing at all is bounded by the timeout

@@ -5,6 +5,8 @@ import (
 
 	"fyne.io/fyne/v2"
 
+	fdtheme "github.com/ushineko/fynedesygn/theme"
+
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/prefs"
 )
@@ -42,8 +44,18 @@ func Menu(a fyne.App, store *config.Store, version string, onChange func(config.
 // MenuWith is Menu, and also the function that opens the preferences window,
 // for a caller that offers another way in: a command-line flag, a desktop
 // entry's second action, or a panel somewhere a person cannot right-click.
-func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) {
+func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) { //nolint:revive // the callback is the panel's only way back
 	var window *prefs.Window
+
+	// applied is every route by which the panel's theme changes: the Window
+	// screen, the Appearance screen the panel falls back to, and the opacity
+	// submenu. They are one function because the panel does not care which of
+	// them it was.
+	applied := func(c config.Config) {
+		if onChange != nil {
+			onChange(c)
+		}
+	}
 
 	open := func() {
 		// One window, however many times the menu is used. A second copy is
@@ -51,13 +63,10 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 		// that overwrites.
 		if window == nil {
 			window = prefs.New(a, prefs.Options{
-				Store:   store,
-				Version: version,
-				OnChange: func() {
-					if onChange != nil {
-						onChange(store.Config())
-					}
-				},
+				Store:    store,
+				Version:  version,
+				Theme:    themeFor(store, applied),
+				OnChange: func() { applied(store.Config()) },
 			})
 		}
 		window.Show()
@@ -66,7 +75,7 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 	return func() *fyne.Menu {
 		return fyne.NewMenu("",
 			fyne.NewMenuItem("Preferences…", open),
-			opacityItem(store, onChange),
+			opacityItem(store, applied),
 			fyne.NewMenuItem("Quit", func() { a.Quit() }),
 		)
 	}, open
@@ -107,4 +116,67 @@ func opacityItem(store *config.Store, onChange func(config.Config)) *fyne.MenuIt
 	item := fyne.NewMenuItem("Opacity", nil)
 	item.ChildMenu = fyne.NewMenu("", items...)
 	return item
+}
+
+/*
+themeFor builds the theme hook the preferences window hands to the shell.
+
+Two things happen here and both are necessary.
+
+**The theme it returns is the preferences window's own, and nothing of the
+panel's belongs in it.** It used to carry the card opacity, on the reasoning
+that setting a theme replaces whatever was wrapped around the last one — which
+was true while this window owned the application's theme and stopped being true
+the moment it took OwnAppearance instead. What it produced was a settings
+window whose every button and separator was drawn at ninety-five per cent,
+over a framebuffer the panel had already asked GLFW to make transparent: the
+desktop showed through the controls. The fade belongs to the cards, and the
+cards are the panel's, so it is applied where the panel's theme is built and
+nowhere else.
+
+Then the panel is told. A glance window paints from its own objects rather
+than from the canvas, so a new theme reaches the preferences window and leaves
+the panel drawn in the old face until something else rebuilds it. The
+notification is queued rather than made here: this runs *while* the shell is
+working out what theme to apply, and a panel that restyled at that moment
+would restyle to the theme it already had.
+
+**It notifies only when the appearance has changed**, and that is load-bearing
+twice over.
+
+The shell asks for a theme whenever it lays itself out, which includes the
+moment the preferences window is built — so an unconditional notification
+made the panel set the application's theme immediately after this window had
+wrapped itself in its own, and a theme set on the application rebuilds every
+window and takes the wrapping with it. The symptom was the whole preferences
+window drawn in the panel's text size: 8 pt against the 12 pt on its own
+Appearance screen, or 20 against 12, always the panel's.
+
+And the notification now puts this window's wrapping back, which would be a
+loop if every layout notified.
+*/
+func themeFor(store *config.Store, notify func(config.Config)) func(fdtheme.Appearance) fyne.Theme {
+	return themeWith(store, notify, func(f func()) { go fyne.Do(f) })
+}
+
+// themeWith is themeFor with the queue named, so a test can watch what would
+// be queued without a running event loop. The queue is the only thing about
+// this that needs Fyne, and it is the only thing a test cannot have.
+func themeWith(
+	store *config.Store,
+	notify func(config.Config),
+	queue func(func()),
+) func(fdtheme.Appearance) fyne.Theme {
+	var last fdtheme.Appearance
+	first := true
+
+	return func(a fdtheme.Appearance) fyne.Theme {
+		changed := first || a != last
+		last, first = a, false
+
+		if notify != nil && changed {
+			queue(func() { notify(store.Config()) })
+		}
+		return a.Theme()
+	}
 }

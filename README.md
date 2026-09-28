@@ -139,6 +139,157 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the usage bar is the window that bites today. It was the window
+  furthest along, which sounds like the same thing and is not: an account a
+  tenth of the way through five hours and three quarters of the way through a
+  week put the week on the bar, and read down a panel of three accounts it gave
+  three bars about three different windows — seven days, a monthly spend, a
+  Business limit. It is the shortest window an account has, and the providers
+  now carry each window's own duration because a name is not a length
+  (spec 012, #34).
+- **Fix**: the cooler keeps what it knew, and plots the processor. liquidctl
+  was opening every HID device on a bus with a documented history of
+  contention, so a poll came back empty several times an hour — and a poll that
+  failed replaced the reading, so the coolant row went away and the panel
+  changed height, at random. It is narrowed with `--match` now, and a failed
+  poll keeps its last values dimmed. The plot carries the processor as a
+  trailing mean over a minute beside the coolant, each scaled to its own range.
+- **Fix**: the peripherals section says what is on the desk now. A device this
+  panel has never had a level from — a headset switched off with its receiver
+  still in — drew a cell that was a name, a dash and a word saying there was
+  nothing to say, and, being sorted by name, drew it in front of the mouse. It
+  has no cell now. A device that gave a level and has gone quiet still keeps
+  one, dim, under "Offline", which is what the monitor does and what a wireless
+  mouse needs: one poll in fourteen comes back empty when the mouse has been
+  still. The cells are ordered by what the device is rather than by its name,
+  so the mouse is first (spec 012, #34).
+- **Fix**: a peripheral is a cell rather than a line. The section drew one
+  label-and-value row per device and argued that the monitor's blocks were an
+  artefact of a narrow panel; put side by side with that program it was wrong,
+  and for a battery the number is the reading and the name is only which one.
+  The state is said under every cell now, not only under a battery that is
+  charging. Needed `glance.Cell` and `glance.CellGrid`, which is fynedesygn
+  v0.1.56 (its spec 040, its #106).
+- **Fix**: the panel opens at the size of its readings. It was 298 px wide at
+  every start while its widest card measured 218, and dragging it narrower did
+  not survive a restart: a resizable panel would not pull its window below the
+  window's current width, and before the first layout that width is Fyne's
+  guess rather than anyone's choice. The device cells reach the right-hand edge
+  now too — a grid with room for three and two devices in it left the last
+  third empty — and a card re-measures its title when the text size changes,
+  which is what had titles reading "Peripheral" and "Bandwidtl" after a move
+  from 8 pt to 9. **219 px** (fynedesygn v0.1.59, its spec 043, its #112 and
+  its quirk 39).
+- **Fix**: the panel's face stops at the panel, dialogs included. The two
+  windows had it the wrong way round: the panel owned the application's theme,
+  on the reasoning that a card is a canvas object a subtree override cannot
+  reach. True, and the wrong conclusion — because a dialog, a dropdown and the
+  context menu are *overlays*, added to the canvas's overlay stack rather than
+  to any window's content, so nothing can override them and they wear the
+  application's theme whatever it is. Opening the font chooser from the
+  preferences window drew a see-through list of font names at eight points.
+  The panel carries its own theme now and the application's is left to the
+  window that has overlays (fynedesygn v0.1.58, its spec 042, its #110 and its
+  quirk 38).
+- **Fix**: a preferences section keeps the window's own face. Opening the
+  window looked right and clicking any section in it switched that section to
+  the panel's font and the panel's transparency, which is how it was reported.
+  A window that owns its appearance keeps it in a subtree override, sections
+  are built when they are first shown, and a subtree installed after an
+  override was built is not covered by it — so every section but the opening
+  one drew in the application's theme, which under that option is deliberately
+  the panel's. Fixed in the design system, which is fynedesygn v0.1.57 (its
+  spec 041, its #108, and its quirk 37).
+- **Fix**: the preferences window is not faded. The card opacity was being
+  applied to the theme that window draws itself in, so its every button and
+  separator was drawn at ninety-five per cent over a framebuffer the panel had
+  already asked GLFW to make transparent, and the desktop showed through the
+  controls. The reasoning behind it was sound while that window owned the
+  application's theme and stopped being sound the moment it took its own; the
+  fade belongs to the cards, and the cards are the panel's.
+- **Fix**: the panel's face stays in the panel. The preferences window is meant
+  to keep the appearance on its own screen and drew at the panel's size
+  instead — 8 pt against 12, or 20 against 12, always the panel's. The shell
+  asks for a theme every time it lays itself out, the hook answered by telling
+  the panel, the panel set the application's theme, and that rebuilds every
+  window and takes the subtree override with it. So the separation was undone
+  by the act of building the window that wanted it.
+
+- The panel has its own faces and size, chosen with the design system's own
+  font choosers: an interface family, a monospace family and a size, all
+  separate from the preferences window's. The panel owns the application's
+  theme, because its cards are canvas objects that cannot be themed per
+  subtree, and the preferences window draws in its own appearance instead
+  (#33).
+- **Fix**: the meters drew their labels in whatever size the application had
+  when they were built. A card restyles its title and its rows; a meter goes in
+  as a plain canvas object and has to be told, so the usage section ignored the
+  panel's size while every other section followed it.
+
+- The panel has a text size of its own, separate from the preferences window's.
+  A Fyne theme is application-wide, so the two shared one — and they are read at
+  different distances: a panel from across a desk, a settings window at arm's
+  length. The panel carries a theme of its own over its own subtree, taking the
+  scheme and the faces from Appearance and departing from it in the one respect
+  that was asked for. It goes down to 8 pt (#33).
+- The navigation's shape is the user's: icons and labels, icons alone or no
+  navigation at all, down the left or across the top. The shell draws the
+  control and binds the shortcut for whichever shapes a program lists, and this
+  one lists them all — four sections is few enough that icons alone are
+  legible.
+- The preferences window has no Refresh button. It rebuilt the current screen,
+  and every screen here holds settings and saves as it is changed, so there was
+  nothing to re-fetch and the button visibly did nothing.
+
+- **Fix**: closing the preferences window no longer closes the program. The
+  design system marked every shell window as the application's master, and
+  closing a master window exits the application — so dismissing the
+  preferences took the panel with it. It is a secondary window now, and its
+  close button puts it away rather than destroying it, because a closed Fyne
+  window cannot be shown again and the panel's menu offers it every time (#33).
+
+- **Fix**: the frameless toggle takes effect on the panel in front of you. KWin
+  applies a window rule to the windows it creates *afterwards* and leaves the
+  ones already on screen alone, so turning it on changed a file and nothing
+  visible — a control that appeared to do nothing. It now also asks KWin to set
+  the property on the running window (#33).
+- Turning it **off** still waits for the next start, and the interface says so
+  rather than claiming otherwise: a window that has lost its titlebar cannot be
+  given one back while it is open.
+
+- **Fix**: the preferences window keeps its titlebar. The KWin rule matched the
+  app ID, and every window in the program carries the same one. It matches the
+  panel's title as well now — and takes out any rule an older version wrote,
+  because a remove keyed on the new match could not see one written under the
+  old key, which left two rules installed and made the toggle look dead (#33).
+- **Fix**: the text size reaches the Usage section. A card restyles its title
+  and its rows; a meter goes in as a plain canvas object, so the card cannot
+  know it has a restyle of its own. Usage was the only section made of meters,
+  which is why it was the only one that did not follow.
+- **Fix**: the cooler draws its trend in the window, as it has in a pane since
+  spec 006. The parity test could not see this one: it compares which sections
+  each shell draws, not what they draw in them.
+- **Fix**: the network card is half the height. Four lines per interface became
+  two — the name and both rates on one line, both totals under them, as the
+  program this replaces draws them.
+- **Fix**: the window no longer keeps its high-water mark. Nothing re-measured
+  it when a card's contents shrank, so a row that went away left a band of
+  panel background below the last card — eighteen pixels of it — that never
+  closed again.
+
+- The panel draws in the appearance you chose. It hard-coded its scheme and
+  its face, so the Appearance screen in the preferences changed the
+  preferences window and nothing else — a font chooser with no effect on the
+  panel sitting beside it. Scheme, interface font, monospace font and text
+  size now reach the panel, as they are changed, without a restart (#32).
+
+- The window manager can resize the panel. It was fixed to its content, which
+  told the window manager it would not take a resize at all — so a frameless
+  panel's own Resize menu item was greyed out and there was no way to ask for a
+  wider one. It still cannot be made *narrower* than its readings, which is
+  Fyne's floor and is why the panel had to stop being wide in the first place
+  (#30).
+
 - **Fix**: the panel fits its corner. It was 655 px wide and 268 px without its
   usage section, so one section was more than doubling the width of the whole
   window: every figure went in one caption, and a caption sets the width of the

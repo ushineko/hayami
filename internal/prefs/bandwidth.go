@@ -33,7 +33,7 @@ func (w *Window) buildBandwidth(s *shell.Shell) fyne.CanvasObject {
 	}
 
 	return container.NewVBox(
-		widgets.Dim("Which interfaces the bandwidth section watches. None, until you say."),
+		widgets.DimWrapped("Which interfaces the bandwidth section watches. None, until you say."),
 		container.NewVBox(rows...),
 	)
 }

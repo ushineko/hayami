@@ -18,6 +18,7 @@ import (
 
 	"github.com/ushineko/fynedesygn/settings"
 	_ "github.com/ushineko/fynedesygn/settings/yamlcodec" // registers .yaml
+	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/desktop"
 	"github.com/ushineko/hayami/internal/view"
@@ -42,6 +43,31 @@ type Config struct {
 	// Interfaces are the network interfaces the bandwidth section watches.
 	Interfaces []string `json:"interfaces"`
 
+	// Font and Mono are the panel's own faces: the interface family and the
+	// monospace one.
+	//
+	// The panel's own, not the preferences window's. Empty means the family
+	// chosen in Appearance, which is what a settings file written before
+	// these existed carries.
+	//
+	// They are two settings and not one because the panel uses both, for the
+	// reason the design system keeps them apart: a label is read as words and
+	// a reading is read as a column, and a column needs every digit the same
+	// width.
+	Font string `json:"font"`
+	Mono string `json:"mono"`
+
+	// FontSize is the panel's text size, in points.
+	//
+	// The panel's own, not the preferences window's. They are read at
+	// different distances — a panel from across a desk, a settings window at
+	// arm's length — and a Fyne theme is application-wide, so the panel
+	// carries a theme of its own to hold this.
+	//
+	// Zero means whatever the appearance says, which is what a settings file
+	// written before this field existed carries.
+	FontSize float32 `json:"fontSize"`
+
 	// Opacity is how opaque the desktop panel is, as a percentage.
 	//
 	// It is only ever applied by the compositor, through the window rule:
@@ -49,6 +75,35 @@ type Config struct {
 	// hayami keeps and KWin acts on. Zero means the default, which is what a
 	// settings file written before this field existed carries.
 	Opacity int `json:"opacity"`
+}
+
+// FontSizeOr is the panel's text size, falling back to the appearance's when
+// the panel has not been given one of its own.
+//
+// Zero is not a legal size, so it is the marker for "not set" — which is what
+// every settings file written before this field existed has.
+func (c Config) FontSizeOr(appearance float32) float32 {
+	if c.FontSize <= 0 {
+		return appearance
+	}
+	return c.FontSize
+}
+
+// PanelAppearance is the appearance the panel draws in: the one chosen in
+// Appearance, with whatever the panel has been given of its own laid over it.
+//
+// A field the panel has not been given falls through to the appearance, so a
+// panel that has only been given a size still follows the scheme and the faces
+// the user picked for everything else.
+func (c Config) PanelAppearance(a fdtheme.Appearance) fdtheme.Appearance {
+	if c.Font != "" {
+		a.Font = c.Font
+	}
+	if c.Mono != "" {
+		a.Mono = c.Mono
+	}
+	a.TextSize = c.FontSizeOr(a.TextSize)
+	return a
 }
 
 // OpacityOrDefault is the opacity to use, resolving the unset zero.
@@ -134,6 +189,15 @@ func (s *Store) Unreadable() error {
 	// which is the whole point of showing it to someone.
 	return s.store.Unreadable()
 }
+
+// Settings is the store underneath, for the parts of the settings file this
+// package does not own.
+//
+// The design system keeps the appearance — scheme, fonts, text size, scale —
+// in its own section of the same file, and reads and writes it through this
+// type. hayami neither parses nor validates any of it; it hands the store
+// over and lets the library do both.
+func (s *Store) Settings() *settings.Store { return s.store }
 
 // Flush writes any pending change now, for a program about to exit.
 func (s *Store) Flush() error {
