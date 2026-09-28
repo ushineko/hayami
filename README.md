@@ -139,6 +139,25 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the preferences window keeps its titlebar. The KWin rule matched the
+  app ID, and every window in the program carries the same one. It matches the
+  panel's title as well now — and takes out any rule an older version wrote,
+  because a remove keyed on the new match could not see one written under the
+  old key, which left two rules installed and made the toggle look dead (#33).
+- **Fix**: the text size reaches the Usage section. A card restyles its title
+  and its rows; a meter goes in as a plain canvas object, so the card cannot
+  know it has a restyle of its own. Usage was the only section made of meters,
+  which is why it was the only one that did not follow.
+- **Fix**: the cooler draws its trend in the window, as it has in a pane since
+  spec 006. The parity test could not see this one: it compares which sections
+  each shell draws, not what they draw in them.
+- **Fix**: the network card is half the height. Four lines per interface became
+  two — the name and both rates on one line, both totals under them, as the
+  program this replaces draws them.
+- **Fix**: the window no longer keeps its high-water mark. Nothing re-measured
+  it when a card's contents shrank, so a row that went away left a band of
+  empty window that never closed.
+
 - The panel draws in the appearance you chose. It hard-coded its scheme and
   its face, so the Appearance screen in the preferences changed the
   preferences window and nothing else — a font chooser with no effect on the

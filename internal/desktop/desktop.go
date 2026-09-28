@@ -32,6 +32,16 @@ import (
 	"github.com/ushineko/fynedesygn/glance/kwin"
 )
 
+// PanelTitle is the panel window's title, and the second thing the rule
+// matches on.
+//
+// **The app ID is not enough.** Every window in the program carries it —
+// Fyne takes the Wayland app_id from the app's unique ID — so a rule keyed on
+// it alone strips the titlebar off the preferences window too, which is a
+// window a person needs to be able to move and close. The design system's
+// Rule.Title exists for exactly this case and says so.
+const PanelTitle = "hayami"
+
 // Description is how the rule identifies itself in System Settings.
 //
 // A rule the user cannot recognise is a rule they cannot remove, and this one
@@ -75,6 +85,7 @@ type Rule struct {
 func ruleFor(appID string) kwin.Rule {
 	return kwin.Rule{
 		AppID:       appID,
+		Title:       PanelTitle,
 		Description: Description,
 		AlwaysOnTop: true,
 		NoBorder:    true,
@@ -88,6 +99,11 @@ func ruleFor(appID string) kwin.Rule {
 // Installing twice updates the rule rather than adding a second, which is the
 // design system's behaviour and is asserted rather than assumed.
 func Install(appID string) error {
+	// Anything written by an older version first, or installing leaves the
+	// two side by side and the older one wins on the windows it matches.
+	if err := removeAll(appID); err != nil {
+		return err
+	}
 	if err := kwin.Install(ruleFor(appID)); err != nil {
 		return fmt.Errorf("installing the window rule: %w", err)
 	}
@@ -99,19 +115,52 @@ func Install(appID string) error {
 // Removing one that is not there is not an error: the user's intent is that
 // there be no rule, and there is none.
 func Remove(appID string) error {
-	if _, err := kwin.Remove(appID); err != nil {
-		return fmt.Errorf("removing the window rule: %w", err)
+	if err := removeAll(appID); err != nil {
+		return err
 	}
 	return reconfigure()
 }
 
+/*
+removeAll takes out every rule this program has ever written for the app ID.
+
+**Both the titled rule and an untitled one.** The rule used to match on the app
+ID alone, which stripped the titlebar off the preferences window too, because
+every window in the program carries the same Wayland app_id. Adding the title
+fixed that and created a worse problem: a remove keyed on the new match cannot
+see a rule written under the old one, so the old rule stayed in the user's
+kwinrulesrc, kept stripping both windows, and made the preferences checkbox
+look like it did nothing — it was removing a rule while another one held the
+panel frameless.
+
+A program that changes what its rule matches on has to clean up after the
+version of itself that matched differently. There is no third form to worry
+about, and if there ever is, it belongs in this list rather than in a comment.
+*/
+func removeAll(appID string) error {
+	for _, title := range []string{PanelTitle, ""} {
+		if _, err := kwin.RemoveTitled(appID, title); err != nil {
+			return fmt.Errorf("removing the window rule: %w", err)
+		}
+	}
+	return nil
+}
+
 // Current reports whether the rule is installed and what opacity it carries.
 func Current(appID string) (Rule, error) {
-	_, found, err := kwin.Lookup(appID)
-	if err != nil {
-		return Rule{}, fmt.Errorf("reading the window rules: %w", err)
+	// Either form counts as installed. A panel held frameless by a rule an
+	// older version wrote is a panel that is frameless, and a checkbox that
+	// said otherwise would be lying about what is on screen.
+	for _, title := range []string{PanelTitle, ""} {
+		_, found, err := kwin.LookupTitled(appID, title)
+		if err != nil {
+			return Rule{}, fmt.Errorf("reading the window rules: %w", err)
+		}
+		if found {
+			return Rule{Installed: true}, nil
+		}
 	}
-	return Rule{Installed: found}, nil
+	return Rule{}, nil
 }
 
 // reconfigure asks KWin to read its rules again, which is what makes a written

@@ -183,3 +183,85 @@ func TestARuleIsWrittenEvenWhenKWinCannotBeTold(t *testing.T) {
 	assert.Contains(t, read(t, path), appID,
 		"the rule should be on disk even when kwin is not there to reload it")
 }
+
+// AC. A rule written before the title match existed is cleaned up.
+//
+// The rule used to match on the app ID alone, which stripped the titlebar off
+// every window in the program. Adding the title fixed that and created a worse
+// problem: a remove keyed on the new match cannot see a rule written under the
+// old one, so the old rule stayed behind, kept stripping both windows, and
+// made the preferences checkbox look like it did nothing.
+func TestARuleFromBeforeTheTitleMatchIsRemoved(t *testing.T) {
+	legacy := `[General]
+count=1
+rules=old
+
+[old]
+Description=hayami — frameless, on top, translucent
+wmclass=io.example.test
+wmclassmatch=1
+above=true
+noborder=true
+`
+	path := rules(t, legacy)
+
+	require.NoError(t, desktop.Remove(appID))
+
+	body := read(t, path)
+	assert.NotContains(t, body, appID,
+		"a rule written before the title match survived the remove")
+}
+
+// And installing does not leave one beside the new rule.
+func TestInstallingDoesNotLeaveTheOlderRuleBeside(t *testing.T) {
+	legacy := `[General]
+count=1
+rules=old
+
+[old]
+Description=hayami — frameless, on top, translucent
+wmclass=io.example.test
+wmclassmatch=1
+noborder=true
+`
+	path := rules(t, legacy)
+
+	_ = desktop.Install(appID)
+
+	body := read(t, path)
+	assert.Equal(t, 1, countOf(body, appID),
+		"two rules for one app: the older one still matches every window")
+	assert.Contains(t, body, "title=hayami",
+		"the surviving rule is the one that matches only the panel")
+}
+
+// A rule from either version reads as installed. A panel held frameless by an
+// older version's rule is a panel that is frameless, and a checkbox saying
+// otherwise would be lying about what is on screen.
+func TestAnOlderRuleStillReadsAsInstalled(t *testing.T) {
+	rules(t, `[General]
+count=1
+rules=old
+
+[old]
+Description=hayami — frameless, on top, translucent
+wmclass=io.example.test
+wmclassmatch=1
+noborder=true
+`)
+
+	current, err := desktop.Current(appID)
+	require.NoError(t, err)
+	assert.True(t, current.Installed)
+}
+
+// The rule matches the panel's title as well as the app ID, so it leaves every
+// other window in the program alone.
+func TestTheRuleMatchesThePanelAndNotTheWholeProgram(t *testing.T) {
+	path := rules(t, "")
+	_ = desktop.Install(appID)
+
+	body := read(t, path)
+	assert.Contains(t, body, "title="+desktop.PanelTitle)
+	assert.Contains(t, body, "titlematch=1", "the title should match exactly")
+}

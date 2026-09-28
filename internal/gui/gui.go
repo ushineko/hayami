@@ -9,10 +9,13 @@ package gui
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	fynetheme "fyne.io/fyne/v2/theme"
 
 	fd "github.com/ushineko/fynedesygn"
 	"github.com/ushineko/fynedesygn/glance"
@@ -70,7 +73,23 @@ type card struct {
 	card   *glance.Card
 	rows   []*glance.Row
 	meters []*glance.Meter
+
+	// spark is the section's trend, for a section that has one. Nil for the
+	// rest, which is most of them.
+	spark *glance.Sparkline
 }
+
+// SparkCapacity is how many samples the window's plot holds.
+//
+// The same as the pane's, because they are drawing the same series: a trend
+// that covered a different span in each shell would be two different readings
+// with one name.
+const SparkCapacity = panel.CoolerTrail
+
+// sparkSeries names the one series a section plots. The design system's
+// sparkline can hold several — the monitor draws two — and hayami has no
+// section that needs a second yet.
+const sparkSeries = "trail"
 
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
@@ -136,6 +155,17 @@ func New(a fyne.App, o Options) *Panel {
 			holder.meters = append(holder.meters, meter)
 			c.AddObject(meter.Object())
 		}
+
+		// A section with a trend to plot gets one. The pane has drawn these
+		// since spec 006 and the window never has, which is a parity gap the
+		// parity test could not see: it compares which sections each shell
+		// draws, not what they draw in them.
+		if len(sec.Trail) > 0 {
+			holder.spark = glance.NewSparkline(SparkCapacity)
+			holder.spark.AddSeries(sparkSeries, fynetheme.Color(fynetheme.ColorNamePrimary), view.SparkMinSpan)
+			c.AddObject(holder.spark)
+		}
+
 		p.cards[s.Key()] = holder
 		p.win.Panel().Add(c)
 	}
@@ -214,6 +244,34 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		c.meters[i].SetTrailing(m.Reset)
 		c.meters[i].SetStats(m.StatsLeft, m.StatsRight)
 	}
+
+	// The plot is given the whole series rather than the newest sample: the
+	// section keeps the trail and this is a view of it, so a window that
+	// missed a poll or was rebuilt still draws the same shape the pane does.
+	if c.spark != nil && len(sec.Trail) > 0 {
+		c.spark.Clear()
+		c.spark.AddSeries(sparkSeries, fynetheme.Color(fynetheme.ColorNamePrimary), view.SparkMinSpan)
+		for _, v := range sec.Trail {
+			c.spark.Add(sparkSeries, v)
+		}
+	}
+
+	/*
+		Re-measure, because a card can get shorter.
+
+		The design system resizes the window when a card is added or hidden,
+		which is the case its own comment is about (quirk 34: a Fyne window
+		grows to fit and never shrinks back on its own). It cannot know about
+		a card whose *contents* shrank — a detail line that went away, a
+		peripheral that was unplugged, a meter's stats row that emptied — and
+		those happen on a poll, several times a minute.
+
+		Without this the window keeps its high-water mark and draws panel
+		background below the last card. It shows as a band of empty window at
+		the bottom that never goes away, because nothing ever lowers the
+		requested size again.
+	*/
+	p.win.Panel().Resize()
 }
 
 // flatten turns a row with a detail line into two rows.
@@ -362,9 +420,7 @@ func Start(o Options) error {
 		o.Menu, open = MenuWith(a, o.Store, o.Version, func(c config.Config) {
 			if p != nil {
 				p.Apply(c)
-				// The cards repaint from their own objects, so a change of
-				// face or scheme reaches them only when they are told.
-				p.win.Panel().Restyle()
+				p.restyle()
 			}
 		})
 	}
@@ -381,6 +437,14 @@ func Start(o Options) error {
 	}
 	p.Poll(ctx)
 
+	go func() {
+		time.Sleep(8 * time.Second)
+		fyne.Do(func() {
+			fmt.Fprintf(os.Stderr, "DBG panel=%v canvas=%v window-content=%v\n",
+				p.win.Panel().Size(), p.win.Window().Canvas().Size(),
+				p.win.Window().Content().Size())
+		})
+	}()
 	p.win.ShowAndRun()
 	return nil
 }
@@ -429,4 +493,32 @@ func baseTheme(t fyne.Theme) fyne.Theme {
 		return faded.Theme
 	}
 	return t
+}
+
+/*
+restyle repaints everything in the panel in the current theme.
+
+The design system's card restyles its title and its rows, and it cannot do
+more: a meter and a sparkline are added to it through AddObject, which takes a
+plain canvas object, so the card has no way to know they have a Restyle of
+their own. This program added them and holds them, so this is where they are
+told.
+
+The symptom when they are not is oddly specific and was reported as one: a
+change of text size takes effect everywhere in the panel *except* the usage
+section, because that is the only section whose readings are meters rather
+than rows.
+*/
+func (p *Panel) restyle() {
+	for _, c := range p.cards {
+		for _, m := range c.meters {
+			m.Restyle()
+		}
+		if c.spark != nil {
+			c.spark.Refresh()
+		}
+	}
+	// The panel last, so it measures the cards after they have been resized
+	// by whatever the new face and size are.
+	p.win.Panel().Restyle()
 }
