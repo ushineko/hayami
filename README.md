@@ -161,6 +161,13 @@ MIT. See [LICENSE](LICENSE).
   The state is said under every cell now, not only under a battery that is
   charging. Needed `glance.Cell` and `glance.CellGrid`, which is fynedesygn
   v0.1.56 (its spec 040, its #106).
+- **Fix**: the preferences window is not faded. The card opacity was being
+  applied to the theme that window draws itself in, so its every button and
+  separator was drawn at ninety-five per cent over a framebuffer the panel had
+  already asked GLFW to make transparent, and the desktop showed through the
+  controls. The reasoning behind it was sound while that window owned the
+  application's theme and stopped being sound the moment it took its own; the
+  fade belongs to the cards, and the cards are the panel's.
 - **Fix**: the panel's face stays in the panel. The preferences window is meant
   to keep the appearance on its own screen and drew at the panel's size
   instead — 8 pt against 12, or 20 against 12, always the panel's. The shell

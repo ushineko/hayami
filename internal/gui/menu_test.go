@@ -4,7 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	fynetheme "fyne.io/fyne/v2/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -168,4 +170,45 @@ func TestTheFirstAskAlwaysTellsThePanel(t *testing.T) {
 	hook(fdtheme.DefaultAppearance())
 
 	assert.Equal(t, 1, told)
+}
+
+/*
+The theme the preferences window wraps itself in carries none of the panel's
+fade.
+
+It used to. The reasoning was sound while that window owned the application's
+theme -- setting a theme replaces whatever was wrapped around the last one, so
+the fade had to be re-applied -- and it stopped being sound the moment the
+window took OwnAppearance and started theming only its own subtree instead.
+
+What it produced was a settings window whose every button and separator was
+drawn at ninety-five per cent, over a framebuffer the panel had already asked
+GLFW to make transparent. The desktop showed through the controls, and it was
+reported as "prefs is partially transparent, seems to be incorrectly using the
+style from the panel" -- which is exactly what it was.
+*/
+func TestThePreferencesThemeCarriesNoneOfThePanelsFade(t *testing.T) {
+	st := store(t)
+	c := st.Config()
+	c.Opacity = 50 // a fade nobody could miss
+	require.NoError(t, st.SetConfig(c))
+
+	hook := gui.ThemeWith(st, nil, func(f func()) { f() })
+	th := hook(fdtheme.DefaultAppearance())
+
+	for _, name := range []fyne.ThemeColorName{
+		fynetheme.ColorNameButton, fynetheme.ColorNameSeparator,
+	} {
+		_, _, _, a := th.Color(name, fynetheme.VariantDark).RGBA()
+		assert.Equal(t, uint32(0xffff), a, "%s is faded in the preferences window", name)
+	}
+}
+
+// And the panel's own theme still carries it, because that is where the cards
+// are and the fade is theirs.
+func TestThePanelsThemeStillFadesItsCards(t *testing.T) {
+	faded := gui.WithCardOpacity(fdtheme.DefaultAppearance().Theme(), 50)
+
+	_, _, _, a := faded.Color(fynetheme.ColorNameButton, fynetheme.VariantDark).RGBA()
+	assert.Less(t, a, uint32(0xffff))
 }

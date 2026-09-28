@@ -134,10 +134,16 @@ themeFor builds the theme hook the preferences window hands to the shell.
 
 Two things happen here and both are necessary.
 
-The appearance decides the scheme, the face and the size, and the card opacity
-is this program's own, applied over the top — because setting a theme replaces
-whatever was wrapped around the last one, so without this, choosing a font
-would quietly undo the fade.
+**The theme it returns is the preferences window's own, and nothing of the
+panel's belongs in it.** It used to carry the card opacity, on the reasoning
+that setting a theme replaces whatever was wrapped around the last one — which
+was true while this window owned the application's theme and stopped being true
+the moment it took OwnAppearance instead. What it produced was a settings
+window whose every button and separator was drawn at ninety-five per cent,
+over a framebuffer the panel had already asked GLFW to make transparent: the
+desktop showed through the controls. The fade belongs to the cards, and the
+cards are the panel's, so it is applied where the panel's theme is built and
+nowhere else.
 
 Then the panel is told. A glance window paints from its own objects rather
 than from the canvas, so a new theme reaches the preferences window and leaves
@@ -182,7 +188,7 @@ func themeWith(
 		if notify != nil && changed {
 			queue(func() { notify(store.Config()) })
 		}
-		return withCardOpacity(a.Theme(), store.Config().OpacityOrDefault())
+		return a.Theme()
 	}
 }
 

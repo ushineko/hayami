@@ -15,6 +15,12 @@ import (
 // widening the package's API for everybody else to be able to say so. The
 // queue is named because the real one is fyne.Do, which needs an event loop a
 // test does not have.
+// WithCardOpacity is withCardOpacity, so a test can say which theme the fade
+// belongs to and which it does not.
+func WithCardOpacity(base fyne.Theme, percent int) fyne.Theme {
+	return withCardOpacity(base, percent)
+}
+
 func ThemeWith(
 	store *config.Store,
 	notify func(config.Config),
