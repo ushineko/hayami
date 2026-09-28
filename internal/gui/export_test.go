@@ -28,3 +28,19 @@ func ThemeWith(
 ) func(fdtheme.Appearance) fyne.Theme {
 	return themeWith(store, notify, queue)
 }
+
+// ShownCells is how many of a card's cells are currently drawn, so a test can
+// say what the window shows without walking the object tree.
+func ShownCells(p *Panel, key string) int {
+	c, ok := p.cards[key]
+	if !ok {
+		return -1
+	}
+	n := 0
+	for _, cell := range c.cells {
+		if cell.Shown() {
+			n++
+		}
+	}
+	return n
+}
