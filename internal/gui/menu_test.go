@@ -77,3 +77,21 @@ func TestTheSubmenuTicksTheDefaultWhenNothingIsSet(t *testing.T) {
 	}
 	assert.True(t, ticked, "no opacity was ticked at all")
 }
+
+// The panel takes a resize from the window manager.
+//
+// A fixed-size window tells the window manager it will not, so a frameless
+// panel's own Resize menu item is greyed out and there is no way to ask for a
+// wider one. It cannot be made narrower than its content whatever this says —
+// Fyne clamps to the minimum size — which is why the content had to be
+// narrowed separately.
+func TestThePanelTakesAResize(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	p := gui.New(a, gui.Options{Title: "hayami"})
+	require.NotNil(t, p.Window())
+
+	assert.False(t, p.Window().Window().FixedSize(),
+		"a fixed-size panel cannot be resized by the window manager at all")
+}

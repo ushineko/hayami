@@ -139,6 +139,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- The window manager can resize the panel. It was fixed to its content, which
+  told the window manager it would not take a resize at all — so a frameless
+  panel's own Resize menu item was greyed out and there was no way to ask for a
+  wider one. It still cannot be made *narrower* than its readings, which is
+  Fyne's floor and is why the panel had to stop being wide in the first place
+  (#30).
+
 - **Fix**: the panel fits its corner. It was 655 px wide and 268 px without its
   usage section, so one section was more than doubling the width of the whole
   window: every figure went in one caption, and a caption sets the width of the

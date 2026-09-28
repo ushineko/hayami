@@ -101,6 +101,18 @@ func New(a fyne.App, o Options) *Panel {
 			// desktop shows through the space between cards. The titlebar is
 			// KWin's to remove and nothing here can ask for it.
 			Translucent: true,
+
+			// Where the panel sits and how big it is are the user's business.
+			// A fixed-size window tells the window manager it will not take a
+			// resize, so a frameless panel's own Resize menu item is greyed
+			// out and there is no way at all to ask for a wider one.
+			//
+			// It cannot be made *narrower* than its content — Fyne clamps to
+			// the minimum size — which is why spec 011 had to narrow the
+			// content rather than rely on this. The two are complementary:
+			// that one was about the panel being the wrong size, this one is
+			// about who gets to change it.
+			Resizable: true,
 		}),
 		cards: map[string]*card{},
 		opts:  o,
