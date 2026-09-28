@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ushineko/hayami/internal/cooler"
 	"github.com/ushineko/hayami/internal/peripherals"
 )
 
@@ -26,4 +27,14 @@ func SetPeripheralSources(
 // SetPeripheralBluetooth replaces just the Bluetooth source.
 func SetPeripheralBluetooth(p *Peripherals, bluetooth func() ([]peripherals.Battery, error)) {
 	p.bluetooth = bluetooth
+}
+
+// SetCoolerSources replaces the two sources, so the suite touches neither the
+// real hwmon tree nor a real subprocess.
+func SetCoolerSources(
+	c *Cooler,
+	sensor func() (float64, error),
+	liquid func(context.Context) (cooler.Liquid, error),
+) {
+	c.sensor, c.liquid = sensor, liquid
 }

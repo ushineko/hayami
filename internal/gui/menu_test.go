@@ -4,7 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
+	fynetheme "fyne.io/fyne/v2/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -127,4 +129,86 @@ func TestAPanelWithNoSettingsTakesTheDefaults(t *testing.T) {
 
 	got := gui.Appearance(a, store(t))
 	assert.Equal(t, fdtheme.DefaultAppearance().Scheme, got.Scheme)
+}
+
+// The shell asks for a theme every time it lays itself out, and the panel
+// answers by setting the application's theme -- which rebuilds every window
+// and takes with it the subtree override that keeps the preferences window in
+// its own appearance.
+//
+// Notifying on every layout therefore undid the separation the moment the
+// window was built: the whole preferences window drew in the panel's text
+// size, 8 pt against the 12 pt on its own Appearance screen. It also makes a
+// loop, because putting the override back is a layout.
+func TestThePanelIsToldOnlyWhenTheAppearanceHasChanged(t *testing.T) {
+	var told int
+	hook := gui.ThemeWith(store(t), func(config.Config) { told++ }, func(f func()) { f() })
+
+	a := fdtheme.DefaultAppearance()
+	require.NotNil(t, hook(a))
+	settled := told
+
+	hook(a)
+	hook(a)
+	assert.Equal(t, settled, told, "laying the window out again is not a change of appearance")
+
+	bigger := a
+	bigger.TextSize = a.TextSize + 4
+	hook(bigger)
+	assert.Equal(t, settled+1, told, "a real change still reaches the panel")
+
+	hook(bigger)
+	assert.Equal(t, settled+1, told)
+}
+
+// The first ask is a change: the panel starts in whatever theme it was built
+// with and has to be told once even if nothing the user did caused it.
+func TestTheFirstAskAlwaysTellsThePanel(t *testing.T) {
+	var told int
+	hook := gui.ThemeWith(store(t), func(config.Config) { told++ }, func(f func()) { f() })
+
+	hook(fdtheme.DefaultAppearance())
+
+	assert.Equal(t, 1, told)
+}
+
+/*
+The theme the preferences window wraps itself in carries none of the panel's
+fade.
+
+It used to. The reasoning was sound while that window owned the application's
+theme -- setting a theme replaces whatever was wrapped around the last one, so
+the fade had to be re-applied -- and it stopped being sound the moment the
+window took OwnAppearance and started theming only its own subtree instead.
+
+What it produced was a settings window whose every button and separator was
+drawn at ninety-five per cent, over a framebuffer the panel had already asked
+GLFW to make transparent. The desktop showed through the controls, and it was
+reported as "prefs is partially transparent, seems to be incorrectly using the
+style from the panel" -- which is exactly what it was.
+*/
+func TestThePreferencesThemeCarriesNoneOfThePanelsFade(t *testing.T) {
+	st := store(t)
+	c := st.Config()
+	c.Opacity = 50 // a fade nobody could miss
+	require.NoError(t, st.SetConfig(c))
+
+	hook := gui.ThemeWith(st, nil, func(f func()) { f() })
+	th := hook(fdtheme.DefaultAppearance())
+
+	for _, name := range []fyne.ThemeColorName{
+		fynetheme.ColorNameButton, fynetheme.ColorNameSeparator,
+	} {
+		_, _, _, a := th.Color(name, fynetheme.VariantDark).RGBA()
+		assert.Equal(t, uint32(0xffff), a, "%s is faded in the preferences window", name)
+	}
+}
+
+// And the panel's own theme still carries it, because that is where the cards
+// are and the fade is theirs.
+func TestThePanelsThemeStillFadesItsCards(t *testing.T) {
+	faded := gui.WithCardOpacity(fdtheme.DefaultAppearance().Theme(), 50)
+
+	_, _, _, a := faded.Color(fynetheme.ColorNameButton, fynetheme.VariantDark).RGBA()
+	assert.Less(t, a, uint32(0xffff))
 }

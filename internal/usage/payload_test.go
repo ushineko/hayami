@@ -111,6 +111,34 @@ func TestTheCodexIndividualLimitCarriesNoCurrencySymbol(t *testing.T) {
 	assert.NotContains(t, limit.Detail, "$")
 }
 
+// The window the bar is about is picked by length, so a length that does not
+// arrive is a bar about the wrong window. A name is not a length: "5h" and
+// "weekly" only sort if something knows what they mean, and this is where
+// that knowledge is put on the value.
+func TestAWindowCarriesItsLengthAndAnAllowanceDoesNot(t *testing.T) {
+	claude, err := usage.Claude(time.Now(), json.RawMessage(claudeWindows))
+	require.NoError(t, err)
+	require.Len(t, claude, 2)
+	assert.Equal(t, 5*time.Hour, claude[0].Span)
+	assert.Equal(t, 7*24*time.Hour, claude[1].Span)
+
+	codex, err := usage.Codex(json.RawMessage(codexPayload))
+	require.NoError(t, err)
+	require.Len(t, codex, 3)
+	assert.Equal(t, 5*time.Hour, codex[0].Span, "three hundred minutes is five hours")
+	assert.Equal(t, 7*24*time.Hour, codex[1].Span)
+	assert.Zero(t, codex[2].Span,
+		"a Business limit states no period, and a guessed one would put it on the bar")
+}
+
+func TestASpendStatesNoPeriodEither(t *testing.T) {
+	got, err := usage.Claude(time.Now(), json.RawMessage(claudeSpend))
+
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	assert.Zero(t, got[len(got)-1].Span)
+}
+
 func TestDecemberRollsOverIntoTheNextYear(t *testing.T) {
 	now := time.Date(2026, time.December, 14, 9, 0, 0, 0, time.UTC)
 

@@ -9,6 +9,7 @@ package gui
 
 import (
 	"context"
+	"image/color"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -18,6 +19,7 @@ import (
 	fd "github.com/ushineko/fynedesygn"
 	"github.com/ushineko/fynedesygn/glance"
 	fdtheme "github.com/ushineko/fynedesygn/theme"
+	"github.com/ushineko/fynedesygn/widgets"
 
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
@@ -75,6 +77,12 @@ type card struct {
 	// spark is the section's trend, for a section that has one. Nil for the
 	// rest, which is most of them.
 	spark *glance.Sparkline
+
+	// grid is the section's cells, for a section whose readings are blocks
+	// rather than lines. Nil for the rest, which is every section but the
+	// peripherals.
+	grid  *glance.CellGrid
+	cells []*glance.Cell
 }
 
 // SparkCapacity is how many samples the window's plot holds.
@@ -84,10 +92,20 @@ type card struct {
 // with one name.
 const SparkCapacity = panel.CoolerTrail
 
-// sparkSeries names the one series a section plots. The design system's
-// sparkline can hold several — the monitor draws two — and hayami has no
-// section that needs a second yet.
-const sparkSeries = "trail"
+/*
+CellSlack is how many spare cells a card of cells is built with.
+
+The library takes objects at build time and a card rebuilt on a poll would
+reflow the window several times a minute, so a cell that was not built cannot
+be added. For a meter that is livable -- an account appearing is rare. For a
+peripheral it is not: a mouse is switched on, a headset comes off its cradle,
+a pair of earbuds is taken out of the case, and a window that had to be
+restarted to see any of it is a window nobody would keep open.
+
+Four, which is what the archetype has slots for and more than this machine has
+ever had at once. They cost nothing while they are hidden.
+*/
+const CellSlack = 4
 
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
@@ -130,6 +148,15 @@ func New(a fyne.App, o Options) *Panel {
 			// that one was about the panel being the wrong size, this one is
 			// about who gets to change it.
 			Resizable: true,
+
+			// No floor: the window is as wide as its widest card and not a
+			// pixel more. The design system's default floor is 260, which is
+			// a guard against a panel of one short reading looking like a
+			// chip; these cards measure 94, 180, 216 and 218, so the floor
+			// was buying nothing and costing forty-two pixels of empty panel
+			// down the right-hand side. A panel the user can resize does not
+			// need protecting from being narrow, either.
+			MinWidth: glance.NoMinWidth,
 		}),
 		cards: map[string]*card{},
 		opts:  o,
@@ -151,16 +178,37 @@ func New(a fyne.App, o Options) *Panel {
 			// the card is narrow. Name() is the three parts as one string.
 			meter := glance.NewMeter(m.Name(), MeterLabelWidth)
 			holder.meters = append(holder.meters, meter)
-			c.AddObject(meter.Object())
+			c.Add(meter)
+		}
+
+		// A section of cells gets a grid. Cells and rows are separate for the
+		// reason the view keeps them separate: they are laid out differently,
+		// and nothing so far has both.
+		if len(sec.Cells) > 0 {
+			holder.grid = glance.NewCellGrid()
+			for i := range len(sec.Cells) + CellSlack {
+				blank := view.NoQuantity()
+				if i < len(sec.Cells) {
+					blank = sec.Cells[i].Value
+				}
+				cell := glance.NewCell("", blank)
+				cell.SetShown(i < len(sec.Cells))
+				holder.cells = append(holder.cells, cell)
+				holder.grid.Add(cell)
+			}
+			c.Add(holder.grid)
 		}
 
 		// A section with a trend to plot gets one. The pane has drawn these
 		// since spec 006 and the window never has, which is a parity gap the
 		// parity test could not see: it compares which sections each shell
 		// draws, not what they draw in them.
-		if len(sec.Trail) > 0 {
+		//
+		// One plot however many series: the design system's sparkline holds
+		// several and scales each to its own range, which is what makes the
+		// coolant and the processor readable on one line.
+		if len(sec.Trails) > 0 {
 			holder.spark = glance.NewSparkline(SparkCapacity)
-			holder.spark.AddSeries(sparkSeries, fynetheme.Color(fynetheme.ColorNamePrimary), view.SparkMinSpan)
 			c.AddObject(holder.spark)
 		}
 
@@ -187,7 +235,7 @@ A reorder therefore takes effect at the next start, which the preferences
 window says. It is in this spec's gaps.
 */
 func (p *Panel) Apply(c config.Config) {
-	p.applyOpacity(c)
+	p.applyTheme(c)
 
 	// And repaint in it. A card restyles its title and its rows; a meter and
 	// a sparkline go in as plain canvas objects and have to be told, and
@@ -218,6 +266,12 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	if !drawn {
 		return
 	}
+
+	// A source that was answering and has stopped keeps its last values and
+	// draws them dim, marker and all. The card does the whole of it; this
+	// only has to say which state it is in, and to say it before the rows are
+	// set so a row written afterwards is not left bright.
+	c.card.SetStale(sec.Gone)
 	rows := flatten(sec.Rows)
 	if len(rows) != len(c.rows) {
 		p.rebuild(c, rows)
@@ -227,6 +281,13 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 			c.rows[i].Set(reading(r))
 		}
 	}
+
+	// A cell the card was not built with cannot be added now, for the reason
+	// the meters below give: the library takes objects at build time. A
+	// peripheral appearing is not rare, though, which is why a card is built
+	// with room and the surplus cells are hidden rather than missing -- see
+	// drawCells.
+	p.drawCells(c, sec.Cells)
 
 	// A meter the card was not built with cannot be added now: the library
 	// takes objects at build time and a card rebuilt on a poll would reflow
@@ -250,13 +311,20 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	}
 
 	// The plot is given the whole series rather than the newest sample: the
-	// section keeps the trail and this is a view of it, so a window that
+	// section keeps the trails and this is a view of them, so a window that
 	// missed a poll or was rebuilt still draws the same shape the pane does.
-	if c.spark != nil && len(sec.Trail) > 0 {
+	//
+	// The series are registered on every draw because their colour follows
+	// the reading -- the coolant's band, and Dim for a section whose source
+	// has stopped answering -- and because a section that gains a trail
+	// should not have to wait for a restart to plot it.
+	if c.spark != nil && len(sec.Trails) > 0 {
 		c.spark.Clear()
-		c.spark.AddSeries(sparkSeries, fynetheme.Color(fynetheme.ColorNamePrimary), view.SparkMinSpan)
-		for _, v := range sec.Trail {
-			c.spark.Add(sparkSeries, v)
+		for _, t := range sec.Trails {
+			c.spark.AddSeries(t.Name, p.trailColour(t, sec.Gone), view.SparkMinSpan)
+			for _, v := range t.Samples {
+				c.spark.Add(t.Name, v)
+			}
 		}
 	}
 
@@ -276,6 +344,35 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		requested size again.
 	*/
 	p.win.Panel().Resize()
+}
+
+/*
+drawCells brings a card's cells up to date.
+
+A cell the card was not built with cannot be added: the library takes objects
+at build time, and a card rebuilt on a poll would reflow the window several
+times a minute. Unlike a meter, though, a section gaining one is an ordinary
+event -- a mouse is switched on, a headset comes off its cradle -- so the
+surplus is drawn as a hidden cell rather than dropped, and a device that
+appears fills one. A device that goes away hides its own again.
+
+CellSlack is how many spare there are. A window that has to be restarted to see
+a peripheral is a window nobody would keep open.
+*/
+func (p *Panel) drawCells(c *card, cells []view.Cell) {
+	for i, cell := range c.cells {
+		if i >= len(cells) {
+			cell.SetShown(false)
+			continue
+		}
+		cl := cells[i]
+		cell.SetName(cl.Label)
+		cell.SetNote(cl.Note)
+		rd := reading(view.Row{Value: cl.Value, Unit: cl.Unit, Status: cl.Status})
+		rd.Stale = cl.Stale
+		cell.Set(rd)
+		cell.SetShown(true)
+	}
 }
 
 // flatten turns a row with a detail line into two rows.
@@ -328,6 +425,32 @@ func reading(r view.Row) glance.Reading {
 		text += " " + r.Unit
 	}
 	return glance.Known(text, status(r.Status))
+}
+
+// trailColour is what a plot's line is drawn in: the trail's own status, or
+// the theme's disabled colour for a section whose source has stopped
+// answering.
+//
+// **Resolved in the panel's theme, not the application's.** A sparkline is
+// given colours rather than a status, so this is the one place the panel
+// picks a colour by hand -- and the application's theme is the preferences
+// window's, which would put that window's scheme on the panel's plot.
+//
+// The dim case is the design system's disabled role rather than a status,
+// because there is no dim status: fd.Status is a verdict, and "we have not
+// heard from this in a minute" is not one. The pane makes the same choice in
+// its own vocabulary, and the two shells must not disagree about what a stale
+// plot looks like.
+func (p *Panel) trailColour(t view.Trail, gone bool) color.Color {
+	th := p.win.Panel().Theme()
+	variant := fynetheme.VariantDark
+	if p.app != nil {
+		variant = p.app.Settings().ThemeVariant()
+	}
+	if gone {
+		return th.Color(fynetheme.ColorNameDisabled, variant)
+	}
+	return th.Color(widgets.StatusColorName(status(t.Status)), variant)
 }
 
 // status maps this program's verdict onto the design system's. They are the
@@ -464,46 +587,32 @@ func Appearance(a fyne.App, store *config.Store) fdtheme.Appearance {
 	return fdtheme.LoadAppearanceFrom(store.Settings(), a.Preferences())
 }
 
-// applyOpacity fades the cards to the setting's value.
-//
-// It re-wraps the app's theme rather than keeping one of its own, so the card
-// opacity composes with whatever the user chose in Appearance: the scheme
-// decides the colour and this decides how much of it survives.
-//
-// glance wraps the theme again when it shows the window, to make the window's
-// own background transparent. The two compose in either order — one names the
-// background and the other names the card — which is why this can be applied
-// whenever the setting changes and not only before the window exists.
 /*
-applyOpacity puts the panel's own appearance on the application's theme.
+applyTheme gives the panel its own face and leaves the application's alone.
 
-**The application's, deliberately.** A Fyne theme is application-wide and only
-one window can own it; the one that should is the one whose widgets cannot be
-overridden, and that is this one — a card, a row and a meter are canvas objects
-that read the app's theme directly. The preferences window is standard widgets
-and draws in its own appearance instead (shell.Options.OwnAppearance).
+**The application's belongs to the preferences window, deliberately.** That is
+the window with *overlays* — a font chooser, a dropdown, the context menu —
+and an overlay is added to the canvas's overlay stack rather than to a window's
+content, so nothing can override one. Whatever the application's theme is, an
+overlay wears it.
 
-An earlier version had this the other way round, with the panel carrying a
-subtree override. It does not work and it does not fail cleanly: the containers
-measure at the override's size while the text draws at the application's, so
-the padding changes, the text does not, and the card titles are clipped by the
-difference.
+It used to be the other way round, on the reasoning that a card is a canvas
+object and a subtree override does not reach one. That was true and it was the
+wrong conclusion: it meant the application's theme was the panel's, so opening
+the font chooser from the preferences window drew the whole dialog in the
+panel's face and the panel's card fade — a see-through list of font names at
+eight points. The design system carries the panel's face explicitly now
+(fynedesygn spec 042), so the panel needs nothing from the application.
+
+The card fade goes here, on the panel's own theme, for the same reason: it is
+the cards' and has no business anywhere else.
 */
-func (p *Panel) applyOpacity(c config.Config) {
+func (p *Panel) applyTheme(c config.Config) {
 	if p.app == nil {
 		return
 	}
 	a := c.PanelAppearance(Appearance(p.app, p.opts.Store))
-	p.app.Settings().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
-}
-
-// baseTheme unwraps a theme this package has already faded, so applying a new
-// opacity does not fade an already-faded card a second time.
-func baseTheme(t fyne.Theme) fyne.Theme {
-	if faded, ok := t.(cardOpacity); ok {
-		return faded.Theme
-	}
-	return t
+	p.win.Panel().SetTheme(withCardOpacity(a.Theme(), c.OpacityOrDefault()))
 }
 
 /*
@@ -524,6 +633,9 @@ func (p *Panel) restyle() {
 	for _, c := range p.cards {
 		for _, m := range c.meters {
 			m.Restyle()
+		}
+		if c.grid != nil {
+			c.grid.Restyle()
 		}
 		if c.spark != nil {
 			c.spark.Refresh()

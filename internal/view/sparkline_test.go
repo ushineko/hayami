@@ -65,8 +65,8 @@ func TestASeriesHoldsItsCapacityAndDropsTheOldest(t *testing.T) {
 // room for it.
 func TestASectionsTrailIsPlottedUnderIt(t *testing.T) {
 	s := view.Section{Key: "cooler", Title: "Cooler",
-		Rows:  []view.Row{{Label: "Coolant", Value: " 46.0", Unit: "°C"}},
-		Trail: []float64{40, 42, 44, 46},
+		Rows:   []view.Row{{Label: "Coolant", Value: " 46.0", Unit: "°C"}},
+		Trails: []view.Trail{{Name: "Coolant", Samples: []float64{40, 42, 44, 46}}},
 	}
 
 	lines := view.Render([]view.Section{s}, view.ArrangeStack, 40)
@@ -74,4 +74,67 @@ func TestASectionsTrailIsPlottedUnderIt(t *testing.T) {
 	joined := strings.Join(lines, "\n")
 	assert.Contains(t, joined, string(view.SparkRunes[len(view.SparkRunes)-1]),
 		"the newest and highest sample should reach the top of the plot")
+}
+
+// Two series on one section are two lines, and in the arrangement that names
+// them they are named for themselves rather than twice for the section. The
+// cooler is the case: "Cooler" against "Cooler" is two plots a reader cannot
+// tell apart, and which one is the coolant is the whole question.
+func TestTwoTrailsAreTwoLinesAndAreNamedApart(t *testing.T) {
+	s := view.Section{Key: "cooler", Title: "Cooler",
+		Rows: []view.Row{{Label: "Coolant", Value: " 46.0", Unit: "°C"}},
+		Trails: []view.Trail{
+			{Name: "Coolant", Samples: []float64{40, 42, 44, 46}},
+			{Name: "CPU", Samples: []float64{60, 70, 80, 90}},
+		},
+	}
+
+	stacked := view.Render([]view.Section{s}, view.ArrangeStack, 40)
+	assert.Len(t, stacked, 4, "a title, a row and a line per trail")
+
+	rows := strings.Join(view.Render([]view.Section{s}, view.ArrangeRow, 60), "\n")
+	assert.Contains(t, rows, "Coolant")
+	assert.Contains(t, rows, "CPU")
+}
+
+// Each series is scaled to its own range. The processor swings thirty-five
+// degrees where the coolant moves under one, so a shared axis flattens the
+// coolant to nothing -- which is the signal the plot exists for.
+func TestEachTrailIsScaledToItsOwnRange(t *testing.T) {
+	coolant := []float64{45.0, 45.4, 45.8}
+	cpu := []float64{60, 80, 100}
+
+	assert.Equal(t,
+		view.Sparkline(coolant, 3, 0.1),
+		view.Sparkline(cpu, 3, 0.1),
+		"two series with the same shape should draw the same line whatever their units")
+}
+
+// A trailing mean starts on the first sample rather than after a minute of
+// blank plot, and it flattens a spike rather than following it.
+func TestAnAveragedSeriesStartsAtOnceAndFlattensASpike(t *testing.T) {
+	a := view.NewAveraged(10, 4)
+
+	a.Add(50)
+	require.Equal(t, []float64{50}, a.Mean(), "a partial window is averaged as it stands")
+
+	for _, v := range []float64{50, 50, 100} {
+		a.Add(v)
+	}
+	means := a.Mean()
+	require.Len(t, means, 4)
+	assert.InDelta(t, 62.5, means[3], 0.001, "the spike is a quarter of the window, not all of it")
+	assert.Less(t, means[3], 100.0)
+}
+
+// The window is the mean's, not the plot's. A mean over four samples kept for
+// ten leaves ten points on the line, each covering the four before it.
+func TestAnAveragedSeriesKeepsItsCapacityOfMeans(t *testing.T) {
+	a := view.NewAveraged(3, 2)
+	for _, v := range []float64{1, 2, 3, 4, 5} {
+		a.Add(v)
+	}
+
+	assert.Equal(t, 3, a.Len())
+	assert.Equal(t, []float64{2.5, 3.5, 4.5}, a.Mean())
 }

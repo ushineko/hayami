@@ -3,7 +3,6 @@ package panel
 import (
 	"context"
 	"errors"
-	"sort"
 	"sync"
 	"time"
 
@@ -21,23 +20,28 @@ const PeripheralsInterval = 15 * time.Second
 
 // PeripheralsForget is how long a device that has stopped answering is kept.
 //
-// A device is drawn stale rather than dropped, because the reader's question
-// is whether its last level is still true. That stops being a useful question
-// eventually: a mouse unplugged this morning is not a mouse that is quiet, it
-// is a mouse that is gone, and a panel still showing it is furniture. Ten
+// The monitor keeps one indefinitely: its slots are fixed, so a device that
+// never comes back costs the slot it already had. These cells are not fixed —
+// they appear and disappear with the hardware — so a memory with no bound is a
+// panel that accumulates every peripheral ever switched on near it. Ten
 // minutes is long enough to cover a headset on its cradle over lunch and short
 // enough that a device put away does not outlast the afternoon.
 const PeripheralsForget = 10 * time.Minute
 
 // Peripherals is the batteries of the devices on the desk.
+//
+// It remembers what each device last said, which is the whole reason this type
+// exists rather than the view reading the devices directly: a peripheral goes
+// quiet, and the panel is the only layer that knows what it said before it
+// did. A wireless mouse that has been still for a minute answers nothing —
+// measured, on the receiver this was written against — and a panel without a
+// memory drops its cell and reflows, which is the fault this memory exists to
+// prevent and the reason the monitor has one too.
 type Peripherals struct {
 	mu      sync.Mutex
 	reading view.PeripheralsReading
 
-	// seen is what each device last said, by name, and when. It is the whole
-	// reason this type exists rather than the view reading the devices
-	// directly: a peripheral goes away, and the panel is the only layer that
-	// knows what it said before it did.
+	// seen is what each device last said, by name, and when.
 	seen map[string]remembered
 
 	// logitech, headsets and bluetooth are the sources, replaced by a test so
@@ -50,7 +54,7 @@ type Peripherals struct {
 	now func() time.Time
 }
 
-// remembered is one device's last good reading.
+// remembered is one device's last reading that had a level in it.
 type remembered struct {
 	reading view.PeripheralReading
 	at      time.Time
@@ -118,24 +122,37 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.reading = p.merge(found)
+	p.reading = p.readings(found)
 	return len(p.reading.Devices) > 0, errors.Join(errs...)
 }
 
-// merge folds this poll's devices into what is remembered.
-//
-// Called with the lock held.
-func (p *Peripherals) merge(found []peripherals.Battery) view.PeripheralsReading {
+/*
+readings is this poll's devices folded into what is remembered, filtered and
+put in the view's order.
+
+Called with the lock held.
+
+Three cases, which are the monitor's and the design system's alike:
+
+  - A device that gave a level is a cell, and is remembered.
+  - A device that is present and has never given one is **not a cell**. There
+    is nothing to draw and, once the cells are ordered, the empty one would sit
+    in front of the mouse. An Arctis whose receiver is in with the headset
+    switched off is this case for a whole session.
+  - A device that gave one before and has gone quiet keeps it, dim, until it
+    has been quiet long enough to be gone rather than quiet.
+*/
+func (p *Peripherals) readings(found []peripherals.Battery) view.PeripheralsReading {
 	now := p.now()
 	fresh := make(map[string]bool, len(found))
 
 	for _, b := range found {
 		reading := view.PeripheralReading{
-			Name:     b.Name,
-			Level:    b.Level,
-			HasLevel: b.HasLevel,
-			Charge:   charge(b.State),
-			Cells:    cells(b.Cells),
+			Name:   b.Name,
+			Level:  b.Level,
+			Charge: charge(b.State),
+			Kind:   kind(b.Kind),
+			Cells:  cells(b.Cells),
 		}
 
 		// A device that is connected and not saying how full it is keeps the
@@ -143,17 +160,27 @@ func (p *Peripherals) merge(found []peripherals.Battery) view.PeripheralsReading
 		// changed. A battery that has crossed between charging and
 		// discharging is not a battery whose old level is merely stale; it is
 		// one whose old level is wrong, and carrying it over would show a
-		// headset filling from a number it has already left.
-		if was, ok := p.seen[b.Name]; ok && !reading.HasLevel && was.reading.HasLevel && was.reading.Charge == reading.Charge {
-			reading.Level, reading.HasLevel = was.reading.Level, true
+		// headset filling from a number it has already left. The monitor
+		// guards its own carry-over on the same two conditions.
+		if !b.HasLevel {
+			was, ok := p.seen[b.Name]
+			if !ok || was.reading.Charge != reading.Charge {
+				// Nothing to carry, or nothing worth carrying. A level from
+				// before the cable is not stale, it is wrong, so it is
+				// forgotten outright rather than left to be drawn dim — which
+				// is what the monitor does too, clearing its cached reading on
+				// the same transition. The device is present and has no level,
+				// so it has no cell.
+				delete(p.seen, b.Name)
+				continue
+			}
+			reading.Level = was.reading.Level
 		}
 
 		fresh[b.Name] = true
 		p.seen[b.Name] = remembered{reading: reading, at: now}
 	}
 
-	// Anything remembered and not found this time is drawn stale, until it has
-	// been quiet long enough to be gone rather than quiet.
 	var out []view.PeripheralReading
 	for name, was := range p.seen {
 		if !fresh[name] {
@@ -165,12 +192,7 @@ func (p *Peripherals) merge(found []peripherals.Battery) view.PeripheralsReading
 		}
 		out = append(out, was.reading)
 	}
-
-	// By name, so a device appearing does not reorder the ones already drawn.
-	// The panel is read at a glance and a row that moves is a row that has to
-	// be found again.
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return view.PeripheralsReading{Devices: out}
+	return view.PeripheralsReading{Devices: view.OrderPeripherals(out)}
 }
 
 // cells translates a device's separate batteries into the view's.
@@ -187,6 +209,20 @@ func cells(in []peripherals.CellReading) []view.PeripheralCell {
 		out = append(out, view.PeripheralCell{Name: c.Cell.String(), Level: c.Level})
 	}
 	return out
+}
+
+// kind translates the reader's device type into the view's.
+func kind(k peripherals.Kind) view.Kind {
+	switch k {
+	case peripherals.KindMouse:
+		return view.KindMouse
+	case peripherals.KindKeyboard:
+		return view.KindKeyboard
+	case peripherals.KindHeadset:
+		return view.KindHeadset
+	default:
+		return view.KindOther
+	}
 }
 
 // charge translates the reader's state into the view's.

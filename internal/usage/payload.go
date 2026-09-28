@@ -27,6 +27,15 @@ type Window struct {
 	// Detail is anything the bar cannot carry: the used and limit values of a
 	// limit that reports them. Empty for most windows.
 	Detail string
+
+	// Span is how long the window is. Zero means the provider did not say,
+	// which is the case for a monthly spend and for a Business limit.
+	//
+	// It is kept because a name is not a duration: "5h" and "weekly" sort by
+	// length only if something knows what they mean, and the panel picks the
+	// window its bar is about by length. A zero span is treated as the
+	// longest there is, which is what an allowance with no stated period is.
+	Span time.Duration
 }
 
 // claudePayload is the part of Anthropic's reply this program reads.
@@ -114,10 +123,20 @@ func Claude(now time.Time, data json.RawMessage) ([]Window, error) {
 
 	var out []Window
 	if w := p.FiveHour; w != nil {
-		out = append(out, Window{Name: "5h", Fraction: w.Utilization / 100, ResetsAt: isoTime(w.ResetsAt)})
+		out = append(out, Window{
+			Name:     "5h",
+			Fraction: w.Utilization / 100,
+			ResetsAt: isoTime(w.ResetsAt),
+			Span:     5 * time.Hour,
+		})
 	}
 	if w := p.SevenDay; w != nil {
-		out = append(out, Window{Name: "7d", Fraction: w.Utilization / 100, ResetsAt: isoTime(w.ResetsAt)})
+		out = append(out, Window{
+			Name:     "7d",
+			Fraction: w.Utilization / 100,
+			ResetsAt: isoTime(w.ResetsAt),
+			Span:     7 * 24 * time.Hour,
+		})
 	}
 	if sp := p.Spend; sp != nil && sp.Enabled {
 		w := Window{Name: "spend", Fraction: sp.Percent / 100, ResetsAt: NextMonth(now)}
@@ -172,6 +191,7 @@ func Codex(data json.RawMessage) ([]Window, error) {
 			Name:     windowName(w.WindowMinutes),
 			Fraction: w.Utilization / 100,
 			ResetsAt: epochTime(w.ResetsAt),
+			Span:     windowSpan(w.WindowMinutes),
 		})
 	}
 	if w := p.Secondary; w != nil {
@@ -179,6 +199,7 @@ func Codex(data json.RawMessage) ([]Window, error) {
 			Name:     windowName(w.WindowMinutes),
 			Fraction: w.Utilization / 100,
 			ResetsAt: epochTime(w.ResetsAt),
+			Span:     windowSpan(w.WindowMinutes),
 		})
 	}
 	if l := p.IndividualLimit; l != nil {
@@ -206,6 +227,16 @@ func windowName(minutes int) string {
 	default:
 		return strconv.Itoa(minutes) + "m"
 	}
+}
+
+// windowSpan is a reported duration in minutes as a duration. A window the
+// app-server did not put a length on has no span, which the panel reads as
+// "longer than any window that does".
+func windowSpan(minutes int) time.Duration {
+	if minutes <= 0 {
+		return 0
+	}
+	return time.Duration(minutes) * time.Minute
 }
 
 // amount tidies a reported number without giving it a unit.

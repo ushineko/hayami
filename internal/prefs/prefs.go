@@ -81,10 +81,18 @@ func New(a fyne.App, o Options) *Window {
 		// to re-fetch and the button visibly did nothing.
 		NoRefresh: true,
 
-		// This window draws in the appearance chosen on its own Appearance
-		// screen; the panel draws in the one chosen for it, and owns the
-		// application's theme because its cards cannot be overridden.
-		OwnAppearance: true,
+		// This window owns the application's theme, and it is the right one
+		// to: it is the window with *overlays*. A font chooser, a dropdown
+		// and the context menu are added to the canvas's overlay stack
+		// rather than to a window's content, so nothing can override them --
+		// whatever the application's theme is, an overlay wears it.
+		//
+		// It used to be the panel that owned it, with this window taking a
+		// subtree override, and the font chooser opened in the panel's face
+		// and the panel's card fade. The panel carries its own theme now
+		// (fynedesygn spec 042) and needs nothing from the application, so
+		// there is nothing left to compete over and no override to keep in
+		// step.
 
 		// The navigation's shape is the user's. Four sections is few enough
 		// that icons alone are legible and a top strip is a reasonable choice

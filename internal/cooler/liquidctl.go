@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -16,6 +17,36 @@ import (
 // the whole poll loop with it, the same reason the Codex app-server is given a
 // deadline.
 const LiquidctlTimeout = 8 * time.Second
+
+/*
+MatchEnv and DefaultMatch narrow liquidctl to the cooler.
+
+**Not a tidiness measure.** Without a match liquidctl opens every device it can
+drive -- on this machine a power supply and an RGB controller as well as the
+cooler -- and each one is a hidraw node held open for as long as the read
+takes. This machine has a documented history of contention on those nodes, and
+the monitor this program replaces passes --match for exactly this reason and
+says so. The symptom when it is left off is not an error: it is a coolant
+temperature that goes missing for a poll or two at random.
+
+The default is this machine's cooler, so a machine with another one sets the
+environment rather than editing a constant. A match that finds nothing is
+ErrNoCooler, which is already a section that draws what the kernel gave it.
+*/
+const (
+	MatchEnv     = "HAYAMI_LIQUIDCTL_MATCH"
+	DefaultMatch = "kraken"
+)
+
+// Match is the substring liquidctl is narrowed to. An empty environment
+// variable is a deliberate "do not narrow", which is how a machine whose
+// cooler this default does not name gets every device looked at again.
+func Match() string {
+	if v, set := os.LookupEnv(MatchEnv); set {
+		return v
+	}
+	return DefaultMatch
+}
 
 // ErrNoLiquidctl is the absence of the program. A machine without it is not a
 // machine with a problem; the section draws what the kernel gave it.
@@ -62,7 +93,13 @@ func Cooling(ctx context.Context) (Liquid, error) {
 	ctx, cancel := context.WithTimeout(ctx, LiquidctlTimeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, path, "--json", "status").Output() //nolint:gosec // the liquidctl on the user's own PATH
+	args := []string{"--json"}
+	if match := Match(); match != "" {
+		args = append(args, "--match", match)
+	}
+	args = append(args, "status")
+
+	out, err := exec.CommandContext(ctx, path, args...).Output() //nolint:gosec // the liquidctl on the user's own PATH
 	if err != nil {
 		return Liquid{}, fmt.Errorf("asking liquidctl for the cooler: %w", err)
 	}
