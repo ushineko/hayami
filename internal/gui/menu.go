@@ -47,20 +47,37 @@ func Menu(a fyne.App, store *config.Store, version string, onChange func(config.
 func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) { //nolint:revive // the callback is the panel's only way back
 	var window *prefs.Window
 
+	/*
+		applied is every route by which the panel's theme changes.
+
+		All of them go through here because all of them end in
+		app.Settings().SetTheme, and a theme set on the application rebuilds
+		every window from it -- taking with it the subtree override that
+		keeps the preferences window out of the panel's face. Whatever
+		changed, that override has to be made again afterwards.
+
+		The opacity submenu is the case that is easy to miss: it never
+		touches a font, but it fades the cards by re-wrapping the
+		application's theme, which is the same event as far as the other
+		window is concerned.
+	*/
+	applied := func(c config.Config) {
+		if onChange != nil {
+			onChange(c)
+		}
+		relayout(window)
+	}
+
 	open := func() {
 		// One window, however many times the menu is used. A second copy is
 		// two views of one file, and the one nobody is looking at is the one
 		// that overwrites.
 		if window == nil {
 			window = prefs.New(a, prefs.Options{
-				Store:   store,
-				Version: version,
-				Theme:   themeFor(store, onChange),
-				OnChange: func() {
-					if onChange != nil {
-						onChange(store.Config())
-					}
-				},
+				Store:    store,
+				Version:  version,
+				Theme:    themeFor(store, applied),
+				OnChange: func() { applied(store.Config()) },
 			})
 		}
 		window.Show()
@@ -69,7 +86,7 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 	return func() *fyne.Menu {
 		return fyne.NewMenu("",
 			fyne.NewMenuItem("Preferences…", open),
-			opacityItem(store, onChange),
+			opacityItem(store, applied),
 			fyne.NewMenuItem("Quit", func() { a.Quit() }),
 		)
 	}, open
@@ -128,12 +145,58 @@ the panel drawn in the old face until something else rebuilds it. The
 notification is queued rather than made here: this runs *while* the shell is
 working out what theme to apply, and a panel that restyled at that moment
 would restyle to the theme it already had.
+
+**It notifies only when the appearance has changed**, and that is load-bearing
+twice over.
+
+The shell asks for a theme whenever it lays itself out, which includes the
+moment the preferences window is built — so an unconditional notification
+made the panel set the application's theme immediately after this window had
+wrapped itself in its own, and a theme set on the application rebuilds every
+window and takes the wrapping with it. The symptom was the whole preferences
+window drawn in the panel's text size: 8 pt against the 12 pt on its own
+Appearance screen, or 20 against 12, always the panel's.
+
+And the notification now puts this window's wrapping back, which would be a
+loop if every layout notified.
 */
 func themeFor(store *config.Store, notify func(config.Config)) func(fdtheme.Appearance) fyne.Theme {
+	return themeWith(store, notify, func(f func()) { go fyne.Do(f) })
+}
+
+// themeWith is themeFor with the queue named, so a test can watch what would
+// be queued without a running event loop. The queue is the only thing about
+// this that needs Fyne, and it is the only thing a test cannot have.
+func themeWith(
+	store *config.Store,
+	notify func(config.Config),
+	queue func(func()),
+) func(fdtheme.Appearance) fyne.Theme {
+	var last fdtheme.Appearance
+	first := true
+
 	return func(a fdtheme.Appearance) fyne.Theme {
-		if notify != nil {
-			go fyne.Do(func() { notify(store.Config()) })
+		changed := first || a != last
+		last, first = a, false
+
+		if notify != nil && changed {
+			queue(func() { notify(store.Config()) })
 		}
 		return withCardOpacity(a.Theme(), store.Config().OpacityOrDefault())
 	}
+}
+
+// relayout draws the preferences window in its own appearance again.
+//
+// A window that owns its appearance keeps it in a subtree override, and an
+// override is built from the objects that were there when it was built. The
+// application's theme changing rebuilds the window from the application's
+// theme, so the override has to be made again afterwards; asking the shell
+// for the appearance it already has is what does that.
+func relayout(w *prefs.Window) {
+	if w == nil {
+		return
+	}
+	s := w.Shell()
+	s.SetAppearance(s.Appearance())
 }

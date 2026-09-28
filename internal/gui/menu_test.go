@@ -128,3 +128,44 @@ func TestAPanelWithNoSettingsTakesTheDefaults(t *testing.T) {
 	got := gui.Appearance(a, store(t))
 	assert.Equal(t, fdtheme.DefaultAppearance().Scheme, got.Scheme)
 }
+
+// The shell asks for a theme every time it lays itself out, and the panel
+// answers by setting the application's theme -- which rebuilds every window
+// and takes with it the subtree override that keeps the preferences window in
+// its own appearance.
+//
+// Notifying on every layout therefore undid the separation the moment the
+// window was built: the whole preferences window drew in the panel's text
+// size, 8 pt against the 12 pt on its own Appearance screen. It also makes a
+// loop, because putting the override back is a layout.
+func TestThePanelIsToldOnlyWhenTheAppearanceHasChanged(t *testing.T) {
+	var told int
+	hook := gui.ThemeWith(store(t), func(config.Config) { told++ }, func(f func()) { f() })
+
+	a := fdtheme.DefaultAppearance()
+	require.NotNil(t, hook(a))
+	settled := told
+
+	hook(a)
+	hook(a)
+	assert.Equal(t, settled, told, "laying the window out again is not a change of appearance")
+
+	bigger := a
+	bigger.TextSize = a.TextSize + 4
+	hook(bigger)
+	assert.Equal(t, settled+1, told, "a real change still reaches the panel")
+
+	hook(bigger)
+	assert.Equal(t, settled+1, told)
+}
+
+// The first ask is a change: the panel starts in whatever theme it was built
+// with and has to be told once even if nothing the user did caused it.
+func TestTheFirstAskAlwaysTellsThePanel(t *testing.T) {
+	var told int
+	hook := gui.ThemeWith(store(t), func(config.Config) { told++ }, func(f func()) { f() })
+
+	hook(fdtheme.DefaultAppearance())
+
+	assert.Equal(t, 1, told)
+}
