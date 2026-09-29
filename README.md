@@ -180,6 +180,29 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Add**: the panel opens where you left it. A Wayland client can neither
+  place itself nor read where it is -- both belong to the compositor -- so
+  this goes through a KWin script that stays loaded and reports the window's
+  position when it changes. Kept beside the other settings and put back at
+  the next start (spec 015, #47).
+- **Add**: each section carries an icon before its title. A panel of four
+  cards was four words, and the icon is what the eye lands on when it is
+  scanning for one of them (fynedesygn #127).
+- **Fix**: the desktop panel builds with `migrated_fynedo` and takes the
+  desktop's cursor. Without the tag, Fyne works out which goroutine it is on
+  by taking a stack traceback at every `Canvas.Refresh` -- profiled elsewhere
+  at 52 % of a process's CPU during a window drag. Without the cursor theme,
+  a Wayland window shows the default pointer rather than the one every other
+  window is using, because the GLFW Wayland backend has no `cursor-shape-v1`
+  (fynedesygn quirks 31 and 15).
+- **Fix**: the panel's labels are measured in the panel's own font. A text
+  measures in the *application's* font unless told otherwise, while the
+  painter draws it in the panel's -- so with a panel font of Adwaita Sans
+  against an application default, "CPU" drew as "CPL" and "tailscale0" lost
+  its last character. Fixed upstream in fynedesygn (#131).
+
 ### 0.2.0 (2026-09-29)
 
 - **Add**: an About screen, with the README itself under the facts rather than

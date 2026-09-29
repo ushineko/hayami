@@ -23,6 +23,7 @@ import (
 	"github.com/ushineko/fynedesygn/widgets"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/desktop"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/readings"
 	"github.com/ushineko/hayami/internal/view"
@@ -190,6 +191,7 @@ func New(a fyne.App, o Options) *Panel {
 			sec = s.Section()
 		}
 		c := glance.NewCard(sec.Title)
+		c.SetIcon(sectionIcon(sec.Icon))
 		holder := &card{card: c}
 		for _, r := range flatten(sec.Rows) {
 			row := glance.NewRow(r.Label, r.Value)
@@ -589,6 +591,61 @@ func restore(sources []panel.Source, drawn map[string]bool, cached readings.Cach
 	return out
 }
 
+/*
+rememberPosition puts the panel back where it was, and keeps it there.
+
+Both halves go through KWin, because neither is the toolkit's to do: a
+Wayland client cannot place itself and cannot read where it is. Where there is
+no KWin this is quiet and the panel opens where the compositor puts it, which
+is what it did before.
+
+The restore waits for the window, because the script matches a window that is
+on screen. The watch is set up first so a move made during the wait is still
+heard.
+*/
+func (p *Panel) rememberPosition(ctx context.Context, store *config.Store) {
+	if store == nil {
+		return
+	}
+	pos := desktop.NewPosition(AppID)
+
+	// Saved only when it differs from what is held, so the storm of
+	// geometryChanged a drag produces is one write at the end of it.
+	if err := pos.Watch(func(x, y int) {
+		c := store.Config()
+		if had, hadY, ok := c.Position(); ok && had == x && hadY == y {
+			return
+		}
+		_ = store.SetConfig(c.WithPosition(x, y))
+	}); err != nil {
+		return // no compositor to ask: not an error, just no memory
+	}
+	go func() {
+		<-ctx.Done()
+		pos.Stop()
+	}()
+
+	x, y, ok := store.Config().Position()
+	if !ok {
+		return
+	}
+	// After the window exists. ShowAndRun has not been called yet, so this
+	// waits for the first frame rather than racing it; a restore that found
+	// no window would silently do nothing.
+	go func() {
+		time.Sleep(RestoreDelay)
+		_ = pos.Restore(x, y)
+	}()
+}
+
+// RestoreDelay is how long the panel waits before putting itself back.
+//
+// Long enough for the window to exist, because the script matches a window
+// that is on screen and one that is not there yet is not moved. Short enough
+// that the panel is not seen in the wrong place first -- which it is, briefly,
+// and that is the cost of a client that cannot place itself.
+const RestoreDelay = 600 * time.Millisecond
+
 // CacheInterval is how often the readings are written out.
 //
 // Not on every poll: the bandwidth section polls every two seconds and a
@@ -746,6 +803,14 @@ func section(sources []panel.Source, key string) view.Section {
 
 // Start builds the window, starts the polls and runs until it closes.
 func Start(o Options) error {
+	// Before the toolkit starts, because GLFW reads the cursor theme from the
+	// environment when it initialises and never again. The Wayland backend
+	// has no cursor-shape-v1, so without this a native Wayland window shows
+	// the default cursor theme rather than the one the desktop is set to --
+	// a pointer that does not match every other window on the screen
+	// (fynedesygn quirk 15).
+	fdtheme.ApplyCursorTheme()
+
 	a := app.NewWithID(AppID)
 	Appearance(a, o.Store).Apply(a)
 
@@ -783,6 +848,7 @@ func Start(o Options) error {
 	a.SetIcon(appIcon())
 
 	p = New(a, o)
+	p.rememberPosition(ctx, o.Store)
 
 	// The panel starts out remembering what it already knew. Without this
 	// the first write replaces the file with only the sections that reported

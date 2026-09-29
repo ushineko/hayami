@@ -140,6 +140,15 @@ type Section struct {
 	// Empty for a section with nothing to plot, which is most of them.
 	Trails []Trail
 
+	// Icon names the glyph a shell draws before the title, from the set in
+	// this package. Empty draws none.
+	//
+	// A name rather than an image, because this package describes a section
+	// and does not know what a picture is: the window resolves it to a Fyne
+	// resource and the pane ignores it, which is the same split every other
+	// field here follows.
+	Icon IconName
+
 	// Restored marks a section drawn from the cache of what the panel last
 	// knew, before this run has heard anything.
 	//
@@ -164,3 +173,27 @@ type Section struct {
 //
 // Both shells draw it the same way, because it means the same thing.
 func (s Section) Dimmed() bool { return s.Gone || s.Restored }
+
+/*
+IconName is the glyph a section asks for.
+
+A closed set, not a free string: a shell has to turn it into something it can
+draw, and a name nothing recognises is a card with a hole where the icon
+should be. Adding one here means adding it to both shells, which is the point.
+*/
+type IconName string
+
+// The glyphs the sections use.
+const (
+	// IconNone is no glyph, and the zero value: a section that says nothing
+	// about an icon gets none.
+	IconNone IconName = ""
+	// IconPeripherals is a battery: the reading the section is about.
+	IconPeripherals IconName = "peripherals"
+	// IconBandwidth is a network.
+	IconBandwidth IconName = "bandwidth"
+	// IconCooler is a temperature.
+	IconCooler IconName = "cooler"
+	// IconUsage is a quota being spent.
+	IconUsage IconName = "usage"
+)

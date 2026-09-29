@@ -47,7 +47,7 @@ type CoolerReading struct {
 // colour that is always on is not a signal — the monitor makes the same point,
 // and colouring the processor would make every compilation look like a fault.
 func Cooler(r CoolerReading) Section {
-	s := Section{Key: "cooler", Title: "Cooler"}
+	s := Section{Key: "cooler", Title: "Cooler", Icon: IconCooler}
 	unit := UnitWidth("°C", "rpm")
 
 	if r.HasCPU {

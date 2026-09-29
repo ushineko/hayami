@@ -172,7 +172,7 @@ however empty it is -- it is being dealt with -- and colouring it would put a
 red cell on the panel for the one battery nobody needs to think about.
 */
 func Peripherals(r PeripheralsReading) Section {
-	s := Section{Key: "peripherals", Title: "Peripherals"}
+	s := Section{Key: "peripherals", Title: "Peripherals", Icon: IconPeripherals}
 	for _, d := range r.Devices {
 		s.Cells = append(s.Cells, peripheral(d))
 	}
