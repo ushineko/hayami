@@ -56,7 +56,7 @@ const UsageStale = 5 * time.Minute
 // rule gave three bars about three different windows — seven days, a monthly
 // spend, a Business limit — which is not a column anybody can compare.
 func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
-	s := Section{Key: "usage", Title: "Usage"}
+	s := Section{Key: "usage", Title: "Usage", Icon: IconUsage}
 
 	for _, group := range byAccount(windows) {
 		lead := leading(group)
