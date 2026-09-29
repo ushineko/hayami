@@ -125,6 +125,26 @@ ever had at once. They cost nothing while they are hidden.
 */
 const CellSlack = 4
 
+/*
+RowSlack is how many spare rows a card is built with.
+
+The same constraint as CellSlack and a sharper consequence. A card's objects go
+into one container in the order they are added, so a row added after the card
+was built lands *under* the sparkline rather than above it -- the reason row
+"Coolant  no cooler" drawn through the plot, which is what the first
+photograph of this change showed.
+
+A card is built from what the first poll or the cache had, and a reason arrives
+whenever a source cannot read something: at the first poll, or an hour later
+when liquidctl is uninstalled. So the rows cannot be counted in advance and the
+spares have to be there from the start.
+
+Four, which covers every section this build has: the cooler's two readings and
+two reasons, the peripherals' three sources, the bandwidth's interfaces one at
+a time. They are hidden and cost nothing, the way the cells do.
+*/
+const RowSlack = 4
+
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
 // can be compared at a glance.
@@ -193,8 +213,16 @@ func New(a fyne.App, o Options) *Panel {
 		c := glance.NewCard(sec.Title)
 		c.SetIcon(sectionIcon(sec.Icon))
 		holder := &card{card: c}
-		for _, r := range flatten(sec.Rows) {
+		// Built with spares, and before the plot, because a row added later
+		// goes in under it. See RowSlack.
+		lines := flatten(sec.Lines())
+		for i := range len(lines) + RowSlack {
+			var r view.Row
+			if i < len(lines) {
+				r = lines[i]
+			}
 			row := glance.NewRow(r.Label, r.Value)
+			row.SetShown(i < len(lines))
 			holder.rows = append(holder.rows, row)
 			c.AddRow(row)
 		}
@@ -315,9 +343,21 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		p.heard(key)
 	} else if !drawn {
 		if restored, err := p.lastKnown(key); err == nil {
+			// The readings come from the cache; the reasons stay this poll's.
+			// A reason is a statement about now, and the cache has none of its
+			// own -- but "the coolant is the last one heard" and "liquidctl
+			// is not installed" are both true at once and the card should say
+			// both.
+			reasons := sec.Reasons
 			sec, drawn = restored, true
+			sec.Reasons = reasons
 		}
 	}
+
+	// A section with nothing to show but a reason for having nothing is still
+	// a section: an absent card and absent hardware are indistinguishable, and
+	// telling them apart is the whole point (issue #54).
+	drawn = drawn || len(sec.Reasons) > 0
 	c.card.SetAvailable(drawn)
 	if !drawn {
 		return
@@ -340,17 +380,13 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// What the section could not fit is a hover away rather than on the card.
 	// The panel is read at a glance by somebody who is not hovering, so this
 	// is only ever detail -- the peripherals the two cells had no room for.
-	c.card.SetTip(sec.Note)
+	c.card.SetTip(sec.Hover())
 
-	rows := flatten(sec.Rows)
-	if len(rows) != len(c.rows) {
-		p.rebuild(c, rows)
-	} else {
-		for i, r := range rows {
-			c.rows[i].SetLabel(r.Label)
-			c.rows[i].Set(reading(r))
-		}
-	}
+	// One path, not two. A card is built with spare rows now (RowSlack), so
+	// the count it holds never equals the count a section wants and the fast
+	// path was never taken; rebuild does the same work plus a SetShown, which
+	// is what makes the spares spare.
+	p.rebuild(c, flatten(sec.Lines()))
 
 	// A cell the card was not built with cannot be added now, for the reason
 	// the meters below give: the library takes objects at build time. A
@@ -469,8 +505,13 @@ func flatten(rows []view.Row) []view.Row {
 	return out
 }
 
-// rebuild replaces a card's rows. It is the slow path and is taken only when
-// the shape of the section changed.
+// rebuild sets a card's rows, showing as many as the section has and hiding
+// the spares it was built with.
+//
+// A row beyond the spares is added, which puts it under the plot rather than
+// above it -- see RowSlack. It is the case the slack exists to keep from
+// happening rather than a case that is handled well, and a section that
+// reached it would be a section this build did not anticipate.
 func (p *Panel) rebuild(c *card, want []view.Row) {
 	rows := c.card.Rows()
 	for i, r := range want {
@@ -713,8 +754,11 @@ func (p *Panel) remember(key string, sec view.Section) {
 	}
 	// Restored is not written back: what goes in the cache is a reading, and
 	// whether it is being *drawn* as a last-known one is the next run's
-	// question rather than this one's.
+	// question rather than this one's. Reasons are not written back either --
+	// they are never serialised, and dropping them here keeps the in-memory
+	// cache the same thing the file is.
 	sec.Restored = false
+	sec.Reasons = nil
 	p.cache[key] = readings.Entry{At: time.Now(), Section: sec}
 }
 
@@ -762,10 +806,11 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 	t := time.NewTicker(s.Interval())
 	defer t.Stop()
 	for {
-		drawn, err := s.Poll(ctx)
-		if err != nil {
-			drawn = false
-		}
+		// The error is not what decides whether anything is drawn. A source
+		// that failed says so in its section's reasons, and Draw knows that a
+		// section with a reason is a section to draw -- discarding the error
+		// into a hidden card is the silence this spec is about (issue #54).
+		drawn, _ := s.Poll(ctx)
 		sec := s.Section()
 		if drawn {
 			p.remember(s.Key(), sec)
@@ -788,12 +833,10 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 func first(ctx context.Context, sources []panel.Source) map[string]bool {
 	out := make(map[string]bool, len(sources))
 	for _, s := range sources {
-		drawn, err := s.Poll(ctx)
-		if err != nil {
-			drawn = false
-		}
-		out[s.Key()] = drawn
+		drawn, _ := s.Poll(ctx)
+		out[s.Key()] = drawn || len(s.Section().Reasons) > 0
 	}
+
 	return out
 }
 

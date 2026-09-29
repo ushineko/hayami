@@ -44,6 +44,12 @@ type Peripherals struct {
 	// seen is what each device last said, by name, and when.
 	seen map[string]remembered
 
+	// reasons are the sources that had nothing to say and why, rebuilt every
+	// poll. A source that found something contributes none: three lines
+	// explaining what is absent, over a card that is already showing a mouse,
+	// would be a panel talking about itself.
+	reasons []view.Reason
+
 	// logitech, headsets and bluetooth are the sources, replaced by a test so
 	// neither a real device nor a real subprocess is touched.
 	logitech  func() ([]peripherals.Battery, error)
@@ -96,39 +102,82 @@ func (p *Peripherals) Interval() time.Duration { return PeripheralsInterval }
 // an empty heading.
 func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	var errs []error
+	var reasons []view.Reason
 
 	found, err := p.logitech()
-	if err != nil {
+	switch {
+	case err != nil:
 		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "the Logitech receiver would not answer", Status: view.Warn,
+			Detail: err.Error(),
+		})
+	case len(found) == 0:
+		reasons = append(reasons, view.Reason{
+			Text: "no Logitech receiver", Status: view.Info,
+		})
 	}
 
 	headsets, err := p.headsets(ctx)
 	switch {
 	case err == nil:
 		found = append(found, headsets...)
+		if len(headsets) == 0 {
+			reasons = append(reasons, view.Reason{
+				Text: "headsetcontrol found no headset", Status: view.Info,
+			})
+		}
 	case errors.Is(err, peripherals.ErrNoHeadsetcontrol):
-		// Not a problem. A machine without it has no headset row.
+		// Not a problem. A machine without it has no headset row -- but a
+		// reader looking at a card with no headset on it deserves to know
+		// that nothing looked, rather than that nothing was found.
+		reasons = append(reasons, view.Reason{
+			Text: "headsetcontrol is not installed", Status: view.Info,
+		})
 	default:
 		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "headsetcontrol failed", Status: view.Warn, Detail: err.Error(),
+		})
 	}
 
 	bluetooth, err := p.bluetooth()
 	switch {
 	case err == nil:
 		found = append(found, bluetooth...)
+		if len(bluetooth) == 0 {
+			reasons = append(reasons, view.Reason{
+				Text: "no Bluetooth device with a battery", Status: view.Info,
+			})
+		}
 	case errors.Is(err, peripherals.ErrNoBluez):
 		// Also not a problem. A machine with no Bluetooth has no Bluetooth
-		// rows, which is what it should look like.
+		// rows, which is what it should look like -- and the reason says
+		// which of the two it is, because "no adapter" and "the daemon is
+		// down" are different things to go and do something about.
+		reasons = append(reasons, view.Reason{
+			Text: "no Bluetooth adapter", Status: view.Info, Detail: err.Error(),
+		})
 	default:
 		// A partial answer is still an answer: Batteries returns what it read
 		// alongside the errors for what it could not.
 		found = append(found, bluetooth...)
 		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "a Bluetooth device would not answer", Status: view.Warn,
+			Detail: err.Error(),
+		})
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.reading = p.readings(found)
+	if len(p.reading.Devices) > 0 {
+		// The card is showing hardware. What else is absent is doctor's
+		// business, not the panel's.
+		reasons = nil
+	}
+	p.reasons = reasons
 	return len(p.reading.Devices) > 0, errors.Join(errs...)
 }
 
@@ -253,7 +302,9 @@ func charge(s peripherals.State) view.Charge {
 func (p *Peripherals) Section() view.Section {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return view.Peripherals(p.reading)
+	sec := view.Peripherals(p.reading)
+	sec.Reasons = p.reasons
+	return sec
 }
 
 // Data is the reading as plain values, for the JSON the command line prints.

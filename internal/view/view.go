@@ -11,6 +11,8 @@ off and must keep doing so.
 */
 package view
 
+import "strings"
+
 /*
 Cell is one device as a block rather than as a line: a name, a reading, and
 what the thing is doing.
@@ -78,6 +80,43 @@ type Trail struct {
 	// Status is the trail's colour. A secondary trace takes Info, which is
 	// the muted one: a plot with two traces of equal weight has no primary,
 	// and the coolant is what the eye should land on.
+	Status Status
+}
+
+/*
+Reason is why a section has nothing, or less than everything, to draw.
+
+**A section that cannot be drawn must say so.** An absent card and an absent
+cooler look identical, and on the machine that prompted this (issue #54) three
+of the four sections were missing with nothing anywhere saying why -- not on
+the card, not in `readings`, not in a log. The half-hour that cost is the whole
+argument for this type.
+
+Status carries the distinction a reader actually needs. Info is hardware this
+machine does not have: stated plainly, dim, no alarm. Warn is a source that
+tried and failed, which is a thing somebody may want to fix.
+
+Detail is never drawn on the card. A card is read at a glance and an exit
+status is not a glance; it is the hover note in the window and a line under its
+reason in `doctor`.
+*/
+type Reason struct {
+	// Label is the reading that is missing -- "Coolant", "CPU" -- or empty
+	// for a line that runs across the section.
+	Label string
+
+	// Text is what the section says: "no cooler", "liquidctl failed".
+	Text string
+
+	// Detail is the underlying error, for the tooltip and for doctor. Empty
+	// for a reason that has nothing more to it, which is most of the Info
+	// ones: "no Bluetooth adapter" is the whole story.
+	Detail string
+
+	// Status is Info for hardware that is not there and Warn for a source
+	// that failed. Nothing here is Bad: a section that cannot be read is not
+	// an emergency, and a panel that cried Bad over a missing headset would
+	// be teaching its reader to ignore the colour.
 	Status Status
 }
 
@@ -174,6 +213,88 @@ type Section struct {
 	// rows keep their last values and are drawn dim, because the reader's
 	// question is whether they are still true.
 	Gone bool
+
+	// Reasons are what this section could not read, and why. They are drawn
+	// dim, after the rows, by both shells, and a section that has reasons is
+	// drawn even when it has no readings at all -- which is the point of
+	// them.
+	//
+	// **Never cached.** A reason is a statement about this moment; restoring
+	// "liquidctl failed" from yesterday's file would be asserting a failure
+	// nobody has observed. The tag is the enforcement, because the cache is
+	// this struct encoded whole.
+	Reasons []Reason `json:"-"`
+}
+
+/*
+Lines are the section's rows followed by its reasons, which is what both shells
+draw and the only form either of them should draw.
+
+A reason is a line in the same column layout as a reading, because that is what
+it stands in for: "Coolant — no cooler" sits where the coolant would have been
+and is read the same way. What it is not is a reading, so an Info reason takes
+Dim -- the status this package keeps for a thing that is not a measurement --
+and a Warn one keeps its verdict, because a source that failed is the one case
+here worth a colour.
+
+Detail never reaches a line. It is the hover note in the window and a line
+under its reason in doctor; a card is read at a glance and a subprocess's exit
+status is not a glance.
+*/
+func (s Section) Lines() []Row {
+	if len(s.Reasons) == 0 {
+		return s.Rows
+	}
+	out := make([]Row, 0, len(s.Rows)+len(s.Reasons))
+	out = append(out, s.Rows...)
+	for _, r := range s.Reasons {
+		status := r.Status
+		if status != Warn && status != Bad {
+			status = Dim
+		}
+		if r.Label == "" {
+			// A reason that stands in for no particular reading is a
+			// sentence, and a sentence reads from the left. The label column
+			// is where a shell puts text; the value column is right-aligned
+			// against the edge, which is correct for a number and wrong for
+			// "headsetcontrol is not installed".
+			out = append(out, Row{Label: r.Text, Status: status})
+			continue
+		}
+		out = append(out, Row{Label: r.Label, Value: r.Text, Status: status})
+	}
+	return out
+}
+
+// Hover is what a shell with a pointer shows on hover: the section's own note,
+// then each reason that has a detail, one per line.
+//
+// The details live here rather than on the card because they are the answer to
+// a question a reader only sometimes asks -- "why not?" -- and a panel that
+// spent two lines on an exit status would be a panel about itself.
+func (s Section) Hover() string {
+	var parts []string
+	if s.Note != "" {
+		parts = append(parts, s.Note)
+	}
+	for _, r := range s.Reasons {
+		if r.Detail == "" {
+			continue
+		}
+		if r.Label != "" {
+			parts = append(parts, r.Label+": "+r.Detail)
+			continue
+		}
+		parts = append(parts, r.Detail)
+	}
+	return strings.Join(parts, "\n")
+}
+
+// Quiet reports whether a section has nothing to draw at all: no readings and
+// no reason for having none. That is a section a shell leaves out, and it is
+// the only one -- an unconfigured section is not a fault and says nothing.
+func (s Section) Quiet() bool {
+	return len(s.Rows) == 0 && len(s.Cells) == 0 && len(s.Meters) == 0 && len(s.Reasons) == 0
 }
 
 // Dimmed reports whether a section's readings are the last ones heard rather

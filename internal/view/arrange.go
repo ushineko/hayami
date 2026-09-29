@@ -110,7 +110,7 @@ func block(s Section, width int, p Painter) []string {
 		p = p.dimmed()
 	}
 	out := []string{p.paint(truncate(title, width), Dim)}
-	for _, r := range s.Rows {
+	for _, r := range s.Lines() {
 		if s.Gone {
 			// The numbers are kept and the verdict is dropped. A green row
 			// for a temperature nobody has measured this minute asserts
@@ -244,7 +244,7 @@ func renderRow(sections []Section, width int, p Painter) []string {
 
 	var out []string
 	for _, s := range sections {
-		for _, r := range s.Rows {
+		for _, r := range s.Lines() {
 			out = append(out, line(labelled(s, r), width, p))
 		}
 		for _, c := range s.Cells {
@@ -304,7 +304,7 @@ func rowColumns(sections []Section) (c columns) {
 		for _, t := range s.Trails {
 			c.label = max(c.label, runeLen(trailLabel(s, t)))
 		}
-		for _, r := range s.Rows {
+		for _, r := range s.Lines() {
 			c.label = max(c.label, runeLen(r.Label))
 		}
 		for _, cell := range s.Cells {

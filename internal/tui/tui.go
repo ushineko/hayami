@@ -105,11 +105,12 @@ func (m Model) Init() tea.Cmd {
 // thermal probe share a pane and nothing else.
 func poll(s panel.Source) tea.Cmd {
 	return func() tea.Msg {
-		drawn, err := s.Poll(context.Background())
-		if err != nil {
-			drawn = false
-		}
-		return polled{key: s.Key(), drawn: drawn}
+		// The error is not what decides whether anything is drawn. A source
+		// that failed says so in its section's reasons, and a section with a
+		// reason is a section to draw -- the alternative is the silence this
+		// whole spec is about (issue #54).
+		drawn, _ := s.Poll(context.Background())
+		return polled{key: s.Key(), drawn: drawn || len(s.Section().Reasons) > 0}
 	}
 }
 

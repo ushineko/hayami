@@ -3,6 +3,7 @@ package panel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -44,6 +45,11 @@ type Cooler struct {
 	// window jump around.
 	gone bool
 
+	// reasons are what this poll could not read, rebuilt every time. They are
+	// never restored from the cache and never carried over from a previous
+	// poll: a reason is a statement about now.
+	reasons []view.Reason
+
 	// sensor and liquid are the two sources, replaced by a test so neither
 	// the real hwmon tree nor a real subprocess is touched.
 	sensor func() (float64, error)
@@ -74,9 +80,16 @@ func (c *Cooler) Interval() time.Duration { return CoolerInterval }
 // machine without the hardware should look like.
 func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	var out view.CoolerReading
+	var reasons []view.Reason
 
 	if v, err := c.sensor(); err == nil {
 		out.CPU, out.HasCPU = v, true
+	} else {
+		reasons = append(reasons, view.Reason{
+			Label: "CPU", Text: "no sensor", Status: view.Info,
+			Detail: fmt.Sprintf("no %s/%s under %s",
+				cooler.CPUPackage.Chip, cooler.CPUPackage.Label, cooler.HwmonRoot),
+		})
 	}
 
 	liquid, err := c.liquid(ctx)
@@ -85,19 +98,44 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		out.Coolant, out.HasLiquid = liquid.Coolant, true
 		out.PumpRPM, out.HasPump = liquid.PumpRPM, liquid.HasPump
 		out.FanRPM, out.HasFan = liquid.FanRPM, liquid.HasFan
-	case errors.Is(err, cooler.ErrNoLiquidctl), errors.Is(err, cooler.ErrNoCooler):
-		// Not a problem. A machine without a liquid cooler is a machine this
-		// program looks at, and the processor is still worth drawing.
+	case errors.Is(err, cooler.ErrNoLiquidctl):
+		// Not a problem. A machine without it is a machine this program looks
+		// at, and the processor is still worth drawing -- but say so, because
+		// an absent row and an absent program are different answers.
+		reasons = append(reasons, view.Reason{
+			Label: "Coolant", Text: "no liquidctl", Status: view.Info,
+			Detail: "liquidctl is not on PATH",
+		})
+		err = nil
+	case errors.Is(err, cooler.ErrNoCooler):
+		reasons = append(reasons, view.Reason{
+			Label: "Coolant", Text: "no cooler", Status: view.Info,
+			Detail: match(),
+		})
 		err = nil
 	default:
-		// A liquidctl that ran and failed is worth neither hiding nor
-		// shouting about: the section draws what it has and the error goes to
-		// the caller, which logs it once.
+		// A liquidctl that ran and failed is a thing somebody may want to
+		// fix, so it is marked rather than stated -- and it is the section's
+		// own business, not only the log's. The error goes to the caller too,
+		// which logs it once.
+		reasons = append(reasons, view.Reason{
+			Text: "liquidctl failed", Status: view.Warn, Detail: err.Error(),
+		})
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.reasons = reasons
 	return c.record(out), err
+}
+
+// match says which devices liquidctl was asked about, which is the first thing
+// to check when a cooler that exists is not being found.
+func match() string {
+	if m := cooler.Match(); m != "" {
+		return fmt.Sprintf("liquidctl --match %q matched nothing", m)
+	}
+	return "liquidctl reports no device with a liquid temperature"
 }
 
 /*
@@ -154,6 +192,7 @@ func (c *Cooler) Section() view.Section {
 	defer c.mu.Unlock()
 	s := view.Cooler(c.reading)
 	s.Gone = c.gone
+	s.Reasons = c.reasons
 	return s
 }
 

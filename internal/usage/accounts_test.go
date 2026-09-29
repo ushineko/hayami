@@ -19,6 +19,16 @@ func touch(t *testing.T, dir, name string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(`{"next_attempt_at":1}`), 0o600))
 }
 
+// fill is a cache file that has actually fetched something, as distinct from
+// one that exists and holds nothing. The difference decides which account
+// supersedes which.
+func fill(t *testing.T, dir, name string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	body := `{"next_attempt_at":1,"fetched_at":1,"data":{"five_hour":{"utilization":1}}}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
+}
+
 // Accounts come from the filenames, so nothing here opens a credential store.
 // That is the point of discovering them this way: a package that cannot read
 // credentials cannot leak or damage them.
@@ -45,14 +55,54 @@ func TestAccountsAreFoundByListingTheCacheAndNothingElse(t *testing.T) {
 // put a dead reading next to a live one under the same heading.
 func TestThePreProfileFileIsDroppedOnceThereAreProfiles(t *testing.T) {
 	dir := tempCache(t)
-	touch(t, dir, "usage.json")
-	touch(t, dir, "usage-max.json")
+	fill(t, dir, "usage.json")
+	fill(t, dir, "usage-max.json")
 
 	got, err := usage.Accounts()
 
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "max", got[0].Label())
+}
+
+/*
+A named profile that has never fetched supersedes nothing.
+
+The case that cost a machine its whole Usage section: `usage-max.json` held
+`"data": null` behind a half-hour backoff, and the nameless `usage.json` --
+which the Python widget keeps full and fresh -- was dropped in its favour, so
+the section drew nothing at all (issue #54). Superseded means replaced, not
+merely outnumbered.
+*/
+func TestThePreProfileFileIsKeptWhenTheProfilesHaveNothing(t *testing.T) {
+	dir := tempCache(t)
+	fill(t, dir, "usage.json")
+	touch(t, dir, "usage-max.json") // exists, has never fetched
+
+	got, err := usage.Accounts()
+
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, "Claude", got[0].Label())
+	assert.Equal(t, "max", got[1].Label())
+}
+
+// And once that profile does fetch, the old file steps aside after all.
+func TestThePreProfileFileStepsAsideOnceAProfileFetches(t *testing.T) {
+	dir := tempCache(t)
+	fill(t, dir, "usage.json")
+	touch(t, dir, "usage-max.json")
+
+	before, err := usage.Accounts()
+	require.NoError(t, err)
+	require.Len(t, before, 2)
+
+	fill(t, dir, "usage-max.json")
+
+	after, err := usage.Accounts()
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	assert.Equal(t, "max", after[0].Label())
 }
 
 // On a machine that never upgraded, that file is the only reading there is.

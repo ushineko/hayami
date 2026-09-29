@@ -98,3 +98,63 @@ func CardMarked(p *Panel, key string) bool {
 	}
 	return false
 }
+
+// CardDrawn reports whether a card is on screen, so a test can say what the
+// window shows without walking the object tree.
+func CardDrawn(p *Panel, key string) bool {
+	c, ok := p.cards[key]
+	if !ok {
+		return false
+	}
+	return c.card.Drawn()
+}
+
+// CardTip is a card's hover text.
+func CardTip(p *Panel, key string) string {
+	c, ok := p.cards[key]
+	if !ok {
+		return ""
+	}
+	return c.card.Tip()
+}
+
+// CardRows is every piece of text a card's shown rows draw.
+//
+// Read off the objects rather than from the row's own fields, because
+// glance.Row exposes its reading and not its label -- a gap logged in spec
+// 015. Walking the object is a test's business and not a reason to widen the
+// library's API from here.
+func CardRows(p *Panel, key string) []string {
+	c, ok := p.cards[key]
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, r := range c.rows {
+		if !r.Shown() {
+			continue
+		}
+		out = append(out, texts(r.Object())...)
+	}
+	return out
+}
+
+// texts is every non-empty string drawn in an object tree.
+func texts(o fyne.CanvasObject) []string {
+	var out []string
+	switch v := o.(type) {
+	case *canvas.Text:
+		if v.Text != "" {
+			out = append(out, v.Text)
+		}
+	case *fyne.Container:
+		for _, child := range v.Objects {
+			out = append(out, texts(child)...)
+		}
+	case fyne.Widget:
+		for _, child := range test.WidgetRenderer(v).Objects() {
+			out = append(out, texts(child)...)
+		}
+	}
+	return out
+}

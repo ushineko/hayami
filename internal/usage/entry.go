@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,6 +38,11 @@ func (e Entry) Fetched() (time.Time, bool) {
 	return epoch(*e.FetchedAt), true
 }
 
+// NextAttempt is the gate as a time: when a caller may fetch again. A panel
+// that is waiting says so, and says until when, rather than drawing a blank
+// for however long the backoff runs.
+func (e Entry) NextAttempt() time.Time { return epoch(e.NextAttemptAt) }
+
 // Open reports whether the gate has passed: whether a caller may fetch.
 func (e Entry) Open(now time.Time) bool {
 	return seconds(now) >= e.NextAttemptAt
@@ -66,7 +72,31 @@ func Read(account, provider string) (*Entry, error) {
 		// that refused to draw over it would cost the whole reading.
 		return nil, nil //nolint:nilerr // deliberate: unreadable cache means no cache
 	}
+	e.Data = payload(e.Data)
 	return &e, nil
+}
+
+/*
+payload normalises a `data` that is present but says nothing.
+
+A fetch that has never succeeded leaves `"data": null` in the file, and
+json.RawMessage keeps that as the four bytes `null` rather than as nil. Those
+four bytes then decode into zero usage windows and **no error**, so an account
+that has never fetched looked exactly like an account that is fine and has
+nothing to report -- which is how a machine sat with an empty Usage section for
+thirty-five minutes with nothing anywhere saying why (issue #54).
+
+Nothing is a reading, so nothing is what this returns.
+
+Read is the only place this is needed. A nil payload and the literal `null`
+serialise to the same four bytes, so a write cannot put anything into the file
+that a read does not take back out.
+*/
+func payload(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || string(bytes.TrimSpace(raw)) == "null" {
+		return nil
+	}
+	return raw
 }
 
 // Write replaces the entry atomically: a temporary file named for this

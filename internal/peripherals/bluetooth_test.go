@@ -158,3 +158,26 @@ func TestNoBluezIsNotAFailure(t *testing.T) {
 	_, err := b.Batteries()
 	require.ErrorIs(t, err, ErrNoBluez)
 }
+
+/*
+A bus name that will not start is BlueZ being absent, not BlueZ failing.
+
+On a machine with no radio at all, `bluetooth.service` never starts -- its
+`ConditionPathIsDirectory=/sys/class/bluetooth` is unmet -- and D-Bus answers an
+activation request with "Could not activate remote peer 'org.bluez': unit
+failed". That is a machine this program looks at, and the peripherals section
+should say "no Bluetooth adapter" rather than reporting a fault (issue #54).
+
+Driven through the real reader with a bus address that resolves to nothing,
+because the wrapping is what is under test and a stub that returned ErrNoBluez
+would be asserting the test's own setup.
+*/
+func TestABusThatWillNotActivateIsErrNoBluez(t *testing.T) {
+	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
+
+	_, err := bluetoothDevices()
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoBluez,
+		"an unreachable system bus was reported as a failure rather than as no Bluetooth")
+}

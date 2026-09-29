@@ -35,15 +35,19 @@ type Usage struct {
 	// now is time.Now, replaced by a test so a countdown can be asserted.
 	now func() time.Time
 
+	// reasons are the accounts that had nothing to say and why, rebuilt every
+	// poll.
+	reasons []view.Reason
+
 	// read gathers the accounts, replaced by a test so neither the real cache
 	// nor a real credential store is touched.
-	read func(ctx context.Context) ([]view.UsageWindow, time.Time, error)
+	read func(ctx context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error)
 }
 
 // NewUsage builds the usage source.
 func NewUsage() *Usage {
 	u := &Usage{now: time.Now}
-	u.read = func(ctx context.Context) ([]view.UsageWindow, time.Time, error) {
+	u.read = func(ctx context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error) {
 		return gather(ctx, u.now())
 	}
 	return u
@@ -66,23 +70,31 @@ func (u *Usage) Poll(ctx context.Context) (bool, error) {
 		return false, err //nolint:wrapcheck // the context's own message is the whole story
 	}
 
-	windows, fetchedAt, err := u.read(ctx)
+	windows, fetchedAt, reasons, err := u.read(ctx)
 	if err != nil {
+		u.mu.Lock()
+		u.reasons = []view.Reason{{
+			Text: "the usage cache could not be read", Status: view.Warn,
+			Detail: err.Error(),
+		}}
+		u.mu.Unlock()
 		return false, err
 	}
 
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.windows, u.fetchedAt = windows, fetchedAt
+	u.windows, u.fetchedAt, u.reasons = windows, fetchedAt, reasons
 	return len(windows) > 0, nil
 }
 
 // Section turns the windows into meters.
 func (u *Usage) Section() view.Section {
 	u.mu.Lock()
-	windows, fetchedAt := u.windows, u.fetchedAt
+	windows, fetchedAt, reasons := u.windows, u.fetchedAt, u.reasons
 	u.mu.Unlock()
-	return view.Usage(u.now(), windows, fetchedAt)
+	sec := view.Usage(u.now(), windows, fetchedAt)
+	sec.Reasons = reasons
+	return sec
 }
 
 // Data is the windows as plain values, for the JSON the command line prints.
@@ -104,25 +116,40 @@ func (u *Usage) Data() any {
 // The oldest reading decides the age shown: a section is as stale as its
 // stalest number, and reporting the freshest would claim the panel is more
 // current than it is.
-func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, error) {
+func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, []view.Reason, error) {
 	accounts, err := usage.Accounts()
 	if err != nil {
-		return nil, time.Time{}, err
+		return nil, time.Time{}, nil, err
 	}
 	stores, badges := claudeStores()
 	accounts = merge(accounts, stores)
 
+	if len(accounts) == 0 {
+		return nil, time.Time{}, []view.Reason{{
+			Text: "no Claude or Codex account", Status: view.Info,
+			Detail: "no credential store and nothing in the usage cache",
+		}}, nil
+	}
+
 	var out []view.UsageWindow
+	var reasons []view.Reason
 	var oldest time.Time
 	for _, a := range accounts {
-		result := refresh(ctx, now, a, stores)
+		result, ferr := refresh(ctx, now, a, stores)
 
 		windows, err := decode(now, a, result.Data)
 		if err != nil {
 			// One account's payload not decoding is one account, not the
 			// section. The canary in internal/usage reports a format change;
 			// a pane should still draw the accounts that do decode.
+			reasons = append(reasons, view.Reason{
+				Label: a.Label(), Text: "unreadable reading", Status: view.Warn,
+				Detail: err.Error(),
+			})
 			continue
+		}
+		if len(windows) == 0 {
+			reasons = append(reasons, silence(now, a, ferr))
 		}
 		for _, w := range windows {
 			out = append(out, view.UsageWindow{
@@ -139,7 +166,44 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 			oldest = result.FetchedAt
 		}
 	}
-	return out, oldest, nil
+	// The reasons stand even when other accounts drew: a quota missing from a
+	// list of quotas is exactly the silence this is here to break.
+	return out, oldest, reasons, nil
+}
+
+/*
+silence is why one account contributed no windows.
+
+Three cases, and telling them apart is the point. A fetch that failed is a
+Warn with the error under it. A fetch that has not been *allowed* yet -- the
+gate closed by an earlier failure, with nothing cached behind it -- says so and
+says until when, because thirty-five minutes of blank panel with no explanation
+is the fault that prompted this (issue #54). Anything else is an account that
+has simply never fetched.
+
+The gate is not shortened here. It is written into a file three programs read,
+and a build that set its own would be deciding for the other two; this says
+what is happening instead.
+*/
+func silence(now time.Time, a usage.Account, err error) view.Reason {
+	if err != nil {
+		return view.Reason{
+			Label: a.Label(), Text: "could not be read", Status: view.Warn,
+			Detail: err.Error(),
+		}
+	}
+
+	entry, rerr := usage.Read(a.Name, a.Provider)
+	if rerr == nil && entry != nil && !entry.Open(now) {
+		return view.Reason{
+			Label: a.Label(), Text: "waiting to retry", Status: view.Warn,
+			Detail: "an earlier fetch failed; the shared cache's gate opens at " +
+				entry.NextAttempt().Format("15:04"),
+		}
+	}
+	return view.Reason{
+		Label: a.Label(), Text: "nothing fetched yet", Status: view.Info,
+	}
 }
 
 // refresh asks the cache for one account, fetching when its gate is open and
@@ -148,24 +212,25 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 // An account with no credential store and no Codex is read and not fetched:
 // calling Cached with a fetch that always fails would push the gate out for
 // every other program too, which is the opposite of cooperating.
-func refresh(ctx context.Context, now time.Time, a usage.Account, stores map[string]claude.Store) usage.Result {
+//
+// The error is returned as well as the result, because the two are not the
+// same thing: a failed fetch still yields the last good reading, and a section
+// that draws stale numbers should still be able to say why they are stale.
+func refresh(ctx context.Context, now time.Time, a usage.Account, stores map[string]claude.Store) (usage.Result, error) {
 	fetch := fetcher(ctx, a, stores)
 	if fetch == nil {
 		entry, err := usage.Read(a.Name, a.Provider)
 		if err != nil || entry == nil {
-			return usage.Result{}
+			return usage.Result{}, err
 		}
-		return usage.Served(*entry)
+		return usage.Served(*entry), nil
 	}
 
+	// A failed fetch still yields the last good reading, which is what Cached
+	// returns alongside the error. An outage shows stale numbers rather than
+	// an empty panel.
 	result, err := usage.Cached(now, UsageTTL, a.Name, a.Provider, false, fetch)
-	if err != nil {
-		// A failed fetch still yields the last good reading, which is what
-		// Cached returns alongside the error. An outage shows stale numbers
-		// rather than an empty panel.
-		return result
-	}
-	return result
+	return result, err
 }
 
 // fetcher is how this account is fetched, or nil when it cannot be.

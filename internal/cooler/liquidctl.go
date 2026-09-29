@@ -56,6 +56,22 @@ var ErrNoLiquidctl = errors.New("liquidctl is not installed")
 // this program looks at a machine that may not have one.
 var ErrNoCooler = errors.New("liquidctl reports no liquid cooler")
 
+/*
+noMatch is what liquidctl says when --match names nothing on this machine.
+
+It says it on stderr and **exits 1**, which is the trap: a machine with no
+Kraken is not a machine where liquidctl failed, but every non-zero exit looked
+the same from here, so the error was neither ErrNoCooler nor ErrNoLiquidctl
+and the whole cooler section was dropped -- processor temperature and all --
+on a box that simply has no AIO (issue #54).
+
+Matched as a substring, and deliberately not anchored. A future liquidctl that
+rewords this falls through to the generic error, which reaches the panel as a
+reason with the exit status in it: visibly wrong rather than silently absent,
+which is the failure this file now prefers.
+*/
+const noMatch = "no device matches available drivers and selection criteria"
+
 // Liquid is what the cooler says about itself.
 type Liquid struct {
 	// Coolant is the liquid temperature in degrees.
@@ -101,10 +117,51 @@ func Cooling(ctx context.Context) (Liquid, error) {
 
 	out, err := exec.CommandContext(ctx, path, args...).Output() //nolint:gosec // the liquidctl on the user's own PATH
 	if err != nil {
-		return Liquid{}, fmt.Errorf("asking liquidctl for the cooler: %w", err)
+		return Liquid{}, classify(err)
 	}
 	return Parse(out)
 }
+
+// classify reads a failed run, separating "this machine has no cooler" from
+// "liquidctl went wrong".
+//
+// The message is on stderr, which Output captures into the ExitError for
+// exactly this: a caller that has to tell the two apart.
+func classify(err error) error {
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		if strings.Contains(string(exit.Stderr), noMatch) {
+			return ErrNoCooler
+		}
+		if stderr := firstLine(exit.Stderr); stderr != "" {
+			return fmt.Errorf("asking liquidctl for the cooler: %w: %s", err, stderr)
+		}
+	}
+	return fmt.Errorf("asking liquidctl for the cooler: %w", err)
+}
+
+// firstLine is the first non-empty line of a subprocess's stderr, trimmed and
+// bounded.
+//
+// Bounded because this ends up in a tooltip and in doctor's output, and a
+// liquidctl that printed a Python traceback would otherwise put the whole of
+// it there.
+func firstLine(b []byte) string {
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if len(line) > maxStderr {
+			return line[:maxStderr] + "…"
+		}
+		return line
+	}
+	return ""
+}
+
+// maxStderr is how much of a subprocess's complaint is worth repeating.
+const maxStderr = 200
 
 /*
 Parse reads liquidctl's report and picks the cooler out of it.
