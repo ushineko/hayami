@@ -761,6 +761,8 @@ func Start(o Options) error {
 	}
 
 	o.Sections = sections
+	a.SetIcon(appIcon())
+
 	p = New(a, o)
 
 	// The panel starts out remembering what it already knew. Without this

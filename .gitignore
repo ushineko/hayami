@@ -4,11 +4,14 @@
 /dist/
 *.exe
 
-# Any other binary built in a worktree. A 36 MB test build was committed by a
+# Any other binary built in a worktree. A 35 MB test build was committed by a
 # `git add -A` because the ignore list named only the two release binaries;
 # these are the same programs under whatever name someone gave them.
+#
+# No negation for hayami-tui: `!` would *un-ignore* it and put a 21 MB binary
+# back in reach of the next `git add -A`, which is the fault this line exists
+# to close. The pattern covers it and that is the point.
 /hayami-*
-!/hayami-tui
 
 # Coverage
 coverage.out
