@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=hayami
+GenericName=Glance panel
+Comment=Peripheral batteries, bandwidth, cooler and usage, read at a glance
+Exec=hayami
+Icon=hayami
+Terminal=false
+Categories=Utility;System;Monitor;
+Keywords=battery;peripheral;mouse;headset;bandwidth;network;temperature;cooler;usage;panel;glance;
+StartupNotify=true
+# The basename of this file must stay io.ushineko.hayami.desktop. Fyne sets the
+# Wayland app_id from the application's unique ID (gui.AppID), and a Wayland
+# compositor resolves a window's icon by matching that app_id to a desktop file
+# of the same name. Renaming this to hayami.desktop silently costs the taskbar
+# icon on every Wayland session. StartupWMClass covers X11 and XWayland, where
+# the match is on WM_CLASS instead.
+StartupWMClass=io.ushineko.hayami

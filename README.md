@@ -77,6 +77,35 @@ hayami installs when asked — from the preferences window, or with
 `hayami window install`. Without it the panel is translucent and has a
 titlebar.
 
+## Installing it
+
+```
+./install.sh                # the two programs, a launcher entry and an icon
+./install.sh --autostart    # and start the panel when you log in
+./install.sh --dry-run      # show what that would do, change nothing
+./uninstall.sh              # remove exactly those, keeping your settings
+```
+
+Everything goes under `~/.local`, nothing needs root, and re-running is safe.
+The titlebar is not part of it: that is a KWin rule the program offers from
+its preferences window or with `hayami window install`, because it writes into
+the same `kwinrulesrc` as every other rule you have.
+
+### Replacing peripheral-battery-monitor
+
+The installer does not touch it. It is another program you chose to run, and
+disabling it is your move, not an installer's -- the two sit side by side
+quite happily while you decide. When you are ready:
+
+```
+rm ~/.config/autostart/peripheral-battery-monitor.desktop   # stop it at login
+pkill -f peripheral-battery.py                              # stop it now
+./install.sh --autostart                                    # and hayami takes over
+```
+
+The monitor's own `uninstall.sh` removes the rest of it. Your Claude usage
+cache is shared between the two and is not touched by either.
+
 ## Running it
 
 ```
@@ -138,6 +167,14 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- **Add**: hayami installs. `install.sh` builds from the checkout and puts the
+  two programs, a launcher entry and an icon under `~/.local`; `--autostart`
+  also starts the panel at login, and `uninstall.sh` removes exactly those.
+  There was no installer, no desktop entry and no icon at all, so the panel
+  had to be run from its checkout by hand -- which is not a glance panel. The
+  desktop entry's basename has to match the app ID or a Wayland compositor
+  cannot find the icon, and the file says so (spec 014, #44).
 
 - **Add**: the panel opens showing what it last knew. Every section'"'"'s reading
   is kept in `${XDG_CACHE_HOME}/hayami/sections.json` and restored at startup,
