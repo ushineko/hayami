@@ -61,6 +61,21 @@ lint: install-lint ## Lint files
 
 # Headless: the window's tests run under Fyne's test driver, and the audio
 # tests skip where no sound server is listening.
+.PHONY: check-no-binaries
+check-no-binaries: ## Fail if a compiled binary is tracked in the repository
+	@found=$$(git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
+	    | grep -E 'application/x-(executable|sharedlib|pie-executable|archive)' \
+	    | cut -d: -f1); \
+	if [ -n "$$found" ]; then \
+	    echo "Compiled binaries are tracked in this repository:" >&2; \
+	    echo "$$found" | sed 's/^/  /' >&2; \
+	    echo >&2; \
+	    echo "Remove them with: git rm --cached <file>" >&2; \
+	    echo "They are build output; .gitignore should already cover them." >&2; \
+	    exit 1; \
+	fi; \
+	echo "No compiled binaries are tracked."
+
 .PHONY: test
 test: ## Run the tests with the race detector
 	go test -race ./...

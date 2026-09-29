@@ -30,6 +30,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols
 
+      # Two binaries reached main in one day -- a 35 MB test build and a 20 MB
+      # hayami-tui -- both by `git add -A`, and the second slipped past the
+      # .gitignore line written to stop the first. An ignore file only governs
+      # what is untracked and can be negated by accident; this cannot.
+      - name: No binaries in the repository
+        run: make check-no-binaries
+
       - name: Test
         run: go test -race ./...
 
