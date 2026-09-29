@@ -11,6 +11,18 @@ BINDIR=$(shell go env GOPATH)
 MODULE=github.com/ushineko/hayami
 VERSION=$(shell cat VERSION)
 
+# migrated_fynedo tells Fyne this front end has been through the fyne.Do
+# migration, so it stops asking which goroutine it is on. Without it, Fyne
+# answers that question with runtime.Stack -- a full traceback -- on every
+# Canvas.Refresh. Profiled on a sibling program during a window drag: 52% of
+# the process's CPU was printing tracebacks. Every UI mutation off the main
+# goroutine here goes through fyne.Do, which is what the tag asserts.
+# See fynedesygn docs/fyne-quirks.md, quirk 31.
+#
+# The terminal panel does not take it: it has no Fyne window and no main
+# goroutine to be on the wrong side of.
+FYNE_TAGS?=migrated_fynedo
+
 LINT_NAME?=golangci-lint
 LINT_VERSION?=v2.12.2
 LINT_PROGRAM=$(LINT_NAME)-$(LINT_VERSION)
@@ -88,7 +100,7 @@ LDFLAGS=-X github.com/ushineko/hayami/internal/buildinfo.version=$(VERSION)
 
 .PHONY: build
 build: ## Build both panels for the host platform
-	CGO_ENABLED=1 go build -trimpath -ldflags='$(LDFLAGS)' -o hayami ./cmd/hayami
+	CGO_ENABLED=1 go build -trimpath -tags '$(FYNE_TAGS)' -ldflags='$(LDFLAGS)' -o hayami ./cmd/hayami
 	CGO_ENABLED=0 go build -trimpath -ldflags='$(LDFLAGS)' -o hayami-tui ./cmd/hayami-tui
 
 .PHONY: vuln
