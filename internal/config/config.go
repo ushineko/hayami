@@ -75,6 +75,30 @@ type Config struct {
 	// hayami keeps and KWin acts on. Zero means the default, which is what a
 	// settings file written before this field existed carries.
 	Opacity int `json:"opacity"`
+
+	// X and Y are where the panel last was, in the compositor's coordinates.
+	//
+	// Kept because a Wayland client cannot place itself and cannot read
+	// where it is: both are the compositor's, and the only way to either is
+	// a KWin script. A glance panel lives in one corner of one screen and
+	// being asked to put it there again at every login is the friction that
+	// makes a thing not worth running.
+	//
+	// Placed is the marker for "we have a position", because zero is a
+	// legal coordinate -- the top-left corner of the leftmost screen -- and
+	// a settings file written before these existed has to mean "no".
+	X      int  `json:"x"`
+	Y      int  `json:"y"`
+	Placed bool `json:"placed"`
+}
+
+// Position is where the panel last was, and whether it has ever been told.
+func (c Config) Position() (x, y int, ok bool) { return c.X, c.Y, c.Placed }
+
+// WithPosition is the config with a new position remembered.
+func (c Config) WithPosition(x, y int) Config {
+	c.X, c.Y, c.Placed = x, y, true
+	return c
 }
 
 // FontSizeOr is the panel's text size, falling back to the appearance's when
