@@ -336,6 +336,12 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	} else {
 		c.card.SetLastKnown(sec.Restored)
 	}
+
+	// What the section could not fit is a hover away rather than on the card.
+	// The panel is read at a glance by somebody who is not hovering, so this
+	// is only ever detail -- the peripherals the two cells had no room for.
+	c.card.SetTip(sec.Note)
+
 	rows := flatten(sec.Rows)
 	if len(rows) != len(c.rows) {
 		p.rebuild(c, rows)

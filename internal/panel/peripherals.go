@@ -58,6 +58,12 @@ type Peripherals struct {
 type remembered struct {
 	reading view.PeripheralReading
 	at      time.Time
+
+	// since is when this device was last detected after not being there. It
+	// survives a poll the device answered and is set again only when the
+	// device has been forgotten in between, which is what makes it "when you
+	// switched this on" rather than "when this program started".
+	since time.Time
 }
 
 // NewPeripherals builds the peripherals source.
@@ -177,8 +183,14 @@ func (p *Peripherals) readings(found []peripherals.Battery) view.PeripheralsRead
 			reading.Level = was.reading.Level
 		}
 
+		since := now
+		if was, ok := p.seen[b.Name]; ok {
+			since = was.since
+		}
+		reading.Since, reading.Seen = since, now
+
 		fresh[b.Name] = true
-		p.seen[b.Name] = remembered{reading: reading, at: now}
+		p.seen[b.Name] = remembered{reading: reading, at: now, since: since}
 	}
 
 	var out []view.PeripheralReading

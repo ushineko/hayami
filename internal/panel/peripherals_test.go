@@ -280,3 +280,60 @@ func TestAMachineWithNeitherSourceDrawsNoSection(t *testing.T) {
 		assert.Empty(t, devices(p))
 	}
 }
+
+// AC. Since is when a device arrived, not when it last answered.
+//
+// The right-hand slot goes to the device detected most recently, so a Since
+// that moved with every poll would make every device equally new and the slot
+// would be decided by the name again.
+func TestSinceIsWhenTheDeviceArrivedNotWhenItLastAnswered(t *testing.T) {
+	c := &clock{at: time.Now()}
+	arrived := c.at
+	p := source(t, c, func() []peripherals.Battery {
+		return []peripherals.Battery{{Name: "G502 X PLUS", Level: 86, HasLevel: true}}
+	})
+
+	_, err := p.Poll(context.Background())
+	require.NoError(t, err)
+	c.tick(time.Minute)
+	_, err = p.Poll(context.Background())
+	require.NoError(t, err)
+
+	found := devices(p)
+	require.Len(t, found, 1)
+	assert.Equal(t, arrived, found[0].Since, "the arrival moved with the poll")
+	assert.Equal(t, c.at, found[0].Seen, "the last answer did not move with the poll")
+}
+
+// AC. A device that was forgotten and comes back is new, so switching a
+// headset off and on again puts it back in the slot.
+func TestADeviceThatComesBackIsNewAgain(t *testing.T) {
+	c := &clock{at: time.Now()}
+	present := true
+	p := source(t, c, func() []peripherals.Battery {
+		if !present {
+			return nil
+		}
+		return []peripherals.Battery{{Name: "G502 X PLUS", Level: 86, HasLevel: true}}
+	})
+
+	_, err := p.Poll(context.Background())
+	require.NoError(t, err)
+	arrived := c.at
+
+	present = false
+	c.tick(panel.PeripheralsForget + time.Minute)
+	_, err = p.Poll(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, devices(p), "the device was not forgotten")
+
+	present = true
+	c.tick(time.Minute)
+	_, err = p.Poll(context.Background())
+	require.NoError(t, err)
+
+	found := devices(p)
+	require.Len(t, found, 1)
+	assert.Equal(t, c.at, found[0].Since, "a device that came back kept its old arrival")
+	assert.NotEqual(t, arrived, found[0].Since)
+}
