@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.1.0
+**Version**: 0.2.0
 
 *a chart you read at a glance*
 
@@ -180,7 +180,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.2.0 (2026-09-29)
 
 - **Add**: an About screen, with the README itself under the facts rather than
   a shortened restatement that would drift from it.
