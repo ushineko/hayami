@@ -4,6 +4,12 @@
 /dist/
 *.exe
 
+# Any other binary built in a worktree. A 36 MB test build was committed by a
+# `git add -A` because the ignore list named only the two release binaries;
+# these are the same programs under whatever name someone gave them.
+/hayami-*
+!/hayami-tui
+
 # Coverage
 coverage.out
 count.out

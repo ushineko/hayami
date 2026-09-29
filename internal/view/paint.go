@@ -31,3 +31,13 @@ func (p Painter) paint(text string, status Status) string {
 	}
 	return p(text, status)
 }
+
+// dimmed is a painter with every verdict replaced by Dim.
+//
+// For a section whose readings are the last ones heard rather than the
+// current ones. Dimming wins over the verdict, as it does for a stale reading
+// in the design system: a warning that is no longer being refreshed should
+// not keep shouting.
+func (p Painter) dimmed() Painter {
+	return func(text string, _ Status) string { return p.paint(text, Dim) }
+}

@@ -140,8 +140,27 @@ type Section struct {
 	// Empty for a section with nothing to plot, which is most of them.
 	Trails []Trail
 
+	// Restored marks a section drawn from the cache of what the panel last
+	// knew, before this run has heard anything.
+	//
+	// Both shells draw it the way they draw Gone -- dim -- because the
+	// meaning is the same: this is the last reading and not the current one.
+	// It is a separate field rather than a reuse because the pane appends
+	// "(unavailable)" to a Gone section, and that is the wrong thing to say
+	// about a panel that has only just started. A restored section says
+	// nothing extra; being dim is the whole of the message, and it stops
+	// being dim as soon as a live poll lands.
+	Restored bool
+
 	// Gone marks a section whose source was answering and has stopped. Its
 	// rows keep their last values and are drawn dim, because the reader's
 	// question is whether they are still true.
 	Gone bool
 }
+
+// Dimmed reports whether a section's readings are the last ones heard rather
+// than current ones — a source that has stopped answering, or a reading
+// restored from the cache before this run has heard anything.
+//
+// Both shells draw it the same way, because it means the same thing.
+func (s Section) Dimmed() bool { return s.Gone || s.Restored }

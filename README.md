@@ -139,6 +139,15 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Add**: the panel opens showing what it last knew. Every section'"'"'s reading
+  is kept in `${XDG_CACHE_HOME}/hayami/sections.json` and restored at startup,
+  drawn dim until a live reading replaces it, and ignored beyond a day. A
+  section was blank until its first poll landed, and where that poll missed it
+  stayed blank for a whole interval -- a wireless mouse that has been still
+  answers nothing about one poll in fourteen, so it was the ordinary case. The
+  cards are built from the restored shape too, which is the fault behind #40
+  addressed at its source rather than padded around (spec 013, #42).
+
 - **Fix**: the panel is invisible between its cards again, not filled. The
   design system asks for a framebuffer with an alpha channel and got one, but
   Fyne clears every window from the *application* theme's background and that

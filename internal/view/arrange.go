@@ -103,6 +103,12 @@ func block(s Section, width int, p Painter) []string {
 	if s.Gone {
 		title += " (unavailable)"
 	}
+	if s.Dimmed() {
+		// The readings are the last ones heard. Dimming them is the whole of
+		// what says so -- and for a restored section it is the only thing,
+		// since nothing is appended to its title.
+		p = p.dimmed()
+	}
 	out := []string{p.paint(truncate(title, width), Dim)}
 	for _, r := range s.Rows {
 		if s.Gone {
