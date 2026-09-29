@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.2.0
+**Version**: 0.3.0
 
 *a chart you read at a glance*
 
@@ -180,7 +180,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.3.0 (2026-09-29)
 
 - **Add**: the panel opens where you left it. A Wayland client can neither
   place itself nor read where it is -- both belong to the compositor -- so
