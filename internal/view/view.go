@@ -140,6 +140,15 @@ type Section struct {
 	// Empty for a section with nothing to plot, which is most of them.
 	Trails []Trail
 
+	// Note is what the section says when the pointer rests on it: detail
+	// there is no room to draw. Empty for a section with nothing extra to
+	// say, which is most of them.
+	//
+	// A shell that has no pointer -- the terminal panel -- ignores it, which
+	// is the right answer rather than a gap: a note is for what did not fit,
+	// and a terminal that cannot show it is no worse off than before.
+	Note string
+
 	// Icon names the glyph a shell draws before the title, from the set in
 	// this package. Empty draws none.
 	//

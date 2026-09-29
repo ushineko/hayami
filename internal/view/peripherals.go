@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The battery bands, in percent.
@@ -114,6 +115,18 @@ type PeripheralReading struct {
 	// stays legible and stops asserting itself.
 	Stale bool
 
+	// Since is when this device was last detected after not being there, and
+	// Seen is when it last answered. Both are set by the panel, which is the
+	// only layer that watches devices come and go.
+	//
+	// They exist for SelectPeripherals and are read by nothing that draws. A
+	// panel with two slots has to choose which of three headsets gets the
+	// second one, and "the one you just switched on" is the only answer that
+	// is ever right -- name and kind cannot tell a headset put on from a
+	// headset in a drawer.
+	Since time.Time
+	Seen  time.Time
+
 	// Cells are the separate batteries inside a device that has more than
 	// one, already named and in the order to draw them. Empty for the
 	// ordinary device with a single battery.
@@ -173,10 +186,31 @@ red cell on the panel for the one battery nobody needs to think about.
 */
 func Peripherals(r PeripheralsReading) Section {
 	s := Section{Key: "peripherals", Title: "Peripherals", Icon: IconPeripherals}
-	for _, d := range r.Devices {
+	shown, overflow := SelectPeripherals(r.Devices)
+	for _, d := range shown {
 		s.Cells = append(s.Cells, peripheral(d))
 	}
+	s.Note = overflowNote(overflow)
 	return s
+}
+
+// overflowNote names the devices there was no slot for, most recent first.
+//
+// A line each rather than a count: "2 more" says a number is missing and not
+// which, and the reader asking is asking about a particular pair of
+// headphones. The state is said too, because a device in this list is one the
+// panel is not drawing and the whole of what it would have drawn is a level
+// and a state.
+func overflowNote(overflow []PeripheralReading) string {
+	if len(overflow) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(overflow)+1)
+	lines = append(lines, "Also connected:")
+	for _, d := range overflow {
+		lines = append(lines, "  "+d.Name+"  "+strings.TrimSpace(Count(d.Level))+" %  "+chargeNote(d))
+	}
+	return strings.Join(lines, "\n")
 }
 
 /*
@@ -198,6 +232,91 @@ func OrderPeripherals(devices []PeripheralReading) []PeripheralReading {
 		return cmp.Compare(a.Name, b.Name)
 	})
 	return out
+}
+
+// PeripheralSlots is how many devices the section draws.
+//
+// **Two, always the same two places.** A cell per device was honest and it
+// made the card breathe: plug a second pair of headphones in and the card grew
+// a third of its width, everything beside it moved, and the panel the eye had
+// learned was a different panel. A battery reading is glanced at, and a glance
+// wants the number to be where it was last time more than it wants every
+// number at once.
+const PeripheralSlots = 2
+
+/*
+SelectPeripherals cuts the devices down to the two the section draws, and
+returns the rest.
+
+**The mouse holds the left slot**, for the reason Kind.Rank gives: a desk has
+one, it is there whenever the machine is, and it is what the panel is usually
+being asked about. It holds the slot even when it has gone quiet, because a
+mouse idle is not a mouse gone and moving the pointer brings it straight back
+-- a slot that emptied every time the hand left the desk would be the same
+flicker in a smaller place.
+
+**The right slot is whatever is live**, most recently detected first: the
+headset just switched on is the one being thought about. When nothing else is
+live it keeps the one that went quiet most recently, rather than emptying, so
+the card is the same width with the headphones on the desk as with them on.
+
+Everything beyond the two is returned as overflow, in the same order, for the
+caller to say somewhere that does not take space on the card.
+
+devices arrive in OrderPeripherals' order and the two that are picked keep it,
+so the mouse is drawn first.
+*/
+func SelectPeripherals(devices []PeripheralReading) (shown, overflow []PeripheralReading) {
+	rest := slices.Clone(devices)
+
+	// The mouse is taken out first so the ordering below never has to make an
+	// exception for it.
+	var left []PeripheralReading
+	if i := slices.IndexFunc(rest, func(d PeripheralReading) bool { return d.Kind == KindMouse }); i >= 0 {
+		left = append(left, rest[i])
+		rest = slices.Delete(rest, i, i+1)
+	}
+
+	slices.SortStableFunc(rest, byLiveThenRecent)
+
+	take := min(PeripheralSlots-len(left), len(rest))
+	return append(left, rest[:take]...), rest[take:]
+}
+
+/*
+byLiveThenRecent puts a device that is answering before one that is not, and
+the most recently detected of each first.
+
+Recency is Since for a live device -- when it arrived -- and Seen for a quiet
+one -- when it was last heard. They are different questions and the same
+intent: the device whose state changed last is the one the reader changed.
+
+The name breaks a tie so a panel with two devices detected in the same poll
+does not swap them between polls.
+*/
+func byLiveThenRecent(a, b PeripheralReading) int {
+	if a.Stale != b.Stale {
+		if a.Stale {
+			return 1
+		}
+		return -1
+	}
+	at, bt := a.Since, b.Since
+	if a.Stale {
+		at, bt = a.Seen, b.Seen
+	}
+	if n := bt.Compare(at); n != 0 {
+		return n
+	}
+
+	// Two devices detected in the same poll -- everything already on at
+	// startup -- have nothing to separate them in time, and Kind.Rank is the
+	// same judgement the whole section is ordered by. Then the name, so the
+	// slot does not swap between polls.
+	if n := cmp.Compare(a.Kind.Rank(), b.Kind.Rank()); n != 0 {
+		return n
+	}
+	return cmp.Compare(a.Name, b.Name)
 }
 
 // peripheral is one device's cell.

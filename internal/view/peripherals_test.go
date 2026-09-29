@@ -3,6 +3,7 @@ package view_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,9 +125,13 @@ func TestTheMouseComesFirst(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
 		[]view.PeripheralReading{other, headset, mouse, keyboard})})
 
-	require.Len(t, s.Cells, 4)
-	assert.Equal(t, []string{"G502 X PLUS", "Keychron K4 HE", "Arctis Nova Pro Wireless", "A Gamepad"},
-		[]string{s.Cells[0].Label, s.Cells[1].Label, s.Cells[2].Label, s.Cells[3].Label})
+	// Two slots: the mouse, then the best of the rest, which with everything
+	// detected at once is the keyboard. The other two are the note.
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, []string{"G502 X PLUS", "Keychron K4 HE"},
+		[]string{s.Cells[0].Label, s.Cells[1].Label})
+	assert.Contains(t, s.Note, "Arctis Nova Pro Wireless")
+	assert.Contains(t, s.Note, "A Gamepad")
 }
 
 // AC15. Within a kind it is still by name, so a cell moves only when the
@@ -245,4 +250,92 @@ func TestAnOrdinaryStateIsNotSaidBesideTheSeparateBatteries(t *testing.T) {
 
 	require.Len(t, s.Cells, 1)
 	assert.Equal(t, "L 80  R 90", s.Cells[0].Note)
+}
+
+// detected is a device seen at a moment, live unless it is marked stale.
+func detected(name string, level int, k view.Kind, at time.Time) view.PeripheralReading {
+	d := reading(name, level)
+	d.Kind, d.Since, d.Seen = k, at, at
+	return d
+}
+
+// AC. The section never draws more than two devices, so the card does not
+// change width when a pair of headphones is connected.
+func TestTheSectionDrawsTwoDevicesAtMost(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	devices := []view.PeripheralReading{
+		detected("G502 X PLUS", 78, view.KindMouse, t0),
+		detected("Arctis Nova Pro", 47, view.KindHeadset, t0),
+		detected("AirPods Pro", 81, view.KindHeadset, t0),
+		detected("Keychron K4 HE", 90, view.KindKeyboard, t0),
+	}
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(devices)})
+
+	assert.Len(t, s.Cells, 2)
+}
+
+// AC. The right slot goes to the device switched on most recently, not to the
+// one whose name sorts first.
+func TestTheRightSlotGoesToTheNewestLiveDevice(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	devices := []view.PeripheralReading{
+		detected("G502 X PLUS", 78, view.KindMouse, t0),
+		detected("Arctis Nova Pro", 47, view.KindHeadset, t0),
+		detected("AirPods Pro", 81, view.KindHeadset, t0.Add(time.Minute)),
+	}
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(devices)})
+
+	require.Len(t, s.Cells, 2)
+	assert.Equal(t, "G502 X PLUS", s.Cells[0].Label, "the mouse gave up the left slot")
+	assert.Equal(t, "AirPods Pro", s.Cells[1].Label,
+		"the right slot went to the older device")
+	assert.Contains(t, s.Note, "Arctis Nova Pro", "the device with no slot was not named")
+}
+
+// AC. A live device takes the slot from one that has gone quiet, however
+// recently that one was heard.
+func TestALiveDeviceOutranksAQuietOne(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	quiet := detected("Arctis Nova Pro", 47, view.KindHeadset, t0.Add(time.Hour))
+	quiet.Stale = true
+	live := detected("AirPods Pro", 81, view.KindHeadset, t0)
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{quiet, live})})
+
+	require.Len(t, s.Cells, 2)
+	assert.Equal(t, "AirPods Pro", s.Cells[0].Label)
+}
+
+// AC. With nothing live, the slot keeps the device that went quiet last, so
+// the card is the same width with the headphones off as on.
+func TestThePanelKeepsTheLastDeviceToGoQuiet(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	mouse := detected("G502 X PLUS", 78, view.KindMouse, t0)
+	older := detected("Arctis Nova Pro", 47, view.KindHeadset, t0)
+	older.Stale, older.Seen = true, t0
+	newer := detected("AirPods Pro", 81, view.KindHeadset, t0)
+	newer.Stale, newer.Seen = true, t0.Add(time.Minute)
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{mouse, older, newer})})
+
+	require.Len(t, s.Cells, 2)
+	assert.Equal(t, "AirPods Pro", s.Cells[1].Label)
+}
+
+// AC. Two devices are two cells and no note, so the ordinary desk says nothing
+// about overflow.
+func TestTwoDevicesHaveNoNote(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+			detected("AirPods Pro", 81, view.KindHeadset, t0),
+		})})
+
+	assert.Len(t, s.Cells, 2)
+	assert.Empty(t, s.Note)
 }

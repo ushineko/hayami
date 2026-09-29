@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.3.1
+**Version**: 0.3.2
 
 *a chart you read at a glance*
 
@@ -179,6 +179,21 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.3.2 (2026-09-29)
+
+- **Change**: the peripherals section draws two devices and no more: the mouse
+  on the left, and on the right whatever is live, most recently switched on
+  first. A cell per device was honest and it made the card breathe -- connect
+  a second pair of headphones and the card grew a third wider, everything
+  beside it moved, and the panel the eye had learned was a different panel. A
+  battery is glanced at, and a glance wants the number to be where it was last
+  time more than it wants every number at once. When nothing else is live the
+  right slot keeps the device that went quiet last, so the card is the same
+  width with the headphones on the desk as on the head.
+- **Add**: the devices there was no slot for are named when the pointer rests
+  on the card, with their level and state. Detail, not the reading: a panel is
+  read by somebody who is not hovering (fynedesygn #136).
 
 ### 0.3.1 (2026-09-29)
 
