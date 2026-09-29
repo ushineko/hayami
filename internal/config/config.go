@@ -223,9 +223,27 @@ func (s *Store) Unreadable() error {
 // over and lets the library do both.
 func (s *Store) Settings() *settings.Store { return s.store }
 
-// Flush writes any pending change now, for a program about to exit.
+// Flush writes any pending change now, without giving the store up.
 func (s *Store) Flush() error {
 	if err := s.store.Flush(); err != nil {
+		return fmt.Errorf("writing the settings: %w", err)
+	}
+	return nil
+}
+
+/*
+Close writes any pending change and stops the store writing on its own.
+
+For a program about to exit, which is the case this was missing. A change
+made in the last moments -- the position the compositor reported as the
+window went away is the one that matters here -- is in the store's memory with
+a write scheduled a second later, and the process does not last a second. The
+panel lost the position it had just been moved to, every time, and the only
+reason the setting ever reached disk was that the panel usually sat still for
+longer than the timer.
+*/
+func (s *Store) Close() error {
+	if err := s.store.Close(); err != nil {
 		return fmt.Errorf("writing the settings: %w", err)
 	}
 	return nil
