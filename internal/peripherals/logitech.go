@@ -237,15 +237,40 @@ func name(e endpoint, timeout time.Duration, index, feature byte) string {
 		}
 		out = append(out, chunk...)
 	}
-	if len(out) > length {
-		out = out[:length]
-	}
 
-	trimmed := trimName(out)
-	if trimmed == "" {
+	/*
+		**A name has to arrive whole, and be a name all the way through.**
+
+		The device declares its own length before sending any of it, so a reply
+		that does not fill that length did not belong to this request -- and
+		the printable-byte filter is happy to turn one stray byte into a
+		plausible label. That is how a battery level of 81 became a peripheral
+		called "Q" on a panel, beside the mouse it had been read from:
+		`chr(81)`, drawn as confidently as the real name next to it (issue #58).
+
+		Counting the bytes is not enough on its own, because a short reply
+		arrives in a report padded with zeroes and a few of those make it look
+		long enough. What a name cannot survive is a hole: the declared run has
+		to be printable from end to end, which the real thing is and a stray
+		byte followed by padding is not.
+
+		defaultName is the honest answer. A device whose name will not read is
+		still a battery worth drawing, and an unnamed one says so rather than
+		inventing something that looks right.
+	*/
+	if len(out) < length {
 		return defaultName
 	}
-	return trimmed
+	name, whole := printableName(out[:length])
+	if !whole {
+		return defaultName
+	}
+	// Trimmed only for display: the check above is against the declared run,
+	// and a device whose name really does end in a space should keep its name.
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		return trimmed
+	}
+	return defaultName
 }
 
 // featureDeviceName is feature 0x0005, which carries the name the device calls
@@ -307,19 +332,23 @@ const defaultName = "Logitech"
 // with nonsense should cost one refused read rather than a loop.
 const maxNameLength = 64
 
-// trimName makes a device's name printable.
+// printableName keeps a name's printable bytes and reports whether *every*
+// byte was one.
 //
-// The protocol pads the last chunk, so the tail is NULs or spaces; anything
-// else unprintable is dropped rather than drawn, because a control character
-// in a row's label would move the column it sits in.
-func trimName(b []byte) string {
+// The two answers are separate because they are asked for different reasons.
+// A control character is dropped rather than drawn, since one in a label would
+// move the column it sits in. But a hole in the declared run is the mark of a
+// reply that did not belong to this request, and only the caller comparing
+// against the declared length can see that -- so the fact is handed back
+// rather than quietly repaired.
+func printableName(b []byte) (string, bool) {
 	out := make([]rune, 0, len(b))
 	for _, c := range b {
 		if c >= 0x20 && c < 0x7F {
 			out = append(out, rune(c))
 		}
 	}
-	return strings.TrimSpace(string(out))
+	return string(out), len(out) == len(b)
 }
 
 // closeEndpoint closes an endpoint that can be closed.

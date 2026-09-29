@@ -23,10 +23,28 @@ const (
 	reportLong  = 0x11
 )
 
-// softwareID marks a reply as an answer to this program's request rather than
-// to another program's, or to no request at all. Any value from 1 to 15 will
-// do; devices echo it back in the low nibble of the function byte.
-const softwareID = 0x08
+/*
+softwareID marks a reply as an answer to *this process's* request.
+
+Devices echo it back in the low nibble of the function byte, and HID++ reserves
+four bits of every request for it so that concurrent clients can tell their
+answers apart. It used to be the constant 0x08, which separated hayami from
+Solaar and did nothing at all between two hayamis -- and there are routinely
+several: the panel polls the receiver every fifteen seconds while
+`hayami-tui readings`, a pane, or `doctor` asks the same node. Two requests
+agreeing on device index, feature index and function would then accept each
+other's replies.
+
+That is not theoretical. A phantom peripheral called "Q" appeared beside a real
+mouse on the panel, at the same percentage: 81 is `chr('Q')`, so a battery
+level had been decoded as a device name (issue #58).
+
+Taken from the process ID because it has to differ between processes and
+nothing else about it matters. Two processes can still collide -- one chance in
+fifteen -- so it narrows the window rather than closing it, and the name check
+in logitech.go is the other half.
+*/
+var softwareID = byte(os.Getpid()%15) + 1
 
 // rootFeature is feature 0x0000, the one every HID++ 2.0 device has at index
 // zero. Its function 0 maps a feature ID to that device's index for it.
