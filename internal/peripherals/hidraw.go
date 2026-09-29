@@ -15,8 +15,12 @@ var SysHidraw = "/sys/class/hidraw"
 // DevDir is where the nodes themselves live, for the same reason.
 var DevDir = "/dev"
 
-// logitechVendor is Logitech's USB vendor ID.
-const logitechVendor = 0x046D
+// The USB vendor IDs this package knows how to talk to.
+const (
+	logitechVendor    = 0x046D
+	razerVendor       = 0x1532
+	steelseriesVendor = 0x1038
+)
 
 // hidppNodes lists the hidraw nodes that speak HID++.
 //
@@ -27,6 +31,50 @@ const logitechVendor = 0x046D
 // which is the hwmon-index mistake spec 006 already refused. The numbering
 // moves when a device is replugged.
 func hidppNodes() ([]string, error) {
+	found, err := nodes(logitechVendor, speaksHIDPP)
+	if err != nil {
+		return nil, err
+	}
+	return paths(found), nil
+}
+
+// hidNode is one hidraw node: where it is and what the kernel calls the device.
+//
+// The name comes from here rather than from the protocol because the kernel
+// already has it -- `HID_NAME=SteelSeries Apex Pro TKL Wireless Gen 3` -- and
+// asking the device for a name it may not have is a round trip for something
+// already on disk.
+type hidNode struct {
+	Path string
+	Name string
+}
+
+// paths is the nodes' paths, for a caller that wants nothing else.
+func paths(found []hidNode) []string {
+	out := make([]string, 0, len(found))
+	for _, n := range found {
+		out = append(out, n.Path)
+	}
+	return out
+}
+
+/*
+nodes lists the hidraw nodes of one vendor whose report descriptor satisfies
+wants.
+
+**Never by product ID.** The SteelSeries keyboard on the machine this was
+written for enumerates as `1038:1644` with its keyboard on 2.4 GHz and
+`1038:1646` with the same keyboard on its cable, on the same USB port, and the
+hidraw numbers land on the same indices both times. A reader keyed to the
+product reads whichever one it was told about and says nothing about the other;
+that cost a round of measurements during spec 016's investigation before anyone
+noticed the number had moved. The vendor does not move and the usage page is
+what actually says "this endpoint speaks the protocol".
+
+Nor by node number, which is the hwmon-index mistake spec 006 already refused:
+the numbering changes when a device is replugged.
+*/
+func nodes(vendor uint64, wants func(descriptor []byte) bool) ([]hidNode, error) {
 	entries, err := os.ReadDir(SysHidraw)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -37,24 +85,79 @@ func hidppNodes() ([]string, error) {
 		return nil, fmt.Errorf("listing hidraw nodes: %w", err)
 	}
 
-	var found []string
+	var found []hidNode
 	for _, e := range entries {
 		dir := filepath.Join(SysHidraw, e.Name(), "device")
-		if !isLogitech(filepath.Join(dir, "uevent")) {
+		uevent := filepath.Join(dir, "uevent")
+		if !isVendor(uevent, vendor) {
 			continue
 		}
-		descriptor, err := os.ReadFile(filepath.Join(dir, "report_descriptor"))
+		descriptor, err := os.ReadFile(filepath.Join(dir, "report_descriptor")) //nolint:gosec // a path under the hidraw root
 		if err != nil {
 			continue
 		}
-		if speaksHIDPP(descriptor) {
-			found = append(found, filepath.Join(DevDir, e.Name()))
+		if !wants(descriptor) {
+			continue
 		}
+		found = append(found, hidNode{
+			Path: filepath.Join(DevDir, e.Name()),
+			Name: hidName(uevent),
+		})
 	}
 	return found, nil
 }
 
-// isLogitech reads a node's uevent for the vendor ID.
+// hidName is what the kernel calls the device, tidied.
+//
+// `HID_NAME=Razer Razer Mouse Dock Pro` is what the descriptor's manufacturer
+// and product strings concatenate to when a vendor puts its own name in both.
+// The doubling is dropped because a card is read by a person.
+func hidName(uevent string) string {
+	return undouble(hidField(uevent, "HID_NAME="))
+}
+
+// hidField reads one `KEY=value` line out of a node's uevent.
+func hidField(uevent, key string) string {
+	b, err := os.ReadFile(uevent) //nolint:gosec // a path under the hidraw root
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		value, ok := strings.CutPrefix(line, key)
+		if !ok {
+			continue
+		}
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+// undouble drops a repeated first word: "Razer Razer Mouse Dock Pro".
+func undouble(name string) string {
+	words := strings.Fields(name)
+	if len(words) > 1 && strings.EqualFold(words[0], words[1]) {
+		return strings.Join(words[1:], " ")
+	}
+	return strings.Join(words, " ")
+}
+
+// usagePage reports whether a descriptor declares a given usage page, which is
+// how a vendor's control endpoint is told from its keyboard and mouse ones.
+func usagePage(want uint32) func([]byte) bool {
+	return func(descriptor []byte) bool {
+		found := false
+		walk(descriptor, func(itemType, tag byte, data uint32) bool {
+			if itemType == typeGlobal && tag == tagUsagePage && data == want {
+				found = true
+				return false
+			}
+			return true
+		})
+		return found
+	}
+}
+
+// isVendor reads a node's uevent for the vendor ID.
 //
 // HID_ID is written as bus:vendor:product, each zero-padded to eight hex
 // digits. The vendor is read as a *number* and matched as a field: comparing
@@ -63,8 +166,8 @@ func hidppNodes() ([]string, error) {
 // with it and leaves "46D", which matches nothing. Matching the field as a
 // substring instead would take a product ID that happens to contain 046D for
 // a Logitech device.
-func isLogitech(uevent string) bool {
-	b, err := os.ReadFile(uevent)
+func isVendor(uevent string, want uint64) bool {
+	b, err := os.ReadFile(uevent) //nolint:gosec // a path under the hidraw root
 	if err != nil {
 		return false
 	}
@@ -78,7 +181,7 @@ func isLogitech(uevent string) bool {
 			return false
 		}
 		vendor, err := strconv.ParseUint(strings.TrimSpace(fields[1]), 16, 32)
-		return err == nil && vendor == logitechVendor
+		return err == nil && vendor == want
 	}
 	return false
 }
@@ -91,13 +194,42 @@ func isLogitech(uevent string) bool {
 // the tail of a longer item's data, and a byte search cannot tell the two
 // apart.
 func speaksHIDPP(descriptor []byte) bool {
-	const (
-		typeGlobal   = 1
-		tagUsagePage = 0
-		tagReportID  = 8
-	)
+	vendorPage, found := false, false
+	walk(descriptor, func(itemType, tag byte, data uint32) bool {
+		if itemType != typeGlobal {
+			return true
+		}
+		switch tag {
+		case tagUsagePage:
+			// 0xFF00 and above is the vendor-defined range.
+			vendorPage = data >= 0xFF00
+		case tagReportID:
+			if vendorPage && data == reportShort {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
 
-	vendorPage := false
+// The HID item types and tags this package reads.
+const (
+	typeGlobal   = 1
+	tagUsagePage = 0
+	tagReportID  = 8
+)
+
+/*
+walk reads a report descriptor item by item, stopping when visit says so.
+
+**Items, not bytes.** `06 00 ff` is a usage page here and could be the tail of
+a longer item's data there, and a byte search cannot tell the two apart. A
+truncated item ends the walk: whatever such a descriptor is, it is not one to
+draw conclusions from.
+*/
+func walk(descriptor []byte, visit func(itemType, tag byte, data uint32) bool) {
 	for i := 0; i < len(descriptor); {
 		prefix := descriptor[i]
 		size := int(prefix & 0x03)
@@ -105,27 +237,14 @@ func speaksHIDPP(descriptor []byte) bool {
 			size = 4
 		}
 		if i+1+size > len(descriptor) {
-			// A truncated item. Whatever this descriptor is, it is not one to
-			// write requests into.
-			return false
+			return
 		}
-		data := value(descriptor[i+1 : i+1+size])
-		tag, itemType := prefix>>4, (prefix>>2)&0x03
-
-		if itemType == typeGlobal {
-			switch tag {
-			case tagUsagePage:
-				// 0xFF00 and above is the vendor-defined range.
-				vendorPage = data >= 0xFF00
-			case tagReportID:
-				if vendorPage && data == reportShort {
-					return true
-				}
-			}
+		itemType, tag := (prefix>>2)&0x03, prefix>>4
+		if !visit(itemType, tag, value(descriptor[i+1:i+1+size])) {
+			return
 		}
 		i += 1 + size
 	}
-	return false
 }
 
 // value reads an HID item's data, which is little-endian and one, two or four

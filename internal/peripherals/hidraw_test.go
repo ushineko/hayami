@@ -18,14 +18,110 @@ var (
 	descriptorHIDPP    = []byte{0x06, 0x00, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x85, 0x10, 0x95, 0x06, 0x75}
 )
 
+/*
+The vendor descriptors spec 016 reads, copied off the devices themselves.
+
+apexControl is the Apex Pro TKL Wireless Gen 3's control endpoint: usage page
+0xFFC0 with a 64-byte input and output and a big feature report for the OLED.
+apexInput is the interface beside it, which declares only 0xFFC1 and has no
+output at all -- it is the discriminator, because a reader that matched "any
+vendor page" would pick the one that cannot be written to.
+
+razerDock is the Mouse Dock Pro's only node. Its vendor collection sits behind
+a mouse, a keyboard and a consumer one, which is why a byte search for the page
+would not do and the descriptor is walked as items.
+*/
+var (
+	apexControl = []byte{
+		0x06, 0xc0, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x06, 0xc1, 0xff, 0x15, 0x00,
+		0x26, 0xff, 0x00, 0x75, 0x08, 0x09, 0xf0, 0x95, 0x40, 0x81, 0x02, 0x09,
+		0xf1, 0x95, 0x40, 0x91, 0x02, 0x09, 0xf2, 0x96, 0x81, 0x02, 0xb1, 0x02, 0xc0,
+	}
+	apexInput = []byte{
+		0x06, 0xc1, 0xff, 0x09, 0x01, 0xa1, 0x01, 0x09, 0xf0, 0x15, 0x00, 0x26,
+		0xff, 0x00, 0x75, 0x08, 0x95, 0x40, 0x81, 0x02, 0xc0,
+	}
+	razerDock = []byte{
+		0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x09, 0x01, 0xa1, 0x00, 0xc0, 0xc0,
+		0x05, 0x0c, 0x09, 0x01, 0xa1, 0x01, 0xc0,
+		0x06, 0x00, 0xff, 0x09, 0x02, 0xa1, 0x01, 0x85, 0x00, 0xc0,
+	}
+)
+
 // node writes one hidraw node into a fake /sys/class/hidraw.
 func node(t *testing.T, root, name, vendor string, descriptor []byte) {
 	t.Helper()
+	namedNode(t, root, name, vendor, "C547", "A Device", descriptor)
+}
+
+// namedNode writes one hidraw node with a product ID and a name of its own,
+// for a test about either.
+func namedNode(t *testing.T, root, name, vendor, product, hid string, descriptor []byte) {
+	t.Helper()
+	physNode(t, root, name, vendor, product, hid, "usb-0000:00:14.0-1/input0", descriptor)
+}
+
+// physNode writes one hidraw node with a HID_PHYS of its own, for a test about
+// which USB device an interface belongs to.
+func physNode(t *testing.T, root, name, vendor, product, hid, phys string, descriptor []byte) {
+	t.Helper()
 	dir := filepath.Join(root, name, "device")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
-	uevent := "DRIVER=hid-generic\nHID_ID=0003:0000" + vendor + ":0000C547\nHID_NAME=A Device\n"
+	uevent := "DRIVER=hid-generic\nHID_ID=0003:0000" + vendor + ":0000" + product +
+		"\nHID_NAME=" + hid + "\nHID_PHYS=" + phys + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "uevent"), []byte(uevent), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "report_descriptor"), descriptor, 0o600))
+}
+
+/*
+AC2. The same reader finds the keyboard under both of its product IDs.
+
+The Apex enumerates as 0x1644 with its keyboard on 2.4 GHz and 0x1646 with the
+same keyboard on its cable, on the same USB port, with the hidraw numbers
+landing on the same indices both times. A reader keyed to the product reads
+whichever one it was told about; that invalidated a round of measurements
+during this spec's investigation before anyone noticed the number had moved.
+*/
+func TestADeviceIsFoundUnderEitherOfItsProductIDs(t *testing.T) {
+	for _, product := range []string{"1644", "1646"} {
+		root := withTree(t)
+		namedNode(t, root, "hidraw5", "1038", product, "SteelSeries Apex Pro TKL", apexControl)
+
+		found, err := nodes(steelseriesVendor, usagePage(SteelSeriesPage))
+
+		require.NoError(t, err)
+		require.Len(t, found, 1, "product %s was not found", product)
+		assert.Equal(t, "/dev/hidraw5", found[0].Path)
+		assert.Equal(t, "SteelSeries Apex Pro TKL", found[0].Name)
+	}
+}
+
+// AC2. The control endpoint is the one declaring the page asked for, and the
+// interface beside it declaring a different vendor page is not.
+func TestTheControlEndpointIsChosenByItsUsagePage(t *testing.T) {
+	root := withTree(t)
+	namedNode(t, root, "hidraw5", "1038", "1644", "Apex", apexControl)
+	namedNode(t, root, "hidraw6", "1038", "1644", "Apex", apexInput)
+
+	found, err := nodes(steelseriesVendor, usagePage(SteelSeriesPage))
+
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, "/dev/hidraw5", found[0].Path)
+}
+
+// AC2. A vendor collection behind three standard ones is still found, which a
+// reader that gave up at the first usage page would miss.
+func TestARazerVendorCollectionIsFoundBehindTheStandardOnes(t *testing.T) {
+	root := withTree(t)
+	namedNode(t, root, "hidraw0", "1532", "00A4", "Razer Razer Mouse Dock Pro", razerDock)
+
+	found, err := nodes(razerVendor, speaksRazer)
+
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, "Razer Mouse Dock Pro", found[0].Name,
+		"a vendor that writes its name into both descriptor strings should not be read out twice")
 }
 
 // withTree points the package at a hidraw tree the test wrote.
