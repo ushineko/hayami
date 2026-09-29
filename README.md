@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.3.3
+**Version**: 0.3.4
 
 *a chart you read at a glance*
 
@@ -179,6 +179,14 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.3.4 (2026-09-29)
+
+- **Change**: a peripheral's battery level is bold. It is already the largest
+  thing in its cell; weight says the same thing from further away, which is
+  the distance the panel is actually read from. The device name above it and
+  the state below it stay regular, so the three pieces of a cell read in the
+  order they matter (fynedesygn #139).
 
 ### 0.3.3 (2026-09-29)
 
