@@ -10,6 +10,7 @@ package gui
 import (
 	"context"
 	"image/color"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/readings"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -52,6 +54,12 @@ type Options struct {
 
 	// Preferences opens the preferences window at start as well as the panel.
 	Preferences bool
+
+	// Sections are the sections to build the cards from, by key, where they
+	// are already known: a live first reading, or what the cache restored.
+	// A key with no entry falls back to asking its source, which is what a
+	// test that builds a panel by hand does.
+	Sections map[string]view.Section
 }
 
 // Panel is the window and the cards in it.
@@ -64,6 +72,15 @@ type Panel struct {
 	// changes: it is a property of the theme, and the theme belongs to the
 	// app rather than to the window.
 	app fyne.App
+
+	// cache is what each section last read, written out on a timer so the
+	// next run opens showing it rather than a blank (spec 013).
+	cacheMu sync.Mutex
+	cache   readings.Cache
+
+	// live is the sources that have answered this run. Until one has, its
+	// card shows what the cache remembered.
+	live map[string]bool
 }
 
 // card is one section's card and the pieces in it, kept so a poll repaints
@@ -159,12 +176,19 @@ func New(a fyne.App, o Options) *Panel {
 			MinWidth: glance.NoMinWidth,
 		}),
 		cards: map[string]*card{},
+		cache: readings.Cache{},
 		opts:  o,
 		app:   a,
 	}
 
 	for _, s := range o.Sources {
-		sec := s.Section()
+		// The section the card is built from decides its shape for the life
+		// of the program, because the library takes its objects now. Where
+		// Start restored one from the cache, that is the shape to build.
+		sec, ok := o.Sections[s.Key()]
+		if !ok {
+			sec = s.Section()
+		}
 		c := glance.NewCard(sec.Title)
 		holder := &card{card: c}
 		for _, r := range flatten(sec.Rows) {
@@ -272,6 +296,25 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	if !ok {
 		return
 	}
+
+	// A source that has not answered yet this run shows what the panel last
+	// knew instead of nothing, until it does. Not for a source that *has*
+	// answered: then an empty poll means the section has gone, and a reading
+	// kept indefinitely would be the panel insisting on hardware that is no
+	// longer there. Fifteen seconds of blank while a mouse wakes is the
+	// whole of what this is for (spec 013).
+	if drawn && !sec.Restored {
+		// A live reading, and only a live one. A restored section arrives
+		// here with drawn set as well -- it is a section to draw -- and
+		// counting it as having been heard would stop the cache standing in
+		// on the *next* empty poll, which is a second or two later and hid
+		// the card again.
+		p.heard(key)
+	} else if !drawn {
+		if restored, err := p.lastKnown(key); err == nil {
+			sec, drawn = restored, true
+		}
+	}
 	c.card.SetAvailable(drawn)
 	if !drawn {
 		return
@@ -281,7 +324,15 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// draws them dim, marker and all. The card does the whole of it; this
 	// only has to say which state it is in, and to say it before the rows are
 	// set so a row written afterwards is not left bright.
-	c.card.SetStale(sec.Gone)
+	// Dim either way, but only a source that has *stopped* is unavailable.
+	// A restored reading is the last one heard by a panel that has not asked
+	// yet, and saying otherwise reports a fault where there is a device that
+	// has not woken up.
+	if sec.Gone {
+		c.card.SetStale(true)
+	} else {
+		c.card.SetLastKnown(sec.Restored)
+	}
 	rows := flatten(sec.Rows)
 	if len(rows) != len(c.rows) {
 		p.rebuild(c, rows)
@@ -297,7 +348,7 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// peripheral appearing is not rare, though, which is why a card is built
 	// with room and the surplus cells are hidden rather than missing -- see
 	// drawCells.
-	p.drawCells(c, sec.Cells)
+	p.drawCells(c, sec.Cells, sec.Dimmed())
 
 	// A meter the card was not built with cannot be added now: the library
 	// takes objects at build time and a card rebuilt on a poll would reflow
@@ -369,7 +420,7 @@ appears fills one. A device that goes away hides its own again.
 CellSlack is how many spare there are. A window that has to be restarted to see
 a peripheral is a window nobody would keep open.
 */
-func (p *Panel) drawCells(c *card, cells []view.Cell) {
+func (p *Panel) drawCells(c *card, cells []view.Cell, dim bool) {
 	for i, cell := range c.cells {
 		if i >= len(cells) {
 			cell.SetShown(false)
@@ -379,7 +430,11 @@ func (p *Panel) drawCells(c *card, cells []view.Cell) {
 		cell.SetName(cl.Label)
 		cell.SetNote(cl.Note)
 		rd := reading(view.Row{Value: cl.Value, Unit: cl.Unit, Status: cl.Status})
-		rd.Stale = cl.Stale
+		// The section's dimming reaches its cells. A card dims its own rows
+		// when it is told it is stale, and a cell is not one of them: it is
+		// a separate object holding its own reading, so a restored section
+		// drew a live-looking percentage until this was here.
+		rd.Stale = cl.Stale || dim
 		cell.Set(rd)
 		cell.SetShown(true)
 	}
@@ -485,6 +540,138 @@ func (p *Panel) Poll(ctx context.Context) {
 	for _, s := range p.opts.Sources {
 		go pollOne(ctx, s, p)
 	}
+	go p.keepCache(ctx)
+}
+
+/*
+restore decides what each card is built from, and marks the ones drawn from
+the cache.
+
+A live reading always wins. The cache fills in only for a source that gave
+nothing on the first poll, which is what a sleeping mouse looks like: it
+answers nothing about one poll in fourteen, and without this the section is
+blank for an interval.
+
+drawn is updated in place, because a section restored from the cache is a
+section to draw.
+*/
+func restore(sources []panel.Source, drawn map[string]bool, cached readings.Cache) map[string]view.Section {
+	out := make(map[string]view.Section, len(sources))
+	for _, src := range sources {
+		key := src.Key()
+		if drawn[key] {
+			out[key] = section(sources, key)
+			continue
+		}
+		if restored, err := cached.Restore(key); err == nil {
+			out[key], drawn[key] = restored, true
+		}
+	}
+	return out
+}
+
+// CacheInterval is how often the readings are written out.
+//
+// Not on every poll: the bandwidth section polls every two seconds and a
+// glance panel has no business writing to disk thirty times a minute. Fifteen
+// seconds is longer than every interval but that one, so most polls are
+// written promptly and the busiest is coalesced.
+const CacheInterval = 15 * time.Second
+
+// loadCache reads what the panel last knew. A cache that is not there, cannot
+// be read or does not parse is a cold start: the panel works without it.
+func loadCache() readings.Cache {
+	path, err := readings.Path()
+	if err != nil {
+		return readings.Cache{}
+	}
+	return readings.Load(path, time.Now())
+}
+
+// seed starts the panel off with what was already on disk, so a section that
+// has not reported this run keeps the reading it had.
+func (p *Panel) seed(c readings.Cache) {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	if p.cache == nil {
+		p.cache = readings.Cache{}
+	}
+	for key, e := range c {
+		p.cache[key] = e
+	}
+}
+
+// heard notes that a source has answered this run, which ends the cache
+// standing in for it.
+func (p *Panel) heard(key string) {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	if p.live == nil {
+		p.live = map[string]bool{}
+	}
+	p.live[key] = true
+}
+
+// lastKnown is the cached reading for a source that has not answered yet.
+func (p *Panel) lastKnown(key string) (view.Section, error) {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	if p.live[key] {
+		return view.Section{}, readings.ErrNoEntry
+	}
+	return p.cache.Restore(key)
+}
+
+// remember records a section for the next write.
+func (p *Panel) remember(key string, sec view.Section) {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	if p.cache == nil {
+		p.cache = readings.Cache{}
+	}
+	// Restored is not written back: what goes in the cache is a reading, and
+	// whether it is being *drawn* as a last-known one is the next run's
+	// question rather than this one's.
+	sec.Restored = false
+	p.cache[key] = readings.Entry{At: time.Now(), Section: sec}
+}
+
+// writeCache puts the readings on disk, coalesced across every section.
+//
+// A failure is not reported anywhere. It is a cache: the panel drew the
+// readings already, and a user who cannot write to their own cache directory
+// has a problem this panel is not going to tell them about usefully.
+func (p *Panel) writeCache() {
+	path, err := readings.Path()
+	if err != nil {
+		return
+	}
+	p.cacheMu.Lock()
+	snapshot := make(readings.Cache, len(p.cache))
+	for k, v := range p.cache {
+		snapshot[k] = v
+	}
+	p.cacheMu.Unlock()
+
+	if len(snapshot) == 0 {
+		return
+	}
+	_ = readings.Save(path, snapshot)
+}
+
+// keepCache writes the readings on a timer until the context is done.
+func (p *Panel) keepCache(ctx context.Context) {
+	t := time.NewTicker(CacheInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			p.writeCache()
+			return
+		case <-t.C:
+			p.writeCache()
+		}
+	}
 }
 
 // pollOne is one source's loop. Each keeps its own interval: a byte counter
@@ -498,6 +685,9 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 			drawn = false
 		}
 		sec := s.Section()
+		if drawn {
+			p.remember(s.Key(), sec)
+		}
 		fyne.Do(func() { p.Draw(s.Key(), sec, drawn) })
 
 		select {
@@ -543,10 +733,18 @@ func Start(o Options) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// What the panel last knew, before anything is asked. A section whose
+	// first live poll comes back empty is drawn from this instead of blank,
+	// and a card is built the size of it -- the card takes its objects at
+	// build time, so its shape is decided here or not at all (spec 013).
+	cached := loadCache()
+
 	// The first reading before the first frame: a card is built with the
 	// pieces its section has, so a section polled after the window is built
 	// would have nowhere to put them.
 	drawn := first(ctx, o.Sources)
+
+	sections := restore(o.Sources, drawn, cached)
 
 	// The menu needs the panel it changes and the panel needs the menu before
 	// its window exists, so the closure is made first and the pointer filled
@@ -562,9 +760,20 @@ func Start(o Options) error {
 		})
 	}
 
+	o.Sections = sections
 	p = New(a, o)
+
+	// The panel starts out remembering what it already knew. Without this
+	// the first write replaces the file with only the sections that reported
+	// *this* run, which drops the entry for the one section that did not --
+	// the very one the cache exists for.
+	p.seed(cached)
 	for key, ok := range drawn {
-		p.Draw(key, section(o.Sources, key), ok)
+		sec, found := sections[key]
+		if !found {
+			sec = section(o.Sources, key)
+		}
+		p.Draw(key, sec, ok)
 	}
 	if o.Store != nil {
 		p.Apply(o.Store.Config())

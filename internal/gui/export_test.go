@@ -2,10 +2,17 @@ package gui
 
 import (
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/test"
+
+	"github.com/ushineko/fynedesygn/glance"
 
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/readings"
+	"github.com/ushineko/hayami/internal/view"
 )
 
 // ThemeWith is themeWith, for a test in the black-box package.
@@ -43,4 +50,51 @@ func ShownCells(p *Panel, key string) int {
 		}
 	}
 	return n
+}
+
+// Restore is restore, so a test can exercise the decision a cold start makes
+// without starting an application.
+func Restore(
+	sources []panel.Source,
+	drawn map[string]bool,
+	cached readings.Cache,
+) map[string]view.Section {
+	return restore(sources, drawn, cached)
+}
+
+// CellStale reports whether a card's nth cell is drawn as a last-known value.
+func CellStale(p *Panel, key string, n int) bool {
+	c, ok := p.cards[key]
+	if !ok || n >= len(c.cells) {
+		return false
+	}
+	return c.cells[n].Reading().Stale
+}
+
+// Seed is seed, and Cached is what the panel would write, so a test can say
+// that a section which never reported keeps the reading it had.
+func Seed(p *Panel, c readings.Cache) { p.seed(c) }
+
+func Cached(p *Panel) readings.Cache {
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
+	out := make(readings.Cache, len(p.cache))
+	for k, v := range p.cache {
+		out[k] = v
+	}
+	return out
+}
+
+// CardMarked reports whether a card's header carries the unavailable marker.
+func CardMarked(p *Panel, key string) bool {
+	c, ok := p.cards[key]
+	if !ok {
+		return false
+	}
+	for _, o := range test.LaidOutObjects(c.card.Object()) {
+		if txt, is := o.(*canvas.Text); is && txt.Text == glance.GoneMarker {
+			return txt.Visible()
+		}
+	}
+	return false
 }
