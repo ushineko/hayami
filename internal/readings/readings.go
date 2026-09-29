@@ -114,7 +114,9 @@ rather than half of one, which is the difference between a cold start and a
 parse failure on every start until someone deletes the file.
 */
 func Save(path string, c Cache) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// The user's own, and nobody else's business: these are readings from
+	// their hardware. The temporary file below is created 0600 already.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("making the cache directory: %w", err)
 	}
 
