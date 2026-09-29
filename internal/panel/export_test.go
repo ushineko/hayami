@@ -6,6 +6,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/cooler"
 	"github.com/ushineko/hayami/internal/peripherals"
+	"github.com/ushineko/hayami/internal/view"
 )
 
 // SetPeripheralSources replaces the two sources and the clock.
@@ -37,4 +38,10 @@ func SetCoolerSources(
 	liquid func(context.Context) (cooler.Liquid, error),
 ) {
 	c.sensor, c.liquid = sensor, liquid
+}
+
+// SetUsageRead replaces the gather, so a test can drive the usage section's
+// reasons without a cache directory or a credential store.
+func SetUsageRead(u *Usage, read func(context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error)) {
+	u.read = read
 }

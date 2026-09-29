@@ -78,7 +78,7 @@ func Accounts() ([]Account, error) {
 		out = append(out, account(rest))
 	}
 
-	out = withoutSupersededDefault(out)
+	out = withoutSupersededDefault(out, hasData)
 
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Provider != out[j].Provider {
@@ -89,18 +89,32 @@ func Accounts() ([]Account, error) {
 	return out, nil
 }
 
-// withoutSupersededDefault drops the nameless Claude account when a named one
-// exists.
-//
-// `usage.json` is what the widget wrote before profiles existed. Its own
-// docstring says the file is "simply left unused" after the upgrade, and on
-// this machine it was last written three weeks before the named ones. Drawing
-// it beside them would put a dead reading next to a live one under the same
-// heading.
-func withoutSupersededDefault(accounts []Account) []Account {
+/*
+withoutSupersededDefault drops the nameless Claude account when a named one has
+actually fetched something.
+
+`usage.json` is what the widget wrote before profiles existed. Its own
+docstring says the file is "simply left unused" after the upgrade, and on the
+machine this was written for it was last written three weeks before the named
+ones. Drawing it beside them would put a dead reading next to a live one under
+the same heading.
+
+**Superseded means replaced, not merely outnumbered.** A named account that
+exists and has never fetched supersedes nothing: on a second machine the named
+file held `"data": null` behind a half-hour backoff while the nameless one --
+which the Python widget keeps full and fresh -- was dropped in its favour, and
+the section drew nothing at all (issue #54). So the named accounts have to have
+a reading between them before the old file is set aside.
+
+has reports whether an account has a payload cached. It is injected so the
+rule can be tested without a cache directory; the real one reads the files this
+function is already deciding about and opens no credential store, which is the
+property the package docstring claims and keeps.
+*/
+func withoutSupersededDefault(accounts []Account, has func(Account) bool) []Account {
 	named := false
 	for _, a := range accounts {
-		if a.Provider == ProviderClaude && a.Name != "" {
+		if a.Provider == ProviderClaude && a.Name != "" && has(a) {
 			named = true
 		}
 	}
@@ -115,6 +129,15 @@ func withoutSupersededDefault(accounts []Account) []Account {
 		out = append(out, a)
 	}
 	return out
+}
+
+// hasData reports whether an account's cache file holds a payload. An entry
+// that cannot be read holds none, which is the same answer a missing file
+// gives and the safe one: it keeps the older account rather than dropping it
+// for a newer one that has nothing.
+func hasData(a Account) bool {
+	e, err := Read(a.Name, a.Provider)
+	return err == nil && e != nil && len(e.Data) > 0
 }
 
 // account reads a filename's suffix back into a provider and a profile.

@@ -56,7 +56,20 @@ func NewBandwidth(names []string, read func() (map[string]core.Counters, error))
 func (b *Bandwidth) Section() view.Section {
 	readings := b.Readings()
 	out := make([]view.BandwidthReading, 0, len(readings))
+	var reasons []view.Reason
 	for _, r := range readings {
+		if !r.Present {
+			// An interface the user named and the kernel does not list. It
+			// used to draw a row of blanks -- correct for the column widths
+			// and silent about the name being wrong, which after a hardware
+			// rename is the ordinary way this happens. The reason takes that
+			// row's place rather than sitting under it: two lines about one
+			// absent interface is one line too many.
+			reasons = append(reasons, view.Reason{
+				Label: r.Name, Text: "not present", Status: view.Info,
+			})
+			continue
+		}
 		out = append(out, view.BandwidthReading{
 			Name:     r.Name,
 			RxRate:   r.RxRate,
@@ -67,7 +80,15 @@ func (b *Bandwidth) Section() view.Section {
 			HasTotal: r.Present,
 		})
 	}
-	return view.Bandwidth(out)
+	sec := view.Bandwidth(out)
+	if len(readings) == 0 {
+		reasons = append(reasons, view.Reason{
+			Text: "no interfaces chosen", Status: view.Info,
+			Detail: "pick one in the preferences, or pass --sections",
+		})
+	}
+	sec.Reasons = reasons
+	return sec
 }
 
 // Data is the last sample as plain values.

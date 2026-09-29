@@ -89,7 +89,7 @@ func TUI(version string) *cobra.Command {
 	root.Flags().BoolVar(&once, "once", false,
 		"draw one frame and exit, for a prompt or a status line")
 	addPanelFlags(root, &f)
-	root.AddCommand(readingsCmd(&f), arrangementsCmd())
+	root.AddCommand(readingsCmd(&f), arrangementsCmd(), doctorCmd(&f))
 	return root
 }
 
@@ -125,7 +125,7 @@ func GUI(version string, start func(Options) error) *cobra.Command {
 	// panel is somewhere they cannot right-click it.
 	root.Flags().BoolVar(&preferences, "preferences", false,
 		"open the preferences window as well as the panel")
-	root.AddCommand(windowCmd())
+	root.AddCommand(windowCmd(), doctorCmd(&f))
 	return root
 }
 
@@ -155,6 +155,38 @@ func readingsCmd(f *flags) *cobra.Command {
 				_, err := s.Poll(context.Background())
 				return err
 			})
+		},
+	}
+}
+
+// doctorCmd reports what each section found and what it did not.
+//
+// On **both** binaries, unlike readings. A person whose panel is missing a
+// card is running the window, and telling them to install and run the other
+// binary to find out why is asking them to do the diagnosis this command is
+// for. It prints to stdout and exits; a windowed binary run from a terminal
+// has one.
+func doctorCmd(f *flags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "doctor",
+		Short: "Report what each section found, and why any of them is missing",
+		Long: "Report what each section found, and why any of them is missing.\n\n" +
+			"Every section this build knows, not only the ones the settings ask for: a\n" +
+			"section that is turned off says so rather than not appearing. States are ok,\n" +
+			"partial, absent, silent and off.\n\n" +
+			"This is the output to paste into an issue. It carries no token, no credential\n" +
+			"and no path inside a credential store.",
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			opts, _, err := f.resolve()
+			if err != nil {
+				return err
+			}
+			warn(cmd, opts)
+			findings := Diagnose(cmd.Context(), opts.Config.Sections, opts.Config.Interfaces, nil)
+			return Report(cmd.OutOrStdout(), findings)
 		},
 	}
 }
