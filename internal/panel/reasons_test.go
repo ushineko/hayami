@@ -123,9 +123,10 @@ func TestARecoveredSourceDropsItsReason(t *testing.T) {
 A peripherals section on a machine with nothing on the desk says what did not
 answer, one source at a time.
 
-Three absences rather than one, because they are three different things to go
-and do something about: a receiver that is not plugged in, a program that is
-not installed, and a radio the machine does not have.
+One per source rather than one for the section, because they are different
+things to go and do something about: a receiver that is not plugged in, a
+program that is not installed, hardware of a given make that is not there, and
+a radio the machine does not have.
 */
 func TestPeripheralsNamesEachSourceThatFoundNothing(t *testing.T) {
 	p := panel.NewPeripherals()
@@ -145,6 +146,8 @@ func TestPeripheralsNamesEachSourceThatFoundNothing(t *testing.T) {
 	assert.Equal(t, []string{
 		"no Logitech receiver",
 		"headsetcontrol is not installed",
+		"no Razer device",
+		"no SteelSeries device",
 		"no Bluetooth adapter",
 	}, reasonTexts(sec))
 	for _, r := range sec.Reasons {

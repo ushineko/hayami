@@ -23,6 +23,13 @@ func SetPeripheralSources(
 ) {
 	p.logitech, p.headsets, p.now = logitech, headsets, now
 	p.bluetooth = func() ([]peripherals.Battery, error) { return nil, peripherals.ErrNoBluez }
+	p.razer = func() ([]peripherals.Battery, error) { return nil, nil }
+	p.steelseries = func() ([]peripherals.Battery, error) { return nil, nil }
+}
+
+// SetPeripheralVendors replaces the two vendor-protocol sources.
+func SetPeripheralVendors(p *Peripherals, razer, steelseries func() ([]peripherals.Battery, error)) {
+	p.razer, p.steelseries = razer, steelseries
 }
 
 // SetPeripheralBluetooth replaces just the Bluetooth source.

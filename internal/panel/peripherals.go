@@ -45,16 +45,18 @@ type Peripherals struct {
 	seen map[string]remembered
 
 	// reasons are the sources that had nothing to say and why, rebuilt every
-	// poll. A source that found something contributes none: three lines
+	// poll. A source that found something contributes none: five lines
 	// explaining what is absent, over a card that is already showing a mouse,
 	// would be a panel talking about itself.
 	reasons []view.Reason
 
-	// logitech, headsets and bluetooth are the sources, replaced by a test so
-	// neither a real device nor a real subprocess is touched.
-	logitech  func() ([]peripherals.Battery, error)
-	headsets  func(context.Context) ([]peripherals.Battery, error)
-	bluetooth func() ([]peripherals.Battery, error)
+	// The sources, replaced by a test so neither a real device nor a real
+	// subprocess is touched.
+	logitech    func() ([]peripherals.Battery, error)
+	headsets    func(context.Context) ([]peripherals.Battery, error)
+	bluetooth   func() ([]peripherals.Battery, error)
+	razer       func() ([]peripherals.Battery, error)
+	steelseries func() ([]peripherals.Battery, error)
 
 	// now is the clock, for the same reason.
 	now func() time.Time
@@ -76,12 +78,16 @@ type remembered struct {
 func NewPeripherals() *Peripherals {
 	logitech := peripherals.NewLogitech()
 	bluetooth := peripherals.NewBluetooth()
+	razer := peripherals.NewRazer()
+	steelseries := peripherals.NewSteelSeries()
 	return &Peripherals{
-		seen:      make(map[string]remembered),
-		logitech:  logitech.Batteries,
-		headsets:  peripherals.Headsets,
-		bluetooth: bluetooth.Batteries,
-		now:       time.Now,
+		seen:        make(map[string]remembered),
+		logitech:    logitech.Batteries,
+		headsets:    peripherals.Headsets,
+		bluetooth:   bluetooth.Batteries,
+		razer:       razer.Batteries,
+		steelseries: steelseries.Batteries,
+		now:         time.Now,
 	}
 }
 
@@ -139,6 +145,36 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		reasons = append(reasons, view.Reason{
 			Text: "headsetcontrol failed", Status: view.Warn, Detail: err.Error(),
 		})
+	}
+
+	razer, err := p.razer()
+	switch {
+	case err != nil:
+		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "a Razer device would not answer", Status: view.Warn, Detail: err.Error(),
+		})
+	case len(razer) == 0:
+		reasons = append(reasons, view.Reason{
+			Text: "no Razer device", Status: view.Info,
+		})
+	default:
+		found = append(found, razer...)
+	}
+
+	steelseries, err := p.steelseries()
+	switch {
+	case err != nil:
+		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "a SteelSeries device would not answer", Status: view.Warn, Detail: err.Error(),
+		})
+	case len(steelseries) == 0:
+		reasons = append(reasons, view.Reason{
+			Text: "no SteelSeries device", Status: view.Info,
+		})
+	default:
+		found = append(found, steelseries...)
 	}
 
 	bluetooth, err := p.bluetooth()
