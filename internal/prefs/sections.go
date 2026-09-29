@@ -26,8 +26,15 @@ func (w *Window) buildSections(s *shell.Shell) fyne.CanvasObject {
 		widgets.DimWrapped("Which readings the panel draws, and in what order."),
 		container.NewVBox(rows...),
 		widget.NewSeparator(),
-		widgets.DimWrapped("How they are laid out. The window is always a stack; this is what a pane uses."),
+		widgets.DimWrapped("How they are laid out. A grid reflows into columns when the panel "+
+			"is wide enough for them; a narrow one is a stack either way."),
 		w.arrangement(s),
+		widget.NewSeparator(),
+		// The interfaces live here rather than on a screen of their own.
+		// They are one section's setting, and a whole navigation entry for a
+		// list of checkboxes was more than it was worth once the list was
+		// short enough to read.
+		w.buildInterfaces(s),
 	)
 }
 
@@ -181,7 +188,7 @@ func describe(a view.Arrangement) string {
 	case view.ArrangeGrid:
 		return "columns that reflow to the width"
 	case view.ArrangeRow:
-		return "one line per reading, its bar stretching to the pane"
+		return "one line per reading, its bar stretching to the pane (terminal only)"
 	default:
 		return "one section above another"
 	}

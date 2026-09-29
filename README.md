@@ -8,25 +8,27 @@ A panel for Linux showing peripheral battery, network bandwidth,
 liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
 frameless always-on-top window, and in a terminal as a pane.
 
-> **Status**: four sections draw in both panels, in all three arrangements,
-> from settings both read: bandwidth, usage — fetched by hayami itself, through
-> the cache it shares with the tools it replaces — the cooler, and the
-> peripherals. The program it replaces,
-> `ag-scripts/peripheral-battery-monitor`, is the behavioural reference and is
-> still the one to run: its keyboard and AirPods readings have no equivalent
-> here yet.
+> **Status**: in use, and it installs. Four sections draw in both panels from
+> settings both read: the peripherals, bandwidth, the cooler, and usage —
+> fetched by hayami itself through the cache it shares with the tools it
+> replaces. AirPods and the rest of Bluetooth read through BlueZ and Apple's
+> accessory protocol. `ag-scripts/peripheral-battery-monitor` remains the
+> behavioural reference, and where this file says "the monitor does X" that is
+> a claim about its source rather than a memory.
 
 ## Contents
 
-- [What it will do](#what-it-will-do)
+- [What it does](#what-it-does)
 - [Arrangements](#arrangements)
 - [Architecture](#architecture)
+- [Installing it](#installing-it)
+- [Running it](#running-it)
 - [Development](#development)
 - [Where it comes from](#where-it-comes-from)
 - [Licence](#licence)
 - [Changelog](#changelog)
 
-## What it will do
+## What it does
 
 Each reading is a **section**, and a section is drawn only when its source has
 something to say. The user chooses which sections appear and in what order,
@@ -44,9 +46,12 @@ and the choice holds in both shells.
 The same sections, laid out three ways. The arrangement is a setting, not a
 mode, which is why there is no separate widget for the terminal:
 
-- **stack** — one card above another. The desktop panel, and a narrow terminal.
-- **grid** — columns that reflow to the width, in the manner of `btop`.
+- **stack** — one card above another. A narrow panel of either kind.
+- **grid** — columns that reflow to the width, in the manner of `btop`. Both
+  shells: a desktop panel wide enough for two columns draws two.
 - **row** — one full-width line per reading, its bar stretching to the pane.
+  The terminal only; there is nothing for a window to do with it, so a window
+  set to it stacks.
   This is what a `herdr` pane wants, and it replaces
   `claude-usage-widget-windows`'s `--tui` and `--line`:
 
@@ -70,8 +75,9 @@ The window is a glance window from
 content, always on top, read without being touched. Its rules are that
 repository's `docs/glance.md`.
 
-It draws its own translucency: the space between cards is clear and the cards
-are faded to a percentage you set, on any desktop. The titlebar is the one
+It draws its own translucency: the space between the cards is not painted at
+all — the desktop shows through it — and the cards themselves are faded to a
+percentage you set, on any desktop. The titlebar is the one
 thing only the compositor can remove, so on Plasma that comes from a KWin rule
 hayami installs when asked — from the preferences window, or with
 `hayami window install`. Without it the panel is translucent and has a
@@ -135,7 +141,15 @@ hayami:
 ```
 
 No interface is watched until one is named. Guessing would be this program
-deciding what is interesting about somebody's network.
+deciding what is interesting about somebody's network — and on a machine
+running containers there are a great many names to guess among: the
+preferences window lists the real interfaces first and keeps the rest behind
+a switch, because seventy-seven checkboxes to find two is not a choice.
+
+The last reading of every section is cached in
+`~/.cache/hayami/sections.json`, so a panel that has just started shows what
+it knew rather than a blank. It is drawn dim until a live reading replaces it
+and ignored after a day. Deleting it costs one blank first frame.
 
 ## Development
 
@@ -167,6 +181,25 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- **Add**: an About screen, with the README itself under the facts rather than
+  a shortened restatement that would drift from it.
+- **Add**: the panel honours the grid arrangement. It had three layout choices
+  in its preferences and ignored all of them: the setting was read only by the
+  terminal panel, and the screen's own caption admitted it. A window wide
+  enough for two columns now draws two (fynedesygn #124). `row` remains the
+  terminal's, because there is nothing for a window to do with it.
+- **Fix**: the interface chooser is readable. It listed every interface the
+  kernel reports -- seventy-seven on the machine this was written for, of
+  which seventy-three were the veth pairs and bridges a container runtime
+  leaves behind. The real ones come first, the churn is behind "Show every
+  interface", and anything already watched is always listed. It no longer has
+  a screen of its own: one section's setting belongs beside that section,
+  under Sections.
+- **Fix**: the Window screen's font choosers line up. They are the same
+  chooser the Appearance screen uses and always were, but the rows around them
+  were hand-rolled, so each label took its own width and the controls started
+  at a different place on each line. It is a form now, as Appearance is.
 
 - **Add**: hayami installs. `install.sh` builds from the checkout and puts the
   two programs, a launcher entry and an icon under `~/.local`; `--autostart`

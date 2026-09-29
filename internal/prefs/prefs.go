@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2"
 	fynetheme "fyne.io/fyne/v2/theme"
 
+	"github.com/ushineko/fynedesygn/markdown"
 	"github.com/ushineko/fynedesygn/shell"
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 
@@ -57,6 +58,14 @@ type Options struct {
 type Window struct {
 	shell *shell.Shell
 	opts  Options
+
+	// readme is the document pane in About while it is on screen.
+	readme *markdown.Pane
+
+	// showAll keeps the interface list expanded while the window is open. It
+	// is not a setting: the long list is for finding something once, not a
+	// state anybody wants restored.
+	showAll bool
 }
 
 // New builds the window over an app that already exists. It is not shown.
@@ -102,9 +111,10 @@ func New(a fyne.App, o Options) *Window {
 		NavPlacements: []shell.NavPlacement{shell.NavLeft, shell.NavTop},
 		Sections: []shell.Section{
 			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
-			shell.NewSection("Bandwidth", fynetheme.ComputerIcon, w.buildBandwidth),
 			shell.NewSection("Window", fynetheme.ViewFullScreenIcon, w.buildWindow),
 			shell.AppearanceSection("Saved as you change it."),
+			shell.NewSection("About", fynetheme.HelpIcon, w.buildAbout).
+				OnDetach(w.detachAbout),
 		},
 	})
 	w.hideOnClose()

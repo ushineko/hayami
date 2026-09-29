@@ -9,6 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ushineko/fynedesygn/glance"
+
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/gui"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/readings"
@@ -166,4 +169,22 @@ func TestOnlyAStoppedSourceIsCalledUnavailable(t *testing.T) {
 	p.Draw("peripherals", gone, true)
 	assert.True(t, gui.CardMarked(p, "peripherals"),
 		"a source that stopped answering said nothing about it")
+}
+
+// AC. The window honours the grid setting, which it used to ignore entirely.
+func TestTheWindowFollowsTheArrangementSetting(t *testing.T) {
+	a := test.NewTempApp(t)
+	src := &cellSource{}
+	p := gui.New(a, gui.Options{Sources: []panel.Source{src}, Title: "hayami"})
+
+	p.Apply(config.Config{Arrangement: "grid"})
+	assert.Equal(t, glance.Grid, p.Window().Panel().Arrangement())
+
+	p.Apply(config.Config{Arrangement: "stack"})
+	assert.Equal(t, glance.Stack, p.Window().Panel().Arrangement())
+
+	// A pane's shape is not a window's: row stacks rather than doing
+	// something arbitrary.
+	p.Apply(config.Config{Arrangement: "row"})
+	assert.Equal(t, glance.Stack, p.Window().Panel().Arrangement())
 }

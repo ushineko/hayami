@@ -193,10 +193,14 @@ func (w *Window) faces(s *shell.Shell, panel fdtheme.Appearance) fyne.CanvasObje
 	})
 	size.SetSelected(fmt.Sprintf("%g", panel.TextSize))
 
-	return container.NewVBox(
-		container.NewBorder(nil, nil, widgets.Dim("Interface"), nil, face),
-		container.NewBorder(nil, nil, widgets.Dim("Monospace"), nil, mono),
-		container.NewBorder(nil, nil, widgets.Dim("Size"), value, size),
+	// A form, because the Appearance screen is a form and these are the same
+	// three choices for a different window. Hand-rolled rows gave each label
+	// its own width, so the controls started at three different places down
+	// one screen and at a fourth on the next.
+	return widget.NewForm(
+		widget.NewFormItem("Interface font", face),
+		widget.NewFormItem("Monospace font", mono),
+		widget.NewFormItem("Text size", container.NewHBox(size, value)),
 	)
 }
 
