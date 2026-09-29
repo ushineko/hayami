@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -102,4 +103,61 @@ func InterfaceNames(counters map[string]Counters) []string {
 	}
 	sortStrings(names)
 	return names
+}
+
+/*
+InterfaceKind is what sort of interface a name belongs to, for a program
+deciding which ones to put in front of somebody.
+
+Not for deciding what to *measure*: every interface the kernel reports can be
+watched, and this package has no business narrowing that. It is for the order
+and the prominence a chooser gives them, which is a different question and one
+a chooser cannot answer from a name alone without this.
+*/
+type InterfaceKind int
+
+const (
+	// KindOrdinary is a real interface: ethernet, wireless, anything the
+	// machine talks to the world through. The default, because a name this
+	// package does not recognise is more likely to be somebody's unusual
+	// hardware than a container.
+	KindOrdinary InterfaceKind = iota
+	// KindTunnel is a VPN or overlay: tailscale, wireguard, tun. Real
+	// traffic, and usually worth watching.
+	KindTunnel
+	// KindVirtual is the churn a container runtime leaves behind: veth
+	// pairs, docker and libvirt bridges, and the loopback. Individually
+	// meaningless and numerous -- 73 of 77 on the machine this was written
+	// for, which is what made the chooser unusable.
+	KindVirtual
+)
+
+// virtualPrefixes are the names a container or VM runtime creates.
+var virtualPrefixes = []string{"veth", "br-", "docker", "virbr", "vnet", "cni", "flannel", "kube"}
+
+// tunnelPrefixes are the overlays worth putting near the top.
+var tunnelPrefixes = []string{"tailscale", "wg", "tun", "ppp", "zt"}
+
+// ClassifyInterface says what sort of interface a name is.
+//
+// By name, because that is all there is here: /proc/net/dev has no notion of
+// a container. The prefixes are the conventions the runtimes follow and they
+// are a heuristic -- a machine that names its ethernet "tunnel0" is misread,
+// and the cost of that is one row in the wrong group of a list that has a
+// "show everything" beside it.
+func ClassifyInterface(name string) InterfaceKind {
+	if name == "lo" {
+		return KindVirtual
+	}
+	for _, p := range virtualPrefixes {
+		if strings.HasPrefix(name, p) {
+			return KindVirtual
+		}
+	}
+	for _, p := range tunnelPrefixes {
+		if strings.HasPrefix(name, p) {
+			return KindTunnel
+		}
+	}
+	return KindOrdinary
 }

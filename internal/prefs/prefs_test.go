@@ -50,12 +50,21 @@ func TestEverySectionIsOfferedWhetherItIsChosenOrNot(t *testing.T) {
 	w := prefs.New(a, prefs.Options{Store: s})
 
 	built := w.Shell().Sections()
-	require.NotEmpty(t, built)
+	require.Len(t, built, 4)
 	assert.Equal(t, "Sections", built[0].Title())
-	assert.Equal(t, "Bandwidth", built[1].Title())
-	assert.Equal(t, "Window", built[2].Title())
-	assert.Equal(t, "Appearance", built[3].Title(),
-		"the shell's own appearance section is last, after ours")
+	assert.Equal(t, "Window", built[1].Title())
+	assert.Equal(t, "Appearance", built[2].Title(),
+		"the shell's own appearance section follows ours")
+	assert.Equal(t, "About", built[3].Title(), "About is last")
+
+	// Bandwidth has no screen of its own: its one setting -- which
+	// interfaces to watch -- lives under Sections, beside the section it
+	// belongs to. A navigation entry for a list of checkboxes was more than
+	// it was worth once the list was short enough to read.
+	for _, sec := range built {
+		assert.NotEqual(t, "Bandwidth", sec.Title(),
+			"the interfaces went back to a screen of their own")
+	}
 }
 
 // A change is saved as it is made. A preference that needed confirming is a

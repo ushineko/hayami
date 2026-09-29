@@ -270,6 +270,7 @@ window says. It is in this spec's gaps.
 */
 func (p *Panel) Apply(c config.Config) {
 	p.applyTheme(c)
+	p.win.Panel().SetArrangement(arrangement(c))
 
 	// And repaint in it. A card restyles its title and its rows; a meter and
 	// a sparkline go in as plain canvas objects and have to be told, and
@@ -516,6 +517,24 @@ func (p *Panel) trailColour(t view.Trail, gone bool) color.Color {
 		return th.Color(fynetheme.ColorNameDisabled, variant)
 	}
 	return th.Color(widgets.StatusColorName(status(t.Status)), variant)
+}
+
+/*
+arrangement is how the window lays its cards out.
+
+Two of the view's three reach the window. Grid reflows the cards into columns
+when the panel is wide enough for them, and stack is one above another; row
+is a pane's shape -- one line per reading with its bar taking the slack --
+and there is nothing for a window to do with it, so it stacks.
+
+The window used to ignore the setting entirely, and its own preferences
+screen said so: three choices, none of which it honoured.
+*/
+func arrangement(c config.Config) glance.Arrangement {
+	if a, err := c.ParseArrangement(); err == nil && a == view.ArrangeGrid {
+		return glance.Grid
+	}
+	return glance.Stack
 }
 
 // status maps this program's verdict onto the design system's. They are the
