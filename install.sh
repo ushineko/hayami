@@ -63,14 +63,20 @@ run() {
 
 echo "Installing hayami from ${REPO_DIR} ..."
 
-if ! command -v go >/dev/null 2>&1; then
+# A release tarball ships the binaries beside this script, so the machine
+# installing does not need Go, a C toolchain or the OpenGL headers -- which is
+# the whole point of there being a tarball. A checkout has no binaries and
+# builds them.
+if [ -x "${REPO_DIR}/hayami" ] && [ -x "${REPO_DIR}/hayami-tui" ] && [ ! -d "${REPO_DIR}/cmd" ]; then
+    echo "Using the binaries in ${REPO_DIR} ..."
+elif ! command -v go >/dev/null 2>&1; then
     echo "Error: go is not installed. hayami needs Go 1.26 or newer to build." >&2
     echo "       Arch: pacman -S go   Debian/Ubuntu: apt install golang-go" >&2
+    echo >&2
+    echo "       Or take a release tarball, which carries the binaries already built:" >&2
+    echo "       https://github.com/ushineko/hayami/releases" >&2
     exit 1
-fi
-
-echo "Building hayami ..."
-if [ "$DRY_RUN" -eq 1 ]; then
+elif [ "$DRY_RUN" -eq 1 ]; then
     echo "  would run: make -C $REPO_DIR build"
 elif ! make -C "$REPO_DIR" build; then
     echo

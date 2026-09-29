@@ -103,6 +103,25 @@ build: ## Build both panels for the host platform
 	CGO_ENABLED=1 go build -trimpath -tags '$(FYNE_TAGS)' -ldflags='$(LDFLAGS)' -o hayami ./cmd/hayami
 	CGO_ENABLED=0 go build -trimpath -ldflags='$(LDFLAGS)' -o hayami-tui ./cmd/hayami-tui
 
+# The release tarball: one archive for linux-amd64 carrying both panels, the
+# installer and what the installer puts on the system.
+#
+# **One target and not four.** The desktop panel is a Fyne window, so it needs
+# CGO, OpenGL and the X11 and Wayland headers, and it links against the
+# system's copies of them -- cross-compiling it means a cross toolchain for
+# each target, which is a lot of machinery for a program whose only reported
+# user runs it on the machine it was written on. The terminal panel would
+# cross-build happily on its own; shipping it alone in a second archive would
+# be a tarball that installs half the program.
+#
+# Built on the oldest runner we have, because a dynamically linked binary
+# needs at least the glibc it was built against, and a newer one is a tarball
+# that will not start on an older distribution.
+.PHONY: release
+release: build ## Package the binaries into dist/ as a tar.gz with SHA256SUMS
+	@set -e; 	rm -rf dist; mkdir -p dist; 	base="hayami-$(VERSION)-linux-amd64"; 	stage="dist/$$base"; 	mkdir -p "$$stage/packaging"; 	cp hayami hayami-tui install.sh uninstall.sh README.md LICENSE "$$stage/"; 	cp packaging/io.ushineko.hayami.desktop packaging/hayami.svg "$$stage/packaging/"; 	tar -C dist -czf "dist/$$base.tar.gz" "$$base"; 	rm -rf "$$stage"; 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS
+	@ls -l dist/*.tar.gz dist/SHA256SUMS
+
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities, before every tagged release
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

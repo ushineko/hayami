@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.3.4
+**Version**: 0.3.5
 
 *a chart you read at a glance*
 
@@ -84,6 +84,22 @@ hayami installs when asked — from the preferences window, or with
 titlebar.
 
 ## Installing it
+
+From a [release](https://github.com/ushineko/hayami/releases), which carries
+both programs already built for linux-amd64:
+
+```
+tar xzf hayami-<version>-linux-amd64.tar.gz
+cd hayami-<version>-linux-amd64
+./install.sh
+```
+
+That needs no Go, no C toolchain and no OpenGL headers. The desktop panel is
+linked against the system's OpenGL and X11 or Wayland libraries, so it wants a
+glibc at least as new as the one it was built against; where it will not
+start, build from the checkout instead.
+
+From a checkout, which builds first:
 
 ```
 ./install.sh                # the two programs, a launcher entry and an icon
@@ -179,6 +195,17 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.3.5 (2026-09-29)
+
+- **Add**: releases. Pushing a `v*` tag builds a linux-amd64 tarball carrying
+  both panels, the installer and what the installer puts on the system, and
+  publishes it with this changelog entry as the notes. The tags up to this one
+  were tags and nothing else -- there was no release job and no Release behind
+  any of them.
+- **Change**: `install.sh` uses the binaries beside it when there are any, so
+  a release tarball installs on a machine with no Go, no C toolchain and no
+  OpenGL headers. From a checkout it builds as before.
 
 ### 0.3.4 (2026-09-29)
 
