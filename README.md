@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.3.0
+**Version**: 0.3.1
 
 *a chart you read at a glance*
 
@@ -179,6 +179,15 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.3.1 (2026-09-29)
+
+- **Fix**: the grid layout works. It shipped in 0.2.0 and had never once run:
+  the design system's panel replaced the cards' layout with a stack whenever
+  it restyled, which every panel does at startup when its theme is applied,
+  and it handed a width the user had dragged back on the next reading -- so a
+  panel set to Grid drew one column, and a window dragged wider snapped back a
+  second later. Both are fixed in fynedesygn 0.1.67 (fynedesygn #133).
 
 ### 0.3.0 (2026-09-29)
 
