@@ -97,7 +97,7 @@ func TestAReplyArrivingAsALongReportDecodesTheSameAsAShortOne(t *testing.T) {
 		device  = 0x01
 		feature = 0x06
 	)
-	function := byte(0x01<<4 | softwareID)
+	function := 0x01<<4 | softwareID
 
 	for _, kind := range []struct {
 		name  string
@@ -138,7 +138,7 @@ func TestANotificationOnTheNodeIsNotMistakenForAReply(t *testing.T) {
 		device  = 0x01
 		feature = 0x06
 	)
-	function := byte(0x01<<4 | softwareID)
+	function := 0x01<<4 | softwareID
 
 	e := &fakeEndpoint{respond: func([]byte) [][]byte {
 		return [][]byte{
