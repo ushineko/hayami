@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.3.2
+**Version**: 0.3.3
 
 *a chart you read at a glance*
 
@@ -179,6 +179,16 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.3.3 (2026-09-29)
+
+- **Fix**: the settings are written when the panel closes. Nothing called
+  anything on the way out, so a change made in the last moments -- the
+  position the compositor reports as the window goes away is the one that
+  matters -- was in memory with a write scheduled a second later, and the
+  process does not last a second. It reached disk only when the panel had been
+  left alone for longer than that, which is most of the time and is why it was
+  not obvious (fynedesygn #137).
 
 ### 0.3.2 (2026-09-29)
 

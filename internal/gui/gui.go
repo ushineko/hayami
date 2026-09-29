@@ -877,6 +877,16 @@ func Start(o Options) error {
 	p.Poll(ctx)
 
 	p.win.ShowAndRun()
+
+	// The window has gone. Anything set in its last moments -- the position
+	// the compositor reported as it closed is the one that matters -- is in
+	// the store's memory with a write scheduled a second later, and the
+	// process does not last a second.
+	if o.Store != nil {
+		if err := o.Store.Close(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

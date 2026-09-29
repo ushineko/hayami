@@ -172,3 +172,36 @@ func TestAnUnsetFontSizeFollowsTheAppearance(t *testing.T) {
 	assert.InDelta(t, 14, config.Config{FontSize: -3}.FontSizeOr(14), 0.01)
 	assert.InDelta(t, 9, config.Config{FontSize: 9}.FontSizeOr(14), 0.01)
 }
+
+/*
+A change is on disk after Close, and nothing writes after it.
+
+The panel sets its position from a compositor callback as the window goes
+away, and a scheduled write does not outlive the process. Nothing called
+anything on the way out, so the setting reached disk only when the panel had
+been left alone for longer than the store's quiet second -- which is most of
+the time, and is why this was not obvious.
+*/
+func TestAChangeMadeOnTheWayOutIsOnDisk(t *testing.T) {
+	s, path := open(t, "")
+
+	require.NoError(t, s.SetConfig(s.Config().WithPosition(12, 34)))
+	require.NoError(t, s.Close())
+
+	again, err := config.Open(path)
+	require.NoError(t, err)
+	x, y, ok := again.Config().Position()
+	require.True(t, ok, "the position was not written")
+	assert.Equal(t, 12, x)
+	assert.Equal(t, 34, y)
+}
+
+// Closing twice is not an error: a program with a window-closed path and a
+// signal path must be able to go through both.
+func TestClosingTheStoreTwiceIsNotAnError(t *testing.T) {
+	s, _ := open(t, "")
+
+	require.NoError(t, s.SetConfig(s.Config().WithPosition(1, 2)))
+	require.NoError(t, s.Close())
+	require.NoError(t, s.Close())
+}
