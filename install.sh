@@ -61,6 +61,38 @@ run() {
     fi
 }
 
+# desktop_entry is the launcher entry with an Exec this machine can resolve.
+#
+# The packaged file carries a bare `Exec=hayami`, which is right for a system
+# install because /usr/bin is on every session's PATH. It is wrong for this
+# one. A desktop session's PATH comes from the display manager and
+# environment.d, not from a shell's rc files, and ~/.local/bin is on it on some
+# machines and not others -- so the entry worked on the machine it was written
+# on and launched nothing at all on the next one, with no error anywhere
+# (issue #60).
+#
+# TryExec goes in for the other half of that symptom: without it an entry whose
+# binary has gone stays in the menu and does nothing when clicked, which is
+# indistinguishable from the bug being fixed here.
+desktop_entry() {
+    sed "s|^Exec=hayami\$|TryExec=${BIN_DIR}/hayami\nExec=${BIN_DIR}/hayami|" \
+        "${REPO_DIR}/packaging/${APP_ID}.desktop"
+}
+
+# write_entry installs the generated entry, honouring --dry-run.
+write_entry() {
+    local dest="$1"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "  would install: ${dest}"
+        echo "            with: Exec=${BIN_DIR}/hayami"
+        return
+    fi
+    mkdir -p "$(dirname "${dest}")"
+    desktop_entry > "${dest}.new"
+    chmod 644 "${dest}.new"
+    mv "${dest}.new" "${dest}"
+}
+
 echo "Installing hayami from ${REPO_DIR} ..."
 
 # A release tarball ships the binaries beside this script, so the machine
@@ -93,13 +125,12 @@ fi
 echo "Installing to ${BIN_DIR} ..."
 run install -Dm755 "${REPO_DIR}/hayami" "${BIN_DIR}/hayami"
 run install -Dm755 "${REPO_DIR}/hayami-tui" "${BIN_DIR}/hayami-tui"
-run install -Dm644 "${REPO_DIR}/packaging/${APP_ID}.desktop" "${APP_DIR}/${APP_ID}.desktop"
+write_entry "${APP_DIR}/${APP_ID}.desktop"
 run install -Dm644 "${REPO_DIR}/packaging/hayami.svg" "${ICON_DIR}/hayami.svg"
 
 if [ "$AUTOSTART" -eq 1 ]; then
     echo "Starting it at login ..."
-    run install -Dm644 "${REPO_DIR}/packaging/${APP_ID}.desktop" \
-        "${AUTOSTART_DIR}/${APP_ID}.desktop"
+    write_entry "${AUTOSTART_DIR}/${APP_ID}.desktop"
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
