@@ -307,6 +307,11 @@ func (p *Peripherals) readings(found []peripherals.Battery) view.PeripheralsRead
 			Kind:   kind(b.Kind),
 			Cells:  cells(b.Cells),
 		}
+		if b.HasBand {
+			// A device from before the feature protocol: four steps and no
+			// percentage. The two never both apply.
+			reading.Band, reading.Segments = b.Band.String(), b.Band.Segments()
+		}
 
 		// A device that is connected and not saying how full it is keeps the
 		// level it last gave — but only while nothing else about it has
@@ -315,7 +320,7 @@ func (p *Peripherals) readings(found []peripherals.Battery) view.PeripheralsRead
 		// one whose old level is wrong, and carrying it over would show a
 		// headset filling from a number it has already left. The monitor
 		// guards its own carry-over on the same two conditions.
-		if !b.HasLevel {
+		if !b.HasLevel && !b.HasBand {
 			was, ok := p.seen[b.Name]
 			if !ok || was.reading.Charge != reading.Charge {
 				// Nothing to carry, or nothing worth carrying. A level from

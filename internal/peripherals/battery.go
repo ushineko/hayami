@@ -47,6 +47,17 @@ type Battery struct {
 
 	State State
 
+	// Band is how full a device without a fuel gauge says it is, in the four
+	// steps such a device knows. HasBand is false for everything with a
+	// percentage.
+	//
+	// **Not a substitute for Level and never converted into one.** A device
+	// saying "good" does not mean 75 %, and spec 008 refused to invent that
+	// figure once already; spec 018 draws the four steps instead, which is how
+	// the device's own indicator shows it.
+	Band    Band
+	HasBand bool
+
 	// Kind is what sort of device this is, where the source could say. It is
 	// not part of the reading and is only used to order the panel's cells;
 	// a source that cannot tell leaves it KindOther.

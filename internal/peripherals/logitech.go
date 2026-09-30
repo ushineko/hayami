@@ -83,6 +83,15 @@ func (l *Logitech) Presence() Presence { return l.presence }
 type located struct {
 	node  string
 	index byte
+
+	// old marks a device that answered that it does not know HID++ 2.0 at all.
+	// Its battery is a register rather than a feature (spec 018).
+	old bool
+
+	// name is what to call it if even the register will not read, and empty
+	// where the node cannot lend a device a name of its own -- see the
+	// exclusions where this is set.
+	name string
 }
 
 // NewLogitech builds the reader.
@@ -122,18 +131,31 @@ func (l *Logitech) Batteries() ([]Battery, error) {
 		still []located
 		errs  []error
 	)
+	unread := map[string]bool{}
+
 	for _, loc := range where {
 		e, err := l.open(loc.node)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		b, err := read(e, l.timeout, loc.index)
+		b, err := read(e, l.timeout, loc)
 		closeEndpoint(e)
+		if err != nil && loc.old && loc.name != "" {
+			// A device from before the feature protocol whose register would
+			// not read either. It is there and it is not a reading, and the
+			// section says so by name rather than by silence.
+			unread[loc.name] = true
+		}
 		if err != nil {
 			// The device has gone quiet, or gone. Either way its index is not
 			// worth remembering; the next poll rediscovers.
-			if !errors.Is(err, errNoDevice) && !errors.Is(err, errUnknownFeature) && !errors.Is(err, errSilent) {
+			// errOldProtocol among them: a register read that comes back
+			// "invalid sub-id" is a device from before this protocol refusing
+			// the question, which is an answer and not a fault. It is named
+			// above instead.
+			if !errors.Is(err, errNoDevice) && !errors.Is(err, errUnknownFeature) &&
+				!errors.Is(err, errSilent) && !errors.Is(err, errOldProtocol) {
 				errs = append(errs, err)
 			}
 			continue
@@ -143,6 +165,7 @@ func (l *Logitech) Batteries() ([]Battery, error) {
 	}
 
 	l.known = still
+	l.presence.TooOld = names(unread)
 	return found, errors.Join(errs...)
 }
 
@@ -168,8 +191,6 @@ func (l *Logitech) discover() ([]located, error) {
 
 	var found []located
 	presence := Presence{Nodes: len(nodes)}
-	old := map[string]bool{}
-
 	for _, node := range nodes {
 		e, err := l.open(node.Path)
 		if err != nil {
@@ -184,22 +205,32 @@ func (l *Logitech) discover() ([]located, error) {
 				// feature read() falls back to.
 				found = append(found, located{node: node.Path, index: index})
 			case errors.Is(err, errOldProtocol) && index != wiredIndex && pairedDevice(node.Phys):
-				// A *paired device* answered that it does not know what HID++
-				// 2.0 is. Something is there; its battery is a 1.0 register
-				// this build does not ask for.
+				// A *paired device* answered, and answered that it has no
+				// features at all.
+				// Its battery is a HID++ 1.0 register, which read() asks for
+				// instead (spec 018).
 				//
 				// Two exclusions, and the real hardware taught both.
 				//
-				// Index 0xFF addresses the receiver itself, and a Unifying
-				// receiver is a HID++ 1.0 device by construction -- reporting
-				// that made every machine with one claim an unreadable device,
-				// two lines under a mouse that was drawing fine.
+				// Index 0xFF addresses the thing being spoken to, and a
+				// Unifying receiver is a 1.0 device by construction with no
+				// battery of its own -- reading it asked a receiver for a
+				// register it does not have, and reporting it made every
+				// machine with one claim an unreadable device two lines under
+				// a mouse that was drawing fine.
 				//
-				// And a receiver node answers for *every* device paired to it,
-				// so a name taken from there is the receiver's and not the
-				// device's: the keyboard was reported twice, once correctly
-				// and once as "Logitech USB Receiver".
-				old[node.Name] = true
+				// And a receiver node answers for every device paired to it,
+				// so what arrives there carries the receiver's name and not
+				// the device's: the keyboard was reported twice, once
+				// correctly and once as "Logitech USB Receiver".
+				//
+				// A device wired in by its own cable would answer on 0xFF and
+				// is missed by this. None is to hand to check against, and a
+				// missed reading is the better of the two mistakes.
+				found = append(found, located{
+					node: node.Path, index: index, old: true, name: node.Name,
+				})
+
 			case errors.Is(err, errNotReachable):
 				presence.Quiet++
 			}
@@ -207,7 +238,6 @@ func (l *Logitech) discover() ([]located, error) {
 		closeEndpoint(e)
 	}
 
-	presence.TooOld = names(old)
 	l.presence = presence
 	return found, nil
 }
@@ -226,17 +256,32 @@ func names(set map[string]bool) []string {
 	return out
 }
 
-// read takes one device's battery, newest feature first.
-func read(e endpoint, timeout time.Duration, index byte) (Battery, error) {
-	b, err := readUnified(e, timeout, index)
+// read takes one device's battery, in whichever protocol it speaks.
+//
+// A device from before the feature protocol has no 0x0005 to ask its name of
+// either, so it keeps the one the kernel gave its node.
+func read(e endpoint, timeout time.Duration, loc located) (Battery, error) {
+	if loc.old {
+		b, err := readOldBattery(e, timeout, loc.index)
+		if err != nil {
+			return Battery{}, err
+		}
+		b.Name = loc.name
+		if b.Name == "" {
+			b.Name = defaultName
+		}
+		return b, nil
+	}
+
+	b, err := readUnified(e, timeout, loc.index)
 	if errors.Is(err, errUnknownFeature) {
-		b, err = readStatus(e, timeout, index)
+		b, err = readStatus(e, timeout, loc.index)
 	}
 	if err != nil {
 		return Battery{}, err
 	}
 
-	b.Name, b.Kind = identify(e, timeout, index)
+	b.Name, b.Kind = identify(e, timeout, loc.index)
 	return b, nil
 }
 

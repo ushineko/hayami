@@ -130,11 +130,12 @@ fuel gauge, and a receiver slot with nothing behind it look like a connection
 that had failed (issue #66).
 */
 const (
-	err10InvalidSubID  = 0x01
-	err10ConnectFail   = 0x04
-	err10Busy          = 0x07
-	err10UnknownDevice = 0x08
-	err10ResourceError = 0x09
+	err10InvalidSubID   = 0x01
+	err10InvalidAddress = 0x02
+	err10ConnectFail    = 0x04
+	err10Busy           = 0x07
+	err10UnknownDevice  = 0x08
+	err10ResourceError  = 0x09
 )
 
 // HID++ 2.0 error codes.
@@ -297,6 +298,10 @@ func translate10(code byte) error {
 		return errNotReachable
 	case err10InvalidSubID:
 		return errOldProtocol
+	case err10InvalidAddress:
+		// A register this device does not have, which is the 1.0 way of
+		// saying what errUnknownFeature says in 2.0.
+		return errUnknownFeature
 	default:
 		return hidppError{code: code}
 	}
@@ -308,6 +313,56 @@ func translate20(code byte) error {
 		return errUnknownFeature
 	}
 	return hidppError{code: code}
+}
+
+/*
+register sends one HID++ 1.0 register read and returns the reply's parameters.
+
+The 1.0 form is a different shape from the 2.0 one: a sub-id where a feature
+index goes, and the register where a function goes, so it cannot share
+attemptRequest's framing. What it does share is [reply]'s recognition, because
+the answer arrives on the same endpoint amid the same unasked-for traffic.
+*/
+func register(e endpoint, timeout time.Duration, index, reg byte) ([]byte, error) {
+	out := make([]byte, 7)
+	out[0] = reportShort
+	out[1] = index
+	out[2] = subGetRegister
+	out[3] = reg
+
+	if _, err := e.Write(out); err != nil {
+		return nil, fmt.Errorf("sending a hid++ 1.0 register read: %w", err)
+	}
+
+	deadline := time.Now().Add(timeout)
+	if err := e.SetReadDeadline(deadline); err != nil {
+		return nil, fmt.Errorf("setting a deadline on the hid++ endpoint: %w", err)
+	}
+
+	buf := make([]byte, 64)
+	for time.Now().Before(deadline) {
+		n, err := e.Read(buf)
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return nil, errSilent
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading a hid++ 1.0 reply: %w", err)
+		}
+		r := buf[:n]
+		if len(r) < 5 || r[1] != index {
+			continue
+		}
+		if r[2] == 0x8F {
+			if len(r) < 6 {
+				continue
+			}
+			return nil, translate10(r[5])
+		}
+		if r[2] == subGetRegister && r[3] == reg {
+			return r[4:], nil
+		}
+	}
+	return nil, errSilent
 }
 
 // featureIndex asks a device which of its own indices holds a feature.
