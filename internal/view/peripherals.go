@@ -101,8 +101,19 @@ type PeripheralReading struct {
 	// Name is the device's own name, which is the cell's label.
 	Name string
 
-	// Level is a percentage.
+	// Level is a percentage. Zero and meaningless for a device that reports a
+	// band instead.
 	Level int
+
+	// Band is how full a device without a fuel gauge says it is, in the four
+	// steps such a device knows, and Segments is how many of four that fills.
+	// Zero means this cell has a percentage.
+	//
+	// **Never converted into a percentage.** A device saying "good" does not
+	// mean 75 %; the cell draws the four steps where a number would go, which
+	// is how the device's own indicator shows it (spec 018).
+	Band     string
+	Segments int
 
 	Charge Charge
 
@@ -321,6 +332,10 @@ func byLiveThenRecent(a, b PeripheralReading) int {
 
 // peripheral is one device's cell.
 func peripheral(d PeripheralReading) Cell {
+	if d.Segments > 0 {
+		return bandCell(d)
+	}
+
 	cell := Cell{
 		Label: d.Name, Unit: "%", Note: note(d),
 		Value: strings.TrimSpace(Count(d.Level)), Stale: d.Stale,
@@ -341,6 +356,78 @@ func peripheral(d PeripheralReading) Cell {
 		cell.Status = Good
 	}
 	return cell
+}
+
+// BandSegments is how many steps a device without a gauge reports in, and so
+// how many the cell draws.
+const BandSegments = 4
+
+/*
+The glyphs a band is drawn with: filled and empty.
+
+An outline rather than a gap for the empty one, so the four steps stay visible
+as four and a reader can see how much is missing as well as how much is left --
+which is what the device's own indicator does.
+
+They are the same width. The first photograph of this made the empty segment
+look like a sliver and it was read as a font problem; measured in the panel's
+own face both glyphs advance identically, and what the eye had picked up was an
+outline sitting beside filled bars, which is the point of it.
+*/
+const (
+	SegmentFull  = '▮'
+	SegmentEmpty = '▯'
+)
+
+/*
+bandCell draws a device that reports a band rather than a percentage.
+
+The segments go where the number goes, so a row of cells still lines up and the
+eye lands in the same place; the band's word takes the quiet line, where a
+percentage cell says "Discharging". A band device is then obviously not a
+measured one without a caption having to say so, and nothing invents a figure
+the device never gave (spec 018).
+
+Charging wins the quiet line when it applies: it is the more urgent fact, and
+the segments already carry the band.
+*/
+func bandCell(d PeripheralReading) Cell {
+	cell := Cell{
+		Label: d.Name,
+		Value: segments(d.Segments),
+		Note:  d.Band,
+		Stale: d.Stale,
+	}
+	if d.Stale || d.Charge != Draining {
+		cell.Note = chargeNote(d)
+	}
+
+	// The same thresholds a percentage cell uses, applied to what exists: the
+	// lowest step is critical and the one above it is low.
+	switch {
+	case d.Charge != Draining:
+		cell.Status = Info
+	case d.Segments <= 1:
+		cell.Status = Bad
+	case d.Segments == 2:
+		cell.Status = Warn
+	default:
+		cell.Status = Good
+	}
+	return cell
+}
+
+// segments draws n of BandSegments filled.
+func segments(n int) string {
+	out := make([]rune, 0, BandSegments)
+	for i := range BandSegments {
+		if i < n {
+			out = append(out, SegmentFull)
+			continue
+		}
+		out = append(out, SegmentEmpty)
+	}
+	return string(out)
 }
 
 /*

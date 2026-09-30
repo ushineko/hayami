@@ -70,8 +70,9 @@ func TestOnlyADevicesOwnNodeLendsItAName(t *testing.T) {
 		},
 	}
 
-	_, err := l.Batteries()
-	require.NoError(t, err)
+	found, err := l.Batteries()
+	require.NoError(t, err, "a device refusing a question is an answer, not a fault")
+	assert.Empty(t, found, "nothing here would give a battery")
 
 	assert.Equal(t, []string{"Logitech K800"}, l.Presence().TooOld,
 		"a device is named from its own node and not from the receiver's")

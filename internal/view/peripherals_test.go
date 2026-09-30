@@ -339,3 +339,59 @@ func TestTwoDevicesHaveNoNote(t *testing.T) {
 	assert.Len(t, s.Cells, 2)
 	assert.Empty(t, s.Note)
 }
+
+/*
+A band cell keeps the shape of a number cell.
+
+The segments go where the percentage goes, so a row still lines up and the eye
+lands in the same place; the band's word takes the quiet line. A band device is
+then obviously not a measured one without a caption saying so (spec 018).
+*/
+func TestABandCellDrawsSegmentsWhereANumberWouldGo(t *testing.T) {
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+		{Name: "Logitech K800", Band: "Good", Segments: 3},
+	}})
+
+	require.Len(t, s.Cells, 1)
+	assert.Equal(t, "▮▮▮▯", s.Cells[0].Value)
+	assert.Equal(t, "Good", s.Cells[0].Note)
+	assert.Empty(t, s.Cells[0].Unit, "there is no percent sign without a percentage")
+}
+
+// The verdict follows the band, on the same thresholds a percentage uses.
+func TestTheVerdictFollowsTheBand(t *testing.T) {
+	for _, c := range []struct {
+		segments int
+		want     view.Status
+	}{{1, view.Bad}, {2, view.Warn}, {3, view.Good}, {4, view.Good}} {
+		s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+			{Name: "K800", Band: "x", Segments: c.segments},
+		}})
+
+		require.Len(t, s.Cells, 1)
+		assert.Equal(t, c.want, s.Cells[0].Status, "%d segments", c.segments)
+	}
+}
+
+// Charging takes the quiet line: it is the more urgent fact, and the segments
+// already carry the band.
+func TestChargingWinsTheQuietLineFromTheBand(t *testing.T) {
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+		{Name: "K800", Band: "Good", Segments: 3, Charge: view.Filling},
+	}})
+
+	require.Len(t, s.Cells, 1)
+	assert.Equal(t, "Charging", s.Cells[0].Note)
+	assert.Equal(t, "▮▮▮▯", s.Cells[0].Value, "the band is still drawn")
+}
+
+// And a percentage device is untouched by any of it.
+func TestAPercentageCellIsUnchanged(t *testing.T) {
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+		{Name: "G502 X PLUS", Level: 78},
+	}})
+
+	require.Len(t, s.Cells, 1)
+	assert.Equal(t, "78", s.Cells[0].Value)
+	assert.Equal(t, "%", s.Cells[0].Unit)
+}
