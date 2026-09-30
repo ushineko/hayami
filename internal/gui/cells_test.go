@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2/test"
+	fynetheme "fyne.io/fyne/v2/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -230,4 +231,43 @@ func TestTheWindowFollowsTheArrangementSetting(t *testing.T) {
 	// something arbitrary.
 	p.Apply(config.Config{Arrangement: "row"})
 	assert.Equal(t, glance.Stack, p.Window().Panel().Arrangement())
+}
+
+/*
+AC (spec 025). The window sets a bar under a level cell and clears it under a
+band cell, and the card is the same height with bars and without.
+
+The height is the point of the library's reserved row: a device that gains or
+loses a level must not reflow the card.
+*/
+func TestTheWindowBarsALevelAndNotABand(t *testing.T) {
+	a := test.NewTempApp(t)
+	at := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	mouse := view.PeripheralReading{Name: "G502 X PLUS", Level: 40, Kind: view.KindMouse, Since: at, Seen: at}
+	band := view.PeripheralReading{Name: "K800", Band: "Good", Segments: 3, Kind: view.KindKeyboard,
+		Since: at, Seen: at}
+	src := &cellSource{reading: view.PeripheralsReading{Devices: []view.PeripheralReading{mouse, band}}}
+	p := gui.New(a, gui.Options{Sources: []panel.Source{src}, Title: "hayami"})
+
+	p.Draw("peripherals", src.Section(), true)
+	require.Equal(t, 2, gui.ShownCells(p, "peripherals"))
+	withBar := gui.CardMinSize(p, "peripherals")
+
+	fraction, fill, ok := gui.CellBar(p, "peripherals", 0, 200)
+	require.True(t, ok, "the level cell drew no bar")
+	assert.InDelta(t, 0.40, fraction, 0.01, "the bar is not the level")
+	assert.Equal(t, gui.PanelTheme(p).Color(fynetheme.ColorNameWarning, a.Settings().ThemeVariant()), fill,
+		"the bar is not in the cell's status")
+	_, _, ok = gui.CellBar(p, "peripherals", 1, 200)
+	assert.False(t, ok, "the band cell drew a bar under its segments")
+
+	// The mouse loses its level: two band cells, no bar anywhere.
+	mouse = view.PeripheralReading{Name: "G502 X PLUS", Band: "Low", Segments: 2, Kind: view.KindMouse,
+		Since: at, Seen: at}
+	src.reading = view.PeripheralsReading{Devices: []view.PeripheralReading{mouse, band}}
+	p.Draw("peripherals", src.Section(), true)
+	_, _, ok = gui.CellBar(p, "peripherals", 0, 200)
+	assert.False(t, ok, "a cell that lost its level kept its bar")
+	assert.Equal(t, withBar.Height, gui.CardMinSize(p, "peripherals").Height,
+		"the card changed height when the bars went")
 }

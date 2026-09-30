@@ -368,6 +368,7 @@ func peripheral(d PeripheralReading) Cell {
 	cell := Cell{
 		Label: d.Name, Unit: "%", Note: note(d),
 		Value: strings.TrimSpace(Count(d.Level)), Stale: d.Stale,
+		Bar: float64(d.Level) / 100, HasBar: true,
 	}
 
 	// The verdict is kept on a stale cell rather than dropped. The shells dim

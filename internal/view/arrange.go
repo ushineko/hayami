@@ -283,6 +283,7 @@ func rightAlign(s string, width int) string {
 func renderRow(sections []Section, width int, p Painter) []string {
 	c := rowColumns(sections)
 	sc := measureStrips(sections)
+	bars := cellRowBars(sections, width)
 
 	var out []string
 	for _, s := range sections {
@@ -290,7 +291,7 @@ func renderRow(sections []Section, width int, p Painter) []string {
 			out = append(out, line(labelled(s, r), width, p))
 		}
 		for _, c := range s.Cells {
-			out = append(out, cellLine(c, width, p))
+			out = append(out, cellLine(c, width, bars, p))
 		}
 		for _, m := range s.Meters {
 			if m.Strip != nil {

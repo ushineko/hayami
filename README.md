@@ -227,6 +227,14 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: a peripheral with a level draws a bar under it, in the level's
+  colour (spec 025, issue #95). A band of segments already draws its level
+  and has none; nor does a "no device" slot. The window's cell reserves the
+  bar's row whether or not a bar is drawn (fynedesygn v0.1.76), so the
+  peripherals card is one bar row taller once, at upgrade, and never moves
+  after. The pane draws the bar in the meter's glyphs on a fourth line under
+  each cell, blank under a band; in `--arrangement row` a ten-character bar
+  follows the level when every device's line has room for it.
 - **Feature**: the cooler says how busy the processors are, and the graphics
   card's temperature (spec 026, issue #96). The CPU row is load and
   temperature on one line (`12 %  78.0 °C`) and a GPU row beside it the same.
@@ -243,6 +251,7 @@ MIT. See [LICENSE](LICENSE).
   card's is violet, and the coolant keeps its band colour.
 - **Change**: `doctor` no longer calls a section "partial" for a reason
   that is kept off the card; it still lists it.
+
 
 ### 0.7.2 (2026-09-30)
 
