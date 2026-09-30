@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.5.1
+**Version**: 0.6.0
 
 *a chart you read at a glance*
 
@@ -225,10 +225,10 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.6.0 (2026-09-30)
 
 - **Change (breaking)**: the peripherals and cooler sections read their
-  devices through [sanshoku](https://github.com/ushineko/sanshoku) v0.1.1, and
+  devices through [sanshoku](https://github.com/ushineko/sanshoku) v0.1.2, and
   `liquidctl` and `headsetcontrol` are no longer used (spec 020, #81). The
   Kraken is read over `hidraw` directly, beside hotaru's service; the Arctis
   Nova Pro Wireless through its base station, and switched off it keeps its
