@@ -61,7 +61,7 @@ func NewCooler() *Cooler {
 	return &Cooler{
 		trail:  view.NewSeries(CoolerTrail),
 		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
-		sensor: cooler.CPUPackage.Temperature,
+		sensor: cooler.CPUPackage,
 		liquid: cooler.Cooling,
 	}
 }
@@ -87,8 +87,11 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	} else {
 		reasons = append(reasons, view.Reason{
 			Label: "CPU", Text: "no sensor", Status: view.Info,
-			Detail: fmt.Sprintf("no %s/%s under %s",
-				cooler.CPUPackage.Chip, cooler.CPUPackage.Label, cooler.HwmonRoot),
+			// Every sensor looked for, not the last one tried: "no
+			// coretemp/Package id 0" on an AMD machine sent somebody looking
+			// for an Intel driver that was never going to be there.
+			Detail: fmt.Sprintf("looked under %s for %s",
+				cooler.HwmonRoot, cooler.CPUSensorNames()),
 		})
 	}
 
