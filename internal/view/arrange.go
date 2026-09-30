@@ -584,10 +584,13 @@ func renderGrid(sections []Section, width int, p Painter) []string {
 	if cols > len(sections) {
 		cols = len(sections)
 	}
+	// Column-major: the first column takes the first sections. Four sections
+	// in room for three columns are two to a column in two columns, and the
+	// width is shared among the two, not measured for three and left empty.
+	perCol := (len(sections) + cols - 1) / cols
+	cols = (len(sections) + perCol - 1) / perCol
 	colWidth := (width - ColumnGap*(cols-1)) / cols
 
-	// Column-major: the first column takes the first sections.
-	perCol := (len(sections) + cols - 1) / cols
 	columns := make([][]string, cols)
 	height := 0
 	for c := range cols {
@@ -612,7 +615,7 @@ func renderGrid(sections []Section, width int, p Painter) []string {
 				cell = columns[c][row]
 			}
 			b.WriteString(cell)
-			if pad := colWidth - runeLen(cell); pad > 0 && c < cols-1 {
+			if pad := colWidth - visibleLen(cell); pad > 0 && c < cols-1 {
 				b.WriteString(strings.Repeat(" ", pad))
 			}
 		}

@@ -16,12 +16,13 @@ import (
 	"github.com/ushineko/hayami/internal/buildinfo"
 	"github.com/ushineko/hayami/internal/cli"
 	"github.com/ushineko/hayami/internal/gui"
+	"github.com/ushineko/hayami/internal/prefs"
 )
 
 func main() {
 	tuneGC(os.Getenv)
 
-	root := cli.GUI(buildinfo.Version(), func(o cli.Options) error {
+	root := cli.GUI(buildinfo.Version(), prefs.Pages(), func(o cli.Options) error {
 		return gui.Start(gui.Options{
 			Sources:     o.Sources(nil),
 			Title:       "hayami",

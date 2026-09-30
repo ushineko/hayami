@@ -98,9 +98,14 @@ func TUI(version string) *cobra.Command {
 // It takes no --sections or --arrangement. Those are a pane's arguments: a
 // desktop panel is configured from its own settings, and a flag that changed
 // what it drew for one run would be a setting nobody could find again.
-func GUI(version string, start func(Options) error) *cobra.Command {
+//
+// pages are the preferences window's pages, in navigation order and in lower
+// case, so --preferences can open one and refuse a name it does not have. They
+// are handed in rather than known here: this package is shared with the
+// terminal panel, which is built without the toolkit the window is made of.
+func GUI(version string, pages []string, start func(Options) error) *cobra.Command {
 	var f flags
-	var preferences bool
+	var preferences string
 
 	root := &cobra.Command{
 		Use:           "hayami",
@@ -110,12 +115,16 @@ func GUI(version string, start func(Options) error) *cobra.Command {
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			page, err := preferencesPage(preferences, pages)
+			if err != nil {
+				return err
+			}
 			opts, _, err := f.resolve()
 			if err != nil {
 				return err
 			}
 			warn(cmd, opts)
-			opts.Preferences = preferences
+			opts.Preferences = page
 			return start(opts)
 		},
 	}
@@ -123,10 +132,33 @@ func GUI(version string, start func(Options) error) *cobra.Command {
 		"the settings file; empty means the usual place")
 	// A desktop entry's second action, and the way in for somebody whose
 	// panel is somewhere they cannot right-click it.
-	root.Flags().BoolVar(&preferences, "preferences", false,
-		"open the preferences window as well as the panel")
+	//
+	// A page name opens the window on that page, which is how
+	// tools/screenshot.sh photographs each one; the list after "on one of" is
+	// what it reads to know which there are.
+	root.Flags().StringVar(&preferences, "preferences", "",
+		"open the preferences window as well as the panel, on one of: "+strings.Join(pages, ", "))
+	if len(pages) > 0 {
+		// A bare --preferences is the window's first page, as it always was.
+		root.Flags().Lookup("preferences").NoOptDefVal = pages[0]
+	}
 	root.AddCommand(windowCmd(), doctorCmd(&f))
 	return root
+}
+
+// preferencesPage checks a --preferences value against the window's pages.
+// Empty is the flag not given.
+func preferencesPage(name string, pages []string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	for _, p := range pages {
+		if strings.EqualFold(p, name) {
+			return p, nil
+		}
+	}
+	return "", &UsageError{fmt.Errorf("the preferences window has no page named %q; there is %s",
+		name, strings.Join(pages, ", "))}
 }
 
 // readingsCmd prints what the sources say, as JSON.

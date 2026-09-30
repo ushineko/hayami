@@ -3,6 +3,7 @@ package prefs_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2/test"
@@ -194,4 +195,31 @@ func TestTheNavigationsShapeIsOffered(t *testing.T) {
 
 	// And Refresh is not among them: every screen here saves as it is changed.
 	assert.NotContains(t, buttons, "Refresh")
+}
+
+// Pages are the navigation's titles, in its order: what --preferences takes
+// and what the screenshot harness photographs.
+func TestPagesAreTheNavigationInOrder(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	w := prefs.New(a, prefs.Options{Store: store(t, ""), Version: "1.2.3"})
+	var titles []string
+	for _, s := range w.Shell().Sections() {
+		titles = append(titles, strings.ToLower(s.Title()))
+	}
+	assert.Equal(t, titles, prefs.Pages())
+}
+
+// The window opens on the page it is asked for, in any case, and a page asked
+// for after it exists moves it there.
+func TestTheWindowOpensOnTheNamedPage(t *testing.T) {
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+
+	w := prefs.New(a, prefs.Options{Store: store(t, ""), Version: "1.2.3", Page: "about"})
+	assert.Equal(t, "About", w.Shell().Current().Title())
+
+	w.ShowPage("Window")
+	assert.Equal(t, "Window", w.Shell().Current().Title())
 }

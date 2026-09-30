@@ -44,7 +44,7 @@ func Menu(a fyne.App, store *config.Store, version string, onChange func(config.
 // MenuWith is Menu, and also the function that opens the preferences window,
 // for a caller that offers another way in: a command-line flag, a desktop
 // entry's second action, or a panel somewhere a person cannot right-click.
-func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func()) { //nolint:revive // the callback is the panel's only way back
+func MenuWith(a fyne.App, store *config.Store, version string, onChange func(config.Config)) (func() *fyne.Menu, func(page string)) { //nolint:revive // the callback is the panel's only way back
 	var window *prefs.Window
 
 	// applied is every route by which the panel's theme changes: the Window
@@ -57,7 +57,9 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 		}
 	}
 
-	open := func() {
+	// open takes the page to show; empty leaves the window where it was, or
+	// on its first page when it is new.
+	open := func(page string) {
 		// One window, however many times the menu is used. A second copy is
 		// two views of one file, and the one nobody is looking at is the one
 		// that overwrites.
@@ -67,14 +69,15 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 				Version:  version,
 				Theme:    themeFor(store, applied),
 				OnChange: func() { applied(store.Config()) },
+				Page:     page,
 			})
 		}
-		window.Show()
+		window.ShowPage(page)
 	}
 
 	return func() *fyne.Menu {
 		return fyne.NewMenu("",
-			fyne.NewMenuItem("Preferences…", open),
+			fyne.NewMenuItem("Preferences…", func() { open("") }),
 			opacityItem(store, applied),
 			fyne.NewMenuItem("Quit", func() { a.Quit() }),
 		)

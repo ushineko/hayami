@@ -18,6 +18,7 @@ frameless always-on-top window, and in a terminal as a pane.
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [What it does](#what-it-does)
 - [Arrangements](#arrangements)
 - [Architecture](#architecture)
@@ -27,6 +28,34 @@ frameless always-on-top window, and in a terminal as a pane.
 - [Where it comes from](#where-it-comes-from)
 - [Licence](#licence)
 - [Changelog](#changelog)
+
+## Screenshots
+
+Taken on the author's desk from its live readings by `make screenshots`,
+which starts a fresh panel on a throwaway copy of the settings, photographs
+it, and stops it.
+
+The desktop panel, in the Breeze Dark scheme:
+
+![The desktop panel: four translucent cards stacked. Peripherals shows a mouse and a headset, each with its battery percentage, charging state and a bar; Bandwidth shows the download and upload rate and totals of two interfaces over a trend line; Cooler shows the processor's and graphics card's load and temperature, the coolant temperature and the fan and pump speeds over a trend line; Usage shows a meter for each of three accounts with its percentage and when it resets](docs/img/gallery-panel.png)
+
+The terminal panel in a 100-column pane, where the grid makes two columns:
+
+![The terminal panel at 100 columns in its grid: Peripherals and Bandwidth in the left column, Cooler and Usage in the right, the batteries' bars and the usage meters drawn in line characters and each trend as a small block chart](docs/img/gallery-pane-column.png)
+
+The same readings at 160 columns in the row arrangement, one line per reading:
+
+![The terminal panel at 160 columns in rows: a line for each device with its level and bar at the right, a line for each interface's rates, a block-chart trend line for each interface and direction, lines for the processor, graphics card, coolant and speeds, and one full-width meter per usage account with its figures and reset time](docs/img/gallery-pane-row.png)
+
+The preferences window, one page at a time:
+
+![Preferences, Sections page: a checkbox for each of the four sections with up and down buttons to reorder them, a choice of stack, grid or row, and a checkbox for each network interface the bandwidth section can watch, with a switch to show every interface](docs/img/gallery-prefs-sections.png)
+
+![Preferences, Window page: the panel's own interface font, monospace font and text size, the checkbox that installs the frameless always-on-top window rule, and the slider for how opaque the cards are](docs/img/gallery-prefs-window.png)
+
+![Preferences, Appearance page: the preferences window's own colour scheme, fonts, text size and interface scale, with a sample of regular, bold, monospace and status text](docs/img/gallery-prefs-appearance.png)
+
+![Preferences, About page: the program's icon, name, version and summary, notes on its origin and what it writes, the facts table naming the settings file and the sections shown, and the start of this README below them](docs/img/gallery-prefs-about.png)
 
 ## What it does
 
@@ -157,6 +186,7 @@ cache is shared between the two and is not touched by either.
 ```
 hayami                                    # the desktop panel
 hayami --preferences                      # …and its preferences window
+hayami --preferences=about                # …open on one of its pages
 hayami-tui                                # the terminal panel
 hayami-tui --sections bandwidth --arrangement row
 hayami-tui readings                       # the numbers as JSON, no display needed
@@ -200,6 +230,13 @@ make lint
 make build     # both panels
 make vuln      # govulncheck, before every tagged release
 
+make screenshots
+               # photograph the gallery above into docs/img from this desk's
+               # live readings; needs KDE/Wayland, kdotool, spectacle and
+               # alacritty, and python3 with Pillow, and leaves a running
+               # panel alone
+
+tools/screenshot.sh --what prefs:about   # one of them
 tools/shot-tui.sh out.png 150 6 ./hayami-tui --sections usage
                # photograph a pane in a real terminal (KDE/Wayland)
 ```
@@ -227,6 +264,28 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Docs**: the README has a gallery (spec 027, issue #97): the desktop panel,
+  the pane at 100 columns in its grid and at 160 in rows, and each page of
+  the preferences window. `make screenshots` takes the whole set from the
+  desk's live readings in one run -- `tools/screenshot.sh`, ported from
+  fynedesygn's -- on a throwaway copy of the settings, finding the window it
+  started by its id and leaving a running panel alone. A test fails when a
+  gallery image is not in the README or the README shows one that is not
+  there.
+- **Feature**: `hayami --preferences=<page>` opens the preferences window on
+  one of its pages (sections, window, appearance, about). A bare
+  `--preferences` opens the first, as before; a page it does not have is a
+  usage error naming the ones it does.
+- **Fix**: the pane's grid lines its columns up when it is coloured. The
+  padding between columns counted the colour codes as characters, so a dim
+  section title padded short by their length and pulled the next column
+  left on its line.
+- **Fix**: the pane's grid shares its width among the columns it fills. Four
+  sections at 100 columns filled two columns but measured them for three,
+  so each was a third of the pane, the rest was empty and an interface name
+  was cut to two letters.
+- **Fix**: About names the settings file the panel was started with, which
+  was the usual place even when `--settings` named another.
 - **Change**: a peripheral with a level draws a bar under it, in the level's
   colour (spec 025, issue #95). A band of segments already draws its level
   and has none; nor does a "no device" slot. The window's cell reserves the
