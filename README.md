@@ -198,6 +198,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: the desktop panel collects garbage at `GOGC=50` rather than Go's
+  default of 100, unless `GOGC` is set. Most of its live heap is parsed fonts
+  that stay, so the default's headroom was memory held for nothing; resident
+  size measured 12–21 MB lower for no measurable CPU. The fonts themselves are
+  #79's larger half and are Fyne's to fix.
 - **Fix**: a device the panel cannot read no longer takes a line of a card
   that is already drawing two devices; it stays in `doctor` and the hover
   note. When it is drawn it is a row -- the name, then `unsupported` -- rather

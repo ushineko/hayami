@@ -19,6 +19,8 @@ import (
 )
 
 func main() {
+	tuneGC(os.Getenv)
+
 	root := cli.GUI(buildinfo.Version(), func(o cli.Options) error {
 		return gui.Start(gui.Options{
 			Sources:     o.Sources(nil),
