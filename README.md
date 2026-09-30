@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.5.0
+**Version**: 0.5.1
 
 *a chart you read at a glance*
 
@@ -195,6 +195,14 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.5.1 (2026-09-29)
+
+- **Fix**: the processor temperature reads on AMD. The sensor was one constant
+  naming `coretemp`, which is Intel's driver, so a Ryzen read nothing at all
+  and the section reported no sensor. An ordered list now: Intel's package
+  temperature, then AMD's `Tdie`, then `Tctl`, then `zenpower`. The reason
+  names every sensor looked for rather than only the last one tried.
 
 ### 0.5.0 (2026-09-29)
 
