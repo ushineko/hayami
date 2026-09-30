@@ -1,0 +1,11 @@
+# LF everywhere: the tests compare the README, the desktop entries and the
+# generated docs byte for byte, and install.sh must not gain CRs. Git for
+# Windows checks out CRLF by default, which failed those tests there.
+* text=auto eol=lf
+*.png binary
+*.svg text eol=lf
+*.ico binary
+
+# Windows PowerShell 5.1, the one an unprepared machine has, mis-parses
+# here-strings in an LF script. The scripts carry CRLF and a UTF-8 BOM.
+*.ps1 text eol=crlf
