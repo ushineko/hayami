@@ -18,6 +18,15 @@ type fakeFeature struct {
 	// which transaction ID.
 	sent [][]byte
 
+	// observe is called with each request as it arrives, for a test that
+	// wants to watch the transaction IDs go by rather than pick them out
+	// afterwards.
+	observe func(request []byte)
+
+	// lastTransaction is the transaction ID of the request being answered, so
+	// a fake can behave like a device that answers on one and not the others.
+	lastTransaction byte
+
 	pending []byte
 	closed  bool
 }
@@ -25,6 +34,10 @@ type fakeFeature struct {
 func (f *fakeFeature) SetFeature(b []byte) error {
 	f.sent = append(f.sent, append([]byte(nil), b...))
 	body := b[1:]
+	f.lastTransaction = body[1]
+	if f.observe != nil {
+		f.observe(b)
+	}
 	if reply, ok := f.answer(body[6], body[7]); ok {
 		f.pending = reply
 		return nil

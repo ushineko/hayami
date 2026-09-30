@@ -40,11 +40,30 @@ mouse on the panel, at the same percentage: 81 is `chr('Q')`, so a battery
 level had been decoded as a device name (issue #58).
 
 Taken from the process ID because it has to differ between processes and
-nothing else about it matters. Two processes can still collide -- one chance in
-fifteen -- so it narrows the window rather than closing it, and the name check
-in logitech.go is the other half.
+nothing else about it matters.
+
+**Solaar's own ID is excluded.** It uses 0x0B -- `SOLAAR_SOFTWARE_ID` in
+logitech_receiver/base.py -- and a value picked freely from 1..15 lands on it
+one run in fifteen, at which point hayami and solaar accept each other's
+replies. The constant this replaced was 0x08, which never collided with solaar;
+narrowing the gap between two hayamis had quietly opened one against the tool
+most likely to be running beside it. The live test caught it: hayami read 71 %
+where solaar read 79 % in the same second, which is a reply belonging to
+somebody else rather than a battery moving.
+
+Two hayamis can still collide -- one chance in fourteen -- so this narrows the
+window rather than closing it, and the name check in logitech.go is the other
+half.
 */
-var softwareID = byte(os.Getpid()%15) + 1
+var softwareID = softwareIDs[os.Getpid()%len(softwareIDs)]
+
+// softwareIDs are the values this program will use: every ID a request may
+// carry except zero, which marks a request as nobody's, and solaar's.
+var softwareIDs = []byte{
+	0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
+	// 0x0B is solaar's.
+	0x0C, 0x0D, 0x0E, 0x0F,
+}
 
 // rootFeature is feature 0x0000, the one every HID++ 2.0 device has at index
 // zero. Its function 0 maps a feature ID to that device's index for it.

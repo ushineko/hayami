@@ -33,9 +33,8 @@ const (
 	// addressed through a dongle: rivalcfg's `_WIRELESS_FLAG`, which is also
 	// exactly the offset between the two aliased command banks the device
 	// exposes.
-	batteryCommand  = 0x92
-	batteryWireless = batteryCommand | wirelessFlag
-	wirelessFlag    = 0x40
+	batteryCommand = 0x92
+	wirelessFlag   = 0x40
 
 	// chargingFlag is bit 7 of the value byte.
 	chargingFlag = 0x80
@@ -45,6 +44,73 @@ const (
 	// and a read does not.
 	reportSize = 64
 )
+
+/*
+batteryProtocol is which battery command a SteelSeries device answers.
+
+There is more than one and they are not compatible, so this is a fact about a
+model rather than about the vendor.
+*/
+type batteryProtocol int
+
+const (
+	// batteryUnknown is a device this build has never been told about. It is
+	// the default on purpose: a product that is not named below is not written
+	// to at all.
+	batteryUnknown batteryProtocol = iota
+
+	// batteryModern is command 0x92 with a two-byte reply: bit 7 charging and
+	// the rest a level in steps of five.
+	batteryModern
+
+	// batteryLegacy is command 0xAA 0x01 with a three-byte reply. rivalcfg
+	// names the devices that speak it; this build cannot read it.
+	//
+	// **Named but not implemented, on purpose.** Its framing differs from the
+	// newer family in more than the command byte -- rivalcfg reads the level
+	// out of the first byte of the reply, so there is no command echo to match
+	// an answer on, which is the whole of how the newer family tells its reply
+	// from the other traffic on that endpoint. Writing that from documentation
+	// alone would be shipping a guess about framing to hardware nobody here
+	// has. It is in the table so those devices get told apart from ones this
+	// build has never heard of.
+	batteryLegacy
+)
+
+/*
+steelseriesBattery says which command each known product answers.
+
+**A product not in here is never written to.** Finding a node by vendor and
+usage page is broad -- broad enough that the Arctis Nova Pro Wireless on the
+development machine matched it and was being sent `0x92` on every poll, a
+command from a family it does not speak (issue #62). Finding a device and
+being entitled to talk to it are separate questions and this is the second one.
+
+The Apex appears twice because its product ID moves with its connection, and
+both were measured. Everything else is from rivalcfg's device profiles, which
+is the only place this protocol is written down at all.
+*/
+var steelseriesBattery = map[uint64]batteryProtocol{
+	// Measured here, spec 016: 2.4 GHz and cable.
+	0x1644: batteryModern, // Apex Pro TKL Wireless Gen 3
+	0x1646: batteryModern, // the same keyboard, wired
+
+	// rivalcfg's 0x92 family. Each mouse has a product for each connection.
+	0x1838: batteryModern, // Aerox 3 Wireless
+	0x183A: batteryModern, // Aerox 3 Wireless, wired
+	0x1852: batteryModern, // Aerox 5 Wireless
+	0x1854: batteryModern, // Aerox 5 Wireless, wired
+	0x1858: batteryModern, // Aerox 9 Wireless
+	0x185A: batteryModern, // Aerox 9 Wireless, wired
+	0x1840: batteryModern, // Prime Wireless
+	0x1842: batteryModern, // Prime Wireless, wired
+
+	// rivalcfg's 0xAA family. Unverified: no hardware here speaks it, which is
+	// exactly why the table exists -- it cannot reach anything else.
+	0x1830: batteryLegacy, // Rival 3 Wireless
+	0x1872: batteryLegacy, // Rival 3 Wireless Gen 2
+	0x172B: batteryLegacy, // Rival 650 Wireless
+}
 
 // SteelSeriesTimeout is how long the device has to answer. Short: a panel
 // polls on a timer, and a keyboard that is not going to reply does not start.
@@ -62,6 +128,9 @@ type SteelSeries struct {
 	// timeout is a field rather than the constant so a test can exercise the
 	// bound without waiting for it.
 	timeout time.Duration
+
+	// unknown is what the last poll found and would not write to.
+	unknown []string
 }
 
 // NewSteelSeries builds the reader.
@@ -87,10 +156,18 @@ func (s *SteelSeries) Batteries() ([]Battery, error) {
 	}
 
 	var (
-		out  []Battery
-		errs []error
+		out     []Battery
+		unknown []string
+		errs    []error
 	)
 	for _, n := range found {
+		if steelseriesBattery[n.Product] == batteryUnknown {
+			// Detected and deliberately not spoken to. Named rather than
+			// dropped, so a person with a device this build has not met can
+			// see that it was found and why nothing was asked of it.
+			unknown = append(unknown, n.Name)
+			continue
+		}
 		b, err := s.read(n)
 		if err != nil {
 			if !errors.Is(err, errSilent) {
@@ -100,23 +177,43 @@ func (s *SteelSeries) Batteries() ([]Battery, error) {
 		}
 		out = append(out, b)
 	}
+	s.unknown = unknown
 	return out, errors.Join(errs...)
 }
 
-// read asks one node for its battery, wired form first.
+// Unsupported names the SteelSeries devices the last poll found and did not
+// speak to, for the section to say so.
+func (s *SteelSeries) Unsupported() []string { return s.unknown }
+
+// commands are the command bytes to try for a protocol, wired form first.
+//
+// The wireless form is the same getter with rivalcfg's `_WIRELESS_FLAG` in it,
+// and which one a device wants depends on how its keyboard or mouse is
+// connected -- which this build cannot tell from the product ID, because that
+// moves too. Asking twice is cheaper than tracking it and being wrong.
+func (p batteryProtocol) commands() []byte {
+	if p != batteryModern {
+		return nil
+	}
+	return []byte{batteryCommand, batteryCommand | wirelessFlag}
+}
+
+// read asks one node for its battery, in the protocol its product speaks.
 func (s *SteelSeries) read(n hidNode) (Battery, error) {
+	protocol := steelseriesBattery[n.Product]
+
 	d, err := s.open(n.Path)
 	if err != nil {
 		return Battery{}, err
 	}
 	defer func() { _ = d.Close() }()
 
-	for _, cmd := range []byte{batteryCommand, batteryWireless} {
+	for _, cmd := range protocol.commands() {
 		reply, err := ask(d, s.timeout, cmd)
 		if err != nil {
 			continue
 		}
-		b, err := decodeSteelSeriesBattery(reply)
+		b, err := decodeModernBattery(reply)
 		if err != nil {
 			continue
 		}
@@ -177,7 +274,7 @@ arithmetic and the device's own resolution, so a panel goes 95 % and then
 A value of zero would decode to -5, which is how a reply that is present and
 means nothing announces itself.
 */
-func decodeSteelSeriesBattery(reply []byte) (Battery, error) {
+func decodeModernBattery(reply []byte) (Battery, error) {
 	if len(reply) < 2 {
 		return Battery{}, fmt.Errorf("a SteelSeries battery reply of %d bytes", len(reply))
 	}
