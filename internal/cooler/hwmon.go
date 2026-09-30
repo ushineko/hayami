@@ -17,6 +17,7 @@ package cooler
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -41,9 +42,65 @@ type Sensor struct {
 	Label string
 }
 
-// CPUPackage is the processor's package temperature, which is the one a panel
-// shows. The same sensor hotaru names, for the same reason.
-var CPUPackage = Sensor{Chip: "coretemp", Label: "Package id 0"}
+/*
+CPUSensors are the processor temperatures this build knows, most wanted first.
+
+**One constant was one vendor.** It named `coretemp`, which is Intel's driver,
+so a Ryzen read nothing at all and said "no coretemp/Package id 0" -- precise
+about what it looked for and silent about only ever looking for one thing
+(issue #72).
+
+The order is not alphabetical and not arbitrary:
+
+  - `coretemp` / `Package id 0` is Intel's package temperature.
+  - `k10temp` / `Tdie` is AMD's die temperature, where a chip exposes it.
+  - `k10temp` / `Tctl` is the fallback, and **it is not a temperature.** It is
+    a control value carrying a per-model offset the firmware uses for fan
+    curves, and on some chips it reads several degrees above the die. It is
+    last among AMD's because it is the one to take when there is nothing
+    better; a 2600X exposes only this. Do not "tidy" it above Tdie.
+  - `zenpower` / `Tdie` is the out-of-tree AMD driver some people run instead
+    of k10temp, which exposes a die temperature where k10temp gives only Tctl.
+
+The first that reads wins, so a machine with both k10temp and zenpower loaded
+gets the in-tree one, which is the one its fan curves are built on.
+*/
+var CPUSensors = []Sensor{
+	{Chip: "coretemp", Label: "Package id 0"},
+	{Chip: "k10temp", Label: "Tdie"},
+	{Chip: "k10temp", Label: "Tctl"},
+	{Chip: "zenpower", Label: "Tdie"},
+}
+
+// CPUPackage is the first CPU sensor this machine has, or the last one tried
+// where it has none -- so the error names something real rather than nothing.
+func CPUPackage() (float64, error) { return ReadCPU(HwmonRoot) }
+
+/*
+ReadCPU is CPUPackage against a hwmon root the caller names, so a test can
+build its own tree rather than depending on the machine it runs on.
+
+A machine with none of them gets an error naming every sensor looked for, not
+just the last: "no coretemp/Package id 0" on an AMD box sent somebody looking
+for an Intel driver that was never going to be there.
+*/
+func ReadCPU(root string) (float64, error) {
+	for _, s := range CPUSensors {
+		if v, err := s.Read(root); err == nil {
+			return v, nil
+		}
+	}
+	return 0, fmt.Errorf("%w: looked for %s", ErrNoSensor, CPUSensorNames())
+}
+
+// CPUSensorNames lists the sensors, for an error and for the panel's reason.
+func CPUSensorNames() string {
+	names := make([]string, 0, len(CPUSensors))
+	for _, s := range CPUSensors {
+		names = append(names, s.Chip+"/"+s.Label)
+	}
+	return strings.Join(names, ", ")
+}
 
 // ErrNoSensor is a sensor this machine does not have. It is a reading that is
 // absent, not a failure: a panel on a machine with a different processor

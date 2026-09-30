@@ -144,3 +144,65 @@ func TestAnEmptyMatchLooksAtEveryDevice(t *testing.T) {
 
 	assert.Empty(t, cooler.Match())
 }
+
+/*
+An AMD processor is read, not declared absent.
+
+One constant named `coretemp`, which is Intel's driver, so a Ryzen read nothing
+and the section said "no coretemp/Package id 0" — precise about what it looked
+for and silent about only looking for one thing (issue #72).
+*/
+func TestAnAMDProcessorIsRead(t *testing.T) {
+	root := t.TempDir()
+	chip(t, root, "hwmon1", "k10temp", map[string]string{"Tctl": "32625"})
+
+	v, err := cooler.ReadCPU(root)
+
+	require.NoError(t, err)
+	assert.InDelta(t, 32.625, v, 0.001)
+}
+
+/*
+Tdie is preferred to Tctl.
+
+Tctl is not a temperature: it carries a per-model offset the firmware uses for
+fan curves and reads above the die on some chips. Where a processor exposes
+both, the real one wins.
+*/
+func TestTdieIsPreferredToTctl(t *testing.T) {
+	root := t.TempDir()
+	chip(t, root, "hwmon1", "k10temp", map[string]string{"Tctl": "52000", "Tdie": "42000"})
+
+	v, err := cooler.ReadCPU(root)
+
+	require.NoError(t, err)
+	assert.InDelta(t, 42, v, 0.001, "Tctl was taken over Tdie")
+}
+
+// Intel still comes first, so nothing changes on the machine this was written
+// on.
+func TestIntelIsStillPreferred(t *testing.T) {
+	root := t.TempDir()
+	chip(t, root, "hwmon1", "k10temp", map[string]string{"Tctl": "52000"})
+	chip(t, root, "hwmon2", "coretemp", map[string]string{"Package id 0": "38000"})
+
+	v, err := cooler.ReadCPU(root)
+
+	require.NoError(t, err)
+	assert.InDelta(t, 38, v, 0.001)
+}
+
+// A machine with no processor sensor names every one looked for, so nobody
+// goes hunting for a driver that was never going to be there.
+func TestAnAbsentSensorNamesEveryOneLookedFor(t *testing.T) {
+	root := t.TempDir()
+	chip(t, root, "hwmon1", "nct6798", map[string]string{"SYSTIN": "31000"})
+
+	_, err := cooler.ReadCPU(root)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, cooler.ErrNoSensor)
+	for _, want := range []string{"coretemp", "k10temp", "zenpower", "Tdie", "Tctl"} {
+		assert.Contains(t, err.Error(), want)
+	}
+}
