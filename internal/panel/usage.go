@@ -159,6 +159,9 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 				Fraction: w.Fraction,
 				ResetsAt: w.ResetsAt,
 				Detail:   w.Detail,
+				Used:     w.Used,
+				Limit:    w.Limit,
+				Severity: w.Severity,
 				Span:     w.Span,
 			})
 		}

@@ -174,7 +174,8 @@ func TestAnAccountWithOnlyAnUnboundedWindowStillGetsABar(t *testing.T) {
 }
 
 // A quota is one of the few readings with a true threshold, so its colour is a
-// signal rather than decoration. The verdict follows the bar.
+// signal rather than decoration. The verdict follows the bar, and the bands
+// are the usage widget's: amber from half, red past four fifths (issue #75).
 func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
 	verdict := func(f float64) view.Status {
 		s := view.Usage(at(9, 0), []view.UsageWindow{
@@ -184,8 +185,11 @@ func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
 	}
 
 	assert.Equal(t, view.Good, verdict(0.10))
-	assert.Equal(t, view.Warn, verdict(0.85))
-	assert.Equal(t, view.Bad, verdict(0.99))
+	assert.Equal(t, view.Good, verdict(0.49))
+	assert.Equal(t, view.Warn, verdict(0.50))
+	assert.Equal(t, view.Warn, verdict(0.79), "just under four fifths is amber")
+	assert.Equal(t, view.Warn, verdict(0.80), "red is past four fifths, not at it")
+	assert.Equal(t, view.Bad, verdict(0.81))
 }
 
 // The badge comes from the credential file, and an account with none is drawn

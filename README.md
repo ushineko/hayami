@@ -196,6 +196,20 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: the usage pane (`--arrangement row`) says what the usage widget's
+  `--tui` says, laid out the same way: `12%  ·  7d 40%` after the bar,
+  `$used / $limit (25%)` for a budget, `individual used/limit (60%)` for a
+  Codex Business limit, and `resets 2h 30m` / `resets Oct 1` at the right edge
+  with a gap before it. The row used to draw only the bar's own window, so the
+  seven-day figure, the dollar amounts and the individual limit never reached
+  a pane. Each figure is coloured for itself (#75).
+- **Change**: a quota is amber from 50 % and red past 80 %, the widget's
+  bands, in both panels. They were 80 % / 95 %, so the same figure was two
+  colours in the two programs. A spend is coloured by the severity the
+  provider reports rather than by its percentage.
+
 ### 0.5.1 (2026-09-29)
 
 - **Fix**: the processor temperature reads on AMD. The sensor was one constant

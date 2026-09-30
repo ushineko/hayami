@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -27,6 +28,23 @@ type Window struct {
 	// Detail is anything the bar cannot carry: the used and limit values of a
 	// limit that reports them. Empty for most windows.
 	Detail string
+
+	// Used and Limit are Detail's two amounts kept apart, in the form the
+	// widget this replaces prints them: "$250.00" and "$1000.00" for a
+	// Claude spend, "300.5" and "1200" for a Codex limit. The terminal pane
+	// arranges them itself, so it needs them as two values rather than one
+	// joined string. Empty for a window with no amounts.
+	Used  string
+	Limit string
+
+	// Severity is the provider's own verdict on a spend: "normal",
+	// "warning", "critical". Empty where the provider gives none, which is
+	// every window except a Claude spend.
+	//
+	// Kept rather than re-derived from the percentage, because the API
+	// decides what counts as concerning for a budget and the widget honours
+	// that.
+	Severity string
 
 	// Span is how long the window is. Zero means the provider did not say,
 	// which is the case for a monthly spend and for a Business limit.
@@ -61,10 +79,11 @@ type claudePayload struct {
 // Unlike the Codex individual limit, this one does name its currency, so a
 // symbol here is reporting what the source said rather than assuming it.
 type claudeSpend struct {
-	Enabled bool         `json:"enabled"`
-	Percent float64      `json:"percent"`
-	Used    *claudeMoney `json:"used"`
-	Limit   *claudeMoney `json:"limit"`
+	Enabled  bool         `json:"enabled"`
+	Percent  float64      `json:"percent"`
+	Severity string       `json:"severity"`
+	Used     *claudeMoney `json:"used"`
+	Limit    *claudeMoney `json:"limit"`
 }
 
 // claudeMoney is an amount in minor units with the exponent to place the
@@ -139,11 +158,14 @@ func Claude(now time.Time, data json.RawMessage) ([]Window, error) {
 		})
 	}
 	if sp := p.Spend; sp != nil && sp.Enabled {
-		w := Window{Name: "spend", Fraction: sp.Percent / 100, ResetsAt: NextMonth(now)}
-		if used := sp.Used.String(); used != "" {
-			w.Detail = used
-			if limit := sp.Limit.String(); limit != "" {
-				w.Detail += " / " + limit
+		w := Window{
+			Name: "spend", Fraction: sp.Percent / 100, ResetsAt: NextMonth(now),
+			Used: sp.Used.String(), Limit: sp.Limit.String(), Severity: sp.Severity,
+		}
+		if w.Used != "" {
+			w.Detail = w.Used
+			if w.Limit != "" {
+				w.Detail += " / " + w.Limit
 			}
 		}
 		out = append(out, w)
@@ -208,6 +230,8 @@ func Codex(data json.RawMessage) ([]Window, error) {
 			Fraction: l.Utilization / 100,
 			ResetsAt: epochTime(l.ResetsAt),
 			Detail:   amount(l.Used) + " / " + amount(l.Limit),
+			Used:     reported(l.Used),
+			Limit:    reported(l.Limit),
 		})
 	}
 	return out, nil
@@ -251,6 +275,19 @@ func amount(s string) string {
 		return s
 	}
 	return strconv.FormatFloat(f, 'f', 2, 64)
+}
+
+// reported is an amount as compact as it can be written without losing a
+// cent: two decimals at most, and trailing zeros dropped, so 1200.00 is "1200"
+// and 300.50 is "300.5". The widget writes the Codex limit this way.
+func reported(s string) string {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return s
+	}
+	out := strconv.FormatFloat(f, 'f', 2, 64)
+	out = strings.TrimRight(out, "0")
+	return strings.TrimSuffix(out, ".")
 }
 
 // isoTime reads a timestamp the way Claude writes one. An unparseable or empty
