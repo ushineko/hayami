@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.6.0
+**Version**: 0.6.1
 
 *a chart you read at a glance*
 
@@ -224,6 +224,20 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.6.1 (2026-09-30)
+
+- **Fix**: the panel snaps back to the smallest size its content needs after
+  a font, text size or theme change. Fyne's own growth of the window to a
+  wider face was being remembered as a width the user had dragged, so a
+  narrower face afterwards kept the wide window until Alt+F3 reclaimed the
+  space. A width dragged after the change is still kept
+  (fynedesygn v0.1.73, spec 046; #85).
+- **Fix**: a device is labelled by its product, not its vendor and product:
+  "Arctis Nova Pro Wireless", "K800", "Basilisk Ultimate Dongle". The vendor
+  word made the Arctis truncate as a card title. The renamed devices are
+  forgotten and re-learned once on the first poll after this build
+  (sanshoku v0.1.3, spec 009; #83).
 
 ### 0.6.0 (2026-09-30)
 
