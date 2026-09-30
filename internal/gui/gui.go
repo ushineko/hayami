@@ -151,7 +151,13 @@ const RowSlack = 4
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
 // can be compared at a glance.
-const MeterLabelWidth float32 = 84
+//
+// Sized to the widest label a usage card draws, "CC work E spend", which
+// measures 93.7 at the theme's 12-point text; the column keeps the 8 of air
+// the label before the provider shorthand had. The shorthand and its space
+// are 18 of the 102 (spec 024). A label wider than this is not cut, it pushes
+// its own caption right and out of line with the others.
+const MeterLabelWidth float32 = 102
 
 // New builds the window with a card per source. Cards are not drawn until
 // their source answers, so the window does not flash empty on the way up.

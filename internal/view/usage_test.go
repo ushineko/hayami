@@ -84,14 +84,14 @@ func TestACaptionDoesNotChangeWidthWithItsNumbers(t *testing.T) {
 // otherwise be six bars and twice the height, in a panel 260 px wide.
 func TestAnAccountIsOneMeterHoweverManyWindowsItHas(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
-		{Account: "max", Name: "7d", Fraction: 0.85, ResetsAt: at(12, 0)},
-		{Account: "Codex", Name: "5h", Fraction: 0.20, ResetsAt: at(11, 0)},
+		{Account: "CC max", Name: "5h", Fraction: 0.10, ResetsAt: at(11, 0)},
+		{Account: "CC max", Name: "7d", Fraction: 0.85, ResetsAt: at(12, 0)},
+		{Account: "CX", Name: "5h", Fraction: 0.20, ResetsAt: at(11, 0)},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 2)
-	assert.Equal(t, "max", s.Meters[0].Label)
-	assert.Equal(t, "Codex", s.Meters[1].Label)
+	assert.Equal(t, "CC max", s.Meters[0].Label)
+	assert.Equal(t, "CX", s.Meters[1].Label)
 }
 
 // The bar shows the shortest window, and it does so even when another window
@@ -106,8 +106,8 @@ func TestAnAccountIsOneMeterHoweverManyWindowsItHas(t *testing.T) {
 // went.
 func TestTheBarShowsTheShortestWindowAndNothingIsLost(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
-		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
+		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
+		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 1)
@@ -131,12 +131,12 @@ func TestTheBarShowsTheShortestWindowAndNothingIsLost(t *testing.T) {
 func TestTheOrderTheWindowsArriveInDoesNotDecideTheBar(t *testing.T) {
 	for _, windows := range [][]view.UsageWindow{
 		{
-			{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
-			{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
+			{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
+			{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
 		},
 		{
-			{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
-			{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
+			{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85, ResetsAt: at(12, 0)},
+			{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.10, ResetsAt: at(11, 0)},
 		},
 	} {
 		s := view.Usage(at(9, 0), windows, at(9, 0))
@@ -151,8 +151,8 @@ func TestTheOrderTheWindowsArriveInDoesNotDecideTheBar(t *testing.T) {
 // Business limit this way and the monthly spend has no window at all.
 func TestAWindowWithNoLengthDoesNotTakeTheBarFromOneThatHasOne(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "Codex", Name: "limit", Fraction: 0.34, ResetsAt: at(11, 0)},
-		{Account: "Codex", Name: "5h", Span: 5 * time.Hour, Fraction: 0.02, ResetsAt: at(11, 0)},
+		{Account: "CX", Name: "limit", Fraction: 0.34, ResetsAt: at(11, 0)},
+		{Account: "CX", Name: "5h", Span: 5 * time.Hour, Fraction: 0.02, ResetsAt: at(11, 0)},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 1)
@@ -165,7 +165,7 @@ func TestAWindowWithNoLengthDoesNotTakeTheBarFromOneThatHasOne(t *testing.T) {
 // the longest thing there is beats no bar.
 func TestAnAccountWithOnlyAnUnboundedWindowStillGetsABar(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "work", Name: "spend", Fraction: 0.85, ResetsAt: at(12, 0)},
+		{Account: "CC work", Name: "spend", Fraction: 0.85, ResetsAt: at(12, 0)},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 1)
@@ -179,7 +179,7 @@ func TestAnAccountWithOnlyAnUnboundedWindowStillGetsABar(t *testing.T) {
 func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
 	verdict := func(f float64) view.Status {
 		s := view.Usage(at(9, 0), []view.UsageWindow{
-			{Account: "max", Name: "5h", Fraction: f, ResetsAt: at(11, 0)},
+			{Account: "CC max", Name: "5h", Fraction: f, ResetsAt: at(11, 0)},
 		}, at(9, 0))
 		return s.Meters[0].Status
 	}
@@ -196,17 +196,17 @@ func TestAQuotaNearItsLimitIsMarked(t *testing.T) {
 // without one rather than with a guess.
 func TestAnAccountsBadgeSitsBesideItsName(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "work", Badge: "E", Name: "spend", Fraction: 0.5, ResetsAt: at(11, 0)},
-		{Account: "Codex", Name: "5h", Fraction: 0.1, ResetsAt: at(11, 0)},
+		{Account: "CC work", Badge: "E", Name: "spend", Fraction: 0.5, ResetsAt: at(11, 0)},
+		{Account: "CX", Name: "5h", Fraction: 0.1, ResetsAt: at(11, 0)},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 2)
-	assert.Equal(t, "work", s.Meters[0].Label)
+	assert.Equal(t, "CC work", s.Meters[0].Label)
 	assert.Equal(t, "E", s.Meters[0].Badge)
 	assert.Equal(t, "spend", s.Meters[0].Window)
-	assert.Equal(t, "Codex", s.Meters[1].Label)
+	assert.Equal(t, "CX", s.Meters[1].Label)
 	assert.Empty(t, s.Meters[1].Badge, "an account with no plan gets no letter rather than a guess")
-	assert.Equal(t, "work E spend", s.Meters[0].Name())
+	assert.Equal(t, "CC work E spend", s.Meters[0].Name())
 }
 
 // Two questions, two forms. "How long have I got" for a window that ends
@@ -231,7 +231,7 @@ func TestAShortWindowCountsDownAndALongOneNamesItsDate(t *testing.T) {
 func TestAStaleReadingSaysItsAge(t *testing.T) {
 	now := at(12, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
+		{Account: "CC max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
 	}, now.Add(-3*time.Hour))
 
 	require.Len(t, s.Rows, 1)
@@ -241,7 +241,7 @@ func TestAStaleReadingSaysItsAge(t *testing.T) {
 func TestAFreshReadingSaysNothingAboutItsAge(t *testing.T) {
 	now := at(12, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
+		{Account: "CC max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
 	}, now.Add(-time.Minute))
 
 	assert.Empty(t, s.Rows)
@@ -252,7 +252,7 @@ func TestAFreshReadingSaysNothingAboutItsAge(t *testing.T) {
 // row, which is where the archetype puts them.
 func TestAWindowsDetailIsDrawnBesideItsFigure(t *testing.T) {
 	s := view.Usage(at(9, 0), []view.UsageWindow{
-		{Account: "Codex", Name: "limit", Fraction: 0.34, ResetsAt: at(11, 0), Detail: "403.51 / 1200.00"},
+		{Account: "CX", Name: "limit", Fraction: 0.34, ResetsAt: at(11, 0), Detail: "403.51 / 1200.00"},
 	}, at(9, 0))
 
 	require.Len(t, s.Meters, 1)
@@ -271,8 +271,8 @@ func TestAWindowsDetailIsDrawnBesideItsFigure(t *testing.T) {
 func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(4 * time.Hour)},
-		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.20, ResetsAt: now.Add(2 * time.Hour)},
+		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(4 * time.Hour)},
+		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.20, ResetsAt: now.Add(2 * time.Hour)},
 	}, now)
 
 	require.Len(t, s.Meters, 1)
@@ -287,8 +287,8 @@ func TestTheCountdownIsTheSoonestResetNotTheLeadingOnes(t *testing.T) {
 func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
-		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21,
+		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(3 * time.Hour)},
+		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21,
 			ResetsAt: now.Add(5*24*time.Hour + time.Hour)},
 	}, now)
 
@@ -304,8 +304,8 @@ func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
 func TestAWindowLessThanADayAwaySaysNothingExtra(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(2 * time.Hour)},
-		{Account: "max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
+		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(2 * time.Hour)},
+		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
 	}, now)
 
 	assert.NotContains(t, s.Meters[0].Line(), "left")
@@ -319,9 +319,9 @@ func TestAWindowLessThanADayAwaySaysNothingExtra(t *testing.T) {
 func TestALimitBesideTheBarSaysItsAmounts(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
-		{Account: "Codex", Name: "5h", Span: 5 * time.Hour, Fraction: 0.03, ResetsAt: now.Add(4 * time.Hour)},
-		{Account: "Codex", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.46, ResetsAt: now.Add(4 * time.Hour)},
-		{Account: "Codex", Name: "limit", Fraction: 0.6, ResetsAt: now.Add(5*24*time.Hour + time.Hour),
+		{Account: "CX", Name: "5h", Span: 5 * time.Hour, Fraction: 0.03, ResetsAt: now.Add(4 * time.Hour)},
+		{Account: "CX", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.46, ResetsAt: now.Add(4 * time.Hour)},
+		{Account: "CX", Name: "limit", Fraction: 0.6, ResetsAt: now.Add(5*24*time.Hour + time.Hour),
 			Detail: "300.50 / 1200.00", Used: "300.5", Limit: "1200"},
 	}, now)
 
@@ -332,7 +332,7 @@ func TestALimitBesideTheBarSaysItsAmounts(t *testing.T) {
 		"the pane's strip is spec 019's and unchanged")
 
 	lead := view.Usage(now, []view.UsageWindow{
-		{Account: "Codex", Name: "limit", Fraction: 0.6, Detail: "300.50 / 1200.00", Used: "300.5", Limit: "1200"},
+		{Account: "CX", Name: "limit", Fraction: 0.6, Detail: "300.50 / 1200.00", Used: "300.5", Limit: "1200"},
 	}, now).Meters[0]
 	assert.Equal(t, "limit: 60 %", strings.TrimSpace(lead.Caption), "the caption stays a percentage")
 	assert.Equal(t, "300.50 / 1200.00", lead.StatsRight)

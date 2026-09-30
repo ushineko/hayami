@@ -431,9 +431,9 @@ func meterRow(s Section, m Meter, width int, c columns, p Painter) string {
 stripRow is a meter with a strip, laid out the way the usage widget's --tui
 lays out an account (issue #75):
 
-	max  M  5h ━━━━━━━───────────── 12%  ·  7d 40%         resets 2h 30m
-	work E     ━━━━━━━━━━━━━━━━──── $250.00 / $1000.00 (25%) resets Oct 1
-	Codex   5h ──────────────────── 0%  ·  individual 300.5/1200 (60%)
+	CC max  M  5h ━━━━━━━───────────── 12%  ·  7d 40%         resets 2h 30m
+	CC work E     ━━━━━━━━━━━━━━━━──── $250.00 / $1000.00 (25%) resets Oct 1
+	CX         5h ──────────────────── 0%  ·  individual 300.5/1200 (60%)
 
 The name, two spaces, the window, then the bar. The width left over is split
 three to one between the bar and a gap before the reset, which is the

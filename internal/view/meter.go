@@ -20,7 +20,7 @@ type Meter struct {
 	// Label, Badge and Window are the three parts of a meter's name, kept
 	// apart because they are three columns and not one string.
 	//
-	// "max M 7d" and "work E spend" as single labels put the badges one
+	// "CC max M 7d" and "CC work E spend" as single labels put the badges one
 	// column apart, and an eye scanning down a pane for the plan letter has
 	// to find it again on every line. Padded separately they line up.
 	Label  string

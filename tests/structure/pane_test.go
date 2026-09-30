@@ -83,9 +83,9 @@ func TestTheUsagePaneIsLaidOutLikeTheWidgets(t *testing.T) {
 
 	// No credential store, so no badges: the name column is the widest
 	// name, then two spaces, then the window, blank for a budget.
-	assert.True(t, strings.HasPrefix(lines[0], "max    5h ━"), "%q", lines[0])
-	assert.True(t, strings.HasPrefix(lines[1], "work      ━"), "%q", lines[1])
-	assert.True(t, strings.HasPrefix(lines[2], "Codex  5h ━"), "%q", lines[2])
+	assert.True(t, strings.HasPrefix(lines[0], "CC max   5h ━"), "%q", lines[0])
+	assert.True(t, strings.HasPrefix(lines[1], "CC work     ━"), "%q", lines[1])
+	assert.True(t, strings.HasPrefix(lines[2], "CX       5h ━"), "%q", lines[2])
 
 	assert.Contains(t, lines[0], " 12%  ·  7d 85% ")
 	assert.Contains(t, lines[1], " $250.00 / $1000.00 (25%) ")

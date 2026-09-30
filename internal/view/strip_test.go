@@ -17,15 +17,15 @@ import (
 func threeAccounts(now time.Time) []view.UsageWindow {
 	october := time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
 	return []view.UsageWindow{
-		{Account: "max", Badge: "M", Name: "5h", Span: 5 * time.Hour, Fraction: 0.12,
+		{Account: "CC max", Badge: "M", Name: "5h", Span: 5 * time.Hour, Fraction: 0.12,
 			ResetsAt: now.Add(2*time.Hour + 55*time.Minute)},
-		{Account: "max", Badge: "M", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85,
+		{Account: "CC max", Badge: "M", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.85,
 			ResetsAt: now.Add(4 * 24 * time.Hour)},
-		{Account: "work", Badge: "E", Name: "spend", Fraction: 0.25, ResetsAt: october,
+		{Account: "CC work", Badge: "E", Name: "spend", Fraction: 0.25, ResetsAt: october,
 			Used: "$250.00", Limit: "$1000.00", Severity: "normal"},
-		{Account: "Codex", Name: "5h", Span: 5 * time.Hour, Fraction: 0.03,
+		{Account: "CX", Name: "5h", Span: 5 * time.Hour, Fraction: 0.03,
 			ResetsAt: now.Add(4*time.Hour + 58*time.Minute)},
-		{Account: "Codex", Name: "limit", Fraction: 0.6, Used: "300.5", Limit: "1200"},
+		{Account: "CX", Name: "limit", Fraction: 0.6, Used: "300.5", Limit: "1200"},
 	}
 }
 
@@ -87,7 +87,7 @@ func TestABudgetIsColouredByItsSeverity(t *testing.T) {
 		"normal": view.Good, "warning": view.Warn, "critical": view.Bad, "": view.Bad,
 	} {
 		s := view.Usage(now, []view.UsageWindow{
-			{Account: "work", Name: "spend", Fraction: 0.9, Used: "$9.00", Limit: "$10.00",
+			{Account: "CC work", Name: "spend", Fraction: 0.9, Used: "$9.00", Limit: "$10.00",
 				Severity: severity},
 		}, now)
 
@@ -102,8 +102,8 @@ func TestASpendBesideAPlanIsItsAmountOnceThereIsOne(t *testing.T) {
 	now := at(9, 0)
 	windows := func(used string) []view.UsageWindow {
 		return []view.UsageWindow{
-			{Account: "max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.1, ResetsAt: at(11, 0)},
-			{Account: "max", Name: "spend", Fraction: 0, Used: used, Limit: "$50.00"},
+			{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.1, ResetsAt: at(11, 0)},
+			{Account: "CC max", Name: "spend", Fraction: 0, Used: used, Limit: "$50.00"},
 		}
 	}
 
@@ -122,14 +122,15 @@ func renderPane(width int) []string {
 }
 
 // The name and window columns are the widget's: names padded to each other
-// with the badge after them, Codex bare, two spaces, then the window.
+// with the badge after them, Codex's shorthand bare, two spaces, then the
+// window.
 func TestAStripLineBeginsTheWayTheWidgetsDoes(t *testing.T) {
 	lines := renderPane(200)
 
 	require.Len(t, lines, 3)
-	assert.True(t, strings.HasPrefix(lines[0], "max  M  5h "), "%q", lines[0])
-	assert.True(t, strings.HasPrefix(lines[1], "work E     "), "%q", lines[1])
-	assert.True(t, strings.HasPrefix(lines[2], "Codex   5h "), "%q", lines[2])
+	assert.True(t, strings.HasPrefix(lines[0], "CC max  M  5h "), "%q", lines[0])
+	assert.True(t, strings.HasPrefix(lines[1], "CC work E     "), "%q", lines[1])
+	assert.True(t, strings.HasPrefix(lines[2], "CX         5h "), "%q", lines[2])
 }
 
 // Every line fills the pane, the bars start and end at one column, the figures
@@ -162,10 +163,10 @@ func TestTheBarTakesThreeQuartersOfTheSpareWidth(t *testing.T) {
 		line := renderPane(width)[0]
 
 		bar := strings.Count(line, string(view.BarFull)) + strings.Count(line, string(view.BarEmpty))
-		// The width, less "max  M  " and "5h ", the space before the
+		// The width, less "CC max  M  " and "5h ", the space before the
 		// figures, the widest figures, and " " plus the widest reset.
 		figures := len([]rune("3%  ·  individual 300.5/1200 (60%)"))
-		slack := width - 8 - 3 - 1 - figures - len(" resets 2h 55m")
+		slack := width - 11 - 3 - 1 - figures - len(" resets 2h 55m")
 		assert.Equal(t, (3*slack+3)/4, bar, "at %d columns", width)
 	}
 }

@@ -39,7 +39,7 @@ and the choice holds in both shells.
 | Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
 | Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan |
-| Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces |
+| Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
 
 ## Arrangements
 
@@ -224,6 +224,15 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Change**: every usage meter's label leads with its provider (spec 024,
+  issue #93): `CC` for Claude Code, `CX` for Codex. A Claude account keeps its
+  name and badge after it (`CC max M 5h`, `CC work E spend`); the Codex
+  account's "Codex" becomes `CX` rather than being said twice. Both shells.
+  The window's meter label column is 18 px wider to hold it. The cache's
+  filenames are unchanged.
 
 ### 0.7.1 (2026-09-30)
 - **Fix**: a headset switched on after the panel started is read. Since spec

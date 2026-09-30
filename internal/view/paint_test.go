@@ -20,7 +20,7 @@ func TestAPainterIsToldWhatEachPieceIs(t *testing.T) {
 		return text
 	}
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "work", Badge: "E", Window: "spend", Caption: "spend: 85 %",
+		{Label: "CC work", Badge: "E", Window: "spend", Caption: "spend: 85 %",
 			Reset: "1 Oct", Fraction: 0.85, Status: view.Warn},
 	}}
 
@@ -46,7 +46,7 @@ func TestAPainterIsToldWhatEachPieceIs(t *testing.T) {
 // the assertion, and so is every pipe and every redirect to a file.
 func TestWithoutAPainterNothingIsChanged(t *testing.T) {
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "max M 5h", Caption: "5h: 4 %", Reset: "in 2h", Fraction: 0.04, Status: view.Good},
+		{Label: "CC max M 5h", Caption: "5h: 4 %", Reset: "in 2h", Fraction: 0.04, Status: view.Good},
 	}}
 
 	plain := view.Render([]view.Section{s}, view.ArrangeRow, 80)
@@ -62,8 +62,8 @@ func TestWithoutAPainterNothingIsChanged(t *testing.T) {
 // place on every line would have to be read for rather than glanced at.
 func TestInARowTheColumnsLineUpAcrossTheLines(t *testing.T) {
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "max M 5h", Caption: "5h: 4 %  7d: 20 %", Reset: "in   2h 53m", Fraction: 0.2},
-		{Label: "work E spend", Caption: "spend: 85 %", Reset: "      1 Oct", Fraction: 0.85},
+		{Label: "CC max M 5h", Caption: "5h: 4 %  7d: 20 %", Reset: "in   2h 53m", Fraction: 0.2},
+		{Label: "CC work E spend", Caption: "spend: 85 %", Reset: "      1 Oct", Fraction: 0.85},
 	}}
 
 	lines := view.Render([]view.Section{s}, view.ArrangeRow, 100)
@@ -83,7 +83,7 @@ func TestInARowTheColumnsLineUpAcrossTheLines(t *testing.T) {
 // and the bar is the impression.
 func TestAPaneTooNarrowForABarStillCarriesItsFigures(t *testing.T) {
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "max M 5h", Caption: "5h: 4 %", Reset: "in 2h", Fraction: 0.04},
+		{Label: "CC max M 5h", Caption: "5h: 4 %", Reset: "in 2h", Fraction: 0.04},
 	}}
 
 	line := view.Render([]view.Section{s}, view.ArrangeRow, 30)[0]
@@ -97,7 +97,7 @@ func TestAPaneTooNarrowForABarStillCarriesItsFigures(t *testing.T) {
 // them.
 func TestTheBarIsReadableWithoutColour(t *testing.T) {
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "max", Caption: "5h: 40 %", Reset: "in 2h", Fraction: 0.4},
+		{Label: "CC max", Caption: "5h: 40 %", Reset: "in 2h", Fraction: 0.4},
 	}}
 
 	line := view.Render([]view.Section{s}, view.ArrangeRow, 80)[0]
@@ -113,9 +113,9 @@ func TestTheBarIsReadableWithoutColour(t *testing.T) {
 // pane for the plan letter has to find it again on every line.
 func TestTheNamePartsLineUpDownThePane(t *testing.T) {
 	s := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
-		{Label: "max", Badge: "M", Window: "7d", Caption: "a", Reset: "x", Fraction: 0.1},
-		{Label: "work", Badge: "E", Window: "spend", Caption: "b", Reset: "y", Fraction: 0.2},
-		{Label: "Codex", Window: "limit", Caption: "c", Reset: "z", Fraction: 0.3},
+		{Label: "CC max", Badge: "M", Window: "7d", Caption: "a", Reset: "x", Fraction: 0.1},
+		{Label: "CC work", Badge: "E", Window: "spend", Caption: "b", Reset: "y", Fraction: 0.2},
+		{Label: "CX", Window: "limit", Caption: "c", Reset: "z", Fraction: 0.3},
 	}}
 
 	lines := view.Render([]view.Section{s}, view.ArrangeRow, 100)
