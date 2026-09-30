@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.7.1
+**Version**: 0.7.2
 
 *a chart you read at a glance*
 
@@ -225,7 +225,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.7.2 (2026-09-30)
 
 - **Change**: every usage meter's label leads with its provider (spec 024,
   issue #93): `CC` for Claude Code, `CX` for Codex. A Claude account keeps its
