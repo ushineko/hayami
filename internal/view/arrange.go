@@ -125,11 +125,48 @@ func block(s Section, width int, p Painter) []string {
 	out = append(out, cells(s.Cells, width, p)...)
 	out = append(out, meters(s.Meters, width, p)...)
 	for _, t := range s.Trails {
-		if line := Sparkline(t.Samples, width, SparkMinSpan); line != "" {
+		if line := plot(s, t, width); line != "" {
 			out = append(out, p.paint(line, trailStatus(t, s.Gone)))
 		}
 	}
 	return out
+}
+
+// plot draws one of a section's trails at a width, under the section's
+// TrailScale.
+func plot(s Section, t Trail, width int) string {
+	if s.TrailScale == ScaleShared {
+		low, span := sharedRange(s.Trails, width)
+		return SparklineIn(t.Samples, width, low, span)
+	}
+	return Sparkline(t.Samples, width, SparkMinSpan)
+}
+
+/*
+sharedRange is the one range every trail of a ScaleShared section is drawn
+against: zero at the floor and the greatest sample across the trails at the
+ceiling, widened to SparkMinSpan when below it.
+
+Only the samples a line of this width shows are measured. A peak that has
+scrolled off the left edge is not on the line, and a scale set by it would
+flatten what is.
+
+Zero rather than the lowest sample, because a rate's zero means something: an
+interface that is idle should sit on the floor, not be stretched to fill the
+line by whatever it has been doing in the last two minutes.
+*/
+func sharedRange(trails []Trail, width int) (low, span float64) {
+	high := 0.0
+	for _, t := range trails {
+		samples := t.Samples
+		if width > 0 && len(samples) > width {
+			samples = samples[len(samples)-width:]
+		}
+		for _, v := range samples {
+			high = max(high, v)
+		}
+	}
+	return 0, max(high, SparkMinSpan)
 }
 
 // trailStatus is a trail's colour, dropped to Dim for a section whose source
@@ -277,11 +314,11 @@ func renderRow(sections []Section, width int, p Painter) []string {
 // from a panel they never touch.
 func trailRow(s Section, t Trail, width int, c columns, p Painter) string {
 	label := padRight(trailLabel(s, t), c.label)
-	plot := Sparkline(t.Samples, width-runeLen(label)-1, SparkMinSpan)
-	if plot == "" {
+	line := plot(s, t, width-runeLen(label)-1)
+	if line == "" {
 		return ""
 	}
-	return p.paint(label, Dim) + " " + p.paint(plot, trailStatus(t, s.Gone))
+	return p.paint(label, Dim) + " " + p.paint(line, trailStatus(t, s.Gone))
 }
 
 // trailLabel names a plot's line. A section with one trail is named for the

@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.6.1
+**Version**: 0.7.0
 
 *a chart you read at a glance*
 
@@ -37,7 +37,7 @@ and the choice holds in both shells.
 | Section | Reads |
 |---|---|
 | Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
-| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface |
+| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
 | Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces |
 
@@ -224,6 +224,16 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.7.0 (2026-09-30)
+
+- **Feature**: the bandwidth section plots its trend, as the cooler does
+  (spec 021). Each interface's down and up rates over the last two minutes
+  are a line each, all against one scale -- zero to the greatest rate in the
+  window -- so an idle interface is a flat line beside a busy one rather than
+  looking just as busy. The pane draws a labelled line per interface per
+  direction; the window draws one plot, an interface's two lines in one
+  colour with the up line fainter. Requires fynedesygn v0.1.75.
 
 ### 0.6.1 (2026-09-30)
 

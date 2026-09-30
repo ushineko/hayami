@@ -138,3 +138,83 @@ func TestAnAveragedSeriesKeepsItsCapacityOfMeans(t *testing.T) {
 	assert.Equal(t, 3, a.Len())
 	assert.Equal(t, []float64{2.5, 3.5, 4.5}, a.Mean())
 }
+
+// Against a range it is given, a series is drawn by its size, not its shape.
+// A quiet interface beside a busy one is a flat line along the floor, which is
+// the reading the bandwidth trend exists for (spec 021).
+func TestASharedRangeDrawsAQuietSeriesFlatBesideABusyOne(t *testing.T) {
+	quiet := []float64{0, 1, 0, 1}
+	busy := []float64{0, 50, 100, 50}
+
+	q := []rune(view.SparklineIn(quiet, 4, 0, 100))
+	b := []rune(view.SparklineIn(busy, 4, 0, 100))
+
+	require.Len(t, q, 4)
+	for _, r := range q {
+		assert.Equal(t, view.SparkRunes[0], r, "a 1-peak series under a 100 scale is the floor: %q", string(q))
+	}
+	assert.Equal(t, view.SparkRunes[len(view.SparkRunes)-1], b[2], "the 100 peak reaches the top: %q", string(b))
+
+	// And on its own range the same quiet series fills the line, which is
+	// what the shared range is there to prevent.
+	own := []rune(view.Sparkline(quiet, 4, 0))
+	assert.Equal(t, view.SparkRunes[len(view.SparkRunes)-1], own[1])
+}
+
+// Sparkline is SparklineIn over the series' own range, widened to the minimum
+// span, and draws exactly what it drew before SparklineIn existed.
+func TestSparklineIsItsOwnRangeDrawnThroughSparklineIn(t *testing.T) {
+	series := []float64{3, 5, 4, 9}
+
+	assert.Equal(t, view.SparklineIn(series, 4, 3, 6), view.Sparkline(series, 4, 1))
+	assert.Equal(t, view.SparklineIn([]float64{46, 46}, 2, 45.5, 1), view.Sparkline([]float64{46, 46}, 2, 1))
+}
+
+func TestSparklineInWithNoRangeDrawsNothing(t *testing.T) {
+	assert.Empty(t, view.SparklineIn([]float64{1, 2}, 4, 0, 0))
+	assert.Empty(t, view.SparklineIn(nil, 4, 0, 1))
+}
+
+// Under ScaleShared the pane draws every trail of the section against zero
+// and the section's greatest sample: the quieter interface is the flatter line
+// in both arrangements that draw a plot.
+func TestASharedScaleSectionDrawsItsTrailsAgainstOneRange(t *testing.T) {
+	s := view.Section{Key: "bandwidth", Title: "Bandwidth", TrailScale: view.ScaleShared,
+		Rows: []view.Row{{Label: "eno2", Value: "x"}},
+		Trails: []view.Trail{
+			{Name: "eno2 ↓", Samples: []float64{0, 1, 0, 1}},
+			{Name: "wlan0 ↓", Samples: []float64{0, 50, 100, 50}, Series: 1},
+		},
+	}
+	floor := strings.Repeat(string(view.SparkRunes[0]), 4)
+	top := string(view.SparkRunes[len(view.SparkRunes)-1])
+
+	stacked := view.Render([]view.Section{s}, view.ArrangeStack, 4)
+	require.Len(t, stacked, 4, "a title, a row and a line per trail")
+	assert.Equal(t, floor, stacked[2])
+	assert.Contains(t, stacked[3], top)
+
+	rows := view.Render([]view.Section{s}, view.ArrangeRow, 12)
+	require.Len(t, rows, 3)
+	assert.True(t, strings.HasSuffix(rows[1], floor), "the quiet trail is flat: %q", rows[1])
+	assert.Contains(t, rows[2], top)
+
+	// The same section under its own ranges draws the quiet trail as
+	// movement, which is the difference the scale makes.
+	s.TrailScale = view.ScaleEach
+	each := view.Render([]view.Section{s}, view.ArrangeStack, 4)
+	assert.NotEqual(t, floor, each[2])
+}
+
+// The shared range is measured on what the line shows: a peak that has
+// scrolled off the left edge does not flatten what is still on it.
+func TestASharedRangeIgnoresAPeakTheLineNoLongerShows(t *testing.T) {
+	s := view.Section{Title: "Bandwidth", TrailScale: view.ScaleShared,
+		Trails: []view.Trail{{Name: "eno2 ↓", Samples: []float64{1000, 0, 10}}},
+	}
+
+	lines := view.Render([]view.Section{s}, view.ArrangeStack, 2)
+
+	require.Len(t, lines, 2)
+	assert.Equal(t, string([]rune{view.SparkRunes[0], view.SparkRunes[len(view.SparkRunes)-1]}), lines[1])
+}

@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"image/color"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
@@ -158,3 +160,32 @@ func texts(o fyne.CanvasObject) []string {
 	}
 	return out
 }
+
+// SparkSamples are what a card's plot holds for one trace: nil when the card
+// has no plot or the plot has no such trace, and an empty slice for a trace
+// that is declared and has nothing yet.
+func SparkSamples(p *Panel, key, trace string) []float64 {
+	c, ok := p.cards[key]
+	if !ok || c.spark == nil {
+		return nil
+	}
+	return c.spark.Samples(trace)
+}
+
+// SparkScale is how a card's plot fits its traces, and false when the card
+// has no plot.
+func SparkScale(p *Panel, key string) (glance.Scale, bool) {
+	c, ok := p.cards[key]
+	if !ok || c.spark == nil {
+		return 0, false
+	}
+	return c.spark.Scale(), true
+}
+
+// TrailColour is trailColour, and PanelTheme the theme it resolves in, so a
+// test can say which colour a trace is drawn in.
+func TrailColour(p *Panel, t view.Trail, sec view.Section) color.Color {
+	return p.trailColour(t, sec)
+}
+
+func PanelTheme(p *Panel) fyne.Theme { return p.win.Panel().Theme() }
