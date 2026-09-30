@@ -201,8 +201,39 @@ func Peripherals(r PeripheralsReading) Section {
 	for _, d := range shown {
 		s.Cells = append(s.Cells, peripheral(d))
 	}
+	// The card keeps its shape with nothing behind a slot (spec 022). A card
+	// that collapsed to one centred cell when the headset was forgotten, and
+	// widened again when it came back, reflowed the panel over a battery.
+	for i := len(s.Cells); i < PeripheralSlots; i++ {
+		s.Cells = append(s.Cells, placeholder(i))
+	}
 	s.Note = overflowNote(overflow)
 	return s
+}
+
+// The placeholders' labels, by slot: the left slot is the mouse's.
+const (
+	NoMouse  = "no mouse"
+	NoDevice = "no device"
+)
+
+/*
+placeholder is the cell for a slot with no device behind it.
+
+Drawn dim, like a device that has gone quiet, and with no reading, so the card
+is the same shape with one device as with two and says which slot is empty.
+It is not a reason: nothing is wrong, and doctor does not report it.
+
+Only the right slot is empty on a desk with a mouse. The left one says "no
+mouse" only when there is nothing at all, because without a mouse the left
+slot goes to the next device rather than staying empty (see SelectPeripherals).
+*/
+func placeholder(slot int) Cell {
+	label := NoDevice
+	if slot == 0 {
+		label = NoMouse
+	}
+	return Cell{Label: label, Value: NoQuantity(), Stale: true, Placeholder: true}
 }
 
 // overflowNote names the devices there was no slot for, most recent first.
@@ -264,18 +295,17 @@ one, it is there whenever the machine is, and it is what the panel is usually
 being asked about. It holds the slot even when it has gone quiet, because a
 mouse idle is not a mouse gone and moving the pointer brings it straight back
 -- a slot that emptied every time the hand left the desk would be the same
-flicker in a smaller place.
+flicker in a smaller place. Without a mouse the slots are filled from the rest,
+as they always were.
 
-**The right slot is whatever is live**, most recently detected first: the
-headset just switched on is the one being thought about. When nothing else is
-live it keeps the one that went quiet most recently, rather than emptying, so
-the card is the same width with the headphones on the desk as with them on.
+**The right slot is the device whose state changed last**, whether that change
+was arriving or going quiet (spec 022). A headset switched off keeps the slot,
+dim, with its last level; a pair of earbuds connected after that takes it.
+Live and quiet are not ranked against each other: the reader's most recent
+change is what the slot shows.
 
 Everything beyond the two is returned as overflow, in the same order, for the
 caller to say somewhere that does not take space on the card.
-
-devices arrive in OrderPeripherals' order and the two that are picked keep it,
-so the mouse is drawn first.
 */
 func SelectPeripherals(devices []PeripheralReading) (shown, overflow []PeripheralReading) {
 	rest := slices.Clone(devices)
@@ -288,35 +318,25 @@ func SelectPeripherals(devices []PeripheralReading) (shown, overflow []Periphera
 		rest = slices.Delete(rest, i, i+1)
 	}
 
-	slices.SortStableFunc(rest, byLiveThenRecent)
+	slices.SortStableFunc(rest, byRecentChange)
 
 	take := min(PeripheralSlots-len(left), len(rest))
 	return append(left, rest[:take]...), rest[take:]
 }
 
 /*
-byLiveThenRecent puts a device that is answering before one that is not, and
-the most recently detected of each first.
+byRecentChange puts the device whose state changed most recently first.
 
 Recency is Since for a live device -- when it arrived -- and Seen for a quiet
-one -- when it was last heard. They are different questions and the same
-intent: the device whose state changed last is the one the reader changed.
+one -- when it was last heard, which is when it went quiet. They are different
+questions and the same intent: the device whose state changed last is the one
+the reader changed.
 
 The name breaks a tie so a panel with two devices detected in the same poll
 does not swap them between polls.
 */
-func byLiveThenRecent(a, b PeripheralReading) int {
-	if a.Stale != b.Stale {
-		if a.Stale {
-			return 1
-		}
-		return -1
-	}
-	at, bt := a.Since, b.Since
-	if a.Stale {
-		at, bt = a.Seen, b.Seen
-	}
-	if n := bt.Compare(at); n != 0 {
+func byRecentChange(a, b PeripheralReading) int {
+	if n := changed(b).Compare(changed(a)); n != 0 {
 		return n
 	}
 
@@ -328,6 +348,15 @@ func byLiveThenRecent(a, b PeripheralReading) int {
 		return n
 	}
 	return cmp.Compare(a.Name, b.Name)
+}
+
+// changed is when a device's state last changed: when it arrived if it is
+// answering, when it was last heard if it is not.
+func changed(d PeripheralReading) time.Time {
+	if d.Stale {
+		return d.Seen
+	}
+	return d.Since
 }
 
 // peripheral is one device's cell.

@@ -58,6 +58,12 @@ type Cell struct {
 	// stays legible and stops shouting. The monitor does the same thing with
 	// a second, darker palette and the word "(Offline)" under the number.
 	Stale bool
+
+	// Placeholder marks a cell with no reading behind it: a slot the section
+	// always draws so the card keeps its shape, with no device in it (spec
+	// 022). It is drawn like any other cell and reported by nothing -- it is
+	// not a reading and not a reason.
+	Placeholder bool
 }
 
 // Trail is one series plotted under a section's rows.

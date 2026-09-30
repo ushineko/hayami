@@ -470,7 +470,12 @@ at build time, and a card rebuilt on a poll would reflow the window several
 times a minute. Unlike a meter, though, a section gaining one is an ordinary
 event -- a mouse is switched on, a headset comes off its cradle -- so the
 surplus is drawn as a hidden cell rather than dropped, and a device that
-appears fills one. A device that goes away hides its own again.
+appears fills one.
+
+A cell the section emitted is never hidden. The peripherals section always
+emits both of its slots, a placeholder where there is no device (spec 022), so
+the card does not collapse to one cell and widen again; only the slack beyond
+what the section emitted is hidden.
 
 CellSlack is how many spare there are. A window that has to be restarted to see
 a peripheral is a window nobody would keep open.

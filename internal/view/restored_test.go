@@ -29,7 +29,7 @@ func TestARestoredSectionIsDrawnDim(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{
 		Devices: []view.PeripheralReading{{Name: "G502 X PLUS", Level: 15, Kind: view.KindMouse}},
 	})
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	require.Equal(t, view.Bad, s.Cells[0].Status, "the reading must be one that would be coloured")
 
 	s.Restored = true

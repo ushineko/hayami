@@ -41,9 +41,6 @@ const FileName = "sections.json"
 // true and better than a blank; a week later it is furniture, and a device
 // that has since been put away would have a cell of its own. A day is the
 // round number between those.
-//
-// It is not PeripheralsForget, which answers a different question — how long a
-// device that has gone quiet keeps its cell *within* a session.
 const MaxAge = 24 * time.Hour
 
 // Entry is one section as it was last drawn, and when.

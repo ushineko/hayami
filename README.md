@@ -226,7 +226,19 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
-
+- **Fix**: a headset switched on after the panel started is read. Since spec
+  020 the panel holds each device open across polls, and the SteelSeries
+  base station's replies to every program's questions queued on that handle
+  faster than one read a poll consumed them, so the reading stayed at what
+  was true when the handle was opened (sanshoku v0.1.4, its #24).
+- **Change**: the peripherals card always draws two cells, so it no longer
+  reflows when a device goes away (spec 022, #89). A device seen once is
+  remembered for the session, dim with its last level, rather than forgotten
+  after ten minutes; a slot with no device behind it says "no device" (or "no
+  mouse" on a desk with nothing on it) instead of being hidden. The right
+  slot goes to the device whose state changed most recently, connecting or
+  disconnecting: a headset switched off keeps the slot until another device
+  connects after it.
 - **Change**: `make lint` keeps its cache under the checkout, so git worktrees
   stop reporting findings against each other's deleted files.
 

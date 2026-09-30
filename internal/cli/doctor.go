@@ -116,6 +116,10 @@ func summarise(s view.Section) string {
 		}
 	}
 	for _, c := range s.Cells {
+		if c.Placeholder {
+			// An empty slot is the card keeping its shape, not a reading.
+			continue
+		}
 		parts = append(parts, tidy(c.Label+" "+c.Value+c.Unit))
 	}
 	for _, m := range s.Meters {

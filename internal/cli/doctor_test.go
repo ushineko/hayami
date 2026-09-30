@@ -270,3 +270,25 @@ func TestDoctorSaysInstallTheUdevRuleForADeviceThatMayNotBeOpened(t *testing.T) 
 	assert.Contains(t, out.String(), "install the udev rule (60-sanshoku.rules)")
 	assert.NotContains(t, out.String(), "no Razer device", "a device that is there was reported absent")
 }
+
+// Spec 022. The peripherals card always draws two cells, and a slot with no
+// device is a placeholder. That is the card keeping its shape, not a reading:
+// doctor on a desk with nothing on it says why, and does not report the
+// placeholders as though something had been read.
+func TestDoctorDoesNotReportThePlaceholders(t *testing.T) {
+	bare(t)
+	findings := cli.Diagnose(t.Context(), panel.Keys(), nil, counters)
+
+	for _, f := range findings {
+		if f.Key != "peripherals" {
+			continue
+		}
+		assert.NotContains(t, f.Summary, view.NoMouse)
+		assert.NotContains(t, f.Summary, view.NoDevice)
+		for _, r := range f.Reasons {
+			assert.NotContains(t, r.Text, view.NoDevice)
+		}
+		return
+	}
+	t.Fatal("doctor did not report the peripherals")
+}

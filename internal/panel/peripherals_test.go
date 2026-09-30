@@ -161,13 +161,24 @@ func TestAnArctisSwitchedOffKeepsItsLastLevel(t *testing.T) {
 
 	arctis.says = []battery.Battery{{Name: "SteelSeries Arctis Nova Pro Wireless", Kind: battery.KindHeadset}}
 	c.tick(time.Minute)
+	off := c.at
 	assert.True(t, poll(t, p))
 
 	found := devices(p)
 	require.Len(t, found, 1)
 	assert.Equal(t, 62, found[0].Level)
-	assert.False(t, found[0].Stale, "the base station answered; it is the headset that is off")
+	assert.True(t, found[0].Stale, "the headset is off and was drawn as if it were answering")
+	assert.Equal(t, off, found[0].Seen, "Seen is when the headset went off")
 	assert.Empty(t, p.Section().Reasons)
+
+	// Still off a poll later: Seen stays at the moment it went off, so a
+	// device that connects in between out-ranks it for the slot.
+	c.tick(time.Minute)
+	poll(t, p)
+	found = devices(p)
+	require.Len(t, found, 1)
+	assert.Equal(t, off, found[0].Seen, "Seen moved while the headset stayed off")
+	assert.True(t, found[0].Stale)
 }
 
 // AC2. A device that answered and has gone quiet keeps its level and is drawn
@@ -195,30 +206,40 @@ func TestADeviceThatStopsAnsweringKeepsItsLevelAndGoesDim(t *testing.T) {
 
 	// The verdict survives the dimming, which is the shells' to apply.
 	cells := p.Section().Cells
-	require.Len(t, cells, 1)
+	require.Len(t, cells, view.PeripheralSlots)
 	assert.True(t, cells[0].Stale)
 	assert.Equal(t, "Offline", cells[0].Note)
 	assert.Contains(t, cells[0].Value, "86")
 }
 
-// AC2. A device quiet for long enough is gone rather than quiet, and stops
-// being drawn. A mouse put away this morning is not a mouse that is idle.
-func TestADeviceQuietForLongEnoughIsForgotten(t *testing.T) {
-	mouse := receiver(battery.Battery{Name: "G502 X PLUS", Level: 86, HasLevel: true})
-	k := &desk{devices: []*peripheral{mouse}}
+// AC (spec 022). A device quiet for longer than the ten minutes that used to
+// forget it is still in the reading, stale, with its last level: the card
+// always draws two cells, and the headset switched off at lunch is the one it
+// should be drawing dim.
+func TestADeviceQuietForLongIsStillInTheReading(t *testing.T) {
+	headset := receiver(battery.Battery{Name: "Arctis Nova Pro Wireless", Level: 47, HasLevel: true, Kind: battery.KindHeadset})
+	k := &desk{devices: []*peripheral{headset}}
 	c := &clock{at: time.Now()}
 	p := k.section(c)
 	poll(t, p)
 
-	mouse.says = nil
-	c.tick(panel.PeripheralsForget + time.Minute)
+	headset.says = nil
+	c.tick(10*time.Minute + time.Minute)
+	poll(t, p)
+	c.tick(8 * time.Hour)
 
-	assert.False(t, poll(t, p))
-	assert.Empty(t, devices(p))
+	assert.True(t, poll(t, p), "a device quiet all afternoon took the section with it")
+	found := devices(p)
+	require.Len(t, found, 1)
+	assert.Equal(t, "Arctis Nova Pro Wireless", found[0].Name)
+	assert.True(t, found[0].Stale)
+	assert.Equal(t, 47, found[0].Level)
 }
 
 // AC2. A device that is connected and not saying how full it is keeps the
-// level it last gave, as the monitor's own carry-over does.
+// level it last gave, as the monitor's own carry-over does, and is drawn dim:
+// a base station that answers for a headset that is off is a headset that is
+// off (spec 022).
 func TestAConnectedDeviceThatIsNotSayingKeepsItsLastLevel(t *testing.T) {
 	headset := receiver(battery.Battery{Name: "Arctis Nova Pro Wireless", Level: 72, HasLevel: true})
 	k := &desk{devices: []*peripheral{headset}}
@@ -233,7 +254,7 @@ func TestAConnectedDeviceThatIsNotSayingKeepsItsLastLevel(t *testing.T) {
 	found := devices(p)
 	require.Len(t, found, 1)
 	assert.Equal(t, 72, found[0].Level)
-	assert.False(t, found[0].Stale, "the device is answering; it is its battery that is quiet")
+	assert.True(t, found[0].Stale, "a headset that is off was drawn as if it were answering")
 }
 
 // AC2. The carried level is dropped when the battery crosses between charging
@@ -347,8 +368,9 @@ func TestSinceIsWhenTheDeviceArrivedNotWhenItLastAnswered(t *testing.T) {
 	assert.Equal(t, c.at, found[0].Seen, "the last answer did not move with the poll")
 }
 
-// AC. A device that was forgotten and comes back is new, so switching a
-// headset off and on again puts it back in the slot.
+// AC. A device that went quiet and comes back is new, so switching a headset
+// off and on again puts it back in the slot (spec 022: it is no longer
+// forgotten in between, so coming back from quiet is what resets it).
 func TestADeviceThatComesBackIsNewAgain(t *testing.T) {
 	mouse := battery.Battery{Name: "G502 X PLUS", Level: 86, HasLevel: true}
 	rx := receiver(mouse)
@@ -359,9 +381,10 @@ func TestADeviceThatComesBackIsNewAgain(t *testing.T) {
 	arrived := c.at
 
 	rx.says = nil
-	c.tick(panel.PeripheralsForget + time.Minute)
+	c.tick(time.Minute)
 	poll(t, p)
-	require.Empty(t, devices(p), "the device was not forgotten")
+	require.Len(t, devices(p), 1)
+	require.True(t, devices(p)[0].Stale)
 
 	rx.says = []battery.Battery{mouse}
 	c.tick(time.Minute)
@@ -369,8 +392,43 @@ func TestADeviceThatComesBackIsNewAgain(t *testing.T) {
 
 	found := devices(p)
 	require.Len(t, found, 1)
+	assert.False(t, found[0].Stale)
 	assert.Equal(t, c.at, found[0].Since, "a device that came back kept its old arrival")
 	assert.NotEqual(t, arrived, found[0].Since)
+
+	// And it keeps the new arrival while it keeps answering.
+	back := c.at
+	c.tick(time.Minute)
+	poll(t, p)
+	assert.Equal(t, back, devices(p)[0].Since)
+}
+
+// R1 (spec 022). A device forgotten on a charge-state flip with no level is
+// remembered again the next time it answers with one.
+func TestADeviceForgottenOnAStateFlipIsRememberedWhenItAnswers(t *testing.T) {
+	headset := receiver(battery.Battery{Name: "Arctis Nova Pro Wireless", Level: 72, HasLevel: true, State: battery.Discharging})
+	k := &desk{devices: []*peripheral{headset}}
+	c := &clock{at: time.Now()}
+	p := k.section(c)
+	poll(t, p)
+
+	headset.says = []battery.Battery{{Name: "Arctis Nova Pro Wireless", State: battery.Charging}}
+	c.tick(time.Minute)
+	poll(t, p)
+	require.Empty(t, devices(p), "a level from before the cable was kept")
+
+	headset.says = []battery.Battery{{Name: "Arctis Nova Pro Wireless", Level: 74, HasLevel: true, State: battery.Charging}}
+	c.tick(time.Minute)
+	poll(t, p)
+	found := devices(p)
+	require.Len(t, found, 1)
+	assert.Equal(t, 74, found[0].Level)
+
+	headset.says = nil
+	c.tick(time.Hour)
+	poll(t, p)
+	require.Len(t, devices(p), 1, "the device was not remembered after it answered again")
+	assert.True(t, devices(p)[0].Stale)
 }
 
 /*
