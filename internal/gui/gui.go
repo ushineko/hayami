@@ -136,7 +136,7 @@ photograph of this change showed.
 
 A card is built from what the first poll or the cache had, and a reason arrives
 whenever a source cannot read something: at the first poll, or an hour later
-when liquidctl is uninstalled. So the rows cannot be counted in advance and the
+when the cooler stops answering. So the rows cannot be counted in advance and the
 spares have to be there from the start.
 
 Four, which covers every section this build has: the cooler's two readings and
@@ -291,7 +291,7 @@ Apply brings the window into line with a changed configuration.
 Hiding and showing a section is live: a card is drawn when the user allows it
 *and* its source has something to say, and this is the first of those. The
 card's own callback stops the poll, so a cooler section switched off stops
-running liquidctl every five seconds for nobody.
+asking the cooler every five seconds for nobody.
 
 **Reordering is not live.** The design system's panel adds cards and never
 removes or moves one, so the stack's order is fixed when the window is built.
@@ -345,8 +345,8 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		if restored, err := p.lastKnown(key); err == nil {
 			// The readings come from the cache; the reasons stay this poll's.
 			// A reason is a statement about now, and the cache has none of its
-			// own -- but "the coolant is the last one heard" and "liquidctl
-			// is not installed" are both true at once and the card should say
+			// own -- but "the coolant is the last one heard" and "the cooler
+			// would not answer" are both true at once and the card should say
 			// both.
 			reasons := sec.Reasons
 			sec, drawn = restored, true

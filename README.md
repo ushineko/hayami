@@ -36,9 +36,9 @@ and the choice holds in both shells.
 
 | Section | Reads |
 |---|---|
-| Peripherals | HID++ over `hidraw` for Logitech, `headsetcontrol` for Arctis, Apple's accessory protocol for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
+| Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface |
-| Cooler | hwmon by label for the processor; `liquidctl` for the pump and the coolant, where the kernel has no driver |
+| Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces |
 
 ## Arrangements
@@ -108,10 +108,34 @@ From a checkout, which builds first:
 ./uninstall.sh              # remove exactly those, keeping your settings
 ```
 
-Everything goes under `~/.local`, nothing needs root, and re-running is safe.
-The titlebar is not part of it: that is a KWin rule the program offers from
-its preferences window or with `hayami window install`, because it writes into
-the same `kwinrulesrc` as every other rule you have.
+Everything goes under `~/.local` and re-running is safe. The one file that
+needs root is the udev rule below, and the installer does not become root to
+write it. The titlebar is not part of it either: that is a KWin rule the
+program offers from its preferences window or with `hayami window install`,
+because it writes into the same `kwinrulesrc` as every other rule you have.
+
+### The udev rule
+
+hayami opens the receivers, docks, headset base stations and cooler on your
+desk itself, as you. A device node is yours to open only when a udev rule tags
+it for the logged-in user; without one, the device is found and the card says
+it is *not permitted*. `packaging/60-sanshoku.rules` is that rule, for
+Logitech, Razer, SteelSeries and NZXT, matched by vendor. Bluetooth needs
+none.
+
+The installer puts it in `/etc/udev/rules.d` when it is allowed to, and
+otherwise prints the two commands that do, and carries on:
+
+```
+sudo install -m644 packaging/60-sanshoku.rules /etc/udev/rules.d/60-sanshoku.rules
+sudo udevadm control --reload
+```
+
+Then replug the device, or reboot. It says nothing when the rule is already
+there. A machine that once had liquidctl or OpenRazer may have a rule that
+covers some of these devices already; `hayami-tui doctor` names any device it
+may not open. `uninstall.sh` removes the copy `install.sh` wrote, or prints
+the commands that do.
 
 ### Replacing peripheral-battery-monitor
 
@@ -190,6 +214,11 @@ window, and every section gains a terminal equivalent.
 `ag-scripts/claude-usage-widget-windows` is replaced too. Its terminal panes
 are this program in its `row` arrangement with one section selected.
 
+The device code -- HID++, Razer and SteelSeries reports, Apple's accessory
+protocol, BlueZ, the Kraken and hwmon -- was written here and in hotaru, and
+now lives in [sanshoku](https://github.com/ushineko/sanshoku), one module both
+programs import, with its measurements, its hardware bench and its udev rule.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
@@ -197,6 +226,31 @@ MIT. See [LICENSE](LICENSE).
 ## Changelog
 
 ### Unreleased
+
+- **Change (breaking)**: the peripherals and cooler sections read their
+  devices through [sanshoku](https://github.com/ushineko/sanshoku) v0.1.1, and
+  `liquidctl` and `headsetcontrol` are no longer used (spec 020, #81). The
+  Kraken is read over `hidraw` directly, beside hotaru's service; the Arctis
+  Nova Pro Wireless through its base station, and switched off it keeps its
+  last level as it did. Its label is now the kernel's name, "SteelSeries
+  Arctis Nova Pro Wireless". **Headsets other than the Arctis are no longer
+  read**: headsetcontrol knew many, and each gets a sanshoku driver when there
+  is one on a desk to measure. `HAYAMI_LIQUIDCTL_MATCH` is gone with liquidctl.
+- **Add**: a device the user may not open says so -- "*name* is not
+  permitted" -- and names the udev rule, which liquidctl's and OpenRazer's
+  packages used to install. `install.sh` installs `60-sanshoku.rules` where it
+  may, and prints the two commands that do where it may not.
+- **Change**: devices are opened once and held across polls, closed when they
+  are unplugged, rather than opened on every poll, so the drivers keep what
+  they learned. A Unifying receiver's paired devices are asked at their own
+  index: on the machine with one, `hayami-tui readings` took 0.8 s with its
+  devices asleep, where the old reader's poll took 19 s.
+- **Change**: "no liquidctl" is "no cooler", and "liquidctl failed" is "the
+  cooler would not answer". The "headsetcontrol ..." reasons are gone.
+- **Add**: a Razer or SteelSeries device that is found and answers nothing --
+  a mouse asleep in its dock -- says "a Razer device answered nothing" rather
+  than nothing at all. A Logitech receiver's quiet count no longer counts a
+  paired device twice when it also has a node of its own.
 
 - **Change**: the desktop panel collects garbage at `GOGC=50` rather than Go's
   default of 100, unless `GOGC` is set. Most of its live heap is parsed fonts

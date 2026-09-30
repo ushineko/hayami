@@ -91,14 +91,14 @@ func TestAReasonsDetailIsTheHoverAndNotTheCard(t *testing.T) {
 /*
 A restored reading keeps this poll's reasons.
 
-Both are true at once -- "the coolant is the last one heard" and "liquidctl is
-not installed" -- and the card should say both. The readings come from the
+Both are true at once -- "the coolant is the last one heard" and "the cooler
+would not answer" -- and the card should say both. The readings come from the
 cache; a reason never does, because it is a statement about now.
 */
 func TestARestoredSectionKeepsThisPollsReasons(t *testing.T) {
 	a := test.NewTempApp(t)
 	src := &reasonSource{key: "cooler", reasons: []view.Reason{
-		{Label: "Coolant", Text: "no liquidctl", Status: view.Info},
+		{Text: "the cooler would not answer", Status: view.Warn},
 	}}
 	p := gui.New(a, gui.Options{Sources: []panel.Source{src}, Title: "hayami"})
 	gui.Seed(p, readings.Cache{"cooler": {At: time.Now(), Section: view.Section{
@@ -109,5 +109,5 @@ func TestARestoredSectionKeepsThisPollsReasons(t *testing.T) {
 
 	rows := gui.CardRows(p, "cooler")
 	assert.Contains(t, rows, "38 °C", "the cached reading was dropped")
-	assert.Contains(t, rows, "no liquidctl", "this poll's reason was dropped")
+	assert.Contains(t, rows, "the cooler would not answer", "this poll's reason was dropped")
 }

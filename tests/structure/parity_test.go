@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ushineko/sanshoku/hidraw"
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
@@ -48,6 +49,7 @@ func TestFeatureParity(t *testing.T) {
 // panel.Source. If this ever needs a type switch on the source, parity is
 // already lost.
 func TestTheTerminalPanelDrawsEverySection(t *testing.T) {
+	noMachine(t)
 	sources := panel.Sources(panel.Keys(), []string{"eth0"}, fakeCounters)
 	m := tui.New(tui.Options{Sources: sources, Arrangement: view.ArrangeStack})
 
@@ -58,6 +60,20 @@ func TestTheTerminalPanelDrawsEverySection(t *testing.T) {
 	m2, _ := m.Update(polledAll(sources))
 
 	assert.Len(t, m2.(tui.Model).Sections(), len(sources))
+}
+
+// noMachine takes away what the real sources would read, so polling them
+// opens no device and fetches no usage: an empty hidraw tree, a system bus
+// that does not resolve, and no credential store or cache.
+func noMachine(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
+	sys, dev := hidraw.SysRoot, hidraw.DevRoot
+	hidraw.SysRoot, hidraw.DevRoot = t.TempDir(), t.TempDir()
+	t.Cleanup(func() { hidraw.SysRoot, hidraw.DevRoot = sys, dev })
 }
 
 // polledAll is every source reporting that it has something to say. The

@@ -17,6 +17,7 @@ import (
 // wrote and what it returned, the way a person at a prompt would see it.
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	noDevices(t)
 	var out bytes.Buffer
 	cmd := cli.TUI("1.2.3")
 	cmd.SetOut(&out)

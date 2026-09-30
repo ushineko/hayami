@@ -71,7 +71,7 @@ func New(o Options) Model {
 // past this: what has arrived is drawn and the rest are left out, which is the
 // same thing the panel shows for a source that has nothing to say.
 //
-// Five seconds is above what the slow sources actually take — liquidctl
+// Five seconds is above what the slow sources actually take — the cooler
 // answers well inside a second, a silent peripheral costs its retries, a
 // cached usage read is immediate — and below what anybody would sit through.
 const OnceDeadline = 5 * time.Second

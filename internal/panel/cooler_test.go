@@ -3,68 +3,100 @@ package panel_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ushineko/sanshoku"
+	"github.com/ushineko/sanshoku/cooling"
+	"github.com/ushineko/sanshoku/hwmon"
 
-	"github.com/ushineko/hayami/internal/cooler"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/view"
 )
 
-// sources builds a cooler whose two readings the test decides, one poll at a
-// time. Each call to Poll takes the next pair.
-type sources struct {
-	cpu    []func() (float64, error)
-	liquid []func() (cooler.Liquid, error)
-	at     int
+/*
+kraken is a fake cooler: the candidate a fake scan lists for the nzxt driver,
+and the device its Open yields.
+
+It carries only what the cooler's reasons turn on: a status, an error from
+Open or from a read (sanshoku.ErrGone, ErrAbsent, ErrUnsupported and a
+permission error among them). The fields are changed between polls.
+*/
+type kraken struct {
+	path    string
+	status  cooling.Status
+	openErr error
+	readErr error
+
+	opens, closes int
 }
 
-func (s *sources) install(c *panel.Cooler) {
-	panel.SetCoolerSources(c,
-		func() (float64, error) { return s.cpu[s.at]() },
-		func(context.Context) (cooler.Liquid, error) { return s.liquid[s.at]() },
-	)
+func (k *kraken) Identity() sanshoku.Identity {
+	return sanshoku.Identity{Name: "NZXT Kraken Elite V2", Path: k.path}
 }
 
-func degrees(v float64) func() (float64, error) {
-	return func() (float64, error) { return v, nil }
+func (k *kraken) Close() error { k.closes++; return nil }
+
+func (k *kraken) Status(context.Context) (cooling.Status, error) { return k.status, k.readErr }
+
+// rig is a machine's cooling: the processor's reading, the coolers the scan
+// lists, and the nzxt driver's own failure to list.
+type rig struct {
+	cpu     float64
+	cpuErr  error
+	coolers []*kraken
+	failing error
 }
 
-func noSensor() (float64, error) { return 0, cooler.ErrNoSensor }
-
-func cooling(v float64, pump int) func() (cooler.Liquid, error) {
-	return func() (cooler.Liquid, error) {
-		return cooler.Liquid{Coolant: v, PumpRPM: pump, HasPump: true}, nil
+func (r *rig) scan(_ context.Context, drivers ...sanshoku.Driver) ([]sanshoku.Candidate, error) {
+	var out []sanshoku.Candidate
+	for _, d := range drivers {
+		if d.Name() != "nzxt" {
+			continue
+		}
+		for _, k := range r.coolers {
+			out = append(out, sanshoku.Candidate{
+				Identity: k.Identity(), Driver: "nzxt",
+				Open: func(context.Context) (sanshoku.Device, error) {
+					k.opens++
+					if k.openErr != nil {
+						return nil, k.openErr
+					}
+					return k, nil
+				},
+			})
+		}
 	}
+	return out, r.failing
 }
 
-func contended() (cooler.Liquid, error) {
-	return cooler.Liquid{}, errors.New("hidraw is busy")
+func (r *rig) sensor() (float64, error) { return r.cpu, r.cpuErr }
+
+func (r *rig) section() *panel.Cooler { return panel.NewCoolerOver(r.scan, r.sensor) }
+
+// withKraken is a machine at 60 degrees with one cooler answering.
+func withKraken(coolant float64, pump int) (*rig, *kraken) {
+	k := &kraken{path: "/dev/hidraw6", status: cooling.Status{Coolant: coolant, PumpRPM: pump, HasPump: true}}
+	return &rig{cpu: 60, coolers: []*kraken{k}}, k
 }
 
-func noCooler() (cooler.Liquid, error) { return cooler.Liquid{}, cooler.ErrNoCooler }
-
-// The bug this is about: liquidctl opens a hidraw node and this machine has a
-// history of contention on those, so a poll comes back empty several times an
-// hour. Replacing the reading with what just arrived took the coolant row
-// away, shortened the card and changed the height of the panel, for a second,
-// at random.
+// The bug this is about: the cooler is a hidraw node other programs hold too,
+// so a poll comes back empty now and then. Replacing the reading with what
+// just arrived took the coolant row away, shortened the card and changed the
+// height of the panel, for a second, at random.
 func TestACoolerThatMissesAPollKeepsWhatItKnew(t *testing.T) {
-	c := panel.NewCooler()
-	s := &sources{
-		cpu:    []func() (float64, error){degrees(60), degrees(61)},
-		liquid: []func() (cooler.Liquid, error){cooling(38.9, 2650), contended},
-	}
-	s.install(c)
+	r, k := withKraken(38.9, 2650)
+	c := r.section()
 
-	drawn, err := c.Poll(t.Context())
-	require.NoError(t, err)
-	require.True(t, drawn)
+	require.True(t, poll(t, c))
 	require.False(t, c.Section().Gone)
 
-	s.at = 1
-	drawn, err = c.Poll(t.Context())
+	k.readErr = errors.New("no 7501 reply: no reply")
+	r.cpu = 61
+	drawn, err := c.Poll(t.Context())
 
 	require.Error(t, err, "the failure still reaches the caller, which logs it")
 	assert.True(t, drawn, "a section that was drawn stays drawn")
@@ -78,37 +110,83 @@ func TestACoolerThatMissesAPollKeepsWhatItKnew(t *testing.T) {
 
 // Recovery clears it. A marker that never goes away is a marker nobody reads.
 func TestACoolerThatComesBackIsNotGoneAnyMore(t *testing.T) {
-	c := panel.NewCooler()
-	s := &sources{
-		cpu:    []func() (float64, error){degrees(60), degrees(61), degrees(62)},
-		liquid: []func() (cooler.Liquid, error){cooling(38.9, 2650), contended, cooling(39.4, 2700)},
-	}
-	s.install(c)
+	r, k := withKraken(38.9, 2650)
+	c := r.section()
+	poll(t, c)
 
-	for s.at = range 3 {
-		_, _ = c.Poll(t.Context())
-	}
+	k.readErr = errors.New("no 7501 reply: no reply")
+	_, _ = c.Poll(t.Context())
+
+	k.readErr, k.status.Coolant = nil, 39.4
+	poll(t, c)
 
 	sec := c.Section()
 	assert.False(t, sec.Gone)
 	assert.Contains(t, sec.Rows[1].Value, "39.4")
+	assert.Empty(t, sec.Reasons, "a reason outlived the thing it was about")
+}
+
+// R2.1. The cooler is opened once and held: its driver coalesces reads by
+// freshness, which only means something to a handle that lives.
+func TestTheCoolerIsOpenedOnceAndHeld(t *testing.T) {
+	r, k := withKraken(38.9, 2650)
+	c := r.section()
+
+	for range 3 {
+		poll(t, c)
+	}
+
+	assert.Equal(t, 1, k.opens)
+	assert.Zero(t, k.closes)
+}
+
+// R2.2. A cooler that has gone is closed, not reported as a failure, and
+// opened afresh when the scan lists it again.
+func TestACoolerThatHasGoneIsClosedAndFoundAgain(t *testing.T) {
+	r, k := withKraken(38.9, 2650)
+	c := r.section()
+	poll(t, c)
+
+	k.readErr = fmt.Errorf("reading /dev/hidraw6: %w", sanshoku.ErrGone)
+	drawn, err := c.Poll(t.Context())
+	require.NoError(t, err)
+	assert.True(t, drawn)
+	assert.Equal(t, 1, k.closes)
+	assert.True(t, c.Section().Gone, "the numbers it had are kept, dim")
+
+	k.readErr = nil
+	poll(t, c)
+	assert.Equal(t, 2, k.opens)
+	assert.False(t, c.Section().Gone)
+}
+
+// A Kraken lists more than one node and only one answers. The one that does
+// not is absent, not a failure, and once the cooler is held it is not asked
+// again: every probe of it costs the driver's timeout.
+func TestANodeThatDoesNotAnswerBesideOneThatDoesIsQuiet(t *testing.T) {
+	silent := &kraken{path: "/dev/hidraw5",
+		openErr: fmt.Errorf("NZXT Kraken at /dev/hidraw5 did not answer: %w", sanshoku.ErrAbsent)}
+	r, k := withKraken(38.9, 2650)
+	r.coolers = []*kraken{silent, k}
+	c := r.section()
+
+	poll(t, c)
+	poll(t, c)
+
+	assert.Empty(t, c.Section().Reasons)
+	assert.Equal(t, 1, silent.opens, "a node that did not answer was probed again with the cooler already held")
 }
 
 // Gone is for a source that answered and has stopped. A machine with no
 // liquid cooler has never had one, and a panel that marked it stale would be
 // claiming to have lost something it never had.
 func TestAMachineWithNoCoolerIsNotGoneItIsAMachineWithNoCooler(t *testing.T) {
-	c := panel.NewCooler()
-	s := &sources{
-		cpu:    []func() (float64, error){degrees(60), degrees(61)},
-		liquid: []func() (cooler.Liquid, error){noCooler, noCooler},
-	}
-	s.install(c)
+	r := &rig{cpu: 60}
+	c := r.section()
 
-	_, err := c.Poll(t.Context())
-	require.NoError(t, err, "no cooler is not a failure")
-	s.at = 1
-	_, _ = c.Poll(t.Context())
+	poll(t, c)
+	r.cpu = 61
+	poll(t, c)
 
 	sec := c.Section()
 	assert.False(t, sec.Gone)
@@ -118,17 +196,10 @@ func TestAMachineWithNoCoolerIsNotGoneItIsAMachineWithNoCooler(t *testing.T) {
 
 // A machine with neither has no section at all, rather than an empty one.
 func TestAMachineWithNeitherDrawsNothing(t *testing.T) {
-	c := panel.NewCooler()
-	s := &sources{
-		cpu:    []func() (float64, error){noSensor},
-		liquid: []func() (cooler.Liquid, error){noCooler},
-	}
-	s.install(c)
+	r := &rig{cpuErr: hwmon.ErrNoSensor}
+	c := r.section()
 
-	drawn, err := c.Poll(t.Context())
-
-	require.NoError(t, err)
-	assert.False(t, drawn)
+	assert.False(t, poll(t, c))
 	assert.False(t, c.Section().Gone)
 }
 
@@ -136,18 +207,14 @@ func TestAMachineWithNeitherDrawsNothing(t *testing.T) {
 // held would draw a flat line through an outage and call it a steady
 // temperature, which is the one thing a trend line must not do.
 func TestAMissedPollPutsNoSampleOnThePlot(t *testing.T) {
-	c := panel.NewCooler()
-	s := &sources{
-		cpu:    []func() (float64, error){degrees(60), degrees(61)},
-		liquid: []func() (cooler.Liquid, error){cooling(38.9, 2650), contended},
-	}
-	s.install(c)
+	r, k := withKraken(38.9, 2650)
+	c := r.section()
 
-	_, _ = c.Poll(t.Context())
+	poll(t, c)
 	before := c.Section().Trails
 	require.Len(t, before, 2, "the coolant and the processor")
 
-	s.at = 1
+	k.readErr = errors.New("no 7501 reply: no reply")
 	_, _ = c.Poll(t.Context())
 	after := c.Section().Trails
 
@@ -160,14 +227,10 @@ func TestAMissedPollPutsNoSampleOnThePlot(t *testing.T) {
 // given to the plot first, because a plot draws them in the order it gets them
 // and the coolant is what the eye should land on.
 func TestTheCoolerPlotsTheCoolantAndTheProcessor(t *testing.T) {
-	c := panel.NewCooler()
-	s := &sources{
-		cpu:    []func() (float64, error){degrees(60)},
-		liquid: []func() (cooler.Liquid, error){cooling(38.9, 2650)},
-	}
-	s.install(c)
+	r, _ := withKraken(38.9, 2650)
+	c := r.section()
 
-	_, _ = c.Poll(t.Context())
+	poll(t, c)
 
 	trails := c.Section().Trails
 	require.Len(t, trails, 2)
@@ -175,4 +238,130 @@ func TestTheCoolerPlotsTheCoolantAndTheProcessor(t *testing.T) {
 	assert.Equal(t, "CPU", trails[1].Name)
 	assert.InDelta(t, 60.0, trails[1].Samples[0], 0.001,
 		"a partial window is averaged as it stands, so the trace starts on the first sample")
+}
+
+/*
+R3.1. A cooler on a machine with no cooler draws the processor and says why the
+coolant is missing.
+
+The shape the panel had on the machine that prompted this: the processor was
+being read perfectly well and the whole card was hidden, because the coolant's
+absence was treated as a fault (issue #54).
+*/
+func TestACoolerWithNoLiquidDrawsTheProcessorAndSaysWhy(t *testing.T) {
+	c := (&rig{cpu: 38}).section()
+
+	drawn, err := c.Poll(t.Context())
+	require.NoError(t, err, "a machine with no cooler is not a machine with a problem")
+	assert.True(t, drawn)
+
+	sec := c.Section()
+	r := find(t, sec, "no cooler")
+	assert.Equal(t, view.Info, r.Status, "absent hardware must not be marked as a failure")
+	assert.Equal(t, "Coolant", r.Label)
+	assert.NotEmpty(t, r.Detail, "the reason should say what was looked for")
+}
+
+// R3.4. A cooler that would not answer is marked, and keeps its error where a
+// reader can reach it.
+func TestACoolerThatWouldNotAnswerIsMarkedAndKeepsItsError(t *testing.T) {
+	k := &kraken{path: "/dev/hidraw6", openErr: errors.New("open /dev/hidraw6: input/output error")}
+	c := (&rig{cpu: 38, coolers: []*kraken{k}}).section()
+
+	drawn, err := c.Poll(t.Context())
+	require.Error(t, err, "a failure is still reported to the caller that logs it")
+	assert.True(t, drawn, "the processor is still worth drawing")
+
+	sec := c.Section()
+	r := find(t, sec, "the cooler would not answer")
+	assert.Equal(t, view.Warn, r.Status, "a source that failed is not the same as hardware that is absent")
+	assert.Contains(t, r.Detail, "input/output error")
+	assert.NotContains(t, sec.Lines()[len(sec.Lines())-1].Value, "input/output",
+		"an error is not a glance; it belongs in the hover")
+}
+
+// R3.4. The nzxt driver failing to list is the same fact in the same words.
+func TestACoolerDriverThatFailsToListWouldNotAnswer(t *testing.T) {
+	c := (&rig{cpu: 38, failing: errors.New("nzxt: listing hidraw: permission denied")}).section()
+
+	_, err := c.Poll(t.Context())
+
+	require.Error(t, err)
+	assert.Equal(t, view.Warn, find(t, c.Section(), "the cooler would not answer").Status)
+}
+
+// R3.2. A cooler that may not be opened names the udev rule, which liquidctl's
+// package used to install for us.
+func TestACoolerThatMayNotBeOpenedNamesTheUdevRule(t *testing.T) {
+	k := &kraken{path: "/dev/hidraw6", openErr: &fsError{syscall.EPERM}}
+	c := (&rig{cpu: 38, coolers: []*kraken{k}}).section()
+
+	drawn, err := c.Poll(t.Context())
+
+	require.NoError(t, err)
+	assert.True(t, drawn)
+	r := find(t, c.Section(), "NZXT Kraken Elite V2 is not permitted")
+	assert.Equal(t, view.Warn, r.Status)
+	assert.Equal(t, panel.UdevDetail, r.Detail)
+	assert.Contains(t, r.Detail, "60-sanshoku.rules")
+	assert.NotContains(t, reasonTexts(c.Section()), "no cooler",
+		"a cooler that is there and may not be opened is not an absent cooler")
+}
+
+// R3.3. An NZXT product the driver will not write to is named and left alone.
+func TestAnUnsupportedCoolerIsNamed(t *testing.T) {
+	k := &kraken{path: "/dev/hidraw6",
+		openErr: fmt.Errorf("NZXT Kraken X (1e71:2007): not a product this driver speaks to: %w", sanshoku.ErrUnsupported)}
+	c := (&rig{cpu: 38, coolers: []*kraken{k}}).section()
+
+	poll(t, c)
+
+	r := find(t, c.Section(), "unsupported")
+	assert.Equal(t, "NZXT Kraken Elite V2", r.Label)
+	assert.Equal(t, view.Info, r.Status)
+}
+
+// R3.8. A processor this build cannot find lists every sensor it looked for,
+// not the last one tried: "no coretemp/Package id 0" on an AMD machine sent
+// somebody looking for an Intel driver that was never going to be there.
+func TestAProcessorWithNoSensorNamesEverySensorLookedFor(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	r.cpuErr = hwmon.ErrNoSensor
+	c := r.section()
+
+	poll(t, c)
+
+	reason := find(t, c.Section(), "no sensor")
+	assert.Equal(t, "CPU", reason.Label)
+	assert.Equal(t, view.Info, reason.Status)
+	for _, s := range hwmon.CPU {
+		assert.Contains(t, reason.Detail, s.String())
+	}
+	assert.Contains(t, reason.Detail, hwmon.Root)
+}
+
+// A cooler with both readings says nothing extra. A card that explained itself
+// while showing its numbers would be a panel talking about itself.
+func TestACoolerThatReadsEverythingSaysNothingExtra(t *testing.T) {
+	r, _ := withKraken(30, 2000)
+	c := r.section()
+
+	poll(t, c)
+
+	assert.Empty(t, c.Section().Reasons)
+}
+
+// A reason is a statement about now. A poll that recovers must take its reason
+// away rather than leaving it under a live reading.
+func TestARecoveredSourceDropsItsReason(t *testing.T) {
+	r := &rig{cpu: 38}
+	c := r.section()
+	poll(t, c)
+	require.NotEmpty(t, c.Section().Reasons)
+
+	_, k := withKraken(30, 2000)
+	r.coolers = []*kraken{k}
+	poll(t, c)
+
+	assert.Empty(t, c.Section().Reasons, "a reason outlived the thing it was about")
 }

@@ -119,7 +119,7 @@ build: ## Build both panels for the host platform
 # that will not start on an older distribution.
 .PHONY: release
 release: build ## Package the binaries into dist/ as a tar.gz with SHA256SUMS
-	@set -e; 	rm -rf dist; mkdir -p dist; 	base="hayami-$(VERSION)-linux-amd64"; 	stage="dist/$$base"; 	mkdir -p "$$stage/packaging"; 	cp hayami hayami-tui install.sh uninstall.sh README.md LICENSE "$$stage/"; 	cp packaging/io.ushineko.hayami.desktop packaging/hayami.svg "$$stage/packaging/"; 	tar -C dist -czf "dist/$$base.tar.gz" "$$base"; 	rm -rf "$$stage"; 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS
+	@set -e; 	rm -rf dist; mkdir -p dist; 	base="hayami-$(VERSION)-linux-amd64"; 	stage="dist/$$base"; 	mkdir -p "$$stage/packaging"; 	cp hayami hayami-tui install.sh uninstall.sh README.md LICENSE "$$stage/"; 	cp packaging/io.ushineko.hayami.desktop packaging/hayami.svg packaging/60-sanshoku.rules "$$stage/packaging/"; 	tar -C dist -czf "dist/$$base.tar.gz" "$$base"; 	rm -rf "$$stage"; 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS
 	@ls -l dist/*.tar.gz dist/SHA256SUMS
 
 .PHONY: vuln

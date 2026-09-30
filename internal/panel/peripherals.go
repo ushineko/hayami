@@ -7,14 +7,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ushineko/hayami/internal/peripherals"
+	"github.com/ushineko/sanshoku"
+	"github.com/ushineko/sanshoku/apple"
+	"github.com/ushineko/sanshoku/battery"
+	"github.com/ushineko/sanshoku/bluez"
+	"github.com/ushineko/sanshoku/hidraw"
+	"github.com/ushineko/sanshoku/logitech"
+	"github.com/ushineko/sanshoku/razer"
+	"github.com/ushineko/sanshoku/steelseries"
+
 	"github.com/ushineko/hayami/internal/view"
 )
 
 // PeripheralsInterval is how often the devices are asked.
 //
 // Fifteen seconds, which is the reference's. A battery moves over hours and
-// one of these polls starts a subprocess; the thing that has to be prompt is
+// one of these polls asks every device on the desk; the thing that has to be prompt is
 // a device appearing, and fifteen seconds is below the threshold at which
 // putting a headset on and glancing at the panel feels broken.
 const PeripheralsInterval = 15 * time.Second
@@ -51,26 +59,44 @@ type Peripherals struct {
 	// would be a panel talking about itself.
 	reasons []view.Reason
 
-	// The sources, replaced by a test so neither a real device nor a real
-	// subprocess is touched.
-	logitech    func() ([]peripherals.Battery, error)
-	headsets    func(context.Context) ([]peripherals.Battery, error)
-	bluetooth   func() ([]peripherals.Battery, error)
-	razer       func() ([]peripherals.Battery, error)
-	steelseries func() ([]peripherals.Battery, error)
+	// polling serialises Poll, which owns the held devices.
+	polling sync.Mutex
 
-	// unsupported names devices a source found and would not speak to. A
-	// device this build does not know is detected and left alone (spec 017),
-	// and saying which one is the difference between that and a bug.
-	unsupported func() []string
+	// held is the devices open across polls, and the scan that finds them:
+	// sanshoku's, or a test's that finds fakes.
+	held *held
 
-	// logitechPresence is what the Logitech reader found besides batteries: a
-	// receiver with nothing awake on it reads very differently from no
-	// receiver, and used to read the same (issue #66).
-	logitechPresence func() peripherals.Presence
-
-	// now is the clock, for the same reason.
+	// now is the clock, replaced by a test.
 	now func() time.Time
+}
+
+// vendor is one line of the card's reasons and the drivers that answer for
+// it. Bluetooth is one vendor with two drivers, because to a reader "no
+// Bluetooth device with a battery" is one fact whichever protocol would have
+// read it.
+type vendor struct {
+	name    string
+	absent  string
+	drivers []sanshoku.Driver
+
+	// quiet is whether a device that is listed and reads nothing gets a line
+	// of its own. Not Logitech, whose receiver says what is quiet on it, and
+	// not Bluetooth, where a device is listed only when it has a level.
+	quiet bool
+}
+
+// vendors are the peripherals drivers, in the order they are asked and their
+// reasons are given: logitech, razer, steelseries, apple, bluez.
+func vendors() []vendor {
+	return []vendor{
+		{name: "Logitech", absent: "no Logitech receiver", drivers: []sanshoku.Driver{logitech.Driver{}}},
+		{name: "Razer", absent: "no Razer device", drivers: []sanshoku.Driver{razer.Driver{}}, quiet: true},
+		{name: "SteelSeries", absent: "no SteelSeries device", drivers: []sanshoku.Driver{steelseries.Driver{}}, quiet: true},
+		{
+			name: "Bluetooth", absent: "no Bluetooth device with a battery",
+			drivers: []sanshoku.Driver{apple.Driver{}, bluez.Driver{}},
+		},
+	}
 }
 
 // remembered is one device's last reading that had a level in it.
@@ -85,23 +111,15 @@ type remembered struct {
 	since time.Time
 }
 
-// NewPeripherals builds the peripherals source.
+// NewPeripherals builds the peripherals source over sanshoku's drivers.
 func NewPeripherals() *Peripherals {
-	logitech := peripherals.NewLogitech()
-	bluetooth := peripherals.NewBluetooth()
-	razer := peripherals.NewRazer()
-	steelseries := peripherals.NewSteelSeries()
-	return &Peripherals{
-		seen:             make(map[string]remembered),
-		logitech:         logitech.Batteries,
-		headsets:         peripherals.Headsets,
-		bluetooth:        bluetooth.Batteries,
-		razer:            razer.Batteries,
-		steelseries:      steelseries.Batteries,
-		unsupported:      steelseries.Unsupported,
-		logitechPresence: logitech.Presence,
-		now:              time.Now,
-	}
+	return newPeripherals(sanshoku.Scan, time.Now)
+}
+
+// newPeripherals builds the source over a scan and a clock, which is the seam
+// the tests use.
+func newPeripherals(scan Scan, now func() time.Time) *Peripherals {
+	return &Peripherals{seen: make(map[string]remembered), held: newHeld(scan), now: now}
 }
 
 // Key names the section.
@@ -113,161 +131,60 @@ func (p *Peripherals) Title() string { return "Peripherals" }
 // Interval is PeripheralsInterval.
 func (p *Peripherals) Interval() time.Duration { return PeripheralsInterval }
 
-// Poll asks both sources and merges what they say with what was said before.
+// vendorPoll is what one vendor's drivers found this poll.
+type vendorPoll struct {
+	batteries []battery.Battery
+
+	// listed is how many candidates the drivers found, opened or not, and
+	// read how many of them are held and answered a read without an error.
+	listed, read int
+
+	// presence is the Logitech receivers' Presence, summed.
+	presence logitech.Presence
+
+	// said is a reason already given for the vendor as a whole -- it would
+	// not answer, or there is no Bluetooth adapter -- so it says nothing
+	// else about itself.
+	said bool
+}
+
+// Poll asks every driver and merges what they say with what was said before.
 //
-// Either source alone is a section worth drawing, and neither is a section
-// that is not drawn — a machine with no Logitech receiver and no headset is a
+// Any one vendor alone is a section worth drawing, and none is a section that
+// is not drawn — a machine with no Logitech receiver and no headset is a
 // machine this program looks at, and it should show no peripherals rather than
 // an empty heading.
 func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
+	p.polling.Lock()
+	defer p.polling.Unlock()
+
 	var errs []error
 	var reasons, present []view.Reason
 
-	found, err := p.logitech()
-	presence := p.logitechPresence()
-	switch {
-	case err != nil:
+	p.held.begin()
+	var found []battery.Battery
+	for _, v := range vendors() {
+		got, why, keep, err := p.pollVendor(ctx, v)
+		found = append(found, got.batteries...)
+		reasons = append(reasons, why...)
+		present = append(present, keep...)
 		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: "the Logitech receiver would not answer", Status: view.Warn,
-			Detail: err.Error(),
-		})
-	case len(found) > 0:
-		// Drawing. Nothing to explain.
-	case presence.Nodes == 0:
-		reasons = append(reasons, view.Reason{
-			Text: "no Logitech receiver", Status: view.Info,
-		})
-	case presence.Quiet > 0:
-		// Counted, and described as exactly what it is.
-		//
-		// Not named, because a pairing table outlives the hardware in it: the
-		// receiver this was written against carries a slot for a mouse its
-		// owner never had, and naming it would put a device on the panel that
-		// was never on the desk.
-		//
-		// And not called *paired* either. The receiver measured here answers
-		// the same code for an empty slot as for a sleeping device, so a count
-		// of unanswered indices is all this knows -- the first draft of this
-		// line said "8 paired slots" on a receiver with two pairings.
-		reasons = append(reasons, view.Reason{
-			Text: "a Logitech receiver, with nothing awake on it", Status: view.Info,
-			Detail: fmt.Sprintf("%d %s asked and none answered; a sleeping device and an empty slot say the same thing",
-				presence.Quiet, plural(presence.Quiet, "index", "indices")),
-		})
-	default:
-		reasons = append(reasons, view.Reason{
-			Text: "a Logitech receiver, with nothing paired to it", Status: view.Info,
-		})
-	}
-
-	headsets, err := p.headsets(ctx)
-	switch {
-	case err == nil:
-		found = append(found, headsets...)
-		if len(headsets) == 0 {
-			reasons = append(reasons, view.Reason{
-				Text: "headsetcontrol found no headset", Status: view.Info,
+		if v.name == "Logitech" && !got.said && len(got.batteries) == 0 {
+			if r := receiverReason(got.presence); r != nil {
+				reasons = append(reasons, *r)
+			}
+		}
+		// A device that answered and speaks a protocol generation older
+		// than this build reads, and whose register would not read either.
+		// Named, because it answered -- something is there.
+		for _, name := range got.presence.TooOld {
+			present = append(present, view.Reason{
+				Label: name, Text: "speaks HID++ 1.0", Status: view.Info,
+				Detail: "found, and not read: its HID++ 1.0 battery register would not answer",
 			})
 		}
-	case errors.Is(err, peripherals.ErrNoHeadsetcontrol):
-		// Not a problem. A machine without it has no headset row -- but a
-		// reader looking at a card with no headset on it deserves to know
-		// that nothing looked, rather than that nothing was found.
-		reasons = append(reasons, view.Reason{
-			Text: "headsetcontrol is not installed", Status: view.Info,
-		})
-	default:
-		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: "headsetcontrol failed", Status: view.Warn, Detail: err.Error(),
-		})
 	}
-
-	razer, err := p.razer()
-	switch {
-	case err != nil:
-		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: "a Razer device would not answer", Status: view.Warn, Detail: err.Error(),
-		})
-	case len(razer) == 0:
-		reasons = append(reasons, view.Reason{
-			Text: "no Razer device", Status: view.Info,
-		})
-	default:
-		found = append(found, razer...)
-	}
-
-	steelseries, err := p.steelseries()
-	switch {
-	case err != nil:
-		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: "a SteelSeries device would not answer", Status: view.Warn, Detail: err.Error(),
-		})
-	case len(steelseries) == 0:
-		reasons = append(reasons, view.Reason{
-			Text: "no SteelSeries device", Status: view.Info,
-		})
-	default:
-		found = append(found, steelseries...)
-	}
-
-	// A device that answered and speaks a protocol generation older than this
-	// build reads. Named, because it answered -- something is there.
-	for _, name := range presence.TooOld {
-		present = append(present, view.Reason{
-			Label: name, Text: "speaks HID++ 1.0", Status: view.Info,
-			Detail: "found, and not read: its battery is a HID++ 1.0 register this build does not ask for",
-		})
-	}
-
-	// A device that was found and deliberately not spoken to.
-	//
-	// Kept apart from the reasons above because it survives a card that is
-	// already showing hardware. "No Logitech receiver" is noise beside a mouse
-	// that is drawing; "this device is on your desk and I cannot read it" is
-	// not, and it is the difference between a gap this build knows about and
-	// one it does not.
-	//
-	// The name is the label and the verdict one word, so the line is a row
-	// like any other rather than a sentence as wide as the panel (issue
-	// #77); the explanation is the detail, on hover and in doctor.
-	for _, name := range p.unsupported() {
-		present = append(present, view.Reason{
-			Label: name, Text: "unsupported", Status: view.Info,
-			Detail: "found, and left alone: its battery protocol is not one this build knows",
-		})
-	}
-
-	bluetooth, err := p.bluetooth()
-	switch {
-	case err == nil:
-		found = append(found, bluetooth...)
-		if len(bluetooth) == 0 {
-			reasons = append(reasons, view.Reason{
-				Text: "no Bluetooth device with a battery", Status: view.Info,
-			})
-		}
-	case errors.Is(err, peripherals.ErrNoBluez):
-		// Also not a problem. A machine with no Bluetooth has no Bluetooth
-		// rows, which is what it should look like -- and the reason says
-		// which of the two it is, because "no adapter" and "the daemon is
-		// down" are different things to go and do something about.
-		reasons = append(reasons, view.Reason{
-			Text: "no Bluetooth adapter", Status: view.Info, Detail: err.Error(),
-		})
-	default:
-		// A partial answer is still an answer: Batteries returns what it read
-		// alongside the errors for what it could not.
-		found = append(found, bluetooth...)
-		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: "a Bluetooth device would not answer", Status: view.Warn,
-			Detail: err.Error(),
-		})
-	}
+	p.held.prune()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -278,14 +195,105 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		// unreadable is still worth a line.
 		reasons = nil
 	}
+	present = uniqueReasons(present)
 	if len(p.reading.Devices) >= PresentAsideAt {
 		for i := range present {
-			present[i].Aside = true
+			// A device that may not be opened is not a footnote: it is the
+			// one line here a reader can act on, and it stays drawn.
+			if present[i].Detail != udevDetail {
+				present[i].Aside = true
+			}
 		}
 	}
-	reasons = append(reasons, present...)
-	p.reasons = reasons
+	p.reasons = append(uniqueReasons(reasons), present...)
 	return len(p.reading.Devices) > 0, errors.Join(errs...)
+}
+
+/*
+pollVendor lists one vendor's candidates, opens what is new and reads what is
+held.
+
+It returns what was read, the reasons that are about absence (dropped when the
+card is drawing), the reasons that are about a device present and unreadable
+(kept), and the failures worth logging.
+*/
+func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []view.Reason, []view.Reason, error) {
+	var out vendorPoll
+	var reasons, present []view.Reason
+	var errs []error
+
+	warn := func(err error) {
+		out.said = true
+		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "a " + v.name + " device would not answer", Status: view.Warn, Detail: err.Error(),
+		})
+	}
+
+	for _, d := range v.drivers {
+		candidates, err := p.held.list(ctx, d)
+		switch {
+		case errors.Is(err, sanshoku.ErrUnavailable):
+			// Not a problem. A driver that could not look is, for the only
+			// drivers that say so (bluez and apple, through
+			// bluez.ErrNoBlueZ), a machine with no Bluetooth: no Bluetooth
+			// rows, which is what it should look like -- and the reason says
+			// which of the two it is, because "no adapter" and "nothing
+			// connected" are different things to go and do something about.
+			reasons = append(reasons, view.Reason{Text: "no Bluetooth adapter", Status: view.Info, Detail: err.Error()})
+			out.said = true
+		case err != nil:
+			warn(err)
+		}
+		out.listed += len(candidates)
+
+		for _, c := range candidates {
+			dev, err := p.held.device(ctx, c)
+			if err != nil {
+				r, failed := openFailure(c, err)
+				switch {
+				case failed:
+					warn(err)
+				case r != nil:
+					present = append(present, *r)
+				}
+				continue
+			}
+			src, ok := dev.(battery.Source)
+			if !ok {
+				continue
+			}
+			batteries, err := src.Batteries(ctx)
+			// A partial answer is still an answer: a receiver returns what it
+			// read beside the error for what it could not.
+			out.batteries = append(out.batteries, batteries...)
+			switch {
+			case err == nil:
+				out.read++
+			case errors.Is(err, sanshoku.ErrGone):
+				p.held.drop(c)
+				continue
+			default:
+				warn(err)
+			}
+			// Asked after the read, because it is what that read found.
+			if pr, ok := dev.(logitech.Presencer); ok {
+				out.presence = addPresence(out.presence, pr.Presence(), hidraw.PairedChild(c.Phys))
+			}
+		}
+	}
+
+	switch {
+	case out.said:
+	case out.listed == 0:
+		reasons = append(reasons, view.Reason{Text: v.absent, Status: view.Info})
+	case v.quiet && out.read > 0 && len(out.batteries) == 0:
+		// Listed, opened and asked, and nothing came back: a mouse asleep in
+		// its dock. Saying nothing made the vendor look absent; saying "no
+		// Razer device" about a dock on the desk was the old reader's lie.
+		reasons = append(reasons, view.Reason{Text: "a " + v.name + " device answered nothing", Status: view.Info})
+	}
+	return out, reasons, present, errors.Join(errs...)
 }
 
 // PresentAsideAt is how many devices a card has to be drawing before a device
@@ -313,7 +321,7 @@ Three cases, which are the monitor's and the design system's alike:
   - A device that gave one before and has gone quiet keeps it, dim, until it
     has been quiet long enough to be gone rather than quiet.
 */
-func (p *Peripherals) readings(found []peripherals.Battery) view.PeripheralsReading {
+func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading {
 	now := p.now()
 	fresh := make(map[string]bool, len(found))
 
@@ -382,7 +390,7 @@ func (p *Peripherals) readings(found []peripherals.Battery) view.PeripheralsRead
 // The names are made here rather than in the view because what a cell is
 // called is the reader's business: the view is told "L" and draws it, and does
 // not know that a left earbud is component 0x04 in somebody's protocol.
-func cells(in []peripherals.CellReading) []view.PeripheralCell {
+func cells(in []battery.Cell) []view.PeripheralCell {
 	if len(in) == 0 {
 		return nil
 	}
@@ -394,13 +402,13 @@ func cells(in []peripherals.CellReading) []view.PeripheralCell {
 }
 
 // kind translates the reader's device type into the view's.
-func kind(k peripherals.Kind) view.Kind {
+func kind(k battery.Kind) view.Kind {
 	switch k {
-	case peripherals.KindMouse:
+	case battery.KindMouse:
 		return view.KindMouse
-	case peripherals.KindKeyboard:
+	case battery.KindKeyboard:
 		return view.KindKeyboard
-	case peripherals.KindHeadset:
+	case battery.KindHeadset:
 		return view.KindHeadset
 	default:
 		return view.KindOther
@@ -408,14 +416,60 @@ func kind(k peripherals.Kind) view.Kind {
 }
 
 // charge translates the reader's state into the view's.
-func charge(s peripherals.State) view.Charge {
+func charge(s battery.State) view.Charge {
 	switch s {
-	case peripherals.Charging:
+	case battery.Charging:
 		return view.Filling
-	case peripherals.Full:
+	case battery.Full:
 		return view.Charged
 	default:
 		return view.Draining
+	}
+}
+
+// addPresence sums two receivers' Presence, which is how a card with two
+// receivers on it counts what is quiet across both.
+//
+// A paired child's node -- one device behind a receiver, with its own node --
+// adds nothing to Quiet: the receiver's node asked every index, that device's
+// among them, and counting it again put "8 indices" on a receiver that
+// numbers six.
+func addPresence(a, b logitech.Presence, child bool) logitech.Presence {
+	a.Nodes += b.Nodes
+	if !child {
+		a.Quiet += b.Quiet
+	}
+	a.TooOld = append(a.TooOld, b.TooOld...)
+	return a
+}
+
+/*
+receiverReason is what a Logitech receiver that read nothing says about itself,
+or nothing when no receiver was opened: an absent one is "no Logitech
+receiver" already, and one that may not be opened says so by name.
+
+Counted, and described as exactly what it is. Not named, because a pairing
+table outlives the hardware in it: the receiver this was written against
+carries a slot for a mouse its owner never had, and naming it would put a
+device on the panel that was never on the desk.
+
+And not called *paired* either. The receiver measured here answers the same
+code for an empty slot as for a sleeping device, so a count of unanswered
+indices is all this knows -- the first draft of this line said "8 paired
+slots" on a receiver with two pairings (issue #66).
+*/
+func receiverReason(presence logitech.Presence) *view.Reason {
+	switch {
+	case presence.Nodes == 0:
+		return nil
+	case presence.Quiet > 0:
+		return &view.Reason{
+			Text: "a Logitech receiver, with nothing awake on it", Status: view.Info,
+			Detail: fmt.Sprintf("%d %s asked and none answered; a sleeping device and an empty slot say the same thing",
+				presence.Quiet, plural(presence.Quiet, "index", "indices")),
+		}
+	default:
+		return &view.Reason{Text: "a Logitech receiver, with nothing paired to it", Status: view.Info}
 	}
 }
 

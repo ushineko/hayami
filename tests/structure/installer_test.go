@@ -83,3 +83,103 @@ func TestThePackagedEntryIsSystemShapedAndKeepsItsName(t *testing.T) {
 	assert.Contains(t, lines, "StartupWMClass=io.ushineko.hayami",
 		"X11 and XWayland match the window on WM_CLASS")
 }
+
+// installer runs install.sh (or uninstall.sh) as a dry run against a udev
+// directory the test made, and returns what it printed. A dry run, so a
+// checkout without its binaries built is enough and nothing is written.
+func installer(t *testing.T, script, udevDir string) string {
+	t.Helper()
+	root := repoRoot(t)
+	cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, script), "--dry-run")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "HOME="+t.TempDir(), "HAYAMI_UDEV_DIR="+udevDir)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s must not fail over the udev rule: %s", script, out)
+	return string(out)
+}
+
+// readOnlyDir is a directory the installer may not write to, which is what
+// /etc/udev/rules.d is to a user.
+func readOnlyDir(t *testing.T, rule []byte) string {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root may write anywhere, so there is no privilege to lack")
+	}
+	dir := t.TempDir()
+	if rule != nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "60-sanshoku.rules"), rule, 0o600))
+	}
+	require.NoError(t, os.Chmod(dir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	return dir
+}
+
+func packagedRule(t *testing.T) []byte {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), "packaging", "60-sanshoku.rules"))
+	require.NoError(t, err)
+	return body
+}
+
+/*
+R5.1. Without the rule and without the privilege to install it, the installer
+prints the two commands that do, and succeeds.
+
+liquidctl's and OpenRazer's packages used to put a rule like this in place;
+reading the devices directly, nothing does, and a device that is found and
+may not be opened otherwise looks like no device at all. The installer does
+not become root to fix it.
+*/
+func TestTheInstallerPrintsTheUdevCommandsWhenItMayNotInstall(t *testing.T) {
+	dir := readOnlyDir(t, nil)
+
+	out := installer(t, "install.sh", dir)
+
+	root := repoRoot(t)
+	assert.Contains(t, out, "sudo install -m644 "+filepath.Join(root, "packaging", "60-sanshoku.rules")+" "+
+		filepath.Join(dir, "60-sanshoku.rules"))
+	assert.Contains(t, out, "sudo udevadm control --reload")
+	assert.NotContains(t, out, "would run: sudo", "the installer tried to become root")
+}
+
+// R5.1. With the privilege, it installs the rule and reloads udev itself.
+func TestTheInstallerInstallsTheUdevRuleWhenItMay(t *testing.T) {
+	dir := t.TempDir()
+
+	out := installer(t, "install.sh", dir)
+
+	assert.Contains(t, out, "would run: install -m644 ")
+	assert.Contains(t, out, filepath.Join(dir, "60-sanshoku.rules"))
+	assert.NotContains(t, out, "sudo ")
+}
+
+// R5.1. With the rule in place, the installer says nothing about it -- whether
+// it is this copy or sanshoku's own, which differs only in its comments.
+func TestTheInstallerSaysNothingWhenTheRuleIsThere(t *testing.T) {
+	ours := packagedRule(t)
+	var rulesOnly []byte
+	for line := range strings.SplitSeq(string(ours), "\n") {
+		if !strings.HasPrefix(line, "#") {
+			rulesOnly = append(rulesOnly, line+"\n"...)
+		}
+	}
+
+	for name, body := range map[string][]byte{"this copy": ours, "the same rules, other comments": rulesOnly} {
+		out := installer(t, "install.sh", readOnlyDir(t, body))
+		assert.NotContains(t, out, "60-sanshoku", name)
+		assert.NotContains(t, out, "udevadm", name)
+	}
+}
+
+// R5.1. The uninstaller mirrors it: this copy of the rule, where it may not be
+// removed, gets the two commands that remove it; a file of the same name that
+// install.sh did not write is left alone.
+func TestTheUninstallerMirrorsTheUdevRule(t *testing.T) {
+	out := installer(t, "uninstall.sh", readOnlyDir(t, packagedRule(t)))
+	assert.Contains(t, out, "sudo rm ")
+	assert.Contains(t, out, "sudo udevadm control --reload")
+
+	out = installer(t, "uninstall.sh", readOnlyDir(t, []byte("# somebody else's\n")))
+	assert.Contains(t, out, "Left ")
+	assert.NotContains(t, out, "sudo rm ")
+}

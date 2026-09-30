@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +14,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ushineko/sanshoku/hidraw"
 
 	"github.com/ushineko/hayami/internal/cli"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
-	"github.com/ushineko/hayami/internal/peripherals"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -44,51 +46,55 @@ bare is a machine with none of the things the sources look for.
 
 Diagnose polls the real sources, which is the point of it -- a doctor built on
 stubs would be testing the stubs -- so the suite has to take the machine away
-instead. An empty PATH removes liquidctl and headsetcontrol, a temporary home
-removes the credential stores, a temporary cache removes the accounts, and a
-bus address that does not resolve removes BlueZ. Without this the test fetches
-somebody's real usage over the network, which is not a unit test.
+instead. A temporary home removes the credential stores, a temporary cache
+removes the accounts, an empty PATH removes codex, and a bus address that does
+not resolve removes BlueZ. Without this the test fetches somebody's real usage
+over the network, which is not a unit test.
 
-The hwmon tree is not among them: it has no environment override and a
-processor temperature that does or does not read is fine either way, because
-what is asserted is that the section *says* which.
+And an empty hidraw tree, which the environment cannot take away. Without it
+these tests talked to the developer's actual mouse, headset and cooler: a unit
+suite should not be writing to somebody's hardware at all, and `go test ./...`
+runs packages as parallel processes, so the polls would race any other reader
+of the same receiver. sanshoku's transports read the tree from two variables
+for exactly this.
+
+The hwmon tree is not among them: reading a temperature file writes nothing,
+and a processor temperature that does or does not read is fine either way,
+because what is asserted is that the section *says* which.
 */
 func bare(t *testing.T) {
 	t.Helper()
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
+	noDevices(t)
+}
 
-	// And an empty hidraw tree, which the environment cannot take away.
-	//
-	// Without this these tests talked to the developer's actual mouse: the
-	// environment above hides the programs and the credential stores, and
-	// nothing hid the devices. Two consequences, and the second is the one
-	// that bit. A unit suite should not be writing to somebody's hardware at
-	// all; and `go test ./...` runs packages as parallel processes, so these
-	// polls raced the live tests in internal/peripherals over one receiver.
-	// HID++ gives a request four bits to say whose it is, so two processes
-	// collide one time in fourteen -- and the live comparison duly failed with
-	// a reading that belonged to the other test binary.
-	sys, dev := peripherals.SysHidraw, peripherals.DevDir
-	peripherals.SysHidraw, peripherals.DevDir = t.TempDir(), t.TempDir()
-	t.Cleanup(func() { peripherals.SysHidraw, peripherals.DevDir = sys, dev })
+// noDevices takes the desk away: an empty hidraw tree and a system bus that
+// does not resolve, so a poll of the real sources opens no device and asks
+// BlueZ nothing. Any test that can reach the device sections calls it, and
+// that includes a command run with default settings.
+func noDevices(t *testing.T) {
+	t.Helper()
+	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
+	sys, dev := hidraw.SysRoot, hidraw.DevRoot
+	hidraw.SysRoot, hidraw.DevRoot = t.TempDir(), t.TempDir()
+	t.Cleanup(func() { hidraw.SysRoot, hidraw.DevRoot = sys, dev })
 }
 
 /*
 readings prints every source, whatever the others did.
 
 The fault this replaces: `readings` returned on the first failure, so on a
-machine where liquidctl exits 1 it printed that one error and nothing at all
-about the other three sections -- the one command meant for debugging a machine
+machine where the cooler's reader exited 1 it printed that one error and
+nothing at all about the other three sections -- the one command meant for debugging a machine
 you cannot see, made useless by the machine being unusual (issue #54).
 */
 func TestReadingsPrintsEverySourceEvenWhenOneFails(t *testing.T) {
 	sources := []panel.Source{
 		stub{key: "bandwidth", drawn: true, data: []string{"eth0"}},
-		stub{key: "cooler", err: errors.New("asking liquidctl for the cooler: exit status 1")},
+		stub{key: "cooler", err: errors.New("reading the cooler: no 7501 reply: no reply")},
 		stub{key: "usage", drawn: true, data: map[string]int{"5h": 5}},
 	}
 
@@ -103,7 +109,7 @@ func TestReadingsPrintsEverySourceEvenWhenOneFails(t *testing.T) {
 	var got map[string]cli.Reading
 	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
 	assert.Len(t, got, 3, "a source that failed was dropped from the report")
-	assert.Contains(t, got["cooler"].Error, "exit status 1")
+	assert.Contains(t, got["cooler"].Error, "no 7501 reply")
 	assert.Empty(t, got["bandwidth"].Error)
 	assert.NotNil(t, got["usage"].Data)
 }
@@ -116,7 +122,7 @@ func TestReadingsCarriesTheReasonsWithTheirStatusNamed(t *testing.T) {
 		drawn: true,
 		section: view.Section{Reasons: []view.Reason{
 			{Label: "Coolant", Text: "no cooler", Detail: "matched nothing", Status: view.Info},
-			{Text: "liquidctl failed", Status: view.Warn},
+			{Text: "the cooler would not answer", Status: view.Warn},
 		}},
 	}}
 
@@ -186,8 +192,8 @@ func TestTheReportPutsEachReasonUnderItsSection(t *testing.T) {
 		State:   cli.StatePartial,
 		Summary: "CPU 38 °C",
 		Reasons: []view.Reason{
-			{Label: "Coolant", Text: "no cooler", Detail: `liquidctl --match "kraken" matched nothing`, Status: view.Info},
-			{Text: "liquidctl failed", Status: view.Warn},
+			{Label: "Coolant", Text: "no cooler", Detail: "no NZXT Kraken answered on USB", Status: view.Info},
+			{Text: "the cooler would not answer", Status: view.Warn},
 		},
 	}}
 
@@ -200,8 +206,8 @@ func TestTheReportPutsEachReasonUnderItsSection(t *testing.T) {
 	assert.Contains(t, lines[0], "partial")
 	assert.Contains(t, lines[0], "CPU 38 °C")
 	assert.Contains(t, lines[1], "Coolant: no cooler")
-	assert.Contains(t, lines[2], "kraken")
-	assert.Contains(t, lines[3], "! liquidctl failed",
+	assert.Contains(t, lines[2], "Kraken")
+	assert.Contains(t, lines[3], "! the cooler would not answer",
 		"a failure must be distinguishable from an absence at a glance")
 }
 
@@ -231,4 +237,36 @@ func TestDoctorPrintsNoCredential(t *testing.T) {
 	for _, word := range []string{"token", "Token", "Bearer", "accessToken", "refreshToken", ".credentials"} {
 		assert.NotContains(t, out.String(), word, "doctor's output is pasted into issues")
 	}
+}
+
+/*
+R4.1. A device the user may not open reads as a udev rule to install, not as a
+device that is not there.
+
+Through the real drivers and a hidraw tree written here: a Razer node whose
+character device the user may not open, which is exactly what a machine that
+never had OpenRazer's package looks like. Nothing is opened but a file this
+test made.
+*/
+func TestDoctorSaysInstallTheUdevRuleForADeviceThatMayNotBeOpened(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root may open anything, so there is no permission to be refused")
+	}
+	bare(t)
+
+	node := filepath.Join(hidraw.SysRoot, "hidraw4", "device")
+	require.NoError(t, os.MkdirAll(node, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(node, "uevent"),
+		[]byte("HID_ID=0003:00001532:000000A4\nHID_NAME=Razer Razer Mouse Dock Pro\n"), 0o600))
+	// Usage Page (0xFF00), the Razer control interface's vendor page.
+	require.NoError(t, os.WriteFile(filepath.Join(node, "report_descriptor"), []byte{0x06, 0x00, 0xFF}, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hidraw.DevRoot, "hidraw4"), nil, 0o000))
+
+	findings := cli.Diagnose(t.Context(), panel.Keys(), nil, counters)
+	var out bytes.Buffer
+	require.NoError(t, cli.Report(&out, findings))
+
+	assert.Contains(t, out.String(), "! Razer Mouse Dock Pro is not permitted")
+	assert.Contains(t, out.String(), "install the udev rule (60-sanshoku.rules)")
+	assert.NotContains(t, out.String(), "no Razer device", "a device that is there was reported absent")
 }

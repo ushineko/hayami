@@ -58,14 +58,14 @@ func TestAPollThatFailedIsStillDrawnWhenItSaidWhy(t *testing.T) {
 	src := &reasonSource{
 		key:     "cooler",
 		err:     assertAnError,
-		reasons: []view.Reason{{Text: "liquidctl failed", Status: view.Warn}},
+		reasons: []view.Reason{{Text: "the cooler would not answer", Status: view.Warn}},
 	}
 	m := tui.New(tui.Options{Sources: []panel.Source{src}, Arrangement: view.ArrangeStack, Once: true})
 
 	got := run(t, m, time.Second)
 
 	require.Len(t, got.Sections(), 1)
-	assert.Contains(t, got.View(), "liquidctl failed")
+	assert.Contains(t, got.View(), "the cooler would not answer")
 }
 
 // A source with nothing at all still draws nothing: an unconfigured section is
@@ -101,4 +101,4 @@ var assertAnError = errAnError{}
 
 type errAnError struct{}
 
-func (errAnError) Error() string { return "asking liquidctl for the cooler: exit status 2" }
+func (errAnError) Error() string { return "reading the cooler: no 7501 reply: no reply" }
