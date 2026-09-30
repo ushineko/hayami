@@ -199,3 +199,33 @@ func TrailColour(p *Panel, t view.Trail, sec view.Section) color.Color {
 }
 
 func PanelTheme(p *Panel) fyne.Theme { return p.win.Panel().Theme() }
+
+// CellBar is the fill of a card's nth cell's bar and its colour, and false
+// when the cell draws no bar.
+//
+// glance.Cell exposes SetBar and ClearBar and not what they set, so this lays
+// the cell out and reads the rectangles it draws, as the library's own tests
+// do: a track and a fill when there is a bar, nothing when there is not.
+func CellBar(p *Panel, key string, n int, width float32) (fraction float32, fill color.Color, ok bool) {
+	c, found := p.cards[key]
+	if !found || n >= len(c.cells) {
+		return 0, nil, false
+	}
+	o := c.cells[n].Object()
+	o.Resize(fyne.NewSize(width, o.MinSize().Height))
+	var rects []*canvas.Rectangle
+	for _, child := range o.(*fyne.Container).Objects {
+		if !child.Visible() {
+			continue
+		}
+		for _, d := range test.LaidOutObjects(child) {
+			if r, is := d.(*canvas.Rectangle); is {
+				rects = append(rects, r)
+			}
+		}
+	}
+	if len(rects) != 2 {
+		return 0, nil, false
+	}
+	return rects[1].Size().Width / rects[0].Size().Width, rects[1].FillColor, true
+}

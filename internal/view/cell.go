@@ -7,7 +7,7 @@ import "strings"
 //
 // Sixteen characters, which is a two-digit percentage with its sign, a state
 // word like "Disconnected" truncated to something still readable, and a space
-// each side. Below it the three lines stop lining up with each other and the
+// each side. Below it the lines stop lining up with each other and the
 // block stops reading as one thing.
 const MinCellWidth = 16
 
@@ -66,28 +66,39 @@ func cellColumns(n, width int) []int {
 	return out
 }
 
-// cellLines draws one line of cells: three lines of text, side by side.
-//
-// columns is every column the line has room for, which is not always how many
-// cells are on it: the last line of an odd number of devices is short. The
-// empty columns are still spent, because a line that stopped at its last cell
-// would leave a ragged edge down the pane and the rule here is that an
-// arrangement fills its width rather than measuring itself.
+/*
+cellLines draws one line of cells: four lines of text, side by side -- the
+name, the reading, the state, and the bar under a level (spec 025).
+
+The bar's line is always drawn, blank under a cell with no bar, as the
+window's bar row is always reserved: a pane that gained a line when a device
+gained a level would reflow over a battery. A band cell's bar line is blank
+so the columns stay aligned; its segments already say its level.
+
+columns is every column the line has room for, which is not always how many
+cells are on it: the last line of an odd number of devices is short. The
+empty columns are still spent, because a line that stopped at its last cell
+would leave a ragged edge down the pane and the rule here is that an
+arrangement fills its width rather than measuring itself.
+*/
 func cellLines(row []Cell, columns []int, p Painter) []string {
 	names := make([]string, 0, len(columns))
 	values := make([]string, 0, len(columns))
 	notes := make([]string, 0, len(columns))
+	bars := make([]string, 0, len(columns))
 
 	for i, column := range columns {
+		blank := strings.Repeat(" ", column)
 		if i >= len(row) {
-			blank := strings.Repeat(" ", column)
-			names, values, notes = append(names, blank), append(values, blank), append(notes, blank)
+			names, values, notes, bars = append(names, blank), append(values, blank),
+				append(notes, blank), append(bars, blank)
 			continue
 		}
 		c := row[i]
 		names = append(names, p.paint(centre(c.Label, column), Info))
 		values = append(values, p.paint(centre(quantity(c), column), cellStatus(c)))
 		notes = append(notes, p.paint(centre(c.Note, column), Dim))
+		bars = append(bars, cellBar(c, column, blank, p))
 	}
 
 	gap := strings.Repeat(" ", CellGap)
@@ -95,7 +106,17 @@ func cellLines(row []Cell, columns []int, p Painter) []string {
 		strings.Join(names, gap),
 		strings.Join(values, gap),
 		strings.Join(notes, gap),
+		strings.Join(bars, gap),
 	}
+}
+
+// cellBar is a cell's bar at a width, in the meter's glyphs and the cell's
+// colour, or blank for a cell without one.
+func cellBar(c Cell, width int, blank string, p Painter) string {
+	if !c.HasBar {
+		return blank
+	}
+	return paintBar(c.Bar, width, cellStatus(c), p)
 }
 
 // quantity is a cell's reading with its unit, as one piece: a cell centres the
@@ -120,21 +141,68 @@ func centre(s string, width int) string {
 	return strings.Repeat(" ", left) + s + strings.Repeat(" ", slack-left)
 }
 
-// cellLine is one cell as a single line, for the arrangement that draws one
-// line per reading: the name at the left, the reading at the right, and the
-// state between them where there is room.
-//
-// A cell is three lines and this arrangement has one, so something has to go.
-// The state goes next to the name rather than being dropped: it is a word, the
-// reading is a number, and a pane that spent its one line on the number alone
-// would say less than the row form it replaced.
-func cellLine(c Cell, width int, p Painter) string {
-	return line(Row{
+/*
+cellLine is one cell as a single line, for the arrangement that draws one
+line per reading: the name at the left, the reading at the right, and the
+state between them where there is room.
+
+A cell is four lines and this arrangement has one, so something has to go.
+The state goes next to the name rather than being dropped: it is a word, the
+reading is a number, and a pane that spent its one line on the number alone
+would say less than the row form it replaced.
+
+With bars, the level is followed by a short bar of CellRowBar characters, and
+a cell without one by as many spaces, so the readings still end in one column
+down the pane. Whether there is room for it is decided for the pane, not the
+line (see cellRowBars): a bar on some lines and not others would put the
+readings in two columns.
+*/
+func cellLine(c Cell, width int, bars bool, p Painter) string {
+	r := Row{
 		Label:  strings.TrimSpace(c.Label + "  " + c.Note),
 		Value:  c.Value,
 		Unit:   c.Unit,
 		Status: c.Status,
-	}, width, p)
+	}
+	if !bars {
+		return line(r, width, p)
+	}
+	return line(r, width-CellRowBar-1, p) + " " +
+		cellBar(c, CellRowBar, strings.Repeat(" ", CellRowBar), p)
+}
+
+/*
+CellRowBar is how many characters a cell's bar takes in the row arrangement.
+
+Ten, so each is a tenth of the battery: short enough to sit after the level
+without crowding the name, and a whole number of steps a reader can count.
+The meter's glyphs rather than a band's segments, because a band cell draws
+its level as segments and a level cell's bar beside it must not look like
+another band.
+*/
+const CellRowBar = 10
+
+/*
+cellRowBars is whether a pane in the row arrangement has room for the cells'
+bars: some cell has one, and every cell's line fits beside a bar without its
+name being cut.
+
+The name gives way to the reading in a line that is too narrow, and a bar is
+worth less than either: it is the impression and the number is the reading.
+So the bar goes first.
+*/
+func cellRowBars(sections []Section, width int) bool {
+	some := false
+	for _, s := range sections {
+		for _, c := range s.Cells {
+			some = some || c.HasBar
+			label := strings.TrimSpace(c.Label + "  " + c.Note)
+			if runeLen(label)+1+runeLen(quantity(c))+1+CellRowBar > width {
+				return false
+			}
+		}
+	}
+	return some
 }
 
 // cellStatus is the colour a cell's reading is painted.

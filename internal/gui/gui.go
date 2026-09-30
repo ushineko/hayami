@@ -502,6 +502,14 @@ func (p *Panel) drawCells(c *card, cells []view.Cell, dim bool) {
 		// drew a live-looking percentage until this was here.
 		rd.Stale = cl.Stale || dim
 		cell.Set(rd)
+		// A level has a bar under it and a band or a placeholder does not
+		// (spec 025). The row is reserved either way, so this never changes
+		// the card's height; the bar dims with the reading, in the library.
+		if cl.HasBar {
+			cell.SetBar(cl.Bar, status(cl.Status))
+		} else {
+			cell.ClearBar()
+		}
 		cell.SetShown(true)
 	}
 }

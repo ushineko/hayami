@@ -64,6 +64,17 @@ type Cell struct {
 	// 022). It is drawn like any other cell and reported by nothing -- it is
 	// not a reading and not a reason.
 	Placeholder bool
+
+	// Bar is the level as a fraction of full, drawn as a bar under the
+	// state, and HasBar says there is one (spec 025). A percentage is a
+	// number the eye has to read; a bar is a length it compares across the
+	// card. Its colour is the cell's Status, dimmed with the cell.
+	//
+	// Only a reading with a level has one. A band already draws its level as
+	// segments, and a bar under four segments would say it twice; a
+	// placeholder has no level to draw.
+	Bar    float64
+	HasBar bool
 }
 
 // Trail is one series plotted under a section's rows.

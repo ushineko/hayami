@@ -506,3 +506,24 @@ func TestAPercentageCellIsUnchanged(t *testing.T) {
 	assert.Equal(t, "78", s.Cells[0].Value)
 	assert.Equal(t, "%", s.Cells[0].Unit)
 }
+
+// AC (spec 025). A level cell has a bar of its level over a hundred, in the
+// cell's status; a band cell and a placeholder have none.
+func TestALevelCellHasABarAndABandOrAPlaceholderNone(t *testing.T) {
+	t0 := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	mouse := detected("G502 X PLUS", 18, view.KindMouse, t0)
+	band := view.PeripheralReading{Name: "K800", Band: "Good", Segments: 3, Kind: view.KindKeyboard,
+		Since: t0, Seen: t0}
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{mouse, band}})
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.True(t, s.Cells[0].HasBar)
+	assert.InDelta(t, 0.18, s.Cells[0].Bar, 1e-9)
+	assert.Equal(t, view.Bad, s.Cells[0].Status, "the bar takes the cell's status")
+	assert.False(t, s.Cells[1].HasBar, "a band cell has a bar under its segments")
+
+	alone := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{mouse}})
+	require.Len(t, alone.Cells, view.PeripheralSlots)
+	assert.True(t, alone.Cells[1].Placeholder)
+	assert.False(t, alone.Cells[1].HasBar, "a placeholder has a bar")
+}
