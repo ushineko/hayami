@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.3.5
+**Version**: 0.4.0
 
 *a chart you read at a glance*
 
@@ -195,6 +195,46 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.4.0 (2026-09-29)
+
+- **Add**: a section that cannot be drawn says why instead of disappearing. An
+  absent card and absent hardware used to look identical, so there was no way
+  to tell a machine with no liquid cooler from a build failing to read one. A
+  reason sits where the reading would have been, dim, with the detail on hover.
+- **Add**: `hayami doctor` and `hayami-tui doctor`, reporting every section this
+  build knows -- including the ones the settings turn off -- as ok, partial,
+  absent, silent or off. It carries no token, no credential and no path inside
+  a credential store, so it is the output to paste into an issue.
+- **Add**: Razer batteries, read through a Mouse Dock's RF relay. The mouse
+  never enumerates -- the dock is the receiver -- so OpenRazer sees only an
+  accessory with no battery at all. The transaction ID is found by trying the
+  list OpenRazer uses and remembered per device, because it differs per model.
+- **Add**: SteelSeries batteries. There is no published protocol for the Apex
+  Pro TKL Wireless; the command turned out to be the one rivalcfg carries in
+  its mouse profiles, with the wireless flag its dongle variants use.
+- **Change**: a device is written to only if this build knows its battery
+  protocol by product ID. Finding a node by vendor and usage page is broad
+  enough to match devices that speak something else entirely, and a command
+  with an empty payload is indistinguishable from "set this to zero" for
+  anything that takes one. A device found and left alone is named on the panel.
+- **Fix**: a battery level could be drawn as a device's name. A panel showed a
+  peripheral called "Q" beside the mouse it had been read from -- 81 is
+  `chr('Q')`. Requests now carry a per-process software ID, avoiding solaar's,
+  and a name must arrive whole and be printable end to end.
+- **Fix**: `readings` reports every source instead of returning on the first
+  one that fails, so the command for debugging a machine with no display works
+  on the machines that need it.
+- **Fix**: the installed launcher entry names the binary by its full path. A
+  bare `Exec` resolves against the session's PATH, which does not carry
+  `~/.local/bin` on every machine -- so the entry launched the panel on one and
+  did nothing at all, with no error, on the next.
+- **Fix**: liquidctl exiting 1 with "no device matches" is a machine without a
+  cooler, not a failure. It used to drop the whole cooler section, processor
+  temperature included.
+- **Fix**: a cached usage payload of JSON `null` is no payload. It decoded to
+  zero windows and no error, and a named account that had never fetched
+  displaced the one with a live reading.
 
 ### 0.3.5 (2026-09-29)
 
