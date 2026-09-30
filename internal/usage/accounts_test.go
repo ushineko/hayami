@@ -44,9 +44,26 @@ func TestAccountsAreFoundByListingTheCacheAndNothingElse(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, got, 3)
-	assert.Equal(t, "max", got[0].Label())
-	assert.Equal(t, "work", got[1].Label())
-	assert.Equal(t, "Codex", got[2].Label(), "Claude before Codex, profiles alphabetically")
+	assert.Equal(t, "CC max", got[0].Label())
+	assert.Equal(t, "CC work", got[1].Label())
+	assert.Equal(t, "CX", got[2].Label(), "Claude before Codex, profiles alphabetically")
+}
+
+// Every label leads with the provider's shorthand, so a column of accounts
+// says which provider each line is before it says whose. Codex's own name is
+// replaced by its shorthand rather than said twice.
+func TestALabelLeadsWithTheProvider(t *testing.T) {
+	for _, c := range []struct {
+		account usage.Account
+		want    string
+	}{
+		{usage.Account{Provider: usage.ProviderClaude, Name: "max"}, "CC max"},
+		{usage.Account{Provider: usage.ProviderClaude}, "CC"},
+		{usage.Account{Provider: usage.ProviderCodex}, "CX"},
+		{usage.Account{Provider: usage.ProviderCodex, Name: "team"}, "CX team"},
+	} {
+		assert.Equal(t, c.want, c.account.Label(), "%+v", c.account)
+	}
 }
 
 // The widget wrote usage.json before profiles existed and its own docstring
@@ -62,7 +79,7 @@ func TestThePreProfileFileIsDroppedOnceThereAreProfiles(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "max", got[0].Label())
+	assert.Equal(t, "CC max", got[0].Label())
 }
 
 /*
@@ -83,8 +100,8 @@ func TestThePreProfileFileIsKeptWhenTheProfilesHaveNothing(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, "Claude", got[0].Label())
-	assert.Equal(t, "max", got[1].Label())
+	assert.Equal(t, "CC", got[0].Label())
+	assert.Equal(t, "CC max", got[1].Label())
 }
 
 // And once that profile does fetch, the old file steps aside after all.
@@ -102,7 +119,7 @@ func TestThePreProfileFileStepsAsideOnceAProfileFetches(t *testing.T) {
 	after, err := usage.Accounts()
 	require.NoError(t, err)
 	require.Len(t, after, 1)
-	assert.Equal(t, "max", after[0].Label())
+	assert.Equal(t, "CC max", after[0].Label())
 }
 
 // On a machine that never upgraded, that file is the only reading there is.
@@ -115,7 +132,7 @@ func TestThePreProfileFileIsKeptWhenItIsAllThereIs(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-	assert.Equal(t, "Claude", got[0].Label())
+	assert.Equal(t, "CC", got[0].Label())
 }
 
 // An account name may carry a hyphen, so the provider is read from the front

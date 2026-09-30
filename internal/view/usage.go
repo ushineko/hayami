@@ -9,7 +9,7 @@ import (
 // UsageWindow is one quota, already measured and not yet formatted. It mirrors
 // what the cache decodes to without importing it: the view takes plain values.
 type UsageWindow struct {
-	// Account is what the caption calls the owner: "max", "Codex".
+	// Account is what the caption calls the owner: "CC max", "CX".
 	Account string
 
 	// Badge is the one letter that says which plan an account is on. Empty

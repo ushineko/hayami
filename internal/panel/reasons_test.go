@@ -145,7 +145,7 @@ func TestAUsageAccountWaitingOutABackoffSaysSo(t *testing.T) {
 
 	sec := u.Section()
 	r := find(t, sec, "waiting to retry")
-	assert.Equal(t, "max", r.Label)
+	assert.Equal(t, "CC max", r.Label)
 	assert.Equal(t, view.Warn, r.Status, "a backoff a person may want to understand is marked")
 	assert.Contains(t, r.Detail, "gate opens at",
 		"a panel that is waiting should say until when")

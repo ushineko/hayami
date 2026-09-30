@@ -20,24 +20,34 @@ type Account struct {
 	Name string
 }
 
-// Label is what a caption calls the account.
+// ShortClaude and ShortCodex are the provider shorthands every meter label
+// leads with.
 //
-// A profile's own name, not "Claude max": the label shares a line with a
-// window name, a percentage, a countdown and sometimes an amount, in a panel
-// that is 260 px wide. "Claude" is only worth the room when the account has no
-// name of its own, and Codex says which it is because it is the other
-// provider.
+// Two letters each, so a column of accounts reads as a column of providers
+// before it reads as names: "CC max", "CC work", "CX" line up where "max",
+// "work" and "Codex" were three different shapes. CC is Claude Code's own
+// abbreviation; CX is the one Codex goes by.
+const (
+	ShortClaude = "CC"
+	ShortCodex  = "CX"
+)
+
+// Label is what a caption calls the account: the provider's shorthand, then
+// the profile's name when it has one.
+//
+// Short on purpose: the label shares a line with a badge, a window name, a
+// percentage, a countdown and sometimes an amount, in a panel that is 260 px
+// wide. The shorthand says which provider, so Codex is "CX" rather than
+// "Codex", and a nameless Claude account is "CC" alone.
 func (a Account) Label() string {
+	short := ShortClaude
 	if a.Provider == ProviderCodex {
-		if a.Name == "" {
-			return "Codex"
-		}
-		return "Codex " + a.Name
+		short = ShortCodex
 	}
 	if a.Name == "" {
-		return "Claude"
+		return short
 	}
-	return a.Name
+	return short + " " + a.Name
 }
 
 // Accounts are the readings the cache holds, found by listing it.
