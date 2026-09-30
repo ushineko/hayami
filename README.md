@@ -198,6 +198,10 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: a device the panel cannot read no longer takes a line of a card
+  that is already drawing two devices; it stays in `doctor` and the hover
+  note. When it is drawn it is a row -- the name, then `unsupported` -- rather
+  than a sentence as wide as the panel (#77).
 - **Fix**: the usage pane (`--arrangement row`) says what the usage widget's
   `--tui` says, laid out the same way: `12%  ·  7d 40%` after the bar,
   `$used / $limit (25%)` for a budget, `individual used/limit (60%)` for a

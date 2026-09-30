@@ -356,9 +356,47 @@ func TestAnUnreadableDeviceIsNamedEvenWhenOthersAreDrawing(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, drawn)
 
-	texts := reasonTexts(p.Section())
-	assert.Len(t, texts, 1, "the absences should still be suppressed: %v", texts)
-	assert.Contains(t, texts[0], "Arctis Nova Pro Wireless")
+	sec := p.Section()
+	require.Len(t, sec.Reasons, 1, "the absences should still be suppressed: %v", reasonTexts(sec))
+	assert.Equal(t, "Arctis Nova Pro Wireless", sec.Reasons[0].Label)
+	assert.Equal(t, "unsupported", sec.Reasons[0].Text,
+		"one word: the name and a sentence was a line as wide as the panel (issue #77)")
+	assert.False(t, sec.Reasons[0].Aside, "one device drawn leaves room, and the line is drawn")
+	assert.Contains(t, sec.Lines(), view.Row{Label: "Arctis Nova Pro Wireless", Value: "unsupported", Status: view.Dim})
+}
+
+/*
+With two devices drawing, an unreadable one steps aside (issue #77).
+
+The card is full and doing its job; a headset this build cannot read is a
+footnote there. It is not dropped: the hover note and doctor still name it,
+which is what spec 017 asked for.
+*/
+func TestAnUnreadableDeviceStepsAsideWhenTwoOthersAreDrawing(t *testing.T) {
+	p := panel.NewPeripherals()
+	panel.SetPeripheralSources(p,
+		func() ([]peripherals.Battery, error) {
+			return []peripherals.Battery{
+				{Name: "MX Master", Level: 70, HasLevel: true},
+				{Name: "G502", Level: 40, HasLevel: true},
+			}, nil
+		},
+		func(context.Context) ([]peripherals.Battery, error) { return nil, peripherals.ErrNoHeadsetcontrol },
+		time.Now,
+	)
+	panel.SetPeripheralUnsupported(p, func() []string { return []string{"Arctis Nova Pro Wireless"} })
+
+	drawn, err := p.Poll(t.Context())
+
+	require.NoError(t, err)
+	require.True(t, drawn)
+	sec := p.Section()
+	require.Len(t, sec.Reasons, 1, "kept for doctor")
+	assert.True(t, sec.Reasons[0].Aside)
+	for _, l := range sec.Lines() {
+		assert.NotEqual(t, "Arctis Nova Pro Wireless", l.Label, "an aside is not a line of the card")
+	}
+	assert.Contains(t, sec.Hover(), "Arctis Nova Pro Wireless", "the hover note still names it")
 }
 
 // receiverSays builds a peripherals section with no batteries and the Logitech
@@ -399,7 +437,7 @@ func TestTheReceiverSaysWhichOfTheseItIs(t *testing.T) {
 		{"a receiver whose devices are quiet", peripherals.Presence{Nodes: 1, Quiet: 2},
 			"a Logitech receiver, with nothing awake on it"},
 		{"a device older than HID++ 2.0", peripherals.Presence{Nodes: 2, TooOld: []string{"Logitech K800"}},
-			"Logitech K800: speaks HID++ 1.0"},
+			"speaks HID++ 1.0"},
 	} {
 		assert.Contains(t, receiverSays(t, c.presence), c.want, c.name)
 	}
