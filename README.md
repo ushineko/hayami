@@ -24,6 +24,7 @@ frameless always-on-top window, and in a terminal as a pane.
 - [Architecture](#architecture)
 - [Installing it](#installing-it)
 - [Running it](#running-it)
+- [Credits](#credits)
 - [Development](#development)
 - [Where it comes from](#where-it-comes-from)
 - [Licence](#licence)
@@ -221,6 +222,12 @@ The last reading of every section is cached in
 it knew rather than a blank. It is drawn dim until a live reading replaces it
 and ignored after a day. Deleting it costs one blank first frame.
 
+## Credits
+
+The protocols were learned from other people's open-source work first, and
+the program is built on other people's libraries; [docs/credits.md](docs/credits.md)
+says whose, with their licences.
+
 ## Development
 
 ```
@@ -261,6 +268,11 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- `docs/credits.md`: the projects each protocol was learned from and the
+  libraries the program is built on, with their licences.
 
 ### 0.8.0 (2026-09-30)
 
