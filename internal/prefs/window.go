@@ -121,7 +121,7 @@ func (w *Window) setOpacity(opacity int) {
 //
 // A desktop without KWin is told plainly, and told as a *fact* rather than as
 // a failure: nothing is broken, the feature is not available here, and that is
-// the same answer the cooler gives a machine with no liquidctl. It goes
+// the same answer the cooler gives a machine with no cooler. It goes
 // through Flash rather than Report for exactly that reason — Report renders
 // everything as "... failed".
 func (w *Window) report(s *shell.Shell, err error, on bool) {

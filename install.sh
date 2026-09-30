@@ -16,6 +16,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 APP_ID="io.ushineko.hayami"
 
+# The udev rule that lets the logged-in user open the devices hayami reads.
+# HAYAMI_UDEV_DIR exists for the installer's own tests, which point it at a
+# directory they made; nobody else needs it.
+UDEV_DIR="${HAYAMI_UDEV_DIR:-/etc/udev/rules.d}"
+UDEV_RULE="60-sanshoku.rules"
+
 DRY_RUN=0
 AUTOSTART=0
 for arg in "$@"; do
@@ -37,6 +43,10 @@ Installs:
 
 With --autostart, also:
   ~/.config/autostart/io.ushineko.hayami.desktop           starts it at login
+
+Run as root, or anywhere /etc/udev/rules.d is writable, also:
+  /etc/udev/rules.d/60-sanshoku.rules                      lets you open the devices
+Otherwise the two commands that install it are printed, and nothing fails.
 
 Building needs Go, CGO and a C toolchain with the OpenGL and X11 or Wayland
 development headers; the message on failure names the packages. The terminal
@@ -93,6 +103,43 @@ write_entry() {
     mv "${dest}.new" "${dest}"
 }
 
+# rules_of is a udev file's rules without its comments, so a copy of the rule
+# with a different header -- sanshoku's own, or one another program put there
+# -- counts as the rule being installed.
+rules_of() {
+    grep -v -e '^[[:space:]]*#' -e '^[[:space:]]*$' "$1" 2>/dev/null || true
+}
+
+# udev_rule installs the device rule where it may, and says how where it may
+# not. It never asks to become root: a panel installer that runs sudo on your
+# behalf is one you have to read before you run it. Says nothing at all when
+# the rule is already in place.
+udev_rule() {
+    local src="${REPO_DIR}/packaging/${UDEV_RULE}"
+    local dest="${UDEV_DIR}/${UDEV_RULE}"
+    if [ -f "${dest}" ] && [ "$(rules_of "${dest}")" = "$(rules_of "${src}")" ]; then
+        return
+    fi
+    echo
+    if [ -d "${UDEV_DIR}" ] && [ -w "${UDEV_DIR}" ]; then
+        echo "Installing the device rule to ${UDEV_DIR} ..."
+        run install -m644 "${src}" "${dest}"
+        if command -v udevadm >/dev/null 2>&1; then
+            run udevadm control --reload
+        fi
+        echo "Replug the receivers, docks and cooler hayami reads, or reboot, for it to apply."
+        return
+    fi
+    echo "hayami reads the devices on your desk as you, and needs a udev rule to"
+    echo "open them. Without it they are found and reported as not permitted."
+    echo "Install it with:"
+    echo
+    echo "  sudo install -m644 ${src} ${dest}"
+    echo "  sudo udevadm control --reload"
+    echo
+    echo "then replug the receivers, docks and cooler, or reboot."
+}
+
 echo "Installing hayami from ${REPO_DIR} ..."
 
 # A release tarball ships the binaries beside this script, so the machine
@@ -145,6 +192,8 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
         gtk-update-icon-cache -f -t "${HOME}/.local/share/icons/hicolor" >/dev/null 2>&1 || true
     fi
 fi
+
+udev_rule
 
 echo
 echo "Done."

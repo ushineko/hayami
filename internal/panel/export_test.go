@@ -4,62 +4,27 @@ import (
 	"context"
 	"time"
 
-	"github.com/ushineko/hayami/internal/cooler"
-	"github.com/ushineko/hayami/internal/peripherals"
 	"github.com/ushineko/hayami/internal/view"
 )
 
-// SetPeripheralSources replaces the two sources and the clock.
+// NewPeripheralsOver builds the peripherals source over a test's scan and
+// clock.
 //
 // It is in an export_test.go so it exists only when the test binary is built:
-// the sources are swapped so the suite touches neither a real device nor a
-// real subprocess, and that is not a reason to widen the package's API for
-// everybody else.
-func SetPeripheralSources(
-	p *Peripherals,
-	logitech func() ([]peripherals.Battery, error),
-	headsets func(context.Context) ([]peripherals.Battery, error),
-	now func() time.Time,
-) {
-	p.logitech, p.headsets, p.now = logitech, headsets, now
-	p.bluetooth = func() ([]peripherals.Battery, error) { return nil, peripherals.ErrNoBluez }
-	p.razer = func() ([]peripherals.Battery, error) { return nil, nil }
-	p.steelseries = func() ([]peripherals.Battery, error) { return nil, nil }
-	p.unsupported = func() []string { return nil }
-	p.logitechPresence = func() peripherals.Presence { return peripherals.Presence{} }
+// the scan is swapped so the suite opens no device, and that is not a reason
+// to widen the package's API for everybody else.
+func NewPeripheralsOver(scan Scan, now func() time.Time) *Peripherals {
+	return newPeripherals(scan, now)
 }
 
-// SetPeripheralPresence replaces what the Logitech reader reports finding
-// besides batteries.
-func SetPeripheralPresence(p *Peripherals, presence func() peripherals.Presence) {
-	p.logitechPresence = presence
+// NewCoolerOver builds the cooler source over a test's scan and processor
+// sensor, so the suite touches neither the real hwmon tree nor a real device.
+func NewCoolerOver(scan Scan, sensor func() (float64, error)) *Cooler {
+	return newCooler(scan, sensor)
 }
 
-// SetPeripheralUnsupported replaces the list of devices a source found and
-// would not speak to.
-func SetPeripheralUnsupported(p *Peripherals, unsupported func() []string) {
-	p.unsupported = unsupported
-}
-
-// SetPeripheralVendors replaces the two vendor-protocol sources.
-func SetPeripheralVendors(p *Peripherals, razer, steelseries func() ([]peripherals.Battery, error)) {
-	p.razer, p.steelseries = razer, steelseries
-}
-
-// SetPeripheralBluetooth replaces just the Bluetooth source.
-func SetPeripheralBluetooth(p *Peripherals, bluetooth func() ([]peripherals.Battery, error)) {
-	p.bluetooth = bluetooth
-}
-
-// SetCoolerSources replaces the two sources, so the suite touches neither the
-// real hwmon tree nor a real subprocess.
-func SetCoolerSources(
-	c *Cooler,
-	sensor func() (float64, error),
-	liquid func(context.Context) (cooler.Liquid, error),
-) {
-	c.sensor, c.liquid = sensor, liquid
-}
+// UdevDetail is the detail a device that may not be opened is given.
+const UdevDetail = udevDetail
 
 // SetUsageRead replaces the gather, so a test can drive the usage section's
 // reasons without a cache directory or a credential store.

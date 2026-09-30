@@ -105,7 +105,7 @@ type Reason struct {
 	// for a line that runs across the section.
 	Label string
 
-	// Text is what the section says: "no cooler", "liquidctl failed".
+	// Text is what the section says: "no cooler", "the cooler would not answer".
 	Text string
 
 	// Detail is the underlying error, for the tooltip and for doctor. Empty
@@ -229,9 +229,9 @@ type Section struct {
 	// them.
 	//
 	// **Never cached.** A reason is a statement about this moment; restoring
-	// "liquidctl failed" from yesterday's file would be asserting a failure
-	// nobody has observed. The tag is the enforcement, because the cache is
-	// this struct encoded whole.
+	// "the cooler would not answer" from yesterday's file would be asserting a
+	// failure nobody has observed. The tag is the enforcement, because the
+	// cache is this struct encoded whole.
 	Reasons []Reason `json:"-"`
 }
 
@@ -269,7 +269,7 @@ func (s Section) Lines() []Row {
 			// sentence, and a sentence reads from the left. The label column
 			// is where a shell puts text; the value column is right-aligned
 			// against the edge, which is correct for a number and wrong for
-			// "headsetcontrol is not installed".
+			// "no Bluetooth device with a battery".
 			out = append(out, Row{Label: r.Text, Status: status})
 			continue
 		}

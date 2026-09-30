@@ -163,7 +163,7 @@ samples, so the first run reports totals and no rates, which is the honest
 answer and not a bug.
 
 **Every source, whatever the others did.** It used to return on the first
-failure, so on a machine where liquidctl exits 1 the command printed that one
+failure, so on a machine where the cooler could not be read the command printed that one
 error and nothing at all about the other three sections -- the one command
 meant for debugging a machine you cannot see, made useless by the machine being
 unusual (issue #54). A source that failed reports its failure in its own entry

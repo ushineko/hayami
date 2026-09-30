@@ -4,10 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/ushineko/hayami/internal/cooler"
+	"github.com/ushineko/sanshoku"
+	"github.com/ushineko/sanshoku/cooling"
+	"github.com/ushineko/sanshoku/hwmon"
+	"github.com/ushineko/sanshoku/nzxt"
+
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -32,7 +37,7 @@ const CoolerTrail = 60
 const CPUAverageWindow = 12
 
 // Cooler is the machine's own temperature: the processor from the kernel, the
-// coolant and the pump from liquidctl.
+// coolant and the pump from the cooler itself.
 type Cooler struct {
 	mu      sync.Mutex
 	reading view.CoolerReading
@@ -50,20 +55,55 @@ type Cooler struct {
 	// poll: a reason is a statement about now.
 	reasons []view.Reason
 
-	// sensor and liquid are the two sources, replaced by a test so neither
-	// the real hwmon tree nor a real subprocess is touched.
+	// polling serialises Poll, which owns the held cooler.
+	polling sync.Mutex
+
+	// sensor is the processor's temperature, and held the cooler open across
+	// polls with the scan that finds it. A test replaces both, so neither the
+	// real hwmon tree nor a real device is touched.
 	sensor func() (float64, error)
-	liquid func(context.Context) (cooler.Liquid, error)
+	held   *held
 }
 
-// NewCooler builds the cooler source.
+// coolerDrivers are the drivers the cooler section asks.
+func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}} }
+
+// NewCooler builds the cooler source over sanshoku's NZXT driver and the
+// kernel's processor sensors.
 func NewCooler() *Cooler {
+	return newCooler(sanshoku.Scan, cpuPackage)
+}
+
+// newCooler builds the source over a scan and a processor sensor, which is
+// the seam the tests use.
+func newCooler(scan Scan, sensor func() (float64, error)) *Cooler {
 	return &Cooler{
 		trail:  view.NewSeries(CoolerTrail),
 		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
-		sensor: cooler.CPUPackage,
-		liquid: cooler.Cooling,
+		sensor: sensor,
+		held:   newHeld(scan),
 	}
+}
+
+// cpuPackage is the first processor sensor this machine has, in hwmon.CPU's
+// order.
+func cpuPackage() (float64, error) {
+	_, v, err := hwmon.First(hwmon.Root, hwmon.CPU)
+	if err != nil {
+		return 0, fmt.Errorf("reading the processor temperature: %w", err)
+	}
+	return v, nil
+}
+
+// cpuSensors names every sensor looked for, for the reason given when none
+// reads: "no coretemp/Package id 0" on an AMD machine sent somebody looking
+// for an Intel driver that was never going to be there.
+func cpuSensors() string {
+	names := make([]string, 0, len(hwmon.CPU))
+	for _, s := range hwmon.CPU {
+		names = append(names, s.String())
+	}
+	return strings.Join(names, ", ")
 }
 
 // Key names the section.
@@ -74,11 +114,14 @@ func (c *Cooler) Interval() time.Duration { return CoolerInterval }
 
 // Poll takes one reading from each source.
 //
-// Either source alone is a section worth drawing: a machine with no liquidctl
-// still has a processor, and one whose processor this build cannot find may
-// still have a cooler. Neither is a section that is not drawn, which is what a
-// machine without the hardware should look like.
+// Either source alone is a section worth drawing: a machine with no liquid
+// cooler still has a processor, and one whose processor this build cannot find
+// may still have a cooler. Neither is a section that is not drawn, which is
+// what a machine without the hardware should look like.
 func (c *Cooler) Poll(ctx context.Context) (bool, error) {
+	c.polling.Lock()
+	defer c.polling.Unlock()
+
 	var out view.CoolerReading
 	var reasons []view.Reason
 
@@ -87,69 +130,108 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	} else {
 		reasons = append(reasons, view.Reason{
 			Label: "CPU", Text: "no sensor", Status: view.Info,
-			// Every sensor looked for, not the last one tried: "no
-			// coretemp/Package id 0" on an AMD machine sent somebody looking
-			// for an Intel driver that was never going to be there.
-			Detail: fmt.Sprintf("looked under %s for %s",
-				cooler.HwmonRoot, cooler.CPUSensorNames()),
+			// Every sensor looked for, not the last one tried.
+			Detail: fmt.Sprintf("looked under %s for %s", hwmon.Root, cpuSensors()),
 		})
 	}
 
-	liquid, err := c.liquid(ctx)
-	switch {
-	case err == nil:
-		out.Coolant, out.HasLiquid = liquid.Coolant, true
-		out.PumpRPM, out.HasPump = liquid.PumpRPM, liquid.HasPump
-		out.FanRPM, out.HasFan = liquid.FanRPM, liquid.HasFan
-	case errors.Is(err, cooler.ErrNoLiquidctl):
-		// Not a problem. A machine without it is a machine this program looks
-		// at, and the processor is still worth drawing -- but say so, because
-		// an absent row and an absent program are different answers.
-		reasons = append(reasons, view.Reason{
-			Label: "Coolant", Text: "no liquidctl", Status: view.Info,
-			Detail: "liquidctl is not on PATH",
-		})
-		err = nil
-	case errors.Is(err, cooler.ErrNoCooler):
-		reasons = append(reasons, view.Reason{
-			Label: "Coolant", Text: "no cooler", Status: view.Info,
-			Detail: match(),
-		})
-		err = nil
-	default:
-		// A liquidctl that ran and failed is a thing somebody may want to
-		// fix, so it is marked rather than stated -- and it is the section's
-		// own business, not only the log's. The error goes to the caller too,
-		// which logs it once.
-		reasons = append(reasons, view.Reason{
-			Text: "liquidctl failed", Status: view.Warn, Detail: err.Error(),
-		})
+	status, why, err := c.liquid(ctx)
+	reasons = append(reasons, why...)
+	if status != nil {
+		out.Coolant, out.HasLiquid = status.Coolant, true
+		out.PumpRPM, out.HasPump = status.PumpRPM, status.HasPump
+		out.FanRPM, out.HasFan = status.FanRPM, status.HasFan
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.reasons = reasons
+	c.reasons = uniqueReasons(reasons)
 	return c.record(out), err
 }
 
-// match says which devices liquidctl was asked about, which is the first thing
-// to check when a cooler that exists is not being found.
-func match() string {
-	if m := cooler.Match(); m != "" {
-		return fmt.Sprintf("liquidctl --match %q matched nothing", m)
+/*
+liquid is the cooler's status, and the reasons it has none.
+
+One cooler. A Kraken lists more than one node and only one answers, so once a
+device is held no further candidate is opened: opening a node that does not
+answer costs the driver's probe timeout, every five seconds, for nothing.
+*/
+func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, []view.Reason, error) {
+	var reasons []view.Reason
+	var errs []error
+
+	failed := func(err error) {
+		// A cooler that is there and would not answer is a thing somebody may
+		// want to fix, so it is marked rather than stated -- and it is the
+		// section's own business, not only the log's. The error goes to the
+		// caller too, which logs it once.
+		errs = append(errs, err)
+		reasons = append(reasons, view.Reason{
+			Text: "the cooler would not answer", Status: view.Warn, Detail: err.Error(),
+		})
 	}
-	return "liquidctl reports no device with a liquid temperature"
+
+	c.held.begin()
+	var candidates []sanshoku.Candidate
+	for _, d := range coolerDrivers() {
+		found, err := c.held.list(ctx, d)
+		if err != nil {
+			failed(err)
+		}
+		candidates = append(candidates, found...)
+	}
+	c.held.prune()
+
+	var status *cooling.Status
+	for _, cand := range candidates {
+		if !c.held.has(cand) && len(c.held.devices) > 0 {
+			continue
+		}
+		dev, err := c.held.device(ctx, cand)
+		if err != nil {
+			r, bad := openFailure(cand, err)
+			switch {
+			case bad:
+				failed(err)
+			case r != nil:
+				reasons = append(reasons, *r)
+			}
+			continue
+		}
+		src, ok := dev.(cooling.Source)
+		if !ok {
+			continue
+		}
+		s, err := src.Status(ctx)
+		switch {
+		case err == nil:
+			if status == nil {
+				status = &s
+			}
+		case errors.Is(err, sanshoku.ErrGone):
+			c.held.drop(cand)
+		default:
+			failed(fmt.Errorf("reading the cooler: %w", err))
+		}
+	}
+
+	if status == nil && len(reasons) == 0 {
+		reasons = append(reasons, view.Reason{
+			Label: "Coolant", Text: "no cooler", Status: view.Info,
+			Detail: "no NZXT Kraken answered on USB",
+		})
+	}
+	return status, reasons, errors.Join(errs...)
 }
 
 /*
 record keeps what the poll learned, or keeps what it knew.
 
 A reading that lost something it used to have is not a reading: it is the same
-cooler with a question unanswered. liquidctl opens a hidraw node and this
-machine has a history of contention on those, so a poll that comes back without
-the coolant is an ordinary event several times an hour -- and replacing the
-reading with what just arrived would take the row away, shorten the card and
-change the height of the panel, for a second, at random.
+cooler with a question unanswered. The cooler is a hidraw node other programs
+hold too, so a poll that comes back without the coolant is an ordinary event --
+and replacing the reading with what just arrived would take the row away,
+shorten the card and change the height of the panel, for a second, at random.
 
 So a field that was there and is not is kept and the section is marked Gone,
 which dims every row and says so in the heading. The monitor does the same and

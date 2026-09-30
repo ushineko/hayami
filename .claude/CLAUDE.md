@@ -27,8 +27,9 @@ below.
   library change, not into `internal/gui`.
 - **Sibling projects**: `~/git/jira-viewer` is the engineering reference for
   the two-shell split and its tests; `~/git/ototo` and `~/git/nmsbonker` for
-  the installer, packaging, CI and conventions; `~/git/hotaru` for reading
-  sensors. When this file and their conventions disagree, this file wins;
+  the installer, packaging, CI and conventions; `~/git/sanshoku`
+  (`github.com/ushineko/sanshoku`) for reading devices and sensors, which
+  hayami imports and hotaru shares. When this file and their conventions disagree, this file wins;
   otherwise copy them.
 
 ---
@@ -121,11 +122,11 @@ This repository is **public**. The following hold without exception:
   else belongs in the preferences window, on the fynedesygn shell. The Python
   grew six nested submenus and they are a settings dialog wearing a menu's
   clothes.
-- **Sensors come from the kernel where the kernel has them.** `hotaru`'s
-  `internal/cooler` reads hwmon **by label**, never by index, which is how it
-  dropped OpenLinkHub as a dependency. A subprocess (`liquidctl`) is allowed
-  only where no file exists: pump rpm and coolant on a cooler the kernel
-  driver does not match.
+- **Devices are read directly, through sanshoku.** hidraw, BlueZ, L2CAP and
+  hwmon **by label**, never by index. No subprocess reads a device: the
+  `liquidctl` and `headsetcontrol` calls inherited from the Python monitor
+  went when spec 020 adopted sanshoku. A device sanshoku does not read gets a
+  driver there, not a tool call here.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that
@@ -190,8 +191,9 @@ tree contains, which is a different question.
   with `CGO_ENABLED=0` and must keep doing so: the terminal panel has no
   business needing a display library.
 - Runtime, all optional and each absent is a reported state rather than a
-  failure: `solaar` (Logitech), `upower`, `headsetcontrol` (Arctis), BlueZ
-  (`org.bluez.Battery1`), `liquidctl`, `tailscale`. No Python, no Qt.
+  failure: BlueZ (`org.bluez.Battery1`), `tailscale`, and the udev rule in
+  `packaging/60-sanshoku.rules` that lets the user open the devices. No
+  Python, no Qt.
 
 ---
 
