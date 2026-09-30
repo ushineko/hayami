@@ -101,7 +101,7 @@ this build cannot tell from the product ID, because that moves too. Asking
 twice is cheaper than tracking it and being wrong.
 */
 func TestTheWirelessFormIsAskedWhenTheWiredOneIsNotAnswered(t *testing.T) {
-	d := &fakeReport{reply: map[byte][]byte{batteryWireless: {batteryWireless, 0x14}}}
+	d := &fakeReport{reply: map[byte][]byte{batteryCommand | wirelessFlag: {batteryCommand | wirelessFlag, 0x14}}}
 	s := withApex(t, d)
 
 	found, err := s.Batteries()
@@ -109,7 +109,7 @@ func TestTheWirelessFormIsAskedWhenTheWiredOneIsNotAnswered(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, found, 1)
 	assert.Equal(t, 95, found[0].Level)
-	assert.Equal(t, []byte{batteryCommand, batteryWireless}, d.asked,
+	assert.Equal(t, []byte{batteryCommand, batteryCommand | wirelessFlag}, d.asked,
 		"the wired form is asked first and the wireless one only after it fails")
 }
 
@@ -139,8 +139,8 @@ func TestAStalePacketIsNotMistakenForTheAnswer(t *testing.T) {
 func TestAnImpossibleValueIsNotAReading(t *testing.T) {
 	for _, value := range []byte{0x00, 0x80, 0x7f} {
 		d := &fakeReport{reply: map[byte][]byte{
-			batteryCommand:  {batteryCommand, value},
-			batteryWireless: {batteryWireless, value},
+			batteryCommand:                {batteryCommand, value},
+			batteryCommand | wirelessFlag: {batteryCommand | wirelessFlag, value},
 		}}
 		s := withApex(t, d)
 

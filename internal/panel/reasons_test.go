@@ -331,3 +331,32 @@ func TestAnAccountThatHasNeverFetchedIsNotMarkedAsAFailure(t *testing.T) {
 	r := find(t, u.Section(), "nothing fetched yet")
 	assert.Equal(t, view.Info, r.Status)
 }
+
+/*
+A device that is present and unreadable is named even when others are drawing.
+
+The suppression rule is right for absences — "no Logitech receiver" is noise
+beside a mouse that is showing — and wrong for a device that is on the desk and
+being deliberately left alone. Without this, a build that had quietly stopped
+recognising a device looked exactly like one that never met it (spec 017).
+*/
+func TestAnUnreadableDeviceIsNamedEvenWhenOthersAreDrawing(t *testing.T) {
+	p := panel.NewPeripherals()
+	panel.SetPeripheralSources(p,
+		func() ([]peripherals.Battery, error) {
+			return []peripherals.Battery{{Name: "MX Master", Level: 70, HasLevel: true}}, nil
+		},
+		func(context.Context) ([]peripherals.Battery, error) { return nil, peripherals.ErrNoHeadsetcontrol },
+		time.Now,
+	)
+	panel.SetPeripheralUnsupported(p, func() []string { return []string{"Arctis Nova Pro Wireless"} })
+
+	drawn, err := p.Poll(t.Context())
+
+	require.NoError(t, err)
+	require.True(t, drawn)
+
+	texts := reasonTexts(p.Section())
+	assert.Len(t, texts, 1, "the absences should still be suppressed: %v", texts)
+	assert.Contains(t, texts[0], "Arctis Nova Pro Wireless")
+}

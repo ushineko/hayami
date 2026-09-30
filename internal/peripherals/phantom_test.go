@@ -83,7 +83,24 @@ func TestTheSoftwareIDIsInRangeAndNotZero(t *testing.T) {
 
 // And it follows this process, so two processes differ wherever their PIDs do.
 func TestTheSoftwareIDFollowsTheProcess(t *testing.T) {
-	assert.Equal(t, byte(os.Getpid()%15)+1, softwareID)
+	assert.Equal(t, softwareIDs[os.Getpid()%len(softwareIDs)], softwareID)
+}
+
+/*
+Solaar's own software ID is never used.
+
+It is 0x0B — SOLAAR_SOFTWARE_ID in logitech_receiver/base.py — and solaar is
+the program most likely to be talking to the same receiver. Picking freely from
+1..15 landed on it one run in fifteen, and the live comparison caught the
+consequence: hayami read 71 % in the same second solaar read 79 %, which is a
+reply belonging to somebody else rather than a battery moving.
+*/
+func TestSolaarsSoftwareIDIsNeverUsed(t *testing.T) {
+	const solaar = 0x0B
+
+	assert.NotContains(t, softwareIDs, byte(solaar))
+	assert.NotContains(t, softwareIDs, byte(0x00), "zero marks a request as nobody's")
+	assert.Len(t, softwareIDs, 14, "every other value a nibble can hold")
 }
 
 /*

@@ -25,6 +25,13 @@ func SetPeripheralSources(
 	p.bluetooth = func() ([]peripherals.Battery, error) { return nil, peripherals.ErrNoBluez }
 	p.razer = func() ([]peripherals.Battery, error) { return nil, nil }
 	p.steelseries = func() ([]peripherals.Battery, error) { return nil, nil }
+	p.unsupported = func() []string { return nil }
+}
+
+// SetPeripheralUnsupported replaces the list of devices a source found and
+// would not speak to.
+func SetPeripheralUnsupported(p *Peripherals, unsupported func() []string) {
+	p.unsupported = unsupported
 }
 
 // SetPeripheralVendors replaces the two vendor-protocol sources.

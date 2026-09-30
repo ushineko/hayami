@@ -47,6 +47,11 @@ func hidppNodes() ([]string, error) {
 type hidNode struct {
 	Path string
 	Name string
+
+	// Product is the USB product ID. It is **not** how a node is found -- see
+	// nodes() for why -- but it is how this build decides whether it knows a
+	// device's protocol well enough to write to it at all (spec 017).
+	Product uint64
 }
 
 // paths is the nodes' paths, for a caller that wants nothing else.
@@ -100,8 +105,9 @@ func nodes(vendor uint64, wants func(descriptor []byte) bool) ([]hidNode, error)
 			continue
 		}
 		found = append(found, hidNode{
-			Path: filepath.Join(DevDir, e.Name()),
-			Name: hidName(uevent),
+			Path:    filepath.Join(DevDir, e.Name()),
+			Name:    hidName(uevent),
+			Product: hidProduct(uevent),
 		})
 	}
 	return found, nil
@@ -114,6 +120,20 @@ func nodes(vendor uint64, wants func(descriptor []byte) bool) ([]hidNode, error)
 // The doubling is dropped because a card is read by a person.
 func hidName(uevent string) string {
 	return undouble(hidField(uevent, "HID_NAME="))
+}
+
+// hidProduct is the product ID out of a node's HID_ID, which the kernel writes
+// as bus:vendor:product with each field zero-padded to eight hex digits.
+func hidProduct(uevent string) uint64 {
+	fields := strings.Split(hidField(uevent, "HID_ID="), ":")
+	if len(fields) != 3 {
+		return 0
+	}
+	product, err := strconv.ParseUint(strings.TrimSpace(fields[2]), 16, 32)
+	if err != nil {
+		return 0
+	}
+	return product
 }
 
 // hidField reads one `KEY=value` line out of a node's uevent.

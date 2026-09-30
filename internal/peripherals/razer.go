@@ -34,7 +34,8 @@ const (
 	razerReportSize = 90
 
 	// relayTransaction addresses a device behind a dock rather than the dock
-	// itself. OpenRazer's unmerged dock support uses the same value.
+	// itself. OpenRazer's unmerged dock support uses the same value, and it is
+	// what the Mouse Dock Pro answered on here.
 	relayTransaction = 0x1F
 
 	// The classes and commands. 0x07 is power; 0x00 is the standard class
@@ -57,6 +58,43 @@ const (
 	statusNotSupported = 0x05
 )
 
+/*
+razerTransactions are the transaction IDs to try, in order.
+
+**Razer's commands are universal and its addressing is not.** OpenRazer drives
+its whole range with one report struct and one battery getter, but picks the
+transaction ID per model -- across its driver, 0xFF appears 141 times, 0x1F
+126, 0x3F 114 and 0x9F 16. Spec 016 hardcoded 0x1F because that is what the
+Mouse Dock Pro answered, and a different Razer device would have read nothing
+and looked like absent hardware (issue #63).
+
+The two docks make the point: OpenRazer uses **0x3F** for the older Mouse Dock
+and **0xFF** for the Dock Pro, while 0x1F is what reaches the mouse *behind*
+the Pro rather than the dock itself. Measured here, 0x1F, 0x08 and 0x00
+answered and 0x3F timed out, so a device accepts some and not others and there
+is no single right answer to hardcode.
+
+The order is most-likely-first for a device that relays: the relay ID, then the
+two the docks themselves use, then the rest. Only getters are sent, so trying
+is a few extra reads of commands whose effect is documented -- not the
+speculative sweeping that spec 017's SteelSeries half exists to stop.
+*/
+var razerTransactions = []byte{0x1F, 0x3F, 0xFF, 0x9F, 0x00}
+
+/*
+razerKinds is what each known product is, for the panel's ordering.
+
+Spec 016 hardcoded KindMouse, which is true of a Mouse Dock and wrong of a
+Razer keyboard or headset. A product this build has not met is KindOther --
+the same answer the SteelSeries reader settled on rather than guess, after an
+attempt to infer a device's kind from its sibling interfaces read a keyboard as
+a mouse.
+*/
+var razerKinds = map[uint64]Kind{
+	0x007E: KindMouse, // Mouse Dock, which relays a mouse
+	0x00A4: KindMouse, // Mouse Dock Pro, likewise
+}
+
 // RazerTimeout is how long one exchange may take. The device answers in
 // milliseconds when it answers at all.
 const RazerTimeout = 300 * time.Millisecond
@@ -74,11 +112,15 @@ type Razer struct {
 
 	// settle is razerSettle, a field so a test need not wait it out.
 	settle time.Duration
+
+	// spoken is the transaction ID each node answered on, so the search for
+	// one costs the first poll and not every poll.
+	spoken map[string]byte
 }
 
 // NewRazer builds the reader.
 func NewRazer() *Razer {
-	return &Razer{open: openFeatureDevice, settle: razerSettle}
+	return &Razer{open: openFeatureDevice, settle: razerSettle, spoken: map[string]byte{}}
 }
 
 /*
@@ -114,7 +156,7 @@ func (r *Razer) Batteries() ([]Battery, error) {
 	return out, errors.Join(errs...)
 }
 
-// read asks one node for a battery.
+// read asks one node for a battery, on whichever transaction ID it answers.
 func (r *Razer) read(n hidNode) (Battery, error) {
 	d, err := r.open(n.Path)
 	if err != nil {
@@ -122,14 +164,14 @@ func (r *Razer) read(n hidNode) (Battery, error) {
 	}
 	defer func() { _ = d.Close() }()
 
-	level, err := r.exchange(d, classPower, commandBatteryLevel, 0x02)
+	transaction, level, err := r.address(d, n.Path)
 	if err != nil {
 		return Battery{}, err
 	}
 
 	b := Battery{
 		Name: n.Name,
-		Kind: KindMouse,
+		Kind: razerKinds[n.Product],
 		// The level is a byte over full scale, not a percentage: 0xFF is a
 		// full battery. Rounded rather than truncated, so 0xFF is 100 and not
 		// 99.
@@ -140,7 +182,7 @@ func (r *Razer) read(n hidNode) (Battery, error) {
 	// The charge state is a second exchange and an optional one: a device that
 	// will not answer it still has a level worth drawing, and a missing answer
 	// must not be read as "not charging".
-	if charging, err := r.exchange(d, classPower, commandCharging, 0x02); err == nil {
+	if charging, err := r.exchange(d, transaction, classPower, commandCharging, 0x02); err == nil {
 		switch {
 		case charging[1] == 0:
 			b.State = Discharging
@@ -154,6 +196,39 @@ func (r *Razer) read(n hidNode) (Battery, error) {
 }
 
 /*
+address finds the transaction ID this node answers on, and the battery with it.
+
+Remembered per node, because the search is the only expensive part: once a
+device has answered, every later poll is one exchange again.
+
+**A silent ID is not evidence that it is the wrong one.** `busy` and `timeout`
+are what a contended or sleeping device says on the *right* ID -- several times
+an hour on this hardware -- so a remembered ID is kept through them rather than
+being unlearnt and searched for again on the next poll, which would turn an
+ordinary quiet minute into a burst of writes to a device.
+*/
+func (r *Razer) address(d featureDevice, path string) (byte, []byte, error) {
+	if known, ok := r.spoken[path]; ok {
+		level, err := r.exchange(d, known, classPower, commandBatteryLevel, 0x02)
+		return known, level, err
+	}
+
+	var err error
+	for _, transaction := range razerTransactions {
+		var level []byte
+		level, err = r.exchange(d, transaction, classPower, commandBatteryLevel, 0x02)
+		if err == nil {
+			if r.spoken == nil {
+				r.spoken = map[string]byte{}
+			}
+			r.spoken[path] = transaction
+			return transaction, level, nil
+		}
+	}
+	return 0, nil, err
+}
+
+/*
 exchange sends one request and returns its arguments.
 
 The reply comes back in the same shape as the request, with the status byte
@@ -161,8 +236,8 @@ filled in and the arguments replaced. Its checksum is verified: this is a radio
 link with a dock in the middle, and a corrupted battery level is a number a
 panel would draw without hesitating.
 */
-func (r *Razer) exchange(d featureDevice, class, command, size byte) ([]byte, error) {
-	req := razerReport(relayTransaction, class, command, size)
+func (r *Razer) exchange(d featureDevice, transaction, class, command, size byte) ([]byte, error) {
+	req := razerReport(transaction, class, command, size)
 	if err := d.SetFeature(req); err != nil {
 		return nil, fmt.Errorf("asking a Razer device for %#02x/%#02x: %w", class, command, err)
 	}

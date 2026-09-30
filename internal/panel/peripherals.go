@@ -58,6 +58,11 @@ type Peripherals struct {
 	razer       func() ([]peripherals.Battery, error)
 	steelseries func() ([]peripherals.Battery, error)
 
+	// unsupported names devices a source found and would not speak to. A
+	// device this build does not know is detected and left alone (spec 017),
+	// and saying which one is the difference between that and a bug.
+	unsupported func() []string
+
 	// now is the clock, for the same reason.
 	now func() time.Time
 }
@@ -87,6 +92,7 @@ func NewPeripherals() *Peripherals {
 		bluetooth:   bluetooth.Batteries,
 		razer:       razer.Batteries,
 		steelseries: steelseries.Batteries,
+		unsupported: steelseries.Unsupported,
 		now:         time.Now,
 	}
 }
@@ -177,6 +183,21 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		found = append(found, steelseries...)
 	}
 
+	// A device that was found and deliberately not spoken to.
+	//
+	// Kept apart from the reasons above because it survives a card that is
+	// already showing hardware. "No Logitech receiver" is noise beside a mouse
+	// that is drawing; "this device is on your desk and I cannot read it" is
+	// not, and it is the difference between a gap this build knows about and
+	// one it does not.
+	var present []view.Reason
+	for _, name := range p.unsupported() {
+		present = append(present, view.Reason{
+			Text: name + ": not a device this build can read", Status: view.Info,
+			Detail: "found, and left alone: its battery protocol is not one this build knows",
+		})
+	}
+
 	bluetooth, err := p.bluetooth()
 	switch {
 	case err == nil:
@@ -209,10 +230,12 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	defer p.mu.Unlock()
 	p.reading = p.readings(found)
 	if len(p.reading.Devices) > 0 {
-		// The card is showing hardware. What else is absent is doctor's
-		// business, not the panel's.
+		// The card is showing hardware. What else is *absent* is doctor's
+		// business, not the panel's -- but a device that is present and
+		// unreadable is still worth a line.
 		reasons = nil
 	}
+	reasons = append(reasons, present...)
 	p.reasons = reasons
 	return len(p.reading.Devices) > 0, errors.Join(errs...)
 }
