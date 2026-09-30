@@ -146,7 +146,7 @@ func TestTheWindowRuleCanBeDrivenFromTheCommandLine(t *testing.T) {
 func runGUI(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 
-	cmd := cli.GUI("1.2.3", func(cli.Options) error {
+	cmd := cli.GUI("1.2.3", []string{"sections", "about"}, func(cli.Options) error {
 		t.Fatal("a window subcommand started the panel")
 		return nil
 	})
@@ -157,4 +157,55 @@ func runGUI(t *testing.T, args ...string) (string, error) {
 
 	err := cmd.Execute()
 	return out.String(), err
+}
+
+// startGUI runs the window's root command with arguments and returns the
+// options it would have started the panel with.
+func startGUI(t *testing.T, args ...string) (cli.Options, string, error) {
+	t.Helper()
+	var got cli.Options
+	cmd := cli.GUI("1.2.3", []string{"sections", "window", "about"}, func(o cli.Options) error {
+		got = o
+		return nil
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(append([]string{"--settings", filepath.Join(t.TempDir(), "settings.yaml")}, args...))
+	err := cmd.Execute()
+	return got, out.String(), err
+}
+
+// --preferences opens the window on the page it names, and a bare
+// --preferences on the first, as it did before it took a name. The screenshot
+// harness opens every page this way.
+func TestPreferencesOpensOnTheNamedPage(t *testing.T) {
+	o, _, err := startGUI(t)
+	require.NoError(t, err)
+	assert.Empty(t, o.Preferences, "the window opened without being asked")
+
+	o, _, err = startGUI(t, "--preferences")
+	require.NoError(t, err)
+	assert.Equal(t, "sections", o.Preferences)
+
+	o, _, err = startGUI(t, "--preferences=About")
+	require.NoError(t, err)
+	assert.Equal(t, "about", o.Preferences)
+}
+
+// A page the window does not have is a usage error that names the ones it
+// does, rather than a window opened somewhere else.
+func TestPreferencesRefusesAPageThatIsNotThere(t *testing.T) {
+	_, _, err := startGUI(t, "--preferences=bandwidth")
+	var usage *cli.UsageError
+	require.ErrorAs(t, err, &usage)
+	assert.Contains(t, err.Error(), "sections, window, about")
+}
+
+// The help names the pages, because tools/screenshot.sh --all reads them from
+// it to know which to photograph.
+func TestTheHelpNamesThePreferencesPages(t *testing.T) {
+	_, out, err := startGUI(t, "--help")
+	require.NoError(t, err)
+	assert.Contains(t, out, "on one of: sections, window, about")
 }

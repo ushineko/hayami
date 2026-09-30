@@ -31,8 +31,9 @@ type Options struct {
 	// its preferences and follow a change made there.
 	Store *config.Store
 
-	// Preferences opens the preferences window at start as well as the panel.
-	Preferences bool
+	// Preferences opens the preferences window at start as well as the panel,
+	// on the page it names. Empty means the window is not opened.
+	Preferences string
 
 	// Unreadable is a settings file that could not be parsed. The panel draws
 	// on defaults and says so rather than refusing to start.

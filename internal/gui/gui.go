@@ -54,8 +54,9 @@ type Options struct {
 	// panel with nothing to follow, which is what a test has.
 	Store *config.Store
 
-	// Preferences opens the preferences window at start as well as the panel.
-	Preferences bool
+	// Preferences opens the preferences window at start as well as the panel,
+	// on the page it names. Empty means the window is not opened.
+	Preferences string
 
 	// Sections are the sections to build the cards from, by key, where they
 	// are already known: a live first reading, or what the cache restored.
@@ -931,7 +932,7 @@ func Start(o Options) error {
 	// its window exists, so the closure is made first and the pointer filled
 	// in after. It runs on a tap, long after New has returned.
 	var p *Panel
-	var open func()
+	var open func(page string)
 	if o.Store != nil {
 		o.Menu, open = MenuWith(a, o.Store, o.Version, func(c config.Config) {
 			if p != nil {
@@ -962,8 +963,8 @@ func Start(o Options) error {
 	if o.Store != nil {
 		p.Apply(o.Store.Config())
 	}
-	if o.Preferences && open != nil {
-		open()
+	if o.Preferences != "" && open != nil {
+		open(o.Preferences)
 	}
 	p.Poll(ctx)
 

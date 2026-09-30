@@ -82,14 +82,22 @@ the link is made by hand and is worth making.
 
 This repository is **public**. The following hold without exception:
 
-- **No device identities.** No Bluetooth MAC address, USB serial, hostname,
-  user name or network interface from a real machine may be committed, in
-  code, docs, fixtures or screenshots. Fixtures use the documentation ranges
-  (`AA:BB:CC:DD:EE:FF`) and invented names.
-- **No credentials, and no usage numbers.** The Claude and Codex tokens live
-  in the user's own stores and are never copied, logged or printed. A usage
-  figure is a fact about a person's account: it does not go into a fixture, a
-  test's golden file, or a screenshot in the README. Sample data is invented.
+- **No personal identifiers.** No Bluetooth MAC address, USB serial,
+  hostname, user name, home path or account identifier from a real machine
+  may be committed, in code, docs, fixtures or screenshots. Fixtures use the
+  documentation ranges (`AA:BB:CC:DD:EE:FF`) and invented names.
+- **No credentials.** The Claude and Codex tokens live in the user's own
+  stores and are never copied, logged or printed. Fixtures and golden files
+  use invented usage data.
+- **Screenshots are the desk's, minus PII.** A screenshot in `docs/` shows
+  the live readings the panel is for: device models, interface names,
+  temperatures, rates and usage figures are facts about a desk, not about a
+  person, and a gallery of invented data would show a panel nobody runs
+  (spec 027 decided this; the earlier rule kept usage figures out of every
+  screenshot and was broader than the harm). What may not appear is
+  anything that identifies a person: names, addresses, hostnames, home
+  paths, account identifiers. `tools/screenshot.sh` runs the panel from a
+  throwaway settings copy so no path of the user's is shown.
 - **No settings or cache files** from any machine. Tests build theirs under
   `t.TempDir()`, except the shared-cache test below, which reads and does not
   write.

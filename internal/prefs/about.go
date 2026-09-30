@@ -70,22 +70,18 @@ func (w *Window) about() shell.About {
 				"screen, and nothing else touches your desktop."},
 		},
 		Facts: []shell.Fact{
-			{Label: "Settings file", Value: widgets.OrNone(settingsPath(), "not found")},
+			{Label: "Settings file", Value: widgets.OrNone(w.settingsPath(), "not found")},
 			{Label: "Sections shown", Value: shownFact(c)},
 			{Label: "Licence", Value: "MIT"},
 		},
 	}
 }
 
-// settingsPath is where the settings live, for the facts table. An error is
-// "not found" rather than a message: the table has one line per fact and the
-// reason belongs in a log.
-func settingsPath() string {
-	p, err := config.Path()
-	if err != nil {
-		return ""
-	}
-	return p
+// settingsPath is the file this run's settings came from, for the facts
+// table: the one --settings named when it named one, which the usual place is
+// not.
+func (w *Window) settingsPath() string {
+	return w.opts.Store.Settings().Path()
 }
 
 // shownFact names the sections the panel is drawing, for the facts table.

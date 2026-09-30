@@ -107,6 +107,14 @@ build: ## Build both panels for the host platform
 	CGO_ENABLED=1 go build -trimpath -tags '$(FYNE_TAGS)' -ldflags='$(LDFLAGS)' -o hayami ./cmd/hayami
 	CGO_ENABLED=0 go build -trimpath -ldflags='$(LDFLAGS)' -o hayami-tui ./cmd/hayami-tui
 
+# The README's gallery, photographed from this desk's live readings: the panel,
+# the pane at 100 and 160 columns, and every page of the preferences window,
+# into docs/img/gallery-*.png. Needs KDE/Wayland, kdotool, spectacle and
+# alacritty, and python3 with Pillow. Leaves a running panel alone.
+.PHONY: screenshots
+screenshots: build ## Photograph the README gallery (KDE/Wayland, kdotool, spectacle, alacritty)
+	tools/screenshot.sh --all
+
 # The release tarball: one archive for linux-amd64 carrying both panels, the
 # installer and what the installer puts on the system.
 #

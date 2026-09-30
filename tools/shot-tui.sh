@@ -32,7 +32,7 @@ T=$(mktemp --suffix=.png)
 spectacle -f -b -n -o "$T" >/dev/null 2>&1 || true
 sleep 2
 G=$(kdotool getwindowgeometry "$wid")
-python3 ~/git/fynedesygn/tools/crop.py "$T" "$OUT" \
+python3 "$(dirname "${BASH_SOURCE[0]}")/crop.py" "$T" "$OUT" \
     "$(printf '%s' "$G" | awk '/Position/{print $2}')" \
     "$(printf '%s' "$G" | awk '/Geometry/{print $2}')"
 rm -f "$T"

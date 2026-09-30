@@ -160,3 +160,59 @@ func TestASectionWhoseSourceIsGoneDrawsItsValuesDim(t *testing.T) {
 	assert.Empty(t, seen[view.Good], "a stale reading keeps its number and loses its colour")
 	assert.Contains(t, strings.Join(seen[view.Dim], ""), "38.9")
 }
+
+// A painted grid lines its columns up where the eye sees them. The padding
+// between columns is counted in characters on screen, not in the escape codes
+// a painter wraps them in: counted with the codes, a dim title padded short by
+// their length and pulled the next column left on its line, which is how the
+// gallery's photograph of the pane first came out (spec 027).
+func TestAPaintedGridKeepsItsColumnsStraight(t *testing.T) {
+	sections := []view.Section{
+		section("a", "Alpha", row("one", "1", "")),
+		section("b", "Beta", row("two", "2", ""), row("three", "3", "")),
+	}
+	painter := func(text string, _ view.Status) string { return "\x1b[90m" + text + "\x1b[0m" }
+	strip := func(s string) string {
+		var b strings.Builder
+		for i := 0; i < len(s); i++ {
+			if s[i] == '\x1b' {
+				for i < len(s) && s[i] != 'm' {
+					i++
+				}
+				continue
+			}
+			b.WriteByte(s[i])
+		}
+		return b.String()
+	}
+
+	plain := view.Render(sections, view.ArrangeGrid, 100)
+	painted := view.RenderWith(sections, view.ArrangeGrid, 100, painter)
+
+	require.Len(t, painted, len(plain))
+	for i := range plain {
+		assert.Equal(t, plain[i], strip(painted[i]), "line %d moved when it was painted", i)
+	}
+}
+
+// A grid shares its width among the columns it fills. Four sections at a
+// width with room for three columns fill two, two to a column; measured for
+// three, the two it drew were a third of the pane each and the rest was empty,
+// and an interface name was cut to two letters beside it (spec 027).
+func TestAGridSharesItsWidthAmongTheColumnsItFills(t *testing.T) {
+	sections := []view.Section{
+		section("a", "Alpha", row("one", "1", "")),
+		section("b", "Beta", row("two", "2", "")),
+		section("c", "Gamma", row("three", "3", "")),
+		section("d", "Delta", row("four", "4", "")),
+	}
+	width := 3*view.MinColumnWidth + 2*view.ColumnGap
+
+	lines := view.Render(sections, view.ArrangeGrid, width)
+
+	require.NotEmpty(t, lines)
+	second := strings.Index(lines[0], "Gamma")
+	require.Positive(t, second, "the third section should head the second column: %q", lines[0])
+	assert.Equal(t, (width-view.ColumnGap)/2+view.ColumnGap, second,
+		"the second of two columns should start half way across")
+}

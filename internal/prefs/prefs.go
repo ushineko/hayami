@@ -14,6 +14,8 @@ the last write.
 package prefs
 
 import (
+	"strings"
+
 	"fyne.io/fyne/v2"
 	fynetheme "fyne.io/fyne/v2/theme"
 
@@ -52,6 +54,10 @@ type Options struct {
 	//
 	// Nil means the appearance's own theme, unwrapped.
 	Theme func(a fdtheme.Appearance) fyne.Theme
+
+	// Page is the page to open on, by title and in any case. Empty is the
+	// first.
+	Page string
 }
 
 // Window is the preferences window.
@@ -109,16 +115,34 @@ func New(a fyne.App, o Options) *Window {
 		// binds its shortcut.
 		NavModes:      []shell.NavMode{shell.NavLabels, shell.NavIcons, shell.NavHidden},
 		NavPlacements: []shell.NavPlacement{shell.NavLeft, shell.NavTop},
-		Sections: []shell.Section{
-			shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
-			shell.NewSection("Window", fynetheme.ViewFullScreenIcon, w.buildWindow),
-			shell.AppearanceSection("Saved as you change it."),
-			shell.NewSection("About", fynetheme.HelpIcon, w.buildAbout).
-				OnDetach(w.detachAbout),
-		},
+		Sections:      w.pages(),
+		Section:       o.Page,
 	})
 	w.hideOnClose()
 	return w
+}
+
+// pages are the window's pages, in navigation order. Nothing is built until a
+// page is shown, so a Window with no shell can list them.
+func (w *Window) pages() []shell.Section {
+	return []shell.Section{
+		shell.NewSection("Sections", fynetheme.ListIcon, w.buildSections),
+		shell.NewSection("Window", fynetheme.ViewFullScreenIcon, w.buildWindow),
+		shell.AppearanceSection("Saved as you change it."),
+		shell.NewSection("About", fynetheme.HelpIcon, w.buildAbout).
+			OnDetach(w.detachAbout),
+	}
+}
+
+// Pages are the window's page titles in navigation order, in lower case: what
+// `hayami --preferences=<page>` takes.
+func Pages() []string {
+	secs := (&Window{}).pages()
+	out := make([]string, 0, len(secs))
+	for _, s := range secs {
+		out = append(out, strings.ToLower(s.Title()))
+	}
+	return out
 }
 
 // Shell is the window's shell, for a caller that wants its window.
@@ -137,6 +161,15 @@ there is nothing waiting to be written when the window goes away.
 */
 func (w *Window) hideOnClose() {
 	w.shell.Window.SetCloseIntercept(func() { w.shell.Window.Hide() })
+}
+
+// ShowPage brings the window up on a page, by title and in any case. An empty
+// or unknown title leaves it on the page it was on.
+func (w *Window) ShowPage(page string) {
+	if page != "" {
+		w.shell.Select(page)
+	}
+	w.Show()
 }
 
 // Show brings the window up, raising it when it is already there.

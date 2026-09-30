@@ -217,7 +217,7 @@ func TestTheReportPutsEachReasonUnderItsSection(t *testing.T) {
 // running the window, and telling them to install the other binary to find out
 // why is asking them to do the diagnosis this command is for.
 func TestDoctorIsOnBothBinaries(t *testing.T) {
-	for _, tree := range []*cobra.Command{cli.TUI("1.2.3"), cli.GUI("1.2.3", func(cli.Options) error { return nil })} {
+	for _, tree := range []*cobra.Command{cli.TUI("1.2.3"), cli.GUI("1.2.3", nil, func(cli.Options) error { return nil })} {
 		found := false
 		for _, c := range tree.Commands() {
 			if c.Name() == "doctor" {
