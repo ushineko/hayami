@@ -10,7 +10,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/ushineko/fynedesygn v0.1.72
-	github.com/ushineko/sanshoku v0.1.1
+	github.com/ushineko/sanshoku v0.1.2
 )
 
 require (
