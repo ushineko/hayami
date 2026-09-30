@@ -62,13 +62,15 @@ type Cell struct {
 
 // Trail is one series plotted under a section's rows.
 //
-// **Each trail is scaled to its own range**, never to a shared axis. The
-// cooler is the case that settled it: the processor swings thirty-five degrees
-// where the coolant moves under one, so a shared degrees-Celsius axis flattens
-// the coolant to a couple of pixels and destroys the signal the plot exists
-// for. The consequence is worth being explicit about -- heights are not
-// comparable between trails -- and it is why the real numbers are in the rows
-// above and the plot carries no axis at all.
+// **How trails are scaled is the section's TrailScale.** By default each is
+// scaled to its own range. The cooler is the case that settled it: the
+// processor swings thirty-five degrees where the coolant moves under one, so a
+// shared degrees-Celsius axis flattens the coolant to a couple of pixels and
+// destroys the signal the plot exists for. The consequence is worth being
+// explicit about -- heights are not comparable between trails -- and it is
+// why the real numbers are in the rows above and the plot carries no axis at
+// all. Bandwidth is the other case (spec 021): its trails share one scale, so
+// a quiet interface is a flat line beside a busy one.
 type Trail struct {
 	// Name identifies the series to a shell that keeps its plot between
 	// polls rather than rebuilding it.
@@ -81,7 +83,28 @@ type Trail struct {
 	// the muted one: a plot with two traces of equal weight has no primary,
 	// and the coolant is what the eye should land on.
 	Status Status
+	// Series is which of a section's things this trail belongs to -- the
+	// interface's ordinal on the bandwidth card -- so a shell can colour one
+	// thing's trails as a pair. Zero for a section that does not use it.
+	Series int
+
+	// Secondary marks the second trail of a pair: the up rate beside the
+	// down. A shell draws it in a fainter form of the pair's colour.
+	Secondary bool
 }
+
+// TrailScale is how a section's trails are fitted to the height of the plot.
+type TrailScale int
+
+const (
+	// ScaleEach draws each trail against its own range, widened to
+	// SparkMinSpan. The zero value, and the cooler's.
+	ScaleEach TrailScale = iota
+	// ScaleShared draws every trail of the section against one range: zero
+	// at the bottom and the greatest sample across the trails at the top.
+	// Heights are comparable between trails, which is the point for rates.
+	ScaleShared
+)
 
 /*
 Reason is why a section has nothing, or less than everything, to draw.
@@ -187,6 +210,9 @@ type Section struct {
 	// Trails are the series to plot under the rows, oldest first within each.
 	// Empty for a section with nothing to plot, which is most of them.
 	Trails []Trail
+
+	// TrailScale is how the trails share, or do not share, a vertical scale.
+	TrailScale TrailScale
 
 	// Note is what the section says when the pointer rests on it: detail
 	// there is no room to draw. Empty for a section with nothing extra to

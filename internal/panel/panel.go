@@ -47,7 +47,7 @@ func NewBandwidth(names []string, read func() (map[string]core.Counters, error))
 	return &Bandwidth{core.NewBandwidthSection(names, read)}
 }
 
-// Section turns the last sample into rows.
+// Section turns the last sample into rows, and the trails into a plot.
 //
 // HasRate is false until the second poll, because a rate is a difference. The
 // distinction survives to here rather than being flattened to zero: a blank of
@@ -70,6 +70,7 @@ func (b *Bandwidth) Section() view.Section {
 			})
 			continue
 		}
+		trail := b.Trail(r.Name)
 		out = append(out, view.BandwidthReading{
 			Name:     r.Name,
 			RxRate:   r.RxRate,
@@ -78,6 +79,8 @@ func (b *Bandwidth) Section() view.Section {
 			TxTotal:  r.TxTotal,
 			HasRate:  r.HasRate,
 			HasTotal: r.Present,
+			RxTrail:  trail.Rx,
+			TxTrail:  trail.Tx,
 		})
 	}
 	sec := view.Bandwidth(out)

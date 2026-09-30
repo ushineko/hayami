@@ -11,6 +11,11 @@ type BandwidthReading struct {
 	TxTotal  uint64
 	HasRate  bool
 	HasTotal bool
+
+	// RxTrail and TxTrail are the recent rates, oldest first. Empty until
+	// two polls have given a rate, which is the honest state after a start.
+	RxTrail []float64
+	TxTrail []float64
 }
 
 // Bandwidth turns readings into a section.
@@ -25,6 +30,21 @@ func Bandwidth(readings []BandwidthReading) Section {
 
 	for _, r := range readings {
 		s.Rows = append(s.Rows, interfaceRow(r, unit))
+	}
+
+	// The trend: down then up for each interface, in the rows' order, all
+	// against one scale (spec 021). A shared scale is what makes a 1 KiB/s
+	// interface a flat line beside a 20 MiB/s one, which is the reading --
+	// scaled each to its own range they would look equally busy.
+	//
+	// A trail is emitted for every interface drawn, even before it has a
+	// sample: the window builds its plot from the first section it sees, and
+	// the first poll has no rate to plot.
+	s.TrailScale = ScaleShared
+	for i, r := range readings {
+		s.Trails = append(s.Trails,
+			Trail{Name: r.Name + " ↓", Samples: r.RxTrail, Status: Info, Series: i},
+			Trail{Name: r.Name + " ↑", Samples: r.TxTrail, Status: Info, Series: i, Secondary: true})
 	}
 	return s
 }

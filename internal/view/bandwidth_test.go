@@ -161,3 +161,28 @@ func TestTheDirectionsAreMarkedTheWayTheMonitorMarksThem(t *testing.T) {
 	require.NotEqual(t, -1, up)
 	assert.Less(t, down, up, "down is read first")
 }
+
+// Each interface drawn gets two trails, down then up, in the rows' order, and
+// the section asks for one scale across them (spec 021). Series and Secondary
+// are what lets the window colour an interface's two lines as a pair.
+func TestTwoInterfacesAreFourTrailsUnderOneScale(t *testing.T) {
+	s := view.Bandwidth([]view.BandwidthReading{
+		{Name: "eno2", HasRate: true, HasTotal: true, RxTrail: []float64{1, 2}, TxTrail: []float64{3, 4}},
+		{Name: "wlan0", HasRate: true, HasTotal: true, RxTrail: []float64{5}, TxTrail: []float64{6}},
+	})
+
+	assert.Equal(t, view.ScaleShared, s.TrailScale)
+	assert.Equal(t, []view.Trail{
+		{Name: "eno2 ↓", Samples: []float64{1, 2}, Status: view.Info, Series: 0},
+		{Name: "eno2 ↑", Samples: []float64{3, 4}, Status: view.Info, Series: 0, Secondary: true},
+		{Name: "wlan0 ↓", Samples: []float64{5}, Status: view.Info, Series: 1},
+		{Name: "wlan0 ↑", Samples: []float64{6}, Status: view.Info, Series: 1, Secondary: true},
+	}, s.Trails)
+}
+
+// The cooler keeps its own-range plot: the zero value of TrailScale.
+func TestTheCoolerKeepsEachTrailOnItsOwnScale(t *testing.T) {
+	s := view.Cooler(view.CoolerReading{HasLiquid: true, Coolant: 46, Trail: []float64{46}})
+
+	assert.Equal(t, view.ScaleEach, s.TrailScale)
+}

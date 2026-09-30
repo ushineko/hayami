@@ -10,13 +10,14 @@ import "strings"
 // never touch.
 var SparkRunes = []rune("▁▂▃▄▅▆▇█")
 
-// Sparkline draws a series as one line.
+// Sparkline draws a series as one line, against its own range.
 //
 // The scale is the series' own: its lowest sample is the floor and its highest
 // the ceiling, so a coolant that moved between 45.8 and 46.6 degrees fills the
 // line the way a processor that moved between 65 and 98 does. That is
 // deliberate — the question is "is this going up", not "how does this compare
-// with that" — and it is why a panel never draws two series against one axis.
+// with that" — and a section that does want that asks for ScaleShared and
+// is drawn with SparklineIn.
 //
 // minSpan is the narrowest range the scale may have. Without it, a series that
 // has not moved at all is amplified into noise: eight heights across a
@@ -41,6 +42,21 @@ func Sparkline(series []float64, width int, minSpan float64) string {
 		// middle reads as "steady", which is what it is.
 		low -= (minSpan - span) / 2
 		span = minSpan
+	}
+	return SparklineIn(series, width, low, span)
+}
+
+// SparklineIn draws a series as one line against a range it is given: low is
+// the floor and low+span the ceiling. Several series drawn against one range
+// are comparable by height, which Sparkline's own-range lines are not.
+//
+// A span that is not positive draws nothing, rather than dividing by it.
+func SparklineIn(series []float64, width int, low, span float64) string {
+	if width < 1 || len(series) == 0 || span <= 0 {
+		return ""
+	}
+	if len(series) > width {
+		series = series[len(series)-width:]
 	}
 
 	var b strings.Builder

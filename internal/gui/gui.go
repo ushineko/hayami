@@ -23,6 +23,7 @@ import (
 	"github.com/ushineko/fynedesygn/widgets"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/desktop"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/readings"
@@ -107,8 +108,10 @@ type card struct {
 //
 // The same as the pane's, because they are drawing the same series: a trend
 // that covered a different span in each shell would be two different readings
-// with one name.
-const SparkCapacity = panel.CoolerTrail
+// with one name. The cooler and the bandwidth trails both keep sixty, so one
+// constant covers both; a test holds them equal, and were they ever to differ
+// the larger would keep the longer trail whole.
+const SparkCapacity = max(panel.CoolerTrail, core.BandwidthTrail)
 
 /*
 CellSlack is how many spare cells a card of cells is built with.
@@ -269,10 +272,17 @@ func New(a fyne.App, o Options) *Panel {
 		// draws, not what they draw in them.
 		//
 		// One plot however many series: the design system's sparkline holds
-		// several and scales each to its own range, which is what makes the
+		// several and by default scales each to its own range, which is what makes the
 		// coolant and the processor readable on one line.
+		//
+		// A section under ScaleShared -- bandwidth -- draws every series
+		// against one range, zero to the window's peak, so a quiet interface
+		// is the flatter line (spec 021).
 		if len(sec.Trails) > 0 {
 			holder.spark = glance.NewSparkline(SparkCapacity)
+			if sec.TrailScale == view.ScaleShared {
+				holder.spark.SetScale(glance.ScaleShared)
+			}
 			c.AddObject(holder.spark)
 		}
 
@@ -427,7 +437,7 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	if c.spark != nil && len(sec.Trails) > 0 {
 		c.spark.Clear()
 		for _, t := range sec.Trails {
-			c.spark.AddSeries(t.Name, p.trailColour(t, sec.Gone), view.SparkMinSpan)
+			c.spark.AddSeries(t.Name, p.trailColour(t, sec), view.SparkMinSpan)
 			for _, v := range t.Samples {
 				c.spark.Add(t.Name, v)
 			}
@@ -556,14 +566,26 @@ func reading(r view.Row) glance.Reading {
 // heard from this in a minute" is not one. The pane makes the same choice in
 // its own vocabulary, and the two shells must not disagree about what a stale
 // plot looks like.
-func (p *Panel) trailColour(t view.Trail, gone bool) color.Color {
+//
+// **A shared-scale section's trails are coloured by series**, not by status
+// (spec 021): an interface's two lines take the design system's series colour
+// for its ordinal, the up line the faded form of it, so a pair reads as a pair
+// and one interface from another. There is no verdict in a byte rate to colour.
+func (p *Panel) trailColour(t view.Trail, sec view.Section) color.Color {
 	th := p.win.Panel().Theme()
 	variant := fynetheme.VariantDark
 	if p.app != nil {
 		variant = p.app.Settings().ThemeVariant()
 	}
-	if gone {
+	if sec.Gone {
 		return th.Color(fynetheme.ColorNameDisabled, variant)
+	}
+	if sec.TrailScale == view.ScaleShared {
+		c := glance.SeriesColour(th, t.Series)
+		if t.Secondary {
+			c = glance.Faded(c)
+		}
+		return c
 	}
 	return th.Color(widgets.StatusColorName(status(t.Status)), variant)
 }
