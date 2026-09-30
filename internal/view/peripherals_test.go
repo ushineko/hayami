@@ -33,7 +33,7 @@ func TestALevelIsColouredAtTheBands(t *testing.T) {
 		s := view.Peripherals(view.PeripheralsReading{
 			Devices: []view.PeripheralReading{reading("A Device", c.level)},
 		})
-		require.Len(t, s.Cells, 1)
+		require.Len(t, s.Cells, view.PeripheralSlots)
 		assert.Equal(t, c.want, s.Cells[0].Status, "at %d %%", c.level)
 	}
 }
@@ -48,7 +48,7 @@ func TestAChargingDeviceIsSaidAndNotColoured(t *testing.T) {
 	d.Charge = view.Filling
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 
 	assert.Equal(t, view.Info, s.Cells[0].Status, "a charging device was coloured for being empty")
 	assert.Equal(t, "Charging", s.Cells[0].Note)
@@ -62,7 +62,7 @@ func TestAChargedDeviceSaysCharged(t *testing.T) {
 	d.Charge = view.Charged
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	assert.Equal(t, "Charged", s.Cells[0].Note)
 }
 
@@ -78,7 +78,7 @@ func TestAStaleCellKeepsItsNumberAndItsVerdict(t *testing.T) {
 	d.Stale = true
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 
 	assert.True(t, s.Cells[0].Stale)
 	assert.Equal(t, view.Bad, s.Cells[0].Status, "the verdict was dropped as well as dimmed")
@@ -170,12 +170,40 @@ func TestEveryCellSaysWhatItsBatteryIsDoing(t *testing.T) {
 	assert.Equal(t, "Charging", s.Cells[1].Note)
 }
 
-// A section with no devices has no cells, so the shells draw no heading.
-func TestNoDevicesIsNoCells(t *testing.T) {
+// AC (spec 022). No devices at all is both placeholders, so the card is the
+// same shape as with two. Whether the card is drawn at all is the panel's
+// decision (Poll), not the section's.
+func TestNoDevicesIsTwoPlaceholders(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{})
-	assert.Empty(t, s.Cells)
+
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, view.NoMouse, s.Cells[0].Label)
+	assert.Equal(t, view.NoDevice, s.Cells[1].Label)
+	for _, c := range s.Cells {
+		assert.True(t, c.Placeholder)
+		assert.True(t, c.Stale, "a placeholder is drawn dim, like a quiet device")
+		assert.Equal(t, view.NoQuantity(), c.Value)
+	}
 	assert.Empty(t, s.Rows)
+	assert.Empty(t, s.Reasons, "a placeholder is not a reason")
+	assert.Empty(t, s.Note)
 	assert.Equal(t, "peripherals", s.Key)
+}
+
+// AC (spec 022). A mouse alone is the mouse and the "no device" placeholder,
+// so the card does not collapse to one centred cell.
+func TestAMouseAloneHasAPlaceholderBesideIt(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+		detected("G502 X PLUS", 78, view.KindMouse, t0),
+	}})
+
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, "G502 X PLUS", s.Cells[0].Label)
+	assert.False(t, s.Cells[0].Placeholder)
+	assert.Equal(t, view.NoDevice, s.Cells[1].Label)
+	assert.True(t, s.Cells[1].Placeholder)
+	assert.True(t, s.Cells[1].Stale)
 }
 
 // The section renders in every arrangement without the shells knowing what a
@@ -196,6 +224,20 @@ func TestTheSectionRendersInEveryArrangement(t *testing.T) {
 	}
 }
 
+// R5 (spec 022). The pane draws the placeholder too, in every arrangement, so
+// both shells show the same two cells.
+func TestThePaneDrawsThePlaceholder(t *testing.T) {
+	s := view.Peripherals(view.PeripheralsReading{
+		Devices: []view.PeripheralReading{{Name: "G502 X PLUS", Level: 86, Kind: view.KindMouse}},
+	})
+
+	for _, a := range []view.Arrangement{view.ArrangeStack, view.ArrangeGrid, view.ArrangeRow} {
+		joined := strings.Join(view.Render([]view.Section{s}, a, 60), "\n")
+		assert.Contains(t, joined, "G502 X PLUS", "in %s", a)
+		assert.Contains(t, joined, view.NoDevice, "in %s", a)
+	}
+}
+
 // AC4. A device with several batteries is one cell and a quiet line beneath
 // it. A pair of earbuds is one device on the desk and should be one block on
 // the panel; which ear is low is exactly what the wearer wants to know, and
@@ -210,7 +252,8 @@ func TestADeviceWithSeveralBatteriesIsOneCell(t *testing.T) {
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
 
-	require.Len(t, s.Cells, 1, "a pair of earbuds became more than one cell")
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.True(t, s.Cells[1].Placeholder, "a pair of earbuds became more than one cell")
 	assert.Equal(t, "L 80  R 90  case 50", s.Cells[0].Note)
 	assert.Contains(t, s.Cells[0].Value, "80")
 }
@@ -221,7 +264,7 @@ func TestADeviceWithOneBatteryListsNoCells(t *testing.T) {
 	s := view.Peripherals(view.PeripheralsReading{
 		Devices: []view.PeripheralReading{reading("G502 X PLUS", 86)},
 	})
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	assert.Equal(t, "Discharging", s.Cells[0].Note)
 }
 
@@ -233,7 +276,7 @@ func TestCellsAndChargingAreBothSaid(t *testing.T) {
 	d.Cells = []view.PeripheralCell{{Name: "L", Level: 40}, {Name: "R", Level: 45}}
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 
 	assert.Contains(t, s.Cells[0].Note, "L 40")
 	assert.Contains(t, s.Cells[0].Note, "Charging")
@@ -248,7 +291,7 @@ func TestAnOrdinaryStateIsNotSaidBesideTheSeparateBatteries(t *testing.T) {
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{d}})
 
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	assert.Equal(t, "L 80  R 90", s.Cells[0].Note)
 }
 
@@ -294,36 +337,104 @@ func TestTheRightSlotGoesToTheNewestLiveDevice(t *testing.T) {
 	assert.Contains(t, s.Note, "Arctis Nova Pro", "the device with no slot was not named")
 }
 
-// AC. A live device takes the slot from one that has gone quiet, however
-// recently that one was heard.
-func TestALiveDeviceOutranksAQuietOne(t *testing.T) {
+// AC (spec 022). A mouse and a headset: the mouse left, the headset right.
+func TestAMouseAndAHeadset(t *testing.T) {
 	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
-	quiet := detected("Arctis Nova Pro", 47, view.KindHeadset, t0.Add(time.Hour))
-	quiet.Stale = true
-	live := detected("AirPods Pro", 81, view.KindHeadset, t0)
-
 	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
-		[]view.PeripheralReading{quiet, live})})
+		[]view.PeripheralReading{
+			detected("Arctis Nova Pro Wireless", 47, view.KindHeadset, t0),
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+		})})
 
-	require.Len(t, s.Cells, 2)
-	assert.Equal(t, "AirPods Pro", s.Cells[0].Label)
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, []string{"G502 X PLUS", "Arctis Nova Pro Wireless"},
+		[]string{s.Cells[0].Label, s.Cells[1].Label})
+	assert.Empty(t, s.Note)
 }
 
-// AC. With nothing live, the slot keeps the device that went quiet last, so
-// the card is the same width with the headphones off as on.
-func TestThePanelKeepsTheLastDeviceToGoQuiet(t *testing.T) {
+// AC (spec 022). The headset went quiet and the AirPods connected after that:
+// the connection is the more recent change, so the AirPods take the slot.
+func TestADeviceConnectedAfterAnotherWentQuietTakesTheSlot(t *testing.T) {
 	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
 	mouse := detected("G502 X PLUS", 78, view.KindMouse, t0)
-	older := detected("Arctis Nova Pro", 47, view.KindHeadset, t0)
-	older.Stale, older.Seen = true, t0
-	newer := detected("AirPods Pro", 81, view.KindHeadset, t0)
-	newer.Stale, newer.Seen = true, t0.Add(time.Minute)
+	headset := detected("Arctis Nova Pro Wireless", 47, view.KindHeadset, t0)
+	headset.Stale, headset.Seen = true, t0.Add(time.Minute)
+	airpods := detected("AirPods Pro", 81, view.KindHeadset, t0.Add(2*time.Minute))
 
 	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
-		[]view.PeripheralReading{mouse, older, newer})})
+		[]view.PeripheralReading{mouse, headset, airpods})})
 
-	require.Len(t, s.Cells, 2)
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, "G502 X PLUS", s.Cells[0].Label)
 	assert.Equal(t, "AirPods Pro", s.Cells[1].Label)
+	assert.False(t, s.Cells[1].Stale)
+	assert.Contains(t, s.Note, "Arctis Nova Pro Wireless")
+}
+
+// AC (spec 022). The AirPods then went quiet too, after the headset: the
+// disconnection is the most recent change, so the AirPods keep the slot, dim,
+// with their last level. Live is not ranked above quiet.
+func TestADeviceThatWentQuietLastKeepsTheSlot(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	mouse := detected("G502 X PLUS", 78, view.KindMouse, t0)
+	headset := detected("Arctis Nova Pro Wireless", 47, view.KindHeadset, t0)
+	headset.Stale, headset.Seen = true, t0.Add(time.Minute)
+	airpods := detected("AirPods Pro", 81, view.KindHeadset, t0.Add(2*time.Minute))
+	airpods.Stale, airpods.Seen = true, t0.Add(3*time.Minute)
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{mouse, headset, airpods})})
+
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, "AirPods Pro", s.Cells[1].Label)
+	assert.True(t, s.Cells[1].Stale, "a quiet device is drawn dim")
+	assert.Contains(t, s.Cells[1].Value, "81", "the last level was not kept")
+}
+
+// AC (spec 022). A quiet device whose silence is newer than another's arrival
+// holds the slot over a live one: the reader's most recent change is what the
+// slot shows.
+func TestAQuietDeviceCanHoldTheSlotOverALiveOne(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	quiet := detected("Arctis Nova Pro", 47, view.KindHeadset, t0)
+	quiet.Stale, quiet.Seen = true, t0.Add(time.Hour)
+	live := detected("AirPods Pro", 81, view.KindHeadset, t0.Add(time.Minute))
+	mouse := detected("G502 X PLUS", 78, view.KindMouse, t0)
+
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{quiet, live, mouse})})
+
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, "Arctis Nova Pro", s.Cells[1].Label)
+	assert.Contains(t, s.Note, "AirPods Pro")
+}
+
+// AC (spec 022). Three live devices: two cells and the third in the note.
+func TestThreeLiveDevicesGiveTheOverflowNote(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+			detected("Arctis Nova Pro", 47, view.KindHeadset, t0),
+			detected("AirPods Pro", 81, view.KindHeadset, t0.Add(time.Minute)),
+		})})
+
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, "AirPods Pro", s.Cells[1].Label)
+	assert.Equal(t, "Also connected:\n  Arctis Nova Pro  47 %  Discharging", s.Note)
+}
+
+// Without a mouse the slots are filled from the rest, as before spec 022; the
+// "no mouse" placeholder is only for a desk with nothing on it.
+func TestWithoutAMouseTheLeftSlotIsNotLeftEmpty(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	s := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
+		detected("AirPods Pro", 81, view.KindHeadset, t0),
+	}})
+
+	require.Len(t, s.Cells, view.PeripheralSlots)
+	assert.Equal(t, "AirPods Pro", s.Cells[0].Label)
+	assert.Equal(t, view.NoDevice, s.Cells[1].Label)
 }
 
 // AC. Two devices are two cells and no note, so the ordinary desk says nothing
@@ -352,7 +463,7 @@ func TestABandCellDrawsSegmentsWhereANumberWouldGo(t *testing.T) {
 		{Name: "Logitech K800", Band: "Good", Segments: 3},
 	}})
 
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	assert.Equal(t, "▮▮▮▯", s.Cells[0].Value)
 	assert.Equal(t, "Good", s.Cells[0].Note)
 	assert.Empty(t, s.Cells[0].Unit, "there is no percent sign without a percentage")
@@ -368,7 +479,7 @@ func TestTheVerdictFollowsTheBand(t *testing.T) {
 			{Name: "K800", Band: "x", Segments: c.segments},
 		}})
 
-		require.Len(t, s.Cells, 1)
+		require.Len(t, s.Cells, view.PeripheralSlots)
 		assert.Equal(t, c.want, s.Cells[0].Status, "%d segments", c.segments)
 	}
 }
@@ -380,7 +491,7 @@ func TestChargingWinsTheQuietLineFromTheBand(t *testing.T) {
 		{Name: "K800", Band: "Good", Segments: 3, Charge: view.Filling},
 	}})
 
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	assert.Equal(t, "Charging", s.Cells[0].Note)
 	assert.Equal(t, "▮▮▮▯", s.Cells[0].Value, "the band is still drawn")
 }
@@ -391,7 +502,7 @@ func TestAPercentageCellIsUnchanged(t *testing.T) {
 		{Name: "G502 X PLUS", Level: 78},
 	}})
 
-	require.Len(t, s.Cells, 1)
+	require.Len(t, s.Cells, view.PeripheralSlots)
 	assert.Equal(t, "78", s.Cells[0].Value)
 	assert.Equal(t, "%", s.Cells[0].Unit)
 }

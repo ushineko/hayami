@@ -54,6 +54,16 @@ func ShownCells(p *Panel, key string) int {
 	return n
 }
 
+// CardMinSize is the smallest a card can be drawn, which is what decides
+// whether a change to it reflows the window.
+func CardMinSize(p *Panel, key string) fyne.Size {
+	c, ok := p.cards[key]
+	if !ok {
+		return fyne.Size{}
+	}
+	return c.card.Object().MinSize()
+}
+
 // Restore is restore, so a test can exercise the decision a cold start makes
 // without starting an application.
 func Restore(

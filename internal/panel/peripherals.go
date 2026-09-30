@@ -27,16 +27,6 @@ import (
 // putting a headset on and glancing at the panel feels broken.
 const PeripheralsInterval = 15 * time.Second
 
-// PeripheralsForget is how long a device that has stopped answering is kept.
-//
-// The monitor keeps one indefinitely: its slots are fixed, so a device that
-// never comes back costs the slot it already had. These cells are not fixed —
-// they appear and disappear with the hardware — so a memory with no bound is a
-// panel that accumulates every peripheral ever switched on near it. Ten
-// minutes is long enough to cover a headset on its cradle over lunch and short
-// enough that a device put away does not outlast the afternoon.
-const PeripheralsForget = 10 * time.Minute
-
 // Peripherals is the batteries of the devices on the desk.
 //
 // It remembers what each device last said, which is the whole reason this type
@@ -50,7 +40,10 @@ type Peripherals struct {
 	mu      sync.Mutex
 	reading view.PeripheralsReading
 
-	// seen is what each device last said, by name, and when.
+	// seen is what each device last said, by name, and when. A device stays
+	// in it for the session once it has given a level (spec 022): the card
+	// always draws two cells, and a headset switched off is the one it should
+	// be drawing dim rather than a placeholder.
 	seen map[string]remembered
 
 	// reasons are the sources that had nothing to say and why, rebuilt every
@@ -102,11 +95,10 @@ func vendors() []vendor {
 // remembered is one device's last reading that had a level in it.
 type remembered struct {
 	reading view.PeripheralReading
-	at      time.Time
 
 	// since is when this device was last detected after not being there. It
-	// survives a poll the device answered and is set again only when the
-	// device has been forgotten in between, which is what makes it "when you
+	// survives a poll the device answered and is set again when the device
+	// was quiet or forgotten in between, which is what makes it "when you
 	// switched this on" rather than "when this program started".
 	since time.Time
 }
@@ -318,8 +310,10 @@ Three cases, which are the monitor's and the design system's alike:
     is nothing to draw and, once the cells are ordered, the empty one would sit
     in front of the mouse. An Arctis whose receiver is in with the headset
     switched off is this case for a whole session.
-  - A device that gave one before and has gone quiet keeps it, dim, until it
-    has been quiet long enough to be gone rather than quiet.
+  - A device that gave one before and has gone quiet keeps it, dim, for the
+    rest of the session (spec 022). It used to be forgotten after ten
+    minutes, and the card then collapsed to one cell and widened again when
+    the device came back.
 */
 func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading {
 	now := p.now()
@@ -359,26 +353,41 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 				continue
 			}
 			reading.Level = was.reading.Level
+			// The base station answered and the headset did not: the
+			// device is off, and it is drawn dim with its last level, as a
+			// device that stopped answering is (spec 022). Seen is when it
+			// went off and stays there while it is off, so a device that
+			// connects later out-ranks it for the slot.
+			reading.Stale = true
+			off := now
+			if was.reading.Stale {
+				off = was.reading.Seen
+			}
+			reading.Since, reading.Seen = was.since, off
+			fresh[b.Name] = true
+			p.seen[b.Name] = remembered{reading: reading, since: was.since}
+			continue
 		}
 
+		// A device that was quiet on the last poll has just come back, which
+		// is a change of state and a claim on the right-hand slot.
 		since := now
-		if was, ok := p.seen[b.Name]; ok {
+		if was, ok := p.seen[b.Name]; ok && !was.reading.Stale {
 			since = was.since
 		}
 		reading.Since, reading.Seen = since, now
 
 		fresh[b.Name] = true
-		p.seen[b.Name] = remembered{reading: reading, at: now, since: since}
+		p.seen[b.Name] = remembered{reading: reading, since: since}
 	}
 
 	var out []view.PeripheralReading
 	for name, was := range p.seen {
-		if !fresh[name] {
-			if now.Sub(was.at) > PeripheralsForget {
-				delete(p.seen, name)
-				continue
-			}
+		if !fresh[name] && !was.reading.Stale {
+			// Written back, so the poll it answers again in knows it was
+			// away.
 			was.reading.Stale = true
+			p.seen[name] = was
 		}
 		out = append(out, was.reading)
 	}
