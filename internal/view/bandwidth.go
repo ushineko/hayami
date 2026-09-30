@@ -43,8 +43,8 @@ func Bandwidth(readings []BandwidthReading) Section {
 	s.TrailScale = ScaleShared
 	for i, r := range readings {
 		s.Trails = append(s.Trails,
-			Trail{Name: r.Name + " ↓", Samples: r.RxTrail, Status: Info, Series: i},
-			Trail{Name: r.Name + " ↑", Samples: r.TxTrail, Status: Info, Series: i, Secondary: true})
+			Trail{Name: r.Name + " ↓", Samples: r.RxTrail, Status: Info, Series: i, Coloured: true},
+			Trail{Name: r.Name + " ↑", Samples: r.TxTrail, Status: Info, Series: i, Secondary: true, Coloured: true})
 	}
 	return s
 }

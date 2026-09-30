@@ -560,7 +560,9 @@ func reading(r view.Row) glance.Reading {
 	if r.Unit != "" {
 		text += " " + r.Unit
 	}
-	return glance.Known(text, status(r.Status))
+	rd := glance.Known(text, status(r.Status))
+	rd.Stale = r.Stale
+	return rd
 }
 
 // trailColour is what a plot's line is drawn in: the trail's own status, or
@@ -578,10 +580,15 @@ func reading(r view.Row) glance.Reading {
 // its own vocabulary, and the two shells must not disagree about what a stale
 // plot looks like.
 //
-// **A shared-scale section's trails are coloured by series**, not by status
-// (spec 021): an interface's two lines take the design system's series colour
-// for its ordinal, the up line the faded form of it, so a pair reads as a pair
-// and one interface from another. There is no verdict in a byte rate to colour.
+// **The bandwidth trails are coloured by series**, not by status (spec 021):
+// an interface's two lines take the design system's series colour for its
+// ordinal, the up line the faded form of it, so a pair reads as a pair and one
+// interface from another. There is no verdict in a byte rate to colour.
+//
+// **So are the cooler's CPU and GPU traces** (spec 026): they share a plot
+// with the coolant, each on its own scale, so colour is the only thing telling
+// them apart. The view marks every such trail Coloured; the coolant is not,
+// and keeps its band colour, which is a verdict.
 func (p *Panel) trailColour(t view.Trail, sec view.Section) color.Color {
 	th := p.win.Panel().Theme()
 	variant := fynetheme.VariantDark
@@ -591,7 +598,7 @@ func (p *Panel) trailColour(t view.Trail, sec view.Section) color.Color {
 	if sec.Gone {
 		return th.Color(fynetheme.ColorNameDisabled, variant)
 	}
-	if sec.TrailScale == view.ScaleShared {
+	if t.Coloured {
 		c := glance.SeriesColour(th, t.Series)
 		if t.Secondary {
 			c = glance.Faded(c)

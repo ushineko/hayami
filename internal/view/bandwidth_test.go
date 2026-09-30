@@ -163,8 +163,8 @@ func TestTheDirectionsAreMarkedTheWayTheMonitorMarksThem(t *testing.T) {
 }
 
 // Each interface drawn gets two trails, down then up, in the rows' order, and
-// the section asks for one scale across them (spec 021). Series and Secondary
-// are what lets the window colour an interface's two lines as a pair.
+// the section asks for one scale across them (spec 021). Coloured, Series and
+// Secondary are what lets the window colour an interface's two lines as a pair.
 func TestTwoInterfacesAreFourTrailsUnderOneScale(t *testing.T) {
 	s := view.Bandwidth([]view.BandwidthReading{
 		{Name: "eno2", HasRate: true, HasTotal: true, RxTrail: []float64{1, 2}, TxTrail: []float64{3, 4}},
@@ -173,10 +173,10 @@ func TestTwoInterfacesAreFourTrailsUnderOneScale(t *testing.T) {
 
 	assert.Equal(t, view.ScaleShared, s.TrailScale)
 	assert.Equal(t, []view.Trail{
-		{Name: "eno2 ↓", Samples: []float64{1, 2}, Status: view.Info, Series: 0},
-		{Name: "eno2 ↑", Samples: []float64{3, 4}, Status: view.Info, Series: 0, Secondary: true},
-		{Name: "wlan0 ↓", Samples: []float64{5}, Status: view.Info, Series: 1},
-		{Name: "wlan0 ↑", Samples: []float64{6}, Status: view.Info, Series: 1, Secondary: true},
+		{Name: "eno2 ↓", Samples: []float64{1, 2}, Status: view.Info, Series: 0, Coloured: true},
+		{Name: "eno2 ↑", Samples: []float64{3, 4}, Status: view.Info, Series: 0, Secondary: true, Coloured: true},
+		{Name: "wlan0 ↓", Samples: []float64{5}, Status: view.Info, Series: 1, Coloured: true},
+		{Name: "wlan0 ↑", Samples: []float64{6}, Status: view.Info, Series: 1, Secondary: true, Coloured: true},
 	}, s.Trails)
 }
 

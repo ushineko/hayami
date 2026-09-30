@@ -75,9 +75,12 @@ func Diagnose(ctx context.Context, configured, interfaces []string, read func() 
 		on[k] = true
 	}
 
-	keys := panel.Keys()
-	sources := panel.Sources(keys, interfaces, read)
+	return diagnose(ctx, on, panel.Sources(panel.Keys(), interfaces, read))
+}
 
+// diagnose is Diagnose over sources already built, which is the seam a test
+// uses to give it a section of its own.
+func diagnose(ctx context.Context, on map[string]bool, sources []panel.Source) []Finding {
 	out := make([]Finding, 0, len(sources))
 	for _, s := range sources {
 		drawn, err := s.Poll(ctx)
@@ -87,7 +90,7 @@ func Diagnose(ctx context.Context, configured, interfaces []string, read func() 
 		switch {
 		case !on[s.Key()]:
 			f.State = StateOff
-		case drawn && len(sec.Reasons) == 0:
+		case drawn && !missing(sec.Reasons):
 			f.State = StateOK
 		case drawn:
 			f.State = StatePartial
@@ -99,6 +102,23 @@ func Diagnose(ctx context.Context, configured, interfaces []string, read func() 
 		out = append(out, f)
 	}
 	return out
+}
+
+/*
+missing reports whether any reason is one a card shows.
+
+An Aside reason is kept off the card because it is not worth a line there --
+"no GPU sensor" on a machine that has no card this build can read -- and a
+section whose only reasons are those is not partial: it read everything it
+draws. doctor still lists the reason under it.
+*/
+func missing(reasons []view.Reason) bool {
+	for _, r := range reasons {
+		if !r.Aside {
+			return true
+		}
+	}
+	return false
 }
 
 /*

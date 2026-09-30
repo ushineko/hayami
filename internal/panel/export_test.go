@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -30,4 +31,10 @@ const UdevDetail = udevDetail
 // reasons without a cache directory or a credential store.
 func SetUsageRead(u *Usage, read func(context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error)) {
 	u.read = read
+}
+
+// SetProcessors replaces the processor's load and the graphics card's reader,
+// so a test drives both without /proc/stat, the card or nvidia-smi.
+func SetProcessors(c *Cooler, load func() (float64, bool), graphics func(context.Context) core.Graphics) {
+	c.load, c.graphics = load, graphics
 }
