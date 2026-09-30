@@ -1,6 +1,7 @@
 package structure_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -63,7 +64,8 @@ func TestTheUsagePaneIsLaidOutLikeTheWidgets(t *testing.T) {
 	start.Env = env
 	out, err = start.CombinedOutput()
 	require.NoError(t, err, "%s", out)
-	t.Cleanup(func() { _ = exec.Command(tmux, "-L", socket, "kill-server").Run() })
+	// Cleanup runs after t.Context() is cancelled, so it has its own.
+	t.Cleanup(func() { _ = exec.CommandContext(context.Background(), tmux, "-L", socket, "kill-server").Run() })
 
 	var lines []string
 	deadline := time.Now().Add(15 * time.Second)
