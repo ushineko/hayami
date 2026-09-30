@@ -41,7 +41,9 @@ wires both.
   the interface and the arrow ("eno2 ↓", "eno2 ↑"), `Samples` the rates,
   `Status` `Info`. Two new fields on `view.Trail`: `Series int`, the
   interface's ordinal, and `Secondary bool`, true for the up trail, so a
-  shell can colour a pair as a pair.
+  shell can colour a pair as a pair; every bandwidth trail also sets
+  `Coloured` (added by spec 026), which is what tells a shell to use the
+  series colour rather than the status colour.
 - R2.2 `view.Section` gains `TrailScale`, `ScaleEach` (zero value; the
   cooler) or `ScaleShared`. `view.Bandwidth` sets `ScaleShared`.
 - R2.3 `view.SparklineIn(series []float64, width int, low, span float64)

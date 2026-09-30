@@ -38,7 +38,7 @@ and the choice holds in both shells.
 |---|---|
 | Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
-| Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan |
+| Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. A five-minute trend of the coolant, the processor and the graphics card |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
 
 ## Arrangements
@@ -224,6 +224,25 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Feature**: the cooler says how busy the processors are, and the graphics
+  card's temperature (spec 026, issue #96). The CPU row is load and
+  temperature on one line (`12 %  78.0 °C`) and a GPU row beside it the same.
+  The load comes from `/proc/stat`; the first poll takes two samples 200 ms
+  apart, so `--once`, `doctor` and `readings` say it too. The card is read
+  from hwmon (`amdgpu`, `nouveau`) and AMD's `gpu_busy_percent`, and
+  otherwise from `nvidia-smi` with a two-second timeout -- the one subprocess
+  the panel runs to read hardware, because NVIDIA's driver offers a vendor
+  library and not a kernel node. A machine with neither has no GPU row, and
+  `doctor` says "no GPU sensor" while still calling the cooler ok. A card
+  that misses a poll keeps its row, dimmed, and the rest of the card stays
+  live. The card's temperature is a third trace on the sparkline, averaged
+  as the processor's is; in the window the processor's trace stays blue, the
+  card's is violet, and the coolant keeps its band colour.
+- **Change**: `doctor` no longer calls a section "partial" for a reason
+  that is kept off the card; it still lists it.
 
 ### 0.7.2 (2026-09-30)
 

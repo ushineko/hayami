@@ -97,6 +97,13 @@ type Trail struct {
 	// Secondary marks the second trail of a pair: the up rate beside the
 	// down. A shell draws it in a fainter form of the pair's colour.
 	Secondary bool
+
+	// Coloured marks a trail that takes a series colour rather than a status
+	// colour: Series picks it, Secondary fades it. Every bandwidth trail, and
+	// the cooler's CPU and GPU, whose traces share a plot with the coolant
+	// and are told apart by nothing else. The coolant is not coloured: its
+	// colour is its band, which is a verdict.
+	Coloured bool
 }
 
 // TrailScale is how a section's trails are fitted to the height of the plot.
@@ -189,6 +196,12 @@ type Row struct {
 	// Detail is a second, quieter line under the row — the cumulative totals
 	// under a rate. Empty means there is none.
 	Detail string
+
+	// Stale marks a row whose source missed this poll: the last value is
+	// kept and drawn dim, and the rest of the section is not. The GPU row
+	// when nvidia-smi does not answer in time (spec 026); a whole source that
+	// has stopped is the section's Gone instead.
+	Stale bool
 }
 
 // Section is a titled group of rows and meters, which is what a card is in the

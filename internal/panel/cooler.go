@@ -13,6 +13,7 @@ import (
 	"github.com/ushineko/sanshoku/hwmon"
 	"github.com/ushineko/sanshoku/nzxt"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -43,6 +44,7 @@ type Cooler struct {
 	reading view.CoolerReading
 	trail   *view.Series
 	cpu     *view.Averaged
+	gpu     *view.Averaged
 
 	// gone marks a cooler that was answering and has stopped. The reading is
 	// kept as it was and drawn dim rather than being emptied, which is the
@@ -63,6 +65,13 @@ type Cooler struct {
 	// real hwmon tree nor a real device is touched.
 	sensor func() (float64, error)
 	held   *held
+
+	// load is the processor's utilisation since the previous poll, and
+	// graphics the card's temperature and load. Absent unless NewCooler sets
+	// them, so a test that does not ask for them reads neither /proc/stat nor
+	// the card -- and never runs nvidia-smi.
+	load     func() (float64, bool)
+	graphics func(context.Context) core.Graphics
 }
 
 // coolerDrivers are the drivers the cooler section asks.
@@ -71,7 +80,10 @@ func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}}
 // NewCooler builds the cooler source over sanshoku's NZXT driver and the
 // kernel's processor sensors.
 func NewCooler() *Cooler {
-	return newCooler(sanshoku.Scan, cpuPackage)
+	c := newCooler(sanshoku.Scan, cpuPackage)
+	c.load = core.NewCPULoad(core.ProcStatPath).Load
+	c.graphics = core.NewGraphicsReader().Read
+	return c
 }
 
 // newCooler builds the source over a scan and a processor sensor, which is
@@ -80,8 +92,12 @@ func newCooler(scan Scan, sensor func() (float64, error)) *Cooler {
 	return &Cooler{
 		trail:  view.NewSeries(CoolerTrail),
 		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
+		gpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
 		sensor: sensor,
 		held:   newHeld(scan),
+
+		load:     func() (float64, bool) { return 0, false },
+		graphics: func(context.Context) core.Graphics { return core.Graphics{} },
 	}
 }
 
@@ -104,6 +120,16 @@ func cpuSensors() string {
 		names = append(names, s.String())
 	}
 	return strings.Join(names, ", ")
+}
+
+// gpuSensors is every route to the card's temperature, for the reason given
+// when none answers.
+func gpuSensors() string {
+	names := make([]string, 0, len(hwmon.GPU)+1)
+	for _, s := range hwmon.GPU {
+		names = append(names, s.String())
+	}
+	return strings.Join(append(names, "nvidia-smi"), ", ")
 }
 
 // Key names the section.
@@ -132,6 +158,20 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 			Label: "CPU", Text: "no sensor", Status: view.Info,
 			// Every sensor looked for, not the last one tried.
 			Detail: fmt.Sprintf("looked under %s for %s", hwmon.Root, cpuSensors()),
+		})
+	}
+	out.CPULoad, out.HasCPULoad = c.load()
+
+	if g := c.graphics(ctx); g.HasTemperature {
+		out.GPU, out.HasGPU = g.Temperature, true
+		out.GPULoad, out.HasGPULoad = g.Load, g.HasLoad
+	} else {
+		// Aside: most machines have no card this build can read, and a line
+		// saying so on every one of them would be the card talking about
+		// itself. Doctor and the hover note still say it.
+		reasons = append(reasons, view.Reason{
+			Text: "no GPU sensor", Status: view.Info, Aside: true,
+			Detail: fmt.Sprintf("looked under %s and tried %s", hwmon.Root, gpuSensors()),
 		})
 	}
 
@@ -255,6 +295,17 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 		c.gone = true
 	}
 
+	// The card's miss is the card's row. nvidia-smi can miss its timeout on a
+	// machine under load, and that is one reading late, not the cooler gone:
+	// the GPU row keeps its value and is drawn dim, and the rest of the card
+	// stays live. It is decided after the coolant's rule so that rule's Gone
+	// is not triggered by the card.
+	if !out.HasGPU && c.reading.HasGPU {
+		out.GPU, out.HasGPU = c.reading.GPU, true
+		out.GPULoad, out.HasGPULoad = c.reading.GPULoad, c.reading.HasGPULoad
+		out.GPUStale = true
+	}
+
 	// Only a sample that was actually taken goes on the plot. A trail fed the
 	// value it already held would draw a flat line through an outage and call
 	// it a steady temperature.
@@ -264,11 +315,15 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 	if out.HasCPU && !c.gone {
 		c.cpu.Add(out.CPU)
 	}
+	if out.HasGPU && !out.GPUStale && !c.gone {
+		c.gpu.Add(out.GPU)
+	}
 	out.Trail = c.trail.Samples()
 	out.CPUTrail = c.cpu.Mean()
+	out.GPUTrail = c.gpu.Mean()
 
 	c.reading = out
-	return out.HasCPU || out.HasLiquid
+	return out.HasCPU || out.HasGPU || out.HasLiquid
 }
 
 // Section turns the reading into rows and a plot.

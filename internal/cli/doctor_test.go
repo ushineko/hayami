@@ -71,12 +71,14 @@ func bare(t *testing.T) {
 	noDevices(t)
 }
 
-// noDevices takes the desk away: an empty hidraw tree and a system bus that
-// does not resolve, so a poll of the real sources opens no device and asks
-// BlueZ nothing. Any test that can reach the device sections calls it, and
-// that includes a command run with default settings.
+// noDevices takes the desk away: an empty hidraw tree, a system bus that
+// does not resolve and a PATH with no nvidia-smi on it, so a poll of the real
+// sources opens no device, asks BlueZ nothing and runs no vendor tool. Any
+// test that can reach the device sections calls it, and that includes a
+// command run with default settings.
 func noDevices(t *testing.T) {
 	t.Helper()
+	t.Setenv("PATH", t.TempDir())
 	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
 	sys, dev := hidraw.SysRoot, hidraw.DevRoot
 	hidraw.SysRoot, hidraw.DevRoot = t.TempDir(), t.TempDir()
@@ -291,4 +293,35 @@ func TestDoctorDoesNotReportThePlaceholders(t *testing.T) {
 		return
 	}
 	t.Fatal("doctor did not report the peripherals")
+}
+
+// sectionSource is a source that has already polled: it says a section.
+type sectionSource struct{ sec view.Section }
+
+func (s sectionSource) Key() string                      { return s.sec.Key }
+func (sectionSource) Interval() time.Duration            { return time.Hour }
+func (sectionSource) Poll(context.Context) (bool, error) { return true, nil }
+func (s sectionSource) Section() view.Section            { return s.sec }
+func (sectionSource) Data() any                          { return nil }
+
+// A reason kept off the card (Aside) is not something missing from it. A
+// machine with no graphics card this build can read has a cooler that is ok,
+// and doctor still says why there is no GPU row (spec 026).
+func TestAMachineWithNoGPUIsOKAndSaysSo(t *testing.T) {
+	sec := view.Cooler(view.CoolerReading{CPU: 60, HasCPU: true, Coolant: 38.9, HasLiquid: true})
+	sec.Reasons = []view.Reason{{Text: "no GPU sensor", Status: view.Info, Aside: true}}
+
+	findings := cli.DiagnoseSources(t.Context(), []panel.Source{sectionSource{sec}})
+
+	require.Len(t, findings, 1)
+	assert.Equal(t, cli.StateOK, findings[0].State)
+
+	var out bytes.Buffer
+	require.NoError(t, cli.Report(&out, findings))
+	assert.Contains(t, out.String(), "no GPU sensor", "doctor still lists it")
+
+	// A reason the card does show still makes it partial.
+	sec.Reasons = append(sec.Reasons, view.Reason{Label: "Coolant", Text: "no cooler", Status: view.Info})
+	findings = cli.DiagnoseSources(t.Context(), []panel.Source{sectionSource{sec}})
+	assert.Equal(t, cli.StatePartial, findings[0].State)
 }

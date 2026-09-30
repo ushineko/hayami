@@ -13,6 +13,7 @@ import (
 	"github.com/ushineko/sanshoku/cooling"
 	"github.com/ushineko/sanshoku/hwmon"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -49,6 +50,12 @@ type rig struct {
 	cpuErr  error
 	coolers []*kraken
 	failing error
+
+	// load is the processor's, and gpu the graphics card; a rig with neither
+	// set has no load yet and no card.
+	load    float64
+	hasLoad bool
+	gpu     core.Graphics
 }
 
 func (r *rig) scan(_ context.Context, drivers ...sanshoku.Driver) ([]sanshoku.Candidate, error) {
@@ -75,7 +82,28 @@ func (r *rig) scan(_ context.Context, drivers ...sanshoku.Driver) ([]sanshoku.Ca
 
 func (r *rig) sensor() (float64, error) { return r.cpu, r.cpuErr }
 
-func (r *rig) section() *panel.Cooler { return panel.NewCoolerOver(r.scan, r.sensor) }
+func (r *rig) section() *panel.Cooler {
+	c := panel.NewCoolerOver(r.scan, r.sensor)
+	panel.SetProcessors(c,
+		func() (float64, bool) { return r.load, r.hasLoad },
+		func(context.Context) core.Graphics { return r.gpu })
+	return c
+}
+
+// card is a graphics card answering at 41 degrees and 4 percent.
+var card = core.Graphics{Temperature: 41, HasTemperature: true, Load: 4, HasLoad: true}
+
+// labelled is the section's row with a label.
+func labelled(t *testing.T, s view.Section, label string) view.Row {
+	t.Helper()
+	for _, r := range s.Rows {
+		if r.Label == label {
+			return r
+		}
+	}
+	require.FailNowf(t, "no such row", "%q is not a row", label)
+	return view.Row{}
+}
 
 // withKraken is a machine at 60 degrees with one cooler answering.
 func withKraken(coolant float64, pump int) (*rig, *kraken) {
@@ -111,6 +139,7 @@ func TestACoolerThatMissesAPollKeepsWhatItKnew(t *testing.T) {
 // Recovery clears it. A marker that never goes away is a marker nobody reads.
 func TestACoolerThatComesBackIsNotGoneAnyMore(t *testing.T) {
 	r, k := withKraken(38.9, 2650)
+	r.gpu = card
 	c := r.section()
 	poll(t, c)
 
@@ -122,7 +151,7 @@ func TestACoolerThatComesBackIsNotGoneAnyMore(t *testing.T) {
 
 	sec := c.Section()
 	assert.False(t, sec.Gone)
-	assert.Contains(t, sec.Rows[1].Value, "39.4")
+	assert.Contains(t, labelled(t, sec, "Coolant").Value, "39.4")
 	assert.Empty(t, sec.Reasons, "a reason outlived the thing it was about")
 }
 
@@ -168,6 +197,7 @@ func TestANodeThatDoesNotAnswerBesideOneThatDoesIsQuiet(t *testing.T) {
 		openErr: fmt.Errorf("NZXT Kraken at /dev/hidraw5 did not answer: %w", sanshoku.ErrAbsent)}
 	r, k := withKraken(38.9, 2650)
 	r.coolers = []*kraken{silent, k}
+	r.gpu = card
 	c := r.section()
 
 	poll(t, c)
@@ -344,6 +374,7 @@ func TestAProcessorWithNoSensorNamesEverySensorLookedFor(t *testing.T) {
 // while showing its numbers would be a panel talking about itself.
 func TestACoolerThatReadsEverythingSaysNothingExtra(t *testing.T) {
 	r, _ := withKraken(30, 2000)
+	r.gpu = card
 	c := r.section()
 
 	poll(t, c)
@@ -354,7 +385,7 @@ func TestACoolerThatReadsEverythingSaysNothingExtra(t *testing.T) {
 // A reason is a statement about now. A poll that recovers must take its reason
 // away rather than leaving it under a live reading.
 func TestARecoveredSourceDropsItsReason(t *testing.T) {
-	r := &rig{cpu: 38}
+	r := &rig{cpu: 38, gpu: card}
 	c := r.section()
 	poll(t, c)
 	require.NotEmpty(t, c.Section().Reasons)
@@ -364,4 +395,66 @@ func TestARecoveredSourceDropsItsReason(t *testing.T) {
 	poll(t, c)
 
 	assert.Empty(t, c.Section().Reasons, "a reason outlived the thing it was about")
+}
+
+// R1.2, R2.2. The processor and the graphics card are one line each, load and
+// temperature, and the card's temperature is a third trail beside the others.
+func TestTheProcessorsAreOneLineEachAndTheCardIsATrail(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	r.load, r.hasLoad, r.gpu = 12, true, card
+	c := r.section()
+
+	poll(t, c)
+	sec := c.Section()
+
+	assert.Equal(t, " 12 %  60.0", labelled(t, sec, "CPU").Value)
+	assert.Equal(t, "  4 %  41.0", labelled(t, sec, "GPU").Value)
+	require.Len(t, sec.Trails, 3)
+	assert.Equal(t, "GPU", sec.Trails[2].Name)
+	assert.Equal(t, []float64{41}, sec.Trails[2].Samples)
+	assert.Empty(t, sec.Reasons)
+}
+
+// R1.2. No card is no row, and a reason kept off the card for doctor.
+func TestNoGraphicsCardIsNoRowAndAReasonForDoctor(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	c := r.section()
+
+	poll(t, c)
+	sec := c.Section()
+
+	for _, row := range sec.Rows {
+		assert.NotEqual(t, "GPU", row.Label)
+	}
+	reason := find(t, sec, "no GPU sensor")
+	assert.Equal(t, view.Info, reason.Status)
+	assert.True(t, reason.Aside, "a machine without a card is not told so on the card")
+	assert.Contains(t, reason.Detail, "nvidia-smi")
+}
+
+// A card that was answering and has stopped -- nvidia-smi timing out under
+// load -- keeps its row, dim, and only its row: the card is not Gone and the
+// CPU and coolant stay live. A row that came and went would move the panel.
+func TestACardThatMissesAPollKeepsItsRow(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	r.gpu = card
+	c := r.section()
+	poll(t, c)
+
+	r.gpu = core.Graphics{}
+	poll(t, c)
+	sec := c.Section()
+
+	assert.False(t, sec.Gone, "a late card does not dim the cooler")
+	gpu := labelled(t, sec, "GPU")
+	assert.Contains(t, gpu.Value, "41.0")
+	assert.True(t, gpu.Stale)
+	assert.False(t, labelled(t, sec, "CPU").Stale)
+	assert.False(t, labelled(t, sec, "Coolant").Stale)
+	assert.Len(t, sec.Trails[2].Samples, 1, "a missed poll is not a sample")
+
+	// And the next answer is live again.
+	r.gpu = card
+	poll(t, c)
+	assert.False(t, labelled(t, c.Section(), "GPU").Stale)
 }

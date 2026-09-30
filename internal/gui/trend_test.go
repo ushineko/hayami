@@ -69,6 +69,7 @@ func (coolerSource) Section() view.Section {
 	return view.Cooler(view.CoolerReading{
 		HasLiquid: true, Coolant: 46, Trail: []float64{45.8, 46, 46.2},
 		HasCPU: true, CPU: 70, CPUTrail: []float64{65, 80, 98},
+		HasGPU: true, GPU: 41, GPUTrail: []float64{40, 41, 43},
 	})
 }
 
@@ -85,8 +86,9 @@ func TestTheCoolerCardKeepsEachSeriesOnItsOwnScale(t *testing.T) {
 }
 
 // A bandwidth trace is coloured by its interface, the up line the faded form
-// of the down; a cooler trace keeps its status colour; a section whose source
-// has gone dims both alike.
+// of the down; the coolant keeps its status colour and the processors take
+// series colours (the rule is the trail's Coloured, not the section's
+// scale); a section whose source has gone dims both alike.
 func TestTraceColoursFollowTheSeriesUnderASharedScale(t *testing.T) {
 	a := test.NewTempApp(t)
 	src := panel.NewBandwidth([]string{"eno2"}, growing())
@@ -94,9 +96,9 @@ func TestTraceColoursFollowTheSeriesUnderASharedScale(t *testing.T) {
 	th := gui.PanelTheme(p)
 
 	bw := view.Section{TrailScale: view.ScaleShared}
-	down1 := view.Trail{Name: "wlan0 ↓", Series: 1}
-	up1 := view.Trail{Name: "wlan0 ↑", Series: 1, Secondary: true}
-	down0 := view.Trail{Name: "eno2 ↓", Series: 0}
+	down1 := view.Trail{Name: "wlan0 ↓", Series: 1, Coloured: true}
+	up1 := view.Trail{Name: "wlan0 ↑", Series: 1, Secondary: true, Coloured: true}
+	down0 := view.Trail{Name: "eno2 ↓", Series: 0, Coloured: true}
 
 	assert.Equal(t, glance.SeriesColour(th, 1), gui.TrailColour(p, down1, bw))
 	assert.Equal(t, glance.Faded(glance.SeriesColour(th, 1)), gui.TrailColour(p, up1, bw))
@@ -107,6 +109,14 @@ func TestTraceColoursFollowTheSeriesUnderASharedScale(t *testing.T) {
 	coolant := cooler.Trails[0]
 	assert.NotEqual(t, glance.SeriesColour(th, coolant.Series), gui.TrailColour(p, coolant, cooler),
 		"the cooler's trace keeps its status colour")
+
+	cpu, gpu := cooler.Trails[1], cooler.Trails[2]
+	assert.Equal(t, glance.SeriesColour(th, 0), gui.TrailColour(p, cpu, cooler),
+		"the processor's trace stays the link blue it has always been")
+	assert.Equal(t, glance.SeriesColour(th, 1), gui.TrailColour(p, gpu, cooler),
+		"the graphics card's is violet")
+	assert.NotEqual(t, gui.TrailColour(p, cpu, cooler), gui.TrailColour(p, gpu, cooler),
+		"three traces on one plot are three colours")
 
 	gone := bw
 	gone.Gone = true

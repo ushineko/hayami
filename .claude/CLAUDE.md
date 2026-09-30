@@ -126,7 +126,12 @@ This repository is **public**. The following hold without exception:
   hwmon **by label**, never by index. No subprocess reads a device: the
   `liquidctl` and `headsetcontrol` calls inherited from the Python monitor
   went when spec 020 adopted sanshoku. A device sanshoku does not read gets a
-  driver there, not a tool call here.
+  driver there, not a tool call here. The one exception is `nvidia-smi`, for
+  the graphics card's temperature and load on NVIDIA's proprietary driver
+  (spec 026): that driver registers no hwmon, and what it offers instead,
+  NVML, is a vendor library and not a kernel node, reachable from Go only
+  through cgo, which the terminal panel is built without. It runs only when
+  hwmon and `gpu_busy_percent` have nothing, with a two-second timeout.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that

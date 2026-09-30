@@ -1,6 +1,9 @@
 package view
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // The coolant's bands, in degrees.
 //
@@ -26,6 +29,18 @@ type CoolerReading struct {
 	FanRPM    int
 	HasFan    bool
 
+	// CPULoad is the processor's utilisation in percent since the previous
+	// poll. The first poll has none: a rate needs two samples.
+	CPULoad    float64
+	HasCPULoad bool
+
+	// GPU is the graphics card's temperature, and GPULoad its utilisation.
+	// A machine with no card this build can read has neither, and no row.
+	GPU        float64
+	HasGPU     bool
+	GPULoad    float64
+	HasGPULoad bool
+
 	// Trail is the coolant's recent samples, oldest first. Empty until this
 	// process has watched for a while, which is the honest state after a
 	// restart.
@@ -39,6 +54,15 @@ type CoolerReading struct {
 	// nothing from it. The monitor plots a trailing mean over sixty seconds
 	// and says so, and this is that mean.
 	CPUTrail []float64
+
+	// GPUTrail is the graphics card's, averaged the same way and for the
+	// same reason.
+	GPUTrail []float64
+
+	// GPUStale marks a GPU reading kept from an earlier poll because this one
+	// had none -- nvidia-smi missing its timeout under load. The row stays,
+	// dim; the rest of the card is live.
+	GPUStale bool
 }
 
 // Cooler turns a reading into a section.
@@ -51,7 +75,12 @@ func Cooler(r CoolerReading) Section {
 	unit := UnitWidth("°C", "rpm")
 
 	if r.HasCPU {
-		s.Rows = append(s.Rows, temperature("CPU", r.CPU, Info, unit))
+		s.Rows = append(s.Rows, processor("CPU", r.CPULoad, r.HasCPULoad, r.CPU, unit))
+	}
+	if r.HasGPU {
+		row := processor("GPU", r.GPULoad, r.HasGPULoad, r.GPU, unit)
+		row.Stale = r.GPUStale
+		s.Rows = append(s.Rows, row)
 	}
 	if r.HasLiquid {
 		s.Rows = append(s.Rows, temperature("Coolant", r.Coolant, coolant(r.Coolant), unit))
@@ -73,9 +102,34 @@ func Cooler(r CoolerReading) Section {
 		// Info, which is the muted colour. A plot with two traces of equal
 		// weight has no primary, and the processor is not the reading anyone
 		// is watching for: it is the thing the coolant is reacting to.
-		s.Trails = append(s.Trails, Trail{Name: "CPU", Samples: r.CPUTrail, Status: Info})
+		s.Trails = append(s.Trails, Trail{Name: "CPU", Samples: r.CPUTrail, Status: Info, Series: 0, Coloured: true})
+	}
+	if len(r.GPUTrail) > 0 {
+		// A series colour each, so the window can tell the three lines
+		// apart: the CPU the link blue it has always been drawn in, the GPU
+		// violet. The coolant is not coloured and keeps its band.
+		s.Trails = append(s.Trails, Trail{Name: "GPU", Samples: r.GPUTrail, Status: Info, Series: 1, Coloured: true})
 	}
 	return s
+}
+
+// LoadWidth is the width a load takes in a processor's row: "100 %".
+const LoadWidth = 5
+
+/*
+processor is a processor's load and temperature on one line: " 12 %   78.0 °C".
+
+The load is padded to LoadWidth and, before it has arrived, is that many
+spaces. The temperature stays where it is either way, in the column the
+coolant's is in, and the row is as wide on the first poll as on the second: a
+row that grew five seconds after the window opened would move the panel.
+*/
+func processor(label string, load float64, hasLoad bool, v float64, unit int) Row {
+	l := strings.Repeat(" ", LoadWidth)
+	if hasLoad {
+		l = fmt.Sprintf("%3.0f %%", load)
+	}
+	return Row{Label: label, Value: l + " " + Quantity(v), Unit: PadUnit("°C", unit), Status: Info}
 }
 
 // temperature is one degree reading, at the fixed width every one shares.

@@ -238,6 +238,10 @@ func paintBar(fraction float64, width int, status Status, p Painter) string {
 // space between taking the change in width. The value and the unit keep their
 // own widths, so a number that gains a digit does not move the label.
 func line(r Row, width int, p Painter) string {
+	if r.Stale {
+		// Kept and dimmed, as a Gone section's rows are, but only this one.
+		r.Status = Dim
+	}
 	right := r.Value
 	if r.Unit != "" {
 		right += " " + r.Unit
