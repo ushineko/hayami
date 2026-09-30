@@ -16,6 +16,7 @@ import (
 	"github.com/ushineko/hayami/internal/cli"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/peripherals"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -59,6 +60,21 @@ func bare(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
+
+	// And an empty hidraw tree, which the environment cannot take away.
+	//
+	// Without this these tests talked to the developer's actual mouse: the
+	// environment above hides the programs and the credential stores, and
+	// nothing hid the devices. Two consequences, and the second is the one
+	// that bit. A unit suite should not be writing to somebody's hardware at
+	// all; and `go test ./...` runs packages as parallel processes, so these
+	// polls raced the live tests in internal/peripherals over one receiver.
+	// HID++ gives a request four bits to say whose it is, so two processes
+	// collide one time in fourteen -- and the live comparison duly failed with
+	// a reading that belonged to the other test binary.
+	sys, dev := peripherals.SysHidraw, peripherals.DevDir
+	peripherals.SysHidraw, peripherals.DevDir = t.TempDir(), t.TempDir()
+	t.Cleanup(func() { peripherals.SysHidraw, peripherals.DevDir = sys, dev })
 }
 
 /*
