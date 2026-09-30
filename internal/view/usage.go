@@ -73,7 +73,7 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 			Label:      group[0].Account,
 			Badge:      group[0].Badge,
 			Window:     lead.Name,
-			Caption:    figure(now, lead, soonest(group)),
+			Caption:    caption(now, lead, soonest(group)),
 			StatsLeft:  left,
 			StatsRight: right,
 			Reset:      resets(now, soonest(group)),
@@ -176,14 +176,35 @@ func spread(now time.Time, group []UsageWindow, lead UsageWindow) (left, right s
 	return left, strings.TrimSpace(lead.Detail)
 }
 
-// figure is one window's name, its percentage, and how long it has left when
-// that is not what the countdown column already says.
+// caption is the bar's own window: its name, its percentage, and how long it
+// has left when that is not what the countdown column already says.
+//
+// No amounts, even where the window has them: the lead window's amounts are
+// its Detail, at the right of the stats row, and a caption is fixed width.
 //
 // The parenthetical is spec 004's and stays: a window whose reset is not the
 // one in the countdown would otherwise say nothing about when it turns over,
 // and the weekly window is the one worth planning around.
+func caption(now time.Time, w UsageWindow, next time.Time) string {
+	return lasting(now, w, next, w.Name+": "+strings.TrimSpace(Percent(w.Fraction)))
+}
+
+// figure is one of an account's other windows in the stats row: the caption's
+// form, with the window's amounts where it carries them (spec 023), so a
+// Business limit reads "limit: 974.28 / 1200 (81 %)" as the pane's
+// "individual 974.28/1200 (81%)" does. The amounts are Used and Limit, the
+// widget's compact form the pane prints, not Detail's two decimals.
 func figure(now time.Time, w UsageWindow, next time.Time) string {
-	out := w.Name + ": " + strings.TrimSpace(Percent(w.Fraction))
+	if w.Used == "" || w.Limit == "" {
+		return caption(now, w, next)
+	}
+	pct := strings.TrimSpace(Percent(w.Fraction))
+	return lasting(now, w, next, w.Name+": "+w.Used+" / "+w.Limit+" ("+pct+")")
+}
+
+// lasting is a figure followed by how long its window has left, when there is
+// something to say.
+func lasting(now time.Time, w UsageWindow, next time.Time, out string) string {
 	if left := remaining(now, w, next); left != "" {
 		out += " (" + left + ")"
 	}

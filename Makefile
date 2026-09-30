@@ -66,7 +66,11 @@ setup: install-lint ## Setup system for local development
 LINT_GO_TOOLCHAIN?=go1.26.0
 
 .PHONY: lint
+# The linter's cache records file paths relative to the checkout that filled
+# it. Shared between git worktrees, it reports findings against files in a
+# worktree that has since been removed. One cache per checkout, ignored.
 lint: export GOTOOLCHAIN = $(LINT_GO_TOOLCHAIN)
+lint: export GOLANGCI_LINT_CACHE = $(CURDIR)/.cache/golangci-lint
 lint: install-lint ## Lint files
 	@go version
 	$(BINDIR)/bin/$(LINT_PROGRAM) run --timeout 5m0s --config config/.golangci-$(LINT_VERSION).yml ./...

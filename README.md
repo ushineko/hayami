@@ -225,6 +225,17 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Change**: `make lint` keeps its cache under the checkout, so git worktrees
+  stop reporting findings against each other's deleted files.
+
+- **Fix**: a Codex Business limit in the window's stats row says its amounts
+  as the pane does (spec 023, issue #90): `limit: 300.5 / 1200 (60 %)` rather
+  than `limit: 60 %`. The amounts are the compact form the pane prints; a
+  window without amounts is unchanged, and the bar's own window still says
+  its amounts once, at the right of the row.
+
 ### 0.7.0 (2026-09-30)
 
 - **Feature**: the bandwidth section plots its trend, as the cooler does
