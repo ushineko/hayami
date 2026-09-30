@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.7.2
+**Version**: 0.8.0
 
 *a chart you read at a glance*
 
@@ -262,7 +262,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.0 (2026-09-30)
 
 - **Docs**: the README has a gallery (spec 027, issue #97): the desktop panel,
   the pane at 100 columns in its grid and at 160 in rows, and each page of
