@@ -101,7 +101,7 @@ wires both.
   `docs/img/spec-021-panel.png`, 2026-09-30, beside the user's own panel:
   eno2 in link blue with its upload faded, tailscale0 in violet flat along
   the floor, one scale.
-- [ ] README and changelog in the same commit; spec reconciled.
+- [x] README and changelog in the same commit; spec reconciled.
 
 ## Risks & Assumptions
 
