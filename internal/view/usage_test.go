@@ -310,3 +310,31 @@ func TestAWindowLessThanADayAwaySaysNothingExtra(t *testing.T) {
 
 	assert.NotContains(t, s.Meters[0].Line(), "left")
 }
+
+// A Business limit beside the bar's window says its amounts as well as its
+// percentage (spec 023), so the window's stats row and the pane's strip say
+// the same thing about one reading; a window without amounts is unchanged, and
+// the bar's own window says its amounts once, at the right, not again in the
+// caption. The amounts are invented.
+func TestALimitBesideTheBarSaysItsAmounts(t *testing.T) {
+	now := at(9, 0)
+	s := view.Usage(now, []view.UsageWindow{
+		{Account: "Codex", Name: "5h", Span: 5 * time.Hour, Fraction: 0.03, ResetsAt: now.Add(4 * time.Hour)},
+		{Account: "Codex", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.46, ResetsAt: now.Add(4 * time.Hour)},
+		{Account: "Codex", Name: "limit", Fraction: 0.6, ResetsAt: now.Add(5*24*time.Hour + time.Hour),
+			Detail: "300.50 / 1200.00", Used: "300.5", Limit: "1200"},
+	}, now)
+
+	require.Len(t, s.Meters, 1)
+	m := s.Meters[0]
+	assert.Equal(t, "7d: 46 %  limit: 300.5 / 1200 (60 %) (5d left)", m.StatsLeft)
+	assert.Equal(t, "3%  ·  7d 46%  ·  individual 300.5/1200 (60%)", text(m.Strip),
+		"the pane's strip is spec 019's and unchanged")
+
+	lead := view.Usage(now, []view.UsageWindow{
+		{Account: "Codex", Name: "limit", Fraction: 0.6, Detail: "300.50 / 1200.00", Used: "300.5", Limit: "1200"},
+	}, now).Meters[0]
+	assert.Equal(t, "limit: 60 %", strings.TrimSpace(lead.Caption), "the caption stays a percentage")
+	assert.Equal(t, "300.50 / 1200.00", lead.StatsRight)
+	assert.Equal(t, 1, strings.Count(lead.Line(), "1200"), "the lead's amounts are said once")
+}

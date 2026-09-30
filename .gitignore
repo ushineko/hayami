@@ -22,3 +22,6 @@ count.out
 packaging/arch/pkg/
 packaging/arch/src/
 packaging/arch/*.pkg.tar.zst
+
+# The linter's per-checkout cache (Makefile lint target)
+/.cache/
