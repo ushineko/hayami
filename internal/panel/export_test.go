@@ -26,6 +26,13 @@ func SetPeripheralSources(
 	p.razer = func() ([]peripherals.Battery, error) { return nil, nil }
 	p.steelseries = func() ([]peripherals.Battery, error) { return nil, nil }
 	p.unsupported = func() []string { return nil }
+	p.logitechPresence = func() peripherals.Presence { return peripherals.Presence{} }
+}
+
+// SetPeripheralPresence replaces what the Logitech reader reports finding
+// besides batteries.
+func SetPeripheralPresence(p *Peripherals, presence func() peripherals.Presence) {
+	p.logitechPresence = presence
 }
 
 // SetPeripheralUnsupported replaces the list of devices a source found and

@@ -91,8 +91,9 @@ attempt to infer a device's kind from its sibling interfaces read a keyboard as
 a mouse.
 */
 var razerKinds = map[uint64]Kind{
-	0x007E: KindMouse, // Mouse Dock, which relays a mouse
-	0x00A4: KindMouse, // Mouse Dock Pro, likewise
+	0x007E: KindMouse, // Mouse Dock: a charger, which answers "unsupported"
+	0x0088: KindMouse, // Basilisk Ultimate's own dongle
+	0x00A4: KindMouse, // Mouse Dock Pro, which relays the mouse on it
 }
 
 // RazerTimeout is how long one exchange may take. The device answers in

@@ -360,3 +360,65 @@ func TestAnUnreadableDeviceIsNamedEvenWhenOthersAreDrawing(t *testing.T) {
 	assert.Len(t, texts, 1, "the absences should still be suppressed: %v", texts)
 	assert.Contains(t, texts[0], "Arctis Nova Pro Wireless")
 }
+
+// receiverSays builds a peripherals section with no batteries and the Logitech
+// presence a test decides, which is the whole of what the five sentences turn
+// on.
+func receiverSays(t *testing.T, presence peripherals.Presence) []string {
+	t.Helper()
+	p := panel.NewPeripherals()
+	panel.SetPeripheralSources(p,
+		func() ([]peripherals.Battery, error) { return nil, nil },
+		func(context.Context) ([]peripherals.Battery, error) { return nil, peripherals.ErrNoHeadsetcontrol },
+		time.Now,
+	)
+	panel.SetPeripheralPresence(p, func() peripherals.Presence { return presence })
+
+	_, err := p.Poll(t.Context())
+	require.NoError(t, err)
+	return reasonTexts(p.Section())
+}
+
+/*
+Five situations that used to read as one sentence.
+
+"No Logitech receiver" was said about a receiver with a ten-year-old keyboard
+on it and a pairing slot left over from hardware that was never on the desk
+(issue #66). Each of these is a different thing for a reader to do something
+about, so each gets its own words.
+*/
+func TestTheReceiverSaysWhichOfTheseItIs(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		presence peripherals.Presence
+		want     string
+	}{
+		{"no hardware at all", peripherals.Presence{}, "no Logitech receiver"},
+		{"a receiver with empty slots", peripherals.Presence{Nodes: 1},
+			"a Logitech receiver, with nothing paired to it"},
+		{"a receiver whose devices are quiet", peripherals.Presence{Nodes: 1, Quiet: 2},
+			"a Logitech receiver, with nothing awake on it"},
+		{"a device older than HID++ 2.0", peripherals.Presence{Nodes: 2, TooOld: []string{"Logitech K800"}},
+			"Logitech K800: speaks HID++ 1.0"},
+	} {
+		assert.Contains(t, receiverSays(t, c.presence), c.want, c.name)
+	}
+}
+
+/*
+A quiet slot is counted and never named.
+
+A pairing table outlives the hardware in it: the receiver this was written
+against carries a slot for a mouse its owner has never owned, because the
+dongle was paired to one years ago and a slot is only cleared by an explicit
+unpair. Naming it would put a device on the panel that was never on the desk —
+which this build has drawn once already, and once is enough.
+*/
+func TestAQuietSlotIsCountedAndNeverNamed(t *testing.T) {
+	texts := receiverSays(t, peripherals.Presence{Nodes: 1, Quiet: 1})
+
+	for _, text := range texts {
+		assert.NotContains(t, text, "Performance MX")
+	}
+	assert.Contains(t, texts, "a Logitech receiver, with nothing awake on it")
+}
