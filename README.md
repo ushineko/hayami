@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.6.1
+**Version**: 0.7.0
 
 *a chart you read at a glance*
 
@@ -225,7 +225,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.7.0 (2026-09-30)
 
 - **Feature**: the bandwidth section plots its trend, as the cooler does
   (spec 021). Each interface's down and up rates over the last two minutes
