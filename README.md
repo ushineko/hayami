@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.4.0
+**Version**: 0.5.0
 
 *a chart you read at a glance*
 
@@ -195,6 +195,28 @@ are this program in its `row` arrangement with one section selected.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### 0.5.0 (2026-09-29)
+
+- **Add**: Logitech devices from before HID++ 2.0 are read. A keyboard of that
+  generation has no features at all and answers a 2.0 request with "invalid
+  sub-id"; its battery is a 1.0 register instead. Only getters are sent.
+- **Add**: a battery that reports a band rather than a percentage is drawn as
+  four segments filled to the band, which is how such a device's own indicator
+  shows it. The number is not invented: a device saying "good" does not mean
+  75 %.
+- **Fix**: a Logitech receiver that is present is no longer reported as absent.
+  The two HID++ error spaces overlap and were read with one table, so a
+  keyboard saying it does not speak 2.0 was taken for a device with no fuel
+  gauge, and an index that did not answer for a failed connection. Five
+  situations now say five things: no receiver; nothing paired; nothing awake; a
+  device from an older generation; and a device that is drawing.
+- **Change**: an index that did not answer is counted and never named. A
+  pairing table outlives the hardware in it -- a receiver carries slots for
+  devices that were never on this desk -- and the same code means an empty slot
+  and a sleeping device, so a name would be an invention.
+- **Fix**: the Razer Basilisk Ultimate's dongle is known to the kind table, so
+  it sorts as a mouse rather than as "other".
 
 ### 0.4.0 (2026-09-29)
 
