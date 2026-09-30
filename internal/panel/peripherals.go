@@ -218,7 +218,7 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	// build reads. Named, because it answered -- something is there.
 	for _, name := range presence.TooOld {
 		present = append(present, view.Reason{
-			Text: name + ": speaks HID++ 1.0", Status: view.Info,
+			Label: name, Text: "speaks HID++ 1.0", Status: view.Info,
 			Detail: "found, and not read: its battery is a HID++ 1.0 register this build does not ask for",
 		})
 	}
@@ -230,9 +230,13 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	// that is drawing; "this device is on your desk and I cannot read it" is
 	// not, and it is the difference between a gap this build knows about and
 	// one it does not.
+	//
+	// The name is the label and the verdict one word, so the line is a row
+	// like any other rather than a sentence as wide as the panel (issue
+	// #77); the explanation is the detail, on hover and in doctor.
 	for _, name := range p.unsupported() {
 		present = append(present, view.Reason{
-			Text: name + ": not a device this build can read", Status: view.Info,
+			Label: name, Text: "unsupported", Status: view.Info,
 			Detail: "found, and left alone: its battery protocol is not one this build knows",
 		})
 	}
@@ -274,10 +278,24 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		// unreadable is still worth a line.
 		reasons = nil
 	}
+	if len(p.reading.Devices) >= PresentAsideAt {
+		for i := range present {
+			present[i].Aside = true
+		}
+	}
 	reasons = append(reasons, present...)
 	p.reasons = reasons
 	return len(p.reading.Devices) > 0, errors.Join(errs...)
 }
+
+// PresentAsideAt is how many devices a card has to be drawing before a device
+// that is present and unreadable stops taking a line of it (issue #77).
+//
+// Two, because that is a full card: one device drawn leaves room and a reader
+// wondering where the headset went, and two means the card is doing its job
+// and the rest is a footnote. The line is kept, as an aside, for the hover
+// note and for doctor.
+const PresentAsideAt = 2
 
 /*
 readings is this poll's devices folded into what is remembered, filtered and

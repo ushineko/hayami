@@ -118,6 +118,15 @@ type Reason struct {
 	// an emergency, and a panel that cried Bad over a missing headset would
 	// be teaching its reader to ignore the colour.
 	Status Status
+
+	// Aside marks a reason that is true and not worth a line: it stays off
+	// the card and the pane and is kept for the hover note and for doctor.
+	//
+	// For a device that is present and unreadable on a card already full of
+	// devices that are not (issue #77). With two batteries drawing, a
+	// headset this build cannot read is a footnote, and a line the width of
+	// its name and a sentence set the width of the whole panel.
+	Aside bool
 }
 
 // Status is a verdict on a reading. It is the same vocabulary the design
@@ -248,6 +257,9 @@ func (s Section) Lines() []Row {
 	out := make([]Row, 0, len(s.Rows)+len(s.Reasons))
 	out = append(out, s.Rows...)
 	for _, r := range s.Reasons {
+		if r.Aside {
+			continue
+		}
 		status := r.Status
 		if status != Warn && status != Bad {
 			status = Dim
