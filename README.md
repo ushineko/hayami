@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.7.0
+**Version**: 0.7.1
 
 *a chart you read at a glance*
 
@@ -225,7 +225,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.7.1 (2026-09-30)
 - **Fix**: a headset switched on after the panel started is read. Since spec
   020 the panel holds each device open across polls, and the SteelSeries
   base station's replies to every program's questions queued on that handle
