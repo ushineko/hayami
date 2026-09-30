@@ -30,12 +30,8 @@ const (
 // one declares a vendor usage page and report 0x10 — and never by node number,
 // which is the hwmon-index mistake spec 006 already refused. The numbering
 // moves when a device is replugged.
-func hidppNodes() ([]string, error) {
-	found, err := nodes(logitechVendor, speaksHIDPP)
-	if err != nil {
-		return nil, err
-	}
-	return paths(found), nil
+func hidppNodes() ([]hidNode, error) {
+	return nodes(logitechVendor, speaksHIDPP)
 }
 
 // hidNode is one hidraw node: where it is and what the kernel calls the device.
@@ -48,19 +44,14 @@ type hidNode struct {
 	Path string
 	Name string
 
+	// Phys is the kernel\'s HID_PHYS: which USB interface a node is, and for
+	// a Logitech receiver\'s children the device index too -- see pairedDevice.
+	Phys string
+
 	// Product is the USB product ID. It is **not** how a node is found -- see
 	// nodes() for why -- but it is how this build decides whether it knows a
 	// device's protocol well enough to write to it at all (spec 017).
 	Product uint64
-}
-
-// paths is the nodes' paths, for a caller that wants nothing else.
-func paths(found []hidNode) []string {
-	out := make([]string, 0, len(found))
-	for _, n := range found {
-		out = append(out, n.Path)
-	}
-	return out
 }
 
 /*
@@ -108,6 +99,7 @@ func nodes(vendor uint64, wants func(descriptor []byte) bool) ([]hidNode, error)
 			Path:    filepath.Join(DevDir, e.Name()),
 			Name:    hidName(uevent),
 			Product: hidProduct(uevent),
+			Phys:    hidField(uevent, "HID_PHYS="),
 		})
 	}
 	return found, nil
@@ -120,6 +112,39 @@ func nodes(vendor uint64, wants func(descriptor []byte) bool) ([]hidNode, error)
 // The doubling is dropped because a card is read by a person.
 func hidName(uevent string) string {
 	return undouble(hidField(uevent, "HID_NAME="))
+}
+
+/*
+pairedDevice reports whether a node is one device behind a receiver rather than
+the receiver itself.
+
+`hid-logitech-dj` gives a receiver's children the receiver's own HID_PHYS with
+`:index` appended:
+
+	usb-0000:03:00.0-3/input2     Logitech USB Receiver
+	usb-0000:03:00.0-3/input2:1   Logitech K800
+	usb-0000:03:00.0-3/input2:2   Logitech Performance MX
+
+The distinction is load-bearing for a *name*. A receiver node answers for every
+device paired to it, so an answer arriving there carries the receiver's name and
+not the device's -- which put "Logitech USB Receiver: speaks HID++ 1.0" on a
+panel beside the very keyboard that had said it.
+*/
+func pairedDevice(phys string) bool {
+	_, suffix, ok := strings.Cut(phys, "input")
+	if !ok {
+		return false
+	}
+	_, index, ok := strings.Cut(suffix, ":")
+	if !ok || index == "" {
+		return false
+	}
+	for _, c := range index {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // hidProduct is the product ID out of a node's HID_ID, which the kernel writes

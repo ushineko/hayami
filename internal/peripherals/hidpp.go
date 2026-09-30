@@ -98,6 +98,19 @@ var errNoDevice = errors.New("no device at that index")
 // caller does not hear about it.
 var errSilent = errors.New("the device did not answer")
 
+// errNotReachable is an index that is paired and not answering: asleep,
+// switched off, or a slot left behind by hardware that has gone. The protocol
+// gives nothing to tell those apart, so neither does this.
+var errNotReachable = errors.New("a paired device is not reachable")
+
+// errOldProtocol is a device that answered and does not speak HID++ 2.0.
+//
+// A keyboard from before that generation refuses the root request outright
+// rather than reporting no features, which is a different thing and reads as a
+// different sentence on the panel. Its battery is a 1.0 register this build
+// does not ask for yet.
+var errOldProtocol = errors.New("the device speaks HID++ 1.0")
+
 // hidppError is the device refusing a request, with the code it refused with.
 type hidppError struct {
 	code byte
@@ -105,11 +118,23 @@ type hidppError struct {
 
 func (e hidppError) Error() string { return fmt.Sprintf("hid++ error 0x%02x", e.code) }
 
-// HID++ 1.0 error codes, which the receiver answers with for an index that
-// has nothing on it.
+/*
+HID++ 1.0 error codes.
+
+**A different code space from 2.0's, and they overlap.** Both arrive through
+the same reply, distinguished only by where in it they sit -- sub-id 0x8F for
+1.0, feature index 0xFF for 2.0 -- and 0x01 means "unsupported feature" in one
+and "invalid sub-id" in the other. Reading them with one table made a
+ten-year-old keyboard that does not speak 2.0 at all look like a device with no
+fuel gauge, and a receiver slot with nothing behind it look like a connection
+that had failed (issue #66).
+*/
 const (
+	err10InvalidSubID  = 0x01
+	err10ConnectFail   = 0x04
+	err10Busy          = 0x07
 	err10UnknownDevice = 0x08
-	err10ConnectFail   = 0x09
+	err10ResourceError = 0x09
 )
 
 // HID++ 2.0 error codes.
@@ -233,7 +258,7 @@ func reply(r []byte, device, feature, function byte) (params []byte, matched boo
 		if len(r) < 6 {
 			return nil, false, nil
 		}
-		return nil, true, translate(r[5])
+		return nil, true, translate10(r[5])
 	}
 
 	// HID++ 2.0 error: feature index 0xFF, the failing function, then the code.
@@ -241,7 +266,7 @@ func reply(r []byte, device, feature, function byte) (params []byte, matched boo
 		if len(r) < 5 {
 			return nil, false, nil
 		}
-		return nil, true, translate(r[4])
+		return nil, true, translate20(r[4])
 	}
 
 	if r[2] != feature || r[3] != function {
@@ -250,17 +275,39 @@ func reply(r []byte, device, feature, function byte) (params []byte, matched boo
 	return r[4:], true, nil
 }
 
-// translate names the error codes this package treats as answers rather than
-// as failures.
-func translate(code byte) error {
+// translate10 names the HID++ 1.0 error codes this package treats as answers
+// rather than as failures.
+//
+// The three that are not failures say three different things, and a panel that
+// ran them together said "no Logitech receiver" about a receiver with a
+// keyboard on it:
+//
+//   - an index with nothing paired to it at all
+//   - an index paired to something that is not answering -- asleep, switched
+//     off, or a slot left behind by a device that has since gone. A pairing
+//     table outlives the hardware in it and a receiver can carry somebody
+//     else's, so a name here is not evidence a device exists.
+//   - a device that answered and does not speak HID++ 2.0, which is what a
+//     keyboard older than that generation does
+func translate10(code byte) error {
 	switch code {
-	case err10UnknownDevice, err10ConnectFail:
+	case err10UnknownDevice:
 		return errNoDevice
-	case err20UnsupportedFeature:
-		return errUnknownFeature
+	case err10ConnectFail, err10ResourceError, err10Busy:
+		return errNotReachable
+	case err10InvalidSubID:
+		return errOldProtocol
 	default:
 		return hidppError{code: code}
 	}
+}
+
+// translate20 names the HID++ 2.0 error codes.
+func translate20(code byte) error {
+	if code == err20UnsupportedFeature {
+		return errUnknownFeature
+	}
+	return hidppError{code: code}
 }
 
 // featureIndex asks a device which of its own indices holds a feature.

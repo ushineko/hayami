@@ -147,7 +147,8 @@ func TestTheHidppNodeIsChosenByItsDescriptorAndNotByItsNumber(t *testing.T) {
 
 	found, err := hidppNodes()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"/dev/hidraw12"}, found)
+	require.Len(t, found, 1)
+	assert.Equal(t, "/dev/hidraw12", found[0].Path)
 }
 
 // AC2. A machine with no Logitech hardware has no Logitech node, and that is

@@ -177,7 +177,7 @@ func TestTheLiveMachinePresentsOneHidppNodePerReceiver(t *testing.T) {
 	}
 
 	for _, n := range nodes {
-		f, err := os.OpenFile(n, os.O_RDWR, 0)
+		f, err := os.OpenFile(n.Path, os.O_RDWR, 0)
 		require.NoError(t, err, "the chosen node is not writable, so HID++ cannot be spoken on it")
 		require.NoError(t, f.Close())
 	}

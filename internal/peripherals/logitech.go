@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -45,7 +46,38 @@ type Logitech struct {
 	// timeout is how long one request may take, a field rather than the
 	// constant so a test can exercise the bound without waiting for it.
 	timeout time.Duration
+
+	// presence is what the last discovery learned besides the batteries.
+	presence Presence
 }
+
+/*
+Presence is what is on the Logitech hardware beyond what could be read.
+
+An empty result used to mean "no Logitech receiver", and on a machine with a
+receiver, a ten-year-old keyboard and a leftover pairing slot it meant three
+other things instead (issue #66). Each of them is a different sentence and a
+different thing for a reader to do.
+*/
+type Presence struct {
+	// Nodes is how many hidraw endpoints speak HID++ at all. Zero is the only
+	// state that honestly reads as "no receiver".
+	Nodes int
+
+	// Quiet is how many paired indices did not answer. **Not named**, on
+	// purpose: a pairing table outlives the hardware in it, and a receiver
+	// that has been round a few machines carries slots for devices that were
+	// never on this desk. A count says something true; a name would not.
+	Quiet int
+
+	// TooOld are devices that answered and do not speak HID++ 2.0, by the name
+	// the kernel gives their node. These are named because they answered --
+	// something is there.
+	TooOld []string
+}
+
+// Presence is what the last poll found besides batteries.
+func (l *Logitech) Presence() Presence { return l.presence }
 
 // located is one device, where it was found.
 type located struct {
@@ -135,25 +167,63 @@ func (l *Logitech) discover() ([]located, error) {
 	}
 
 	var found []located
+	presence := Presence{Nodes: len(nodes)}
+	old := map[string]bool{}
+
 	for _, node := range nodes {
-		e, err := l.open(node)
+		e, err := l.open(node.Path)
 		if err != nil {
 			// One unreadable node does not stop the others being asked.
 			continue
 		}
 		for _, index := range append([]byte{wiredIndex}, deviceIndices...) {
-			if _, err := featureIndex(e, l.timeout, index, featureUnifiedBattery); err == nil {
-				found = append(found, located{node: node, index: index})
-				continue
-			} else if errors.Is(err, errUnknownFeature) {
-				// The device is there and has no fuel gauge. It may still have
-				// the older feature, which read() tries.
-				found = append(found, located{node: node, index: index})
+			_, err := featureIndex(e, l.timeout, index, featureUnifiedBattery)
+			switch {
+			case err == nil, errors.Is(err, errUnknownFeature):
+				// There, and either with a fuel gauge or with the older
+				// feature read() falls back to.
+				found = append(found, located{node: node.Path, index: index})
+			case errors.Is(err, errOldProtocol) && index != wiredIndex && pairedDevice(node.Phys):
+				// A *paired device* answered that it does not know what HID++
+				// 2.0 is. Something is there; its battery is a 1.0 register
+				// this build does not ask for.
+				//
+				// Two exclusions, and the real hardware taught both.
+				//
+				// Index 0xFF addresses the receiver itself, and a Unifying
+				// receiver is a HID++ 1.0 device by construction -- reporting
+				// that made every machine with one claim an unreadable device,
+				// two lines under a mouse that was drawing fine.
+				//
+				// And a receiver node answers for *every* device paired to it,
+				// so a name taken from there is the receiver's and not the
+				// device's: the keyboard was reported twice, once correctly
+				// and once as "Logitech USB Receiver".
+				old[node.Name] = true
+			case errors.Is(err, errNotReachable):
+				presence.Quiet++
 			}
 		}
 		closeEndpoint(e)
 	}
+
+	presence.TooOld = names(old)
+	l.presence = presence
 	return found, nil
+}
+
+// names is a set of device names, in a stable order so a panel's lines do not
+// change places between two polls.
+func names(set map[string]bool) []string {
+	if len(set) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // read takes one device's battery, newest feature first.

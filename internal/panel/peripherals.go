@@ -3,6 +3,7 @@ package panel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -63,6 +64,11 @@ type Peripherals struct {
 	// and saying which one is the difference between that and a bug.
 	unsupported func() []string
 
+	// logitechPresence is what the Logitech reader found besides batteries: a
+	// receiver with nothing awake on it reads very differently from no
+	// receiver, and used to read the same (issue #66).
+	logitechPresence func() peripherals.Presence
+
 	// now is the clock, for the same reason.
 	now func() time.Time
 }
@@ -86,14 +92,15 @@ func NewPeripherals() *Peripherals {
 	razer := peripherals.NewRazer()
 	steelseries := peripherals.NewSteelSeries()
 	return &Peripherals{
-		seen:        make(map[string]remembered),
-		logitech:    logitech.Batteries,
-		headsets:    peripherals.Headsets,
-		bluetooth:   bluetooth.Batteries,
-		razer:       razer.Batteries,
-		steelseries: steelseries.Batteries,
-		unsupported: steelseries.Unsupported,
-		now:         time.Now,
+		seen:             make(map[string]remembered),
+		logitech:         logitech.Batteries,
+		headsets:         peripherals.Headsets,
+		bluetooth:        bluetooth.Batteries,
+		razer:            razer.Batteries,
+		steelseries:      steelseries.Batteries,
+		unsupported:      steelseries.Unsupported,
+		logitechPresence: logitech.Presence,
+		now:              time.Now,
 	}
 }
 
@@ -114,9 +121,10 @@ func (p *Peripherals) Interval() time.Duration { return PeripheralsInterval }
 // an empty heading.
 func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	var errs []error
-	var reasons []view.Reason
+	var reasons, present []view.Reason
 
 	found, err := p.logitech()
+	presence := p.logitechPresence()
 	switch {
 	case err != nil:
 		errs = append(errs, err)
@@ -124,9 +132,32 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 			Text: "the Logitech receiver would not answer", Status: view.Warn,
 			Detail: err.Error(),
 		})
-	case len(found) == 0:
+	case len(found) > 0:
+		// Drawing. Nothing to explain.
+	case presence.Nodes == 0:
 		reasons = append(reasons, view.Reason{
 			Text: "no Logitech receiver", Status: view.Info,
+		})
+	case presence.Quiet > 0:
+		// Counted, and described as exactly what it is.
+		//
+		// Not named, because a pairing table outlives the hardware in it: the
+		// receiver this was written against carries a slot for a mouse its
+		// owner never had, and naming it would put a device on the panel that
+		// was never on the desk.
+		//
+		// And not called *paired* either. The receiver measured here answers
+		// the same code for an empty slot as for a sleeping device, so a count
+		// of unanswered indices is all this knows -- the first draft of this
+		// line said "8 paired slots" on a receiver with two pairings.
+		reasons = append(reasons, view.Reason{
+			Text: "a Logitech receiver, with nothing awake on it", Status: view.Info,
+			Detail: fmt.Sprintf("%d %s asked and none answered; a sleeping device and an empty slot say the same thing",
+				presence.Quiet, plural(presence.Quiet, "index", "indices")),
+		})
+	default:
+		reasons = append(reasons, view.Reason{
+			Text: "a Logitech receiver, with nothing paired to it", Status: view.Info,
 		})
 	}
 
@@ -183,6 +214,15 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		found = append(found, steelseries...)
 	}
 
+	// A device that answered and speaks a protocol generation older than this
+	// build reads. Named, because it answered -- something is there.
+	for _, name := range presence.TooOld {
+		present = append(present, view.Reason{
+			Text: name + ": speaks HID++ 1.0", Status: view.Info,
+			Detail: "found, and not read: its battery is a HID++ 1.0 register this build does not ask for",
+		})
+	}
+
 	// A device that was found and deliberately not spoken to.
 	//
 	// Kept apart from the reasons above because it survives a card that is
@@ -190,7 +230,6 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	// that is drawing; "this device is on your desk and I cannot read it" is
 	// not, and it is the difference between a gap this build knows about and
 	// one it does not.
-	var present []view.Reason
 	for _, name := range p.unsupported() {
 		present = append(present, view.Reason{
 			Text: name + ": not a device this build can read", Status: view.Info,
@@ -371,4 +410,12 @@ func (p *Peripherals) Data() any {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.reading
+}
+
+// plural picks a word for a count, so a reason reads like a sentence.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
