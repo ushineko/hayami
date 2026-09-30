@@ -111,6 +111,32 @@ func TestTheCodexIndividualLimitCarriesNoCurrencySymbol(t *testing.T) {
 	assert.NotContains(t, limit.Detail, "$")
 }
 
+// The pane arranges a limit's two amounts itself, so they arrive apart as
+// well as joined, and in the widget's own compact form: a whole number of
+// units drops its decimals.
+func TestALimitsAmountsArriveApartInTheWidgetsForm(t *testing.T) {
+	got, err := usage.Codex(json.RawMessage(codexPayload))
+
+	require.NoError(t, err)
+	limit := got[len(got)-1]
+	assert.Equal(t, "400.5", limit.Used)
+	assert.Equal(t, "1200", limit.Limit)
+}
+
+// A budget's severity is the provider's verdict and is kept, because the API
+// decides what counts as concerning for a spend.
+func TestASpendKeepsItsAmountsAndItsSeverity(t *testing.T) {
+	now := time.Date(2026, time.September, 27, 12, 0, 0, 0, time.UTC)
+
+	got, err := usage.Claude(now, json.RawMessage(claudeSpend))
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "$42.00", got[0].Used)
+	assert.Equal(t, "$100.00", got[0].Limit)
+	assert.Equal(t, "normal", got[0].Severity)
+}
+
 // The window the bar is about is picked by length, so a length that does not
 // arrive is a bar about the wrong window. A name is not a length: "5h" and
 // "weekly" only sort if something knows what they mean, and this is where

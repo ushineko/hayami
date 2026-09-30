@@ -51,8 +51,34 @@ type Meter struct {
 	// figures first.
 	Reset string
 
+	// Strip is the meter as a pane's row draws it, in the form of the widget
+	// that arrangement replaces. Nil for a meter with no such form, which
+	// the row then draws from the caption and the reset.
+	Strip *Strip
+
 	Fraction float64
 	Status   Status
+}
+
+// Strip is a meter laid out along one line of a pane: the window the bar is
+// about, the figures after the bar, and the reset at the right edge.
+type Strip struct {
+	// Window names the bar's window beside the name. Empty leaves the
+	// column blank.
+	Window string
+
+	// Figures are the text after the bar, each piece with its own verdict,
+	// so one window near its limit is coloured on a line whose bar is not.
+	Figures []Figure
+
+	// Reset is the right-hand column: "resets 2h 30m", "resets Oct 1".
+	Reset string
+}
+
+// Figure is a piece of a strip's text and the verdict it is painted with.
+type Figure struct {
+	Text   string
+	Status Status
 }
 
 // BarFull and BarEmpty are what a bar is drawn with.

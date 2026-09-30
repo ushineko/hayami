@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -24,6 +25,13 @@ type UsageWindow struct {
 	// Detail is anything the bar cannot carry, such as a limit's used and
 	// limit values.
 	Detail string
+
+	// Used and Limit are Detail's two amounts apart, for the pane, which
+	// arranges them the way the widget it replaces does. Severity is a
+	// spend's own verdict from the provider; empty for everything else.
+	Used     string
+	Limit    string
+	Severity string
 
 	// Span is how long the window is, and is what decides which window gets
 	// the bar. Zero means the provider did not say, which is read as longer
@@ -69,8 +77,9 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 			StatsLeft:  left,
 			StatsRight: right,
 			Reset:      resets(now, soonest(group)),
+			Strip:      strip(now, group, lead),
 			Fraction:   lead.Fraction,
-			Status:     quota(lead.Fraction),
+			Status:     verdict(lead),
 		})
 	}
 
@@ -220,16 +229,145 @@ func resets(now, at time.Time) string { return Resets(now, at) }
 // quota is the verdict on a proportion of something with a limit.
 //
 // A quota is one of the few readings with a true threshold, so its colour is a
-// signal rather than decoration. The bands are the monitor's: amber at four
-// fifths, red at nineteen twentieths.
+// signal rather than decoration. The bands are the usage widget's: amber from
+// half, red past four fifths. They were the battery monitor's 80/95 until the
+// pane was set beside the widget it replaces (issue #75) and the same 60 %
+// was amber in one and green in the other; the widget is the program a reader
+// of these numbers has been looking at.
 func quota(fraction float64) Status {
 	switch {
-	case fraction >= 0.95:
+	case fraction > 0.80:
 		return Bad
-	case fraction >= 0.80:
+	case fraction >= 0.50:
 		return Warn
 	default:
 		return Good
+	}
+}
+
+// verdict is a window's colour: the provider's own severity where it gave one,
+// which only a spend does, and the quota bands otherwise.
+//
+// The severity wins because the API decides what counts as concerning for a
+// budget, and the widget honours it. An unrecognised severity falls back to
+// the bands rather than to no colour.
+func verdict(w UsageWindow) Status {
+	switch w.Severity {
+	case "normal":
+		return Good
+	case "warning", "elevated":
+		return Warn
+	case "critical", "exceeded":
+		return Bad
+	}
+	return quota(w.Fraction)
+}
+
+/*
+strip is an account as the pane's row draws it, in the words of the widget it
+replaces: "12%  ·  7d 40%", "$250.00 / $1000.00 (25%)",
+"0%  ·  individual 300.5/1200 (60%)", and "resets 2h 30m" at the right.
+
+A separate form from the caption because the two are read differently. The
+window has a card with room under the bar and states which window each figure
+is; a pane has one line and a reader who has looked at the widget's for
+months, and the bar's own window is already named in the column beside it.
+
+Each figure carries its own verdict and the separators are dim, so a seven-day
+window close to its limit is red in a line whose bar is green.
+
+**Not fixed width.** The widget prints "7%", and the pane matches it; a
+figure that gains a digit moves the bar's end by a column. That is a choice
+made for this form only (issue #75): the window's captions stay fixed width.
+*/
+func strip(now time.Time, group []UsageWindow, lead UsageWindow) *Strip {
+	out := &Strip{Window: lead.Name, Reset: resetsIn(now, lead)}
+	if lead.Name == "spend" {
+		// A budget is not a window, and the widget leaves the column blank
+		// rather than naming it.
+		out.Window = ""
+		out.Figures = []Figure{{Text: budget(lead), Status: verdict(lead)}}
+		return out
+	}
+
+	out.Figures = []Figure{{Text: percent(lead.Fraction), Status: verdict(lead)}}
+	for _, w := range group {
+		if w.Name == lead.Name {
+			continue
+		}
+		switch w.Name {
+		case "spend":
+			// Beside a plan's windows, a spend is only its amount, and
+			// only when something has been spent: a fresh month looks the
+			// way it did before there was a budget at all.
+			if w.Used == "" || nothing(w.Used) {
+				continue
+			}
+			out.Figures = append(out.Figures, Figure{Text: stripSeparator, Status: Dim},
+				Figure{Text: w.Used, Status: verdict(w)})
+		case "limit":
+			out.Figures = append(out.Figures, Figure{Text: stripSeparator, Status: Dim},
+				Figure{Text: individual(w), Status: verdict(w)})
+		default:
+			out.Figures = append(out.Figures, Figure{Text: stripSeparator + w.Name + " ", Status: Dim},
+				Figure{Text: percent(w.Fraction), Status: verdict(w)})
+		}
+	}
+	return out
+}
+
+// stripSeparator is what goes between two figures in a pane.
+const stripSeparator = "  ·  "
+
+// percent is a percentage the widget's way: no padding and no space before
+// the sign.
+func percent(fraction float64) string {
+	return fmt.Sprintf("%.0f%%", fraction*100)
+}
+
+// budget is a spend with its cap: "$250.00 / $1000.00 (25%)".
+func budget(w UsageWindow) string {
+	if w.Used == "" || w.Limit == "" {
+		return percent(w.Fraction)
+	}
+	return w.Used + " / " + w.Limit + " (" + percent(w.Fraction) + ")"
+}
+
+// individual is a Codex Business account's own allowance:
+// "individual 300.5/1200 (60%)".
+func individual(w UsageWindow) string {
+	if w.Used == "" || w.Limit == "" {
+		return "individual " + percent(w.Fraction)
+	}
+	return "individual " + w.Used + "/" + w.Limit + " (" + percent(w.Fraction) + ")"
+}
+
+// nothing reports whether an amount is zero, whatever its symbol or decimals.
+func nothing(amount string) bool { return !strings.ContainsAny(amount, "123456789") }
+
+// resetsIn is the pane's reset column, the widget's way: a countdown for a
+// window with a length ("resets 2h 30m", "resets 3d 4h"), a date for an
+// allowance without one ("resets Oct 1"), and nothing where the provider did
+// not say.
+func resetsIn(now time.Time, w UsageWindow) string {
+	if w.ResetsAt.IsZero() {
+		return ""
+	}
+	if w.Span == 0 {
+		return "resets " + w.ResetsAt.Format("Jan 2")
+	}
+	d := w.ResetsAt.Sub(now)
+	if d <= 0 {
+		return "resets now"
+	}
+	h, m := int(d.Hours()), int(d.Minutes())%60
+	switch {
+	case h >= 24:
+		return fmt.Sprintf("resets %dd %dh", h/24, h%24)
+	case h > 0:
+		return fmt.Sprintf("resets %dh %dm", h, m)
+	default:
+		return fmt.Sprintf("resets %dm", m)
 	}
 }
 

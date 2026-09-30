@@ -241,6 +241,7 @@ func rightAlign(s string, width int) string {
 // carried only for a row that has no label of its own.
 func renderRow(sections []Section, width int, p Painter) []string {
 	c := rowColumns(sections)
+	sc := measureStrips(sections)
 
 	var out []string
 	for _, s := range sections {
@@ -251,6 +252,10 @@ func renderRow(sections []Section, width int, p Painter) []string {
 			out = append(out, cellLine(c, width, p))
 		}
 		for _, m := range s.Meters {
+			if m.Strip != nil {
+				out = append(out, stripRow(m, width, sc, p))
+				continue
+			}
 			out = append(out, meterRow(s, m, width, c, p))
 		}
 		for _, t := range s.Trails {
@@ -383,6 +388,125 @@ func meterRow(s Section, m Meter, width int, c columns, p Painter) string {
 	return p.paint(name, Info) + " " +
 		paintBar(m.Fraction, barWidth, m.Status, p) + " " +
 		p.paint(figures, m.Status) + " " + p.paint(reset, Dim)
+}
+
+/*
+stripRow is a meter with a strip, laid out the way the usage widget's --tui
+lays out an account (issue #75):
+
+	max  M  5h ━━━━━━━───────────── 12%  ·  7d 40%         resets 2h 30m
+	work E     ━━━━━━━━━━━━━━━━──── $250.00 / $1000.00 (25%) resets Oct 1
+	Codex   5h ──────────────────── 0%  ·  individual 300.5/1200 (60%)
+
+The name, two spaces, the window, then the bar. The width left over is split
+three to one between the bar and a gap before the reset, which is the
+widget's ratio: the bar is most of the line, and the reset floats at the right
+edge with air in front of it rather than hard against the figures.
+
+Too narrow for a bar worth drawing, the bar goes and the figures stay, then
+the reset goes, then the figures are cut. The figures are the reading.
+*/
+func stripRow(m Meter, width int, c stripColumns, p Painter) string {
+	st := m.Strip
+
+	head := padRight(c.nameOf(m), c.name) + "  "
+	if c.window > 0 {
+		head += padRight(st.Window, c.window) + " "
+	}
+	reset := ""
+	if c.reset > 0 {
+		reset = " " + padLeft(st.Reset, c.reset)
+	}
+	figures := figuresLen(st.Figures)
+
+	segs := []Figure{{Text: head, Status: Info}}
+	slack := width - runeLen(head) - 1 - c.figures - runeLen(reset)
+	// Rounded up, as rich rounds its ratios, so a pane is the same number of
+	// columns of bar as the widget's at the same width.
+	if bar := (3*slack + 3) / 4; bar >= MinBarWidth {
+		full := int(MeterFraction(m.Fraction)*float64(bar) + 0.5)
+		segs = append(segs,
+			Figure{Text: strings.Repeat(string(BarFull), full), Status: m.Status},
+			Figure{Text: strings.Repeat(string(BarEmpty), bar-full), Status: Dim},
+			Figure{Text: " ", Status: Info})
+		segs = append(segs, st.Figures...)
+		gap := slack - bar + c.figures - figures
+		return fit(append(segs, Figure{Text: strings.Repeat(" ", gap) + reset, Status: Dim}), width, p)
+	}
+
+	segs = append(segs, st.Figures...)
+	if gap := width - runeLen(head) - figures - runeLen(st.Reset); st.Reset != "" && gap >= 1 {
+		segs = append(segs, Figure{Text: strings.Repeat(" ", gap) + st.Reset, Status: Dim})
+	}
+	return fit(segs, width, p)
+}
+
+// fit paints pieces of a line into exactly a width: cut with an ellipsis where
+// they run over, padded where they fall short.
+func fit(segs []Figure, width int, p Painter) string {
+	var b strings.Builder
+	left := width
+	for _, s := range segs {
+		if left <= 0 {
+			break
+		}
+		text := s.Text
+		if runeLen(text) > left {
+			text = truncate(text, left)
+		}
+		left -= runeLen(text)
+		b.WriteString(p.paint(text, s.Status))
+	}
+	if left > 0 {
+		b.WriteString(strings.Repeat(" ", left))
+	}
+	return b.String()
+}
+
+// figuresLen is how wide a strip's figures are, in characters.
+func figuresLen(fs []Figure) int {
+	n := 0
+	for _, f := range fs {
+		n += runeLen(f.Text)
+	}
+	return n
+}
+
+// stripColumns are the widths the strips of one pane share, so the bars start
+// and the figures begin at the same column on every line.
+type stripColumns struct{ label, name, window, figures, reset int }
+
+// measureStrips measures every strip in a pane.
+func measureStrips(sections []Section) (c stripColumns) {
+	var strips []Meter
+	for _, s := range sections {
+		for _, m := range s.Meters {
+			if m.Strip == nil {
+				continue
+			}
+			strips = append(strips, m)
+			if m.Badge != "" {
+				c.label = max(c.label, runeLen(m.Label))
+			}
+			c.window = max(c.window, runeLen(m.Strip.Window))
+			c.figures = max(c.figures, figuresLen(m.Strip.Figures))
+			c.reset = max(c.reset, runeLen(m.Strip.Reset))
+		}
+	}
+	for _, m := range strips {
+		c.name = max(c.name, runeLen(c.nameOf(m)))
+	}
+	return c
+}
+
+// nameOf is an account's name and badge. The names of the accounts that have
+// a badge are padded to each other so the letters line up; one without a
+// badge -- Codex -- is only its name, which is how the widget draws it.
+func (c stripColumns) nameOf(m Meter) string {
+	if m.Badge == "" {
+		return m.Label
+	}
+	return padRight(m.Label, c.label) + " " + m.Badge
 }
 
 // MinBarWidth is the narrowest a bar may be before it is not worth the room.
