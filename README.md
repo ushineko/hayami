@@ -276,6 +276,8 @@ MIT. See [LICENSE](LICENSE).
   thirty-six hours is `2d left` rather than `1d left`; and the pane's row
   carries the suffix too (`7d 52% (2d left)`), which spec 019 had left out
   (issue #102, spec 028).
+- **Fix**: with no cooler found, the Cooler section's reason is "no supported
+  cooler detected" rather than naming one product (issue #104).
 - `docs/credits.md`: the projects each protocol was learned from and the
   libraries the program is built on, with their licences.
 
