@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.1
+**Version**: 0.8.2
 
 *a chart you read at a glance*
 
@@ -269,7 +269,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.2 (2026-09-30)
 
 - **Fix**: the panel goes back where it was. The restore ran after a fixed
   600 ms against whatever window was on screen, and a cold start took 2.15 s
