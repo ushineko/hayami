@@ -527,3 +527,39 @@ func TestALevelCellHasABarAndABandOrAPlaceholderNone(t *testing.T) {
 	assert.True(t, alone.Cells[1].Placeholder)
 	assert.False(t, alone.Cells[1].HasBar, "a placeholder has a bar")
 }
+
+// A device that has stopped answering is not listed as connected. The overflow
+// note keeps the two apart: live devices with their state, quiet ones under
+// their own heading at the level they last reported.
+func TestAnOfflineDeviceInTheOverflowIsNotCalledConnected(t *testing.T) {
+	t0 := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	quiet := detected("AirPods Pro", 71, view.KindHeadset, t0)
+	quiet.Stale, quiet.Seen = true, t0
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+			detected("WH-1000XM6", 60, view.KindHeadset, t0.Add(2*time.Minute)),
+			detected("Arctis Nova Pro", 47, view.KindHeadset, t0.Add(time.Minute)),
+			quiet,
+		})})
+
+	assert.Equal(t, "Also connected:\n  Arctis Nova Pro  47 %  Discharging\n"+
+		"Offline, at the level last heard:\n  AirPods Pro  71 %", s.Note)
+}
+
+// With only quiet devices left over, the note does not open with "Also
+// connected" at all.
+func TestAnOverflowOfOnlyOfflineDevicesSaysSo(t *testing.T) {
+	t0 := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	quiet := detected("AirPods Pro", 71, view.KindHeadset, t0)
+	quiet.Stale, quiet.Seen = true, t0
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+			detected("WH-1000XM6", 60, view.KindHeadset, t0.Add(time.Minute)),
+			quiet,
+		})})
+
+	assert.Equal(t, "Offline, at the level last heard:\n  AirPods Pro  71 %", s.Note)
+	assert.NotContains(t, s.Note, "connected")
+}
