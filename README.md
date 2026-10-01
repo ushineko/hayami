@@ -269,6 +269,17 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: the panel goes back where it was. The restore ran after a fixed
+  600 ms against whatever window was on screen, and a cold start took 2.15 s
+  to put one there; it now loads a script that places the window when the
+  compositor adds it. And a panel killed with SIGTERM left its watch script
+  loaded, which blocked the next panel's and with it the restore, silently;
+  a stale script is unloaded before loading, a signal quits the window
+  cleanly, and a failure is printed (issue #106, spec 029; fynedesygn
+  spec 049).
+
 ### 0.8.1 (2026-09-30)
 
 - **Fix**: the weekly window says how long it has left on its last day

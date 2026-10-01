@@ -9,8 +9,12 @@ package gui
 
 import (
 	"context"
+	"fmt"
 	"image/color"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -690,18 +694,23 @@ func restore(sources []panel.Source, drawn map[string]bool, cached readings.Cach
 /*
 rememberPosition puts the panel back where it was, and keeps it there.
 
-Both halves go through KWin, because neither is the toolkit's to do: a
-Wayland client cannot place itself and cannot read where it is. Where there is
-no KWin this is quiet and the panel opens where the compositor puts it, which
-is what it did before.
+The watch is set before the restore, because the restore's first effect is a
+geometry change the watch should see as the position it already holds rather
+than as a move to remember.
 
-The restore waits for the window, because the script matches a window that is
-on screen. The watch is set up first so a move made during the wait is still
-heard.
+The restore is asked for before the window exists, and that is fine: the
+script waits for the window (issue #106). The first version slept 600 ms and
+then moved whatever was on screen; a cold start took 2.15 s to put a window
+there.
+
+What comes back is how to stop: the watch script unloaded and the bus name
+released, to run after the window has gone and before the process does. A
+failure is printed rather than returned: a panel without its memory is still
+a panel, and a silent failure here cost an evening (issue #106).
 */
-func (p *Panel) rememberPosition(ctx context.Context, store *config.Store) {
+func (p *Panel) rememberPosition(store *config.Store) (stop func()) {
 	if store == nil {
-		return
+		return func() {}
 	}
 	pos := desktop.NewPosition(AppID)
 
@@ -714,33 +723,17 @@ func (p *Panel) rememberPosition(ctx context.Context, store *config.Store) {
 		}
 		_ = store.SetConfig(c.WithPosition(x, y))
 	}); err != nil {
-		return // no compositor to ask: not an error, just no memory
+		fmt.Fprintln(os.Stderr, "hayami: the position will not be remembered:", err)
+		return func() {}
 	}
-	go func() {
-		<-ctx.Done()
-		pos.Stop()
-	}()
 
-	x, y, ok := store.Config().Position()
-	if !ok {
-		return
+	if x, y, ok := store.Config().Position(); ok {
+		if err := pos.Restore(x, y); err != nil {
+			fmt.Fprintln(os.Stderr, "hayami: the position was not restored:", err)
+		}
 	}
-	// After the window exists. ShowAndRun has not been called yet, so this
-	// waits for the first frame rather than racing it; a restore that found
-	// no window would silently do nothing.
-	go func() {
-		time.Sleep(RestoreDelay)
-		_ = pos.Restore(x, y)
-	}()
+	return pos.Stop
 }
-
-// RestoreDelay is how long the panel waits before putting itself back.
-//
-// Long enough for the window to exist, because the script matches a window
-// that is on screen and one that is not there yet is not moved. Short enough
-// that the panel is not seen in the wrong place first -- which it is, briefly,
-// and that is the cost of a client that cannot place itself.
-const RestoreDelay = 600 * time.Millisecond
 
 // CacheInterval is how often the readings are written out.
 //
@@ -915,6 +908,23 @@ func Start(o Options) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// A signal is a close. The panel is stopped by whoever started it --
+	// a session ending, a service stopping, a kill from a shell -- and a
+	// process that dies on the spot leaves its scripts loaded in the
+	// compositor and its last position unwritten (issue #106). The quit
+	// goes through the toolkit so ShowAndRun returns and the tidying below
+	// runs as it does for a close.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	go func() {
+		select {
+		case <-signals:
+			fyne.Do(a.Quit)
+		case <-ctx.Done():
+		}
+	}()
+
 	// What the panel last knew, before anything is asked. A section whose
 	// first live poll comes back empty is drawn from this instead of blank,
 	// and a card is built the size of it -- the card takes its objects at
@@ -946,7 +956,7 @@ func Start(o Options) error {
 	a.SetIcon(appIcon())
 
 	p = New(a, o)
-	p.rememberPosition(ctx, o.Store)
+	forget := p.rememberPosition(o.Store)
 
 	// The panel starts out remembering what it already knew. Without this
 	// the first write replaces the file with only the sections that reported
@@ -970,10 +980,12 @@ func Start(o Options) error {
 
 	p.win.ShowAndRun()
 
-	// The window has gone. Anything set in its last moments -- the position
-	// the compositor reported as it closed is the one that matters -- is in
-	// the store's memory with a write scheduled a second later, and the
-	// process does not last a second.
+	// The window has gone. The scripts come out of the compositor first,
+	// while the process is still here to ask. Anything set in the window's
+	// last moments -- the position the compositor reported as it closed is
+	// the one that matters -- is in the store's memory with a write
+	// scheduled a second later, and the process does not last a second.
+	forget()
 	if o.Store != nil {
 		if err := o.Store.Close(); err != nil {
 			return err
