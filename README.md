@@ -269,6 +269,13 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: sanshoku v0.1.6. The Apex's battery reads while lighting frames
+  stream to it through its receiver; before, one poll in five to one in two
+  came back empty while an effect ran (sanshoku #31). Reads through the
+  receiver are also 300 ms faster.
+
 ### 0.8.3 (2026-09-30)
 
 - **Fix**: the position watched and restored is the panel's, not the
