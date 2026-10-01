@@ -212,18 +212,35 @@ func lasting(now time.Time, w UsageWindow, next time.Time, out string) string {
 }
 
 // remaining is how long a window has left, for a window whose reset is not the
-// one already in the Reset column and is far enough away to be worth saying.
+// one already in the Reset column.
 //
-// Days only. A window that turns over this afternoon is covered by the
-// countdown in the column; one that turns over next Tuesday is what this is
-// for, and an hour of precision on it would be false.
+// Days only, rounded up, and "<1d" on the last day, which is the widget's
+// arithmetic (issue #102): a window that turns over in thirty-six hours has
+// two days left the way a reader counts them, and one that turns over this
+// evening has not stopped having a reset. The first version floored and said
+// nothing under a day, so the weekly window went silent for its last day and
+// read a day short before that. An hour of precision on next Tuesday would be
+// false; a day of silence on the day itself was worse.
 func remaining(now time.Time, w UsageWindow, shown time.Time) string {
 	if w.ResetsAt.IsZero() || w.ResetsAt.Equal(shown) {
 		return ""
 	}
-	days := int(w.ResetsAt.Sub(now).Hours()) / 24
-	if days < 1 {
+	return daysLeft(now, w.ResetsAt)
+}
+
+// daysLeft is a reset as a count of days, the widget's way: rounded up, "<1d"
+// under a day, nothing once it has passed.
+func daysLeft(now, at time.Time) string {
+	d := at.Sub(now)
+	if d <= 0 {
 		return ""
+	}
+	if d < 24*time.Hour {
+		return "<1d left"
+	}
+	days := int(d / (24 * time.Hour))
+	if d%(24*time.Hour) != 0 {
+		days++
 	}
 	return itoa(days) + "d left"
 }
@@ -330,8 +347,15 @@ func strip(now time.Time, group []UsageWindow, lead UsageWindow) *Strip {
 			out.Figures = append(out.Figures, Figure{Text: stripSeparator, Status: Dim},
 				Figure{Text: individual(w), Status: verdict(w)})
 		default:
+			// The widget writes "7d 85% (2d left)": the figure, then how
+			// long the window has left, which the reset column at the
+			// edge does not say because that column is the bar's window.
+			// Nothing when the two reset together, as in the card.
 			out.Figures = append(out.Figures, Figure{Text: stripSeparator + w.Name + " ", Status: Dim},
 				Figure{Text: percent(w.Fraction), Status: verdict(w)})
+			if left := remaining(now, w, lead.ResetsAt); left != "" {
+				out.Figures = append(out.Figures, Figure{Text: " (" + left + ")", Status: Dim})
+			}
 		}
 	}
 	return out

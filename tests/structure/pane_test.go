@@ -87,7 +87,7 @@ func TestTheUsagePaneIsLaidOutLikeTheWidgets(t *testing.T) {
 	assert.True(t, strings.HasPrefix(lines[1], "CC work     ━"), "%q", lines[1])
 	assert.True(t, strings.HasPrefix(lines[2], "CX       5h ━"), "%q", lines[2])
 
-	assert.Contains(t, lines[0], " 12%  ·  7d 85% ")
+	assert.Contains(t, lines[0], " 12%  ·  7d 85% (4d left) ")
 	assert.Contains(t, lines[1], " $250.00 / $1000.00 (25%) ")
 	assert.Contains(t, lines[2], " 3%  ·  individual 300.5/1200 (60%) ")
 

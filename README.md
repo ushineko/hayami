@@ -271,6 +271,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the weekly window says how long it has left on its last day
+  (`7d: 52 % (<1d left)`) and rounds the days up as the widget does, so
+  thirty-six hours is `2d left` rather than `1d left`; and the pane's row
+  carries the suffix too (`7d 52% (2d left)`), which spec 019 had left out
+  (issue #102, spec 028).
 - `docs/credits.md`: the projects each protocol was learned from and the
   libraries the program is built on, with their licences.
 

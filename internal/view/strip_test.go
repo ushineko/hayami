@@ -51,7 +51,8 @@ func TestAStripSaysWhatTheWidgetSays(t *testing.T) {
 	require.NotNil(t, budget)
 	require.NotNil(t, codex)
 
-	assert.Equal(t, "12%  ·  7d 85%", text(plan))
+	assert.Equal(t, "12%  ·  7d 85% (4d left)", text(plan),
+		"the weekly window says how long it has left, as the widget's row does")
 	assert.Equal(t, "5h", plan.Window)
 	assert.Equal(t, "resets 2h 55m", plan.Reset)
 
@@ -70,10 +71,11 @@ func TestEachFigureInAStripHasItsOwnColour(t *testing.T) {
 	s := view.Usage(now, threeAccounts(now), now)
 	plan, codex := s.Meters[0].Strip, s.Meters[2].Strip
 
-	require.Len(t, plan.Figures, 3)
+	require.Len(t, plan.Figures, 4)
 	assert.Equal(t, view.Good, plan.Figures[0].Status, "12 % is green")
 	assert.Equal(t, view.Dim, plan.Figures[1].Status, "the separator is dim")
 	assert.Equal(t, view.Bad, plan.Figures[2].Status, "85 % is red")
+	assert.Equal(t, view.Dim, plan.Figures[3].Status, "the days left are a date, not a verdict")
 	assert.Equal(t, view.Good, s.Meters[0].Status, "the bar is the five-hour window's colour")
 
 	assert.Equal(t, view.Warn, codex.Figures[len(codex.Figures)-1].Status, "60 % is amber")
