@@ -269,6 +269,15 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: the position watched and restored is the panel's, not the
+  preferences window's. Both carry the app ID on Wayland, so a drag of the
+  preferences window was saved as the panel's position, and the restore
+  could place the preferences window when the program was started onto a
+  preferences page. The KWin scripts now name the window by its title
+  (issue #107, spec 030; fynedesygn spec 050).
+
 ### 0.8.2 (2026-09-30)
 
 - **Fix**: the panel goes back where it was. The restore ran after a fixed

@@ -42,7 +42,7 @@ It is quiet where there is no KWin. A machine running another compositor gets
 a panel that opens where it opens, which is what it does today.
 */
 type Position struct {
-	appID string
+	target kwin.Target
 
 	mu      sync.Mutex
 	conn    *dbus.Conn
@@ -50,8 +50,17 @@ type Position struct {
 	watched bool
 }
 
-// NewPosition builds the watcher. Nothing happens until Watch is called.
-func NewPosition(appID string) *Position { return &Position{appID: appID} }
+// NewPosition builds the watcher for the window of the app with the title.
+// Nothing happens until Watch is called.
+//
+// The title, because the app ID is not a window: on Wayland the preferences
+// window carries it too, and a drag of that window was saved as the panel's
+// position (issue #107). The panel's title is the program's to set and it
+// is set before the window is mapped, so the compositor's first report of
+// the window already carries it.
+func NewPosition(appID, title string) *Position {
+	return &Position{target: kwin.Target{Class: appID, Caption: title}}
+}
 
 // geometry is the object KWin calls. Its one method takes what the script
 // sends: the frame's x, y, width and height.
@@ -135,7 +144,7 @@ func (p *Position) Watch(onMove func(x, y int)) error {
 	}
 
 	if err := p.load(watchName, kwin.WatchGeometryScript(
-		p.appID, geometryService, geometryPath, geometryIface, geometryMethod)); err != nil {
+		p.target, geometryService, geometryPath, geometryIface, geometryMethod)); err != nil {
 		return err
 	}
 	p.watched = true
@@ -150,8 +159,8 @@ version ran kwin.PositionScript once, after a fixed delay, and that script
 moves a window that is on screen at that moment: a cold start took 2.15 s to
 put one there, the script found nothing, and the panel opened where the
 compositor placed it. kwin.PlaceScript places the window when the compositor
-adds it, which is the one party that knows the moment, and places only the
-first, so the preferences window is not moved onto the panel.
+adds it, which is the one party that knows the moment, and places the
+window with the panel's title, once.
 
 Watch first: the bus connection is the watch's.
 */
@@ -161,7 +170,7 @@ func (p *Position) Restore(x, y int) error {
 	if p.conn == nil {
 		return fmt.Errorf("%w: restoring before watching", ErrNoKWin)
 	}
-	return p.load(placeName, kwin.PlaceScript(p.appID, x, y))
+	return p.load(placeName, kwin.PlaceScript(p.target, x, y))
 }
 
 // Stop unloads the watch script and releases the bus name.

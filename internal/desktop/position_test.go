@@ -12,7 +12,7 @@ import (
 // refused rather than dereferenced. The compositor itself is not in these
 // tests; what it does with the scripts is recorded on the desk in spec 029.
 func TestRestoringBeforeWatchingIsRefused(t *testing.T) {
-	pos := desktop.NewPosition(appID)
+	pos := desktop.NewPosition(appID, "example")
 
 	err := pos.Restore(10, 20)
 	assert.ErrorIs(t, err, desktop.ErrNoKWin)
@@ -21,6 +21,6 @@ func TestRestoringBeforeWatchingIsRefused(t *testing.T) {
 // Stopping what was never started is nothing, so a panel that failed to
 // watch can still call what rememberPosition handed back.
 func TestStoppingAnUnwatchedPositionIsNothing(t *testing.T) {
-	pos := desktop.NewPosition(appID)
+	pos := desktop.NewPosition(appID, "example")
 	assert.NotPanics(t, pos.Stop)
 }
