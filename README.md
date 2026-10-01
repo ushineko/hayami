@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.0
+**Version**: 0.8.1
 
 *a chart you read at a glance*
 
@@ -269,7 +269,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.1 (2026-09-30)
 
 - **Fix**: the weekly window says how long it has left on its last day
   (`7d: 52 % (<1d left)`) and rounds the days up as the widget does, so
