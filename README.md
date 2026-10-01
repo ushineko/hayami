@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.2
+**Version**: 0.8.3
 
 *a chart you read at a glance*
 
@@ -269,7 +269,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.3 (2026-09-30)
 
 - **Fix**: the position watched and restored is the panel's, not the
   preferences window's. Both carry the app ID on Wayland, so a drag of the
