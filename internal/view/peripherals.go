@@ -243,14 +243,27 @@ func placeholder(slot int) Cell {
 // headphones. The state is said too, because a device in this list is one the
 // panel is not drawing and the whole of what it would have drawn is a level
 // and a state.
+//
+// A device that has stopped answering is not "also connected": it is listed
+// under its own heading with the level it last reported. One list for both
+// put "Papa's AirPods Pro  71 %  Offline" under "Also connected:", which says
+// two opposite things in one line.
 func overflowNote(overflow []PeripheralReading) string {
-	if len(overflow) == 0 {
-		return ""
-	}
-	lines := make([]string, 0, len(overflow)+1)
-	lines = append(lines, "Also connected:")
+	var live, quiet []string
 	for _, d := range overflow {
-		lines = append(lines, "  "+d.Name+"  "+strings.TrimSpace(Count(d.Level))+" %  "+chargeNote(d))
+		level := strings.TrimSpace(Count(d.Level)) + " %"
+		if d.Stale {
+			quiet = append(quiet, "  "+d.Name+"  "+level)
+			continue
+		}
+		live = append(live, "  "+d.Name+"  "+level+"  "+chargeNote(d))
+	}
+	var lines []string
+	if len(live) > 0 {
+		lines = append(append(lines, "Also connected:"), live...)
+	}
+	if len(quiet) > 0 {
+		lines = append(append(lines, "Offline, at the level last heard:"), quiet...)
 	}
 	return strings.Join(lines, "\n")
 }
