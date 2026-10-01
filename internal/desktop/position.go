@@ -22,9 +22,12 @@ const (
 	geometryMethod  = "Report"
 )
 
-// watchName is what the watch script is loaded under, so it can be unloaded
-// by name without remembering an id.
-const watchName = "hayami-geometry"
+// watchName and placeName are what the two scripts that stay loaded are
+// loaded under, so each can be unloaded by name without remembering an id.
+const (
+	watchName = "hayami-geometry"
+	placeName = "hayami-place"
+)
 
 /*
 Position watches where the panel is and puts it back.
@@ -131,7 +134,7 @@ func (p *Position) Watch(onMove func(x, y int)) error {
 		return fmt.Errorf("%w: taking the bus name: %w", ErrNoKWin, err)
 	}
 
-	if err := p.load(kwin.WatchGeometryScript(
+	if err := p.load(watchName, kwin.WatchGeometryScript(
 		p.appID, geometryService, geometryPath, geometryIface, geometryMethod)); err != nil {
 		return err
 	}
@@ -139,14 +142,26 @@ func (p *Position) Watch(onMove func(x, y int)) error {
 	return nil
 }
 
-// Restore puts the panel back where it was.
-//
-// After the window exists, because the script matches a window that is on
-// screen. A window that is not there yet is not moved and not an error: the
-// panel opens where the compositor put it, which is what it did before any of
-// this.
+/*
+Restore puts the panel back where it was, as soon as there is a panel.
+
+The script stays loaded and waits for the window (issue #106). The first
+version ran kwin.PositionScript once, after a fixed delay, and that script
+moves a window that is on screen at that moment: a cold start took 2.15 s to
+put one there, the script found nothing, and the panel opened where the
+compositor placed it. kwin.PlaceScript places the window when the compositor
+adds it, which is the one party that knows the moment, and places only the
+first, so the preferences window is not moved onto the panel.
+
+Watch first: the bus connection is the watch's.
+*/
 func (p *Position) Restore(x, y int) error {
-	return p.run(kwin.PositionScript(p.appID, x, y))
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.conn == nil {
+		return fmt.Errorf("%w: restoring before watching", ErrNoKWin)
+	}
+	return p.load(placeName, kwin.PlaceScript(p.appID, x, y))
 }
 
 // Stop unloads the watch script and releases the bus name.
@@ -161,68 +176,48 @@ func (p *Position) Stop() {
 		return
 	}
 	unload := kwin.UnloadScriptCall()
-	_ = p.conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
-		Call(unload.Interface+"."+unload.Method, 0, watchName).Err
+	for _, name := range []string{watchName, placeName} {
+		_ = p.conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
+			Call(unload.Interface+"."+unload.Method, 0, name).Err
+	}
 	_, _ = p.conn.ReleaseName(geometryService)
 	_ = p.conn.Close()
 	p.conn, p.watched = nil, false
 }
 
-// load puts a script in place and leaves it loaded, for one that keeps
-// handlers.
-func (p *Position) load(body string) error {
+// load puts a script in place under a name and leaves it loaded, for one
+// that keeps handlers. The caller holds the lock.
+//
+// A script already loaded under the name is unloaded first. KWin answers a
+// second load of a name with -1 and no error, and the run that follows fails
+// on a path that does not exist; the name is left by a panel that did not
+// get to Stop -- killed, crashed, or any panel before this one handled a
+// signal -- and its script goes on reporting to the bus name this panel now
+// owns, so the watch looks alive while the restore never happens (issue
+// #106). Unloading a name that is not loaded is answered false and nothing
+// else.
+func (p *Position) load(name, body string) error {
 	path, err := writeScript(body)
 	if err != nil {
 		return err
 	}
 	defer remove(path)
 
+	unload := kwin.UnloadScriptCall()
+	_ = p.conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
+		Call(unload.Interface+"."+unload.Method, 0, name).Err
+
 	call := kwin.LoadScriptCall()
 	var id int
 	if err := p.conn.Object(call.Destination, dbus.ObjectPath(call.Path)).
-		Call(call.Interface+"."+call.Method, 0, path, watchName).Store(&id); err != nil {
-		return fmt.Errorf("%w: loading the geometry script: %w", ErrNoKWin, err)
+		Call(call.Interface+"."+call.Method, 0, path, name).Store(&id); err != nil {
+		return fmt.Errorf("%w: loading the %s script: %w", ErrNoKWin, name, err)
 	}
 
 	run := kwin.RunCall(id)
 	if err := p.conn.Object(run.Destination, dbus.ObjectPath(run.Path)).
 		Call(run.Interface+"."+run.Method, 0).Err; err != nil {
-		return fmt.Errorf("%w: running the geometry script: %w", ErrNoKWin, err)
+		return fmt.Errorf("%w: running the %s script: %w", ErrNoKWin, name, err)
 	}
-	return nil
-}
-
-// run loads a script, runs it once and unloads it, for one that does its work
-// in its body.
-func (p *Position) run(body string) error {
-	conn, err := session()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-
-	path, err := writeScript(body)
-	if err != nil {
-		return err
-	}
-	defer remove(path)
-
-	const once = "hayami-position"
-	call := kwin.LoadScriptCall()
-	var id int
-	if err := conn.Object(call.Destination, dbus.ObjectPath(call.Path)).
-		Call(call.Interface+"."+call.Method, 0, path, once).Store(&id); err != nil {
-		return fmt.Errorf("%w: loading the position script: %w", ErrNoKWin, err)
-	}
-
-	runCall := kwin.RunCall(id)
-	if err := conn.Object(runCall.Destination, dbus.ObjectPath(runCall.Path)).
-		Call(runCall.Interface+"."+runCall.Method, 0).Err; err != nil {
-		return fmt.Errorf("%w: running the position script: %w", ErrNoKWin, err)
-	}
-
-	unload := kwin.UnloadScriptCall()
-	_ = conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
-		Call(unload.Interface+"."+unload.Method, 0, once).Err
 	return nil
 }
