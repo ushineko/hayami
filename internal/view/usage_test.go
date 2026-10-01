@@ -293,22 +293,44 @@ func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
 	}, now)
 
 	require.Len(t, s.Meters, 1)
-	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (5d left)")
+	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (6d left)",
+		"five days and an hour is six days the way a reader counts them")
 	assert.NotContains(t, s.Meters[0].Caption, "5h: 4 % (",
 		"the window whose reset is already in the column repeats nothing")
 	assert.Contains(t, s.Meters[0].Reset, "3h")
 }
 
-// A window that turns over this afternoon is covered by the countdown in the
-// column; days are the only unit worth spending room on here.
-func TestAWindowLessThanADayAwaySaysNothingExtra(t *testing.T) {
+// A window on its last day still has a reset, and the widget says so: "<1d
+// left" rather than nothing (issue #102). The first version went silent under
+// a day, which is the day the weekly window matters most.
+func TestAWindowOnItsLastDaySaysSo(t *testing.T) {
 	now := at(9, 0)
 	s := view.Usage(now, []view.UsageWindow{
 		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(2 * time.Hour)},
 		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
 	}, now)
 
-	assert.NotContains(t, s.Meters[0].Line(), "left")
+	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (<1d left)")
+	assert.Contains(t, text(s.Meters[0].Strip), "7d 21% (<1d left)")
+}
+
+// The days are rounded up, as the widget rounds them: thirty-six hours is two
+// days, a whole number of days is itself, and a reset that has passed says
+// nothing until the numbers are re-read.
+func TestDaysLeftAreRoundedUp(t *testing.T) {
+	now := at(9, 0)
+	left := func(d time.Duration) string {
+		s := view.Usage(now, []view.UsageWindow{
+			{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(time.Second)},
+			{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(d)},
+		}, now)
+		return s.Meters[0].StatsLeft
+	}
+	assert.Equal(t, "7d: 21 % (2d left)", left(36*time.Hour))
+	assert.Equal(t, "7d: 21 % (1d left)", left(24*time.Hour))
+	assert.Equal(t, "7d: 21 % (4d left)", left(4*24*time.Hour))
+	assert.Equal(t, "7d: 21 % (<1d left)", left(time.Minute))
+	assert.Equal(t, "7d: 21 %", left(-time.Minute))
 }
 
 // A Business limit beside the bar's window says its amounts as well as its
@@ -327,9 +349,9 @@ func TestALimitBesideTheBarSaysItsAmounts(t *testing.T) {
 
 	require.Len(t, s.Meters, 1)
 	m := s.Meters[0]
-	assert.Equal(t, "7d: 46 %  limit: 300.5 / 1200 (60 %) (5d left)", m.StatsLeft)
+	assert.Equal(t, "7d: 46 %  limit: 300.5 / 1200 (60 %) (6d left)", m.StatsLeft)
 	assert.Equal(t, "3%  ·  7d 46%  ·  individual 300.5/1200 (60%)", text(m.Strip),
-		"the pane's strip is spec 019's and unchanged")
+		"the pane's strip is spec 019's; the 7d resets with the bar's window, so says no more")
 
 	lead := view.Usage(now, []view.UsageWindow{
 		{Account: "CX", Name: "limit", Fraction: 0.6, Detail: "300.50 / 1200.00", Used: "300.5", Limit: "1200"},
