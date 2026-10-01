@@ -271,6 +271,17 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: the peripherals tooltip no longer appears, or stays, when the
+  pointer is not on the panel. Leaving the panel straight from a card left the
+  tooltip's timer running, so it appeared a second later with the pointer
+  elsewhere and stayed until the pointer came back (fynedesygn v0.1.79,
+  fynedesygn #156).
+
+- **Fix**: the peripherals tooltip keeps live and offline devices apart. It
+  listed every device without a slot under "Also connected:", so an offline
+  pair of earbuds read "Also connected: … 71 %  Offline". Offline devices are
+  now under their own heading, at the level they last reported.
+
 - **Fix**: sanshoku v0.1.6. The Apex's battery reads while lighting frames
   stream to it through its receiver; before, one poll in five to one in two
   came back empty while an effect ran (sanshoku #31). Reads through the
