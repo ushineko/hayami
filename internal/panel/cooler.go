@@ -258,7 +258,7 @@ func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, []view.Reason, er
 	if status == nil && len(reasons) == 0 {
 		reasons = append(reasons, view.Reason{
 			Label: "Coolant", Text: "no cooler", Status: view.Info,
-			Detail: "no NZXT Kraken answered on USB",
+			Detail: "no supported cooler detected",
 		})
 	}
 	return status, reasons, errors.Join(errs...)

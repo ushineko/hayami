@@ -67,7 +67,7 @@ func TestDetailStaysOffTheCardAndLandsOnTheHover(t *testing.T) {
 	s := view.Section{
 		Note: "and two more",
 		Reasons: []view.Reason{
-			{Label: "Coolant", Text: "no cooler", Detail: "no NZXT Kraken answered on USB"},
+			{Label: "Coolant", Text: "no cooler", Detail: "no supported cooler detected"},
 			{Text: "the cooler would not answer", Detail: "no 7501 reply: no reply"},
 			{Text: "no Bluetooth adapter"},
 		},
@@ -81,7 +81,7 @@ func TestDetailStaysOffTheCardAndLandsOnTheHover(t *testing.T) {
 
 	hover := s.Hover()
 	assert.Contains(t, hover, "and two more", "the section's own note comes first")
-	assert.Contains(t, hover, "Coolant: no NZXT Kraken answered on USB")
+	assert.Contains(t, hover, "Coolant: no supported cooler detected")
 	assert.Contains(t, hover, "no 7501 reply")
 }
 

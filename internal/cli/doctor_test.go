@@ -194,7 +194,7 @@ func TestTheReportPutsEachReasonUnderItsSection(t *testing.T) {
 		State:   cli.StatePartial,
 		Summary: "CPU 38 °C",
 		Reasons: []view.Reason{
-			{Label: "Coolant", Text: "no cooler", Detail: "no NZXT Kraken answered on USB", Status: view.Info},
+			{Label: "Coolant", Text: "no cooler", Detail: "no supported cooler detected", Status: view.Info},
 			{Text: "the cooler would not answer", Status: view.Warn},
 		},
 	}}
@@ -208,7 +208,7 @@ func TestTheReportPutsEachReasonUnderItsSection(t *testing.T) {
 	assert.Contains(t, lines[0], "partial")
 	assert.Contains(t, lines[0], "CPU 38 °C")
 	assert.Contains(t, lines[1], "Coolant: no cooler")
-	assert.Contains(t, lines[2], "Kraken")
+	assert.Contains(t, lines[2], "no supported cooler detected")
 	assert.Contains(t, lines[3], "! the cooler would not answer",
 		"a failure must be distinguishable from an absence at a glance")
 }
