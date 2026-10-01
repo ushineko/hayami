@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.3
+**Version**: 0.8.4
 
 *a chart you read at a glance*
 
@@ -269,7 +269,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.4 (2026-10-01)
 
 - **Fix**: the peripherals tooltip no longer appears, or stays, when the
   pointer is not on the panel. Leaving the panel straight from a card left the
