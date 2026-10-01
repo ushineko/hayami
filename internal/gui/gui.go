@@ -708,11 +708,13 @@ released, to run after the window has gone and before the process does. A
 failure is printed rather than returned: a panel without its memory is still
 a panel, and a silent failure here cost an evening (issue #106).
 */
-func (p *Panel) rememberPosition(store *config.Store) (stop func()) {
+func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()) {
 	if store == nil {
 		return func() {}
 	}
-	pos := desktop.NewPosition(AppID)
+	// The title tells the panel from the preferences window, which has
+	// the same app ID (issue #107).
+	pos := desktop.NewPosition(AppID, title)
 
 	// Saved only when it differs from what is held, so the storm of
 	// geometryChanged a drag produces is one write at the end of it.
@@ -956,7 +958,7 @@ func Start(o Options) error {
 	a.SetIcon(appIcon())
 
 	p = New(a, o)
-	forget := p.rememberPosition(o.Store)
+	forget := p.rememberPosition(o.Store, o.Title)
 
 	// The panel starts out remembering what it already knew. Without this
 	// the first write replaces the file with only the sections that reported
