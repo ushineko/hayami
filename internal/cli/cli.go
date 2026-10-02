@@ -150,6 +150,10 @@ func StatusName(s view.Status) string {
 		return "warn"
 	case view.Bad:
 		return "bad"
+	case view.Accent:
+		return "accent"
+	case view.Strong:
+		return "strong"
 	case view.Dim:
 		return "dim"
 	default:

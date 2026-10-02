@@ -57,6 +57,11 @@ type Finding struct {
 	Summary string
 	Reasons []view.Reason
 
+	// Names are the full names the section's labels were shortened from,
+	// "CPU: Intel(R) Core(TM) i9-14900K" (spec 031). The window shows them on
+	// hover; a report has no hover, so it prints them under the summary.
+	Names []string
+
 	// Err is a poll that failed outright, as distinct from a section that
 	// reported what it could not read.
 	Err error
@@ -85,7 +90,7 @@ func diagnose(ctx context.Context, on map[string]bool, sources []panel.Source) [
 	for _, s := range sources {
 		drawn, err := s.Poll(ctx)
 		sec := s.Section()
-		f := Finding{Key: s.Key(), Reasons: sec.Reasons, Err: err, Summary: summarise(sec)}
+		f := Finding{Key: s.Key(), Reasons: sec.Reasons, Err: err, Summary: summarise(sec), Names: names(sec)}
 
 		switch {
 		case !on[s.Key()]:
@@ -154,6 +159,17 @@ func summarise(s view.Section) string {
 	return strings.Join(parts, ", ")
 }
 
+// names are the rows' full names, in the rows' order.
+func names(s view.Section) []string {
+	var out []string
+	for _, r := range s.Rows {
+		if r.Tip != "" {
+			out = append(out, r.Tip)
+		}
+	}
+	return out
+}
+
 // tidy collapses the padding a section carries for its columns. A pane aligns
 // its values by padding them, and a report that repeated the padding would be
 // a wall of spaces.
@@ -176,6 +192,11 @@ func Report(w io.Writer, findings []Finding) error {
 		}
 		if err := line(w, f.Key, string(f.State), lead); err != nil {
 			return err
+		}
+		for _, n := range f.Names {
+			if err := line(w, "", "", n); err != nil {
+				return err
+			}
 		}
 		for _, r := range f.Reasons {
 			if err := line(w, "", "", reasonText(r)); err != nil {

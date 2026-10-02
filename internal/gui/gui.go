@@ -551,12 +551,12 @@ func (p *Panel) rebuild(c *card, want []view.Row) {
 	for i, r := range want {
 		if i < len(rows) {
 			rows[i].SetLabel(r.Label)
-			rows[i].Set(reading(r))
+			rows[i].Set(p.emphasised(reading(r), r.Status))
 			rows[i].SetShown(true)
 			continue
 		}
 		row := glance.NewRow(r.Label, r.Value)
-		row.Set(reading(r))
+		row.Set(p.emphasised(reading(r), r.Status))
 		c.card.AddRow(row)
 		c.rows = append(c.rows, row)
 	}
@@ -576,6 +576,50 @@ func reading(r view.Row) glance.Reading {
 	rd := glance.Known(text, status(r.Status))
 	rd.Stale = r.Stale
 	return rd
+}
+
+/*
+emphasised paints a reading in the colour of an emphasis the design system has
+no status for (spec 031): Accent in the scheme's info colour, Strong in the
+design system's categorical magenta, the one of its colours that no verdict
+and no first or second plot trace takes. Any other status is left to the row.
+
+**The whole value, not each part.** glance.Row draws its value as one piece of
+text in one colour, so an interface whose down rate is 80 MiB/s and whose up
+rate is 12 KiB/s is drawn entirely in the band of the faster -- the view's
+Row.Status, which it sets to the strongest of the parts. The pane colours each
+rate on its own. A value of several coloured pieces, and bold for Strong, need
+the library; both are in spec 031's gaps.
+
+Resolved in the panel's theme for the reason trailColour gives. A stale row is
+dimmed by the library whatever colour it was given.
+*/
+func (p *Panel) emphasised(rd glance.Reading, s view.Status) glance.Reading {
+	switch s {
+	case view.Accent:
+		th, variant := p.theme()
+		return rd.Tinted(th.Color(widgets.StatusColorName(fd.StatusInfo), variant))
+	case view.Strong:
+		th, _ := p.theme()
+		return rd.Tinted(glance.SeriesColour(th, StrongSeries))
+	default:
+		return rd
+	}
+}
+
+// StrongSeries is the design system's series colour Strong is drawn in:
+// magenta, the third of its categorical colours. A bandwidth card shares it
+// with the trace of a fourth interface, which is further down a card than most
+// desks reach.
+const StrongSeries = 3
+
+// theme is the panel's own theme and the variant it is drawn in.
+func (p *Panel) theme() (fyne.Theme, fyne.ThemeVariant) {
+	variant := fynetheme.VariantDark
+	if p.app != nil {
+		variant = p.app.Settings().ThemeVariant()
+	}
+	return p.win.Panel().Theme(), variant
 }
 
 // trailColour is what a plot's line is drawn in: the trail's own status, or
@@ -603,11 +647,7 @@ func reading(r view.Row) glance.Reading {
 // them apart. The view marks every such trail Coloured; the coolant is not,
 // and keeps its band colour, which is a verdict.
 func (p *Panel) trailColour(t view.Trail, sec view.Section) color.Color {
-	th := p.win.Panel().Theme()
-	variant := fynetheme.VariantDark
-	if p.app != nil {
-		variant = p.app.Settings().ThemeVariant()
-	}
+	th, variant := p.theme()
 	if sec.Gone {
 		return th.Color(fynetheme.ColorNameDisabled, variant)
 	}

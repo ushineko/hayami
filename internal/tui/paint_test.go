@@ -37,7 +37,7 @@ func TestThePainterKeepsTheTextWhateverTheVerdict(t *testing.T) {
 	p := tui.Painter()
 	require.NotNil(t, p)
 
-	for _, s := range []view.Status{view.Good, view.Warn, view.Bad, view.Dim, view.Info} {
+	for _, s := range []view.Status{view.Good, view.Warn, view.Bad, view.Dim, view.Info, view.Accent, view.Strong} {
 		assert.Contains(t, p("48 %", s), "48 %", "the text must survive being painted")
 	}
 }

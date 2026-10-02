@@ -59,6 +59,15 @@ type CoolerReading struct {
 	// same reason.
 	GPUTrail []float64
 
+	// CPUName, GPUName and CoolerName are the parts' names as their sources
+	// give them -- "Intel(R) Core(TM) i9-14900K", "NVIDIA GeForce RTX 4090",
+	// "NZXT Kraken Elite V2" -- or empty where a name could not be read
+	// (spec 031). The rows are labelled with them, shortened; the full form
+	// is the row's tip.
+	CPUName    string `json:",omitempty"`
+	GPUName    string `json:",omitempty"`
+	CoolerName string `json:",omitempty"`
+
 	// GPUStale marks a GPU reading kept from an earlier poll because this one
 	// had none -- nvidia-smi missing its timeout under load. The row stays,
 	// dim; the rest of the card is live.
@@ -74,16 +83,19 @@ func Cooler(r CoolerReading) Section {
 	s := Section{Key: "cooler", Title: "Cooler", Icon: IconCooler}
 	unit := UnitWidth("°C", "rpm")
 
+	// Each row is labelled with the part it reads (spec 031): a machine has
+	// one processor, but which one is a fact the panel knows, and the two
+	// desks it runs on differ.
 	if r.HasCPU {
-		s.Rows = append(s.Rows, processor("CPU", r.CPULoad, r.HasCPULoad, r.CPU, unit))
+		s.Rows = append(s.Rows, named(processor("CPU", r.CPULoad, r.HasCPULoad, r.CPU, unit), "CPU", r.CPUName))
 	}
 	if r.HasGPU {
-		row := processor("GPU", r.GPULoad, r.HasGPULoad, r.GPU, unit)
+		row := named(processor("GPU", r.GPULoad, r.HasGPULoad, r.GPU, unit), "GPU", r.GPUName)
 		row.Stale = r.GPUStale
 		s.Rows = append(s.Rows, row)
 	}
 	if r.HasLiquid {
-		s.Rows = append(s.Rows, temperature("Coolant", r.Coolant, coolant(r.Coolant), unit))
+		s.Rows = append(s.Rows, named(temperature("Coolant", r.Coolant, coolant(r.Coolant), unit), "Coolant", r.CoolerName))
 	}
 	if r.HasPump || r.HasFan {
 		s.Rows = append(s.Rows, speeds(r, unit))

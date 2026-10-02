@@ -186,3 +186,124 @@ func TestTheCoolerKeepsEachTrailOnItsOwnScale(t *testing.T) {
 
 	assert.Equal(t, view.ScaleEach, s.TrailScale)
 }
+
+/*
+Spec 031, R1.2. Each rate is drawn in its band, the down and the up apart: a
+rate in each band is given that band's status, whichever direction it is in.
+*/
+func TestEachRateIsInItsOwnBand(t *testing.T) {
+	bands := []struct {
+		rate float64
+		want view.Status
+	}{
+		{0, view.Info},
+		{12 << 10, view.Info},
+		{view.RateNotable - 1, view.Info},
+		{view.RateNotable, view.Accent},
+		{4 << 20, view.Accent},
+		{view.RateBusy, view.Warn},
+		{80 << 20, view.Warn},
+		{view.RateFlatOut, view.Strong},
+		{3 << 30, view.Strong},
+	}
+	for _, b := range bands {
+		s := view.Bandwidth([]view.BandwidthReading{
+			{Name: "eno2", RxRate: b.rate, TxRate: 1, HasRate: true},
+			{Name: "wlan0", RxRate: 1, TxRate: b.rate, HasRate: true},
+		})
+		require.Len(t, s.Rows, 2)
+		down, up := downUp(t, s.Rows[0]), downUp(t, s.Rows[1])
+
+		assert.Equal(t, b.want, down[0], "down at %.0f B/s", b.rate)
+		assert.Equal(t, view.Info, down[1], "the up rate took the down's band")
+		assert.Equal(t, view.Info, up[0], "the down rate took the up's band")
+		assert.Equal(t, b.want, up[1], "up at %.0f B/s", b.rate)
+	}
+}
+
+// downUp is the statuses of a bandwidth row's two rates, down then up.
+func downUp(t *testing.T, r view.Row) [2]view.Status {
+	t.Helper()
+	require.Len(t, r.Parts, 4, "a row is ↓, the down rate, ↑ and the up rate")
+	assert.Contains(t, r.Parts[0].Text, "↓")
+	assert.Contains(t, r.Parts[2].Text, "↑")
+	return [2]view.Status{r.Parts[1].Status, r.Parts[3].Status}
+}
+
+// R1.2. No band is the error colour: a fast download is not a failure. And a
+// rate that has not arrived has none.
+func TestNoRateIsAFailure(t *testing.T) {
+	for _, rate := range []float64{0, 1 << 20, 50 << 20, 900 << 20, 1 << 40} {
+		assert.NotEqual(t, view.Bad, view.RateBand(rate, true))
+		assert.NotEqual(t, view.Good, view.RateBand(rate, true))
+	}
+	assert.Equal(t, view.Info, view.RateBand(500<<20, false))
+}
+
+// R1.4. The parts are the value, exactly: colouring them changes no width.
+// The padded strings are the ones the row drew before it had parts.
+func TestThePartsAreTheValue(t *testing.T) {
+	for _, rate := range []float64{0, 940, 2 << 20, 40 << 20, 400 << 20} {
+		s := view.Bandwidth([]view.BandwidthReading{
+			{Name: "eno2", RxRate: rate, TxRate: rate / 3, HasRate: true},
+		})
+		row := s.Rows[0]
+		joined := ""
+		for _, p := range row.Parts {
+			joined += p.Text
+		}
+		assert.Equal(t, row.Value, joined)
+
+		rx, rxUnit := view.Rate(rate)
+		tx, txUnit := view.Rate(rate / 3)
+		unit := view.UnitWidth("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s")
+		assert.Equal(t, "↓ "+rx+" "+view.PadUnit(rxUnit, unit)+"  ↑ "+tx+" "+view.PadUnit(txUnit, unit), row.Value,
+			"the value is not the string it was before it had parts")
+	}
+}
+
+// R1.3. The totals are a record, not a rate: the detail line takes no band,
+// however large.
+func TestTheTotalsTakeNoBand(t *testing.T) {
+	s := view.Bandwidth([]view.BandwidthReading{
+		{Name: "eno2", RxRate: 400 << 20, TxRate: 400 << 20, RxTotal: 1 << 45, TxTotal: 1 << 44,
+			HasRate: true, HasTotal: true},
+	})
+
+	flat := view.Section{Rows: s.Rows}.Lines()
+	require.Len(t, flat, 1)
+	assert.NotEmpty(t, flat[0].Detail)
+	assert.Equal(t, view.Strong, flat[0].Status, "the row is drawn in its strongest rate's band")
+
+	var painted []string
+	view.RenderWith([]view.Section{s}, view.ArrangeStack, 60, func(text string, st view.Status) string {
+		if strings.Contains(text, "Σ") {
+			painted = append(painted, text)
+			assert.Equal(t, view.Dim, st, "the totals took a colour")
+		}
+		return text
+	})
+	assert.NotEmpty(t, painted, "the totals were not drawn")
+}
+
+// R3.1. The pane colours each rate on its own, and keeps the arrows plain.
+// A row that has gone is dimmed whole: a band is a statement about now.
+func TestThePaneColoursEachRate(t *testing.T) {
+	s := view.Bandwidth([]view.BandwidthReading{
+		{Name: "eno2", RxRate: 40 << 20, TxRate: 2 << 10, HasRate: true},
+	})
+	seen := map[view.Status]string{}
+	paint := func(text string, st view.Status) string { seen[st] += text; return text }
+
+	view.RenderWith([]view.Section{s}, view.ArrangeStack, 60, paint)
+
+	assert.Contains(t, seen[view.Warn], "MiB/s")
+	assert.NotContains(t, seen[view.Warn], "KiB/s", "the up rate took the down's colour")
+	assert.Contains(t, seen[view.Info], "KiB/s")
+	assert.Contains(t, seen[view.Info], "↓")
+
+	s.Gone = true
+	seen = map[view.Status]string{}
+	view.RenderWith([]view.Section{s}, view.ArrangeStack, 60, paint)
+	assert.Empty(t, seen[view.Warn], "a rate from a source that has gone kept its band")
+}

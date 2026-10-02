@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
 
+	fd "github.com/ushineko/fynedesygn"
 	"github.com/ushineko/fynedesygn/glance"
 
 	fdtheme "github.com/ushineko/fynedesygn/theme"
@@ -228,4 +229,36 @@ func CellBar(p *Panel, key string, n int, width float32) (fraction float32, fill
 		return 0, nil, false
 	}
 	return rects[1].Size().Width / rects[0].Size().Width, rects[1].FillColor, true
+}
+
+// PanelSize is the size the panel asks its window for.
+func PanelSize(p *Panel) fyne.Size { return p.win.Panel().Size() }
+
+// RowColour is the explicit colour a card's nth shown row's value was given,
+// nil when it takes its colour from its status.
+func RowColour(p *Panel, key string, n int) color.Color {
+	c, ok := p.cards[key]
+	if !ok || n >= len(c.rows) {
+		return nil
+	}
+	return c.rows[n].Reading().Colour
+}
+
+// Status is the design-system status a card's nth row's value carries, by the
+// word cli uses for it.
+func Status(p *Panel, key string, n int) string {
+	c, ok := p.cards[key]
+	if !ok || n >= len(c.rows) {
+		return ""
+	}
+	switch c.rows[n].Reading().Status {
+	case fd.StatusWarn:
+		return "warn"
+	case fd.StatusBad:
+		return "bad"
+	case fd.StatusGood:
+		return "good"
+	default:
+		return "info"
+	}
 }

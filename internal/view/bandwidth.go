@@ -49,7 +49,6 @@ func Bandwidth(readings []BandwidthReading) Section {
 	return s
 }
 
-// rateRow is one direction: the rate as the value, the total as the detail.
 /*
 interfaceRow is one interface on one line, with its totals on a second.
 
@@ -66,17 +65,97 @@ held to and it matters more here, not less: two changing values on one line
 have two chances to drag it about.
 */
 func interfaceRow(r BandwidthReading, unitWidth int) Row {
-	row := Row{Label: r.Name, Value: rates(r, unitWidth)}
+	parts := rates(r, unitWidth)
+	row := Row{Label: r.Name, Parts: parts, Status: strongest(parts)}
+	for _, p := range parts {
+		row.Value += p.Text
+	}
 	if r.HasTotal {
+		// The totals take no band: they are a record of what has passed,
+		// not a rate, and a total that went amber at 10 MiB would be amber
+		// for the rest of the day.
 		row.Detail = totals(r)
 	}
 	return row
 }
 
-// rates is the two directions, padded so neither moves the other.
-func rates(r BandwidthReading, unitWidth int) string {
-	return "↓ " + rate(r.RxRate, r.HasRate, unitWidth) +
-		"  ↑ " + rate(r.TxRate, r.HasRate, unitWidth)
+// rates is the two directions, padded so neither moves the other, each with
+// the band of its own rate (spec 031). The arrows are the row's plain text: it
+// is the figure that is emphasised, not the furniture beside it.
+func rates(r BandwidthReading, unitWidth int) []Part {
+	return []Part{
+		{Text: "↓ ", Status: Info},
+		{Text: rate(r.RxRate, r.HasRate, unitWidth), Status: RateBand(r.RxRate, r.HasRate)},
+		{Text: "  ↑ ", Status: Info},
+		{Text: rate(r.TxRate, r.HasRate, unitWidth), Status: RateBand(r.TxRate, r.HasRate)},
+	}
+}
+
+/*
+The rate bands, in bytes per second (spec 031).
+
+**Binary, and the first one where the unit changes.** 1 MiB/s is the rate at
+which the figure stops reading KiB/s and starts reading MiB/s, so the colour
+and the unit agree about where "small" ends. Below it an interface is doing
+what interfaces do all day -- a page, a sync, a chat -- and is drawn as it
+always was.
+
+**Then a decade each.** 10 MiB/s is a large download on a home line, or a
+100-megabit link full; 100 MiB/s is most of a gigabit link (whose ceiling is
+about 119 MiB/s), which is a copy across the room or a game being installed.
+Three steps a reader can tell apart at a glance, and no fourth: past a gigabit
+the only question left is which interface, and the row already says.
+*/
+const (
+	RateNotable = 1 << 20
+	RateBusy    = 10 << 20
+	RateFlatOut = 100 << 20
+)
+
+// RateBand is the emphasis a rate is drawn with. A rate that has not arrived
+// has none.
+//
+// No band is Bad, and none is Good either: a rate is not a verdict. Warn is the
+// one verdict colour used, for the middle band, because it is the scheme's
+// amber and amber reads as "look here" without reading as "something broke";
+// the error colour would.
+func RateBand(bytesPerSecond float64, has bool) Status {
+	switch {
+	case !has || bytesPerSecond < RateNotable:
+		return Info
+	case bytesPerSecond < RateBusy:
+		return Accent
+	case bytesPerSecond < RateFlatOut:
+		return Warn
+	default:
+		return Strong
+	}
+}
+
+// strongest is the most emphatic of a row's parts, which is the colour a shell
+// that draws the value as one piece gives it.
+func strongest(parts []Part) Status {
+	out := Info
+	for _, p := range parts {
+		if emphasis(p.Status) > emphasis(out) {
+			out = p.Status
+		}
+	}
+	return out
+}
+
+// emphasis ranks a rate's band. Only the statuses RateBand gives are ranked.
+func emphasis(s Status) int {
+	switch s {
+	case Accent:
+		return 1
+	case Warn:
+		return 2
+	case Strong:
+		return 3
+	default:
+		return 0
+	}
 }
 
 // rate is one direction's figure and unit, at a width that does not change.

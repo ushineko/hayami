@@ -257,7 +257,33 @@ func line(r Row, width int, p Painter) string {
 	// The label is white, as a meter's name is. It says what the number beside
 	// it is, and a reader who cannot tell two rows apart has no use for
 	// either. What is dim is the furniture: a track, a heading, a reset.
-	return p.paint(label, Info) + strings.Repeat(" ", gap) + p.paint(right, r.Status)
+	return p.paint(label, Info) + strings.Repeat(" ", gap) + paintValue(r, p)
+}
+
+/*
+paintValue is a row's value and unit in their colours: piece by piece where
+the row has parts (spec 031), whole where it has not.
+
+A row that is dimmed -- stale, or in a section that has gone -- is dimmed
+whole, parts and all. A rate's band is a statement about this moment, and a
+rate nobody has measured this minute is not in any band.
+*/
+func paintValue(r Row, p Painter) string {
+	if len(r.Parts) == 0 || r.Status == Dim {
+		right := r.Value
+		if r.Unit != "" {
+			right += " " + r.Unit
+		}
+		return p.paint(right, r.Status)
+	}
+	var b strings.Builder
+	for _, part := range r.Parts {
+		b.WriteString(p.paint(part.Text, part.Status))
+	}
+	if r.Unit != "" {
+		b.WriteString(p.paint(" "+r.Unit, Info))
+	}
+	return b.String()
 }
 
 // rightAlign puts a detail line against the right edge, under the value it
@@ -352,7 +378,9 @@ func rowColumns(sections []Section) (c columns) {
 			c.label = max(c.label, runeLen(trailLabel(s, t)))
 		}
 		for _, r := range s.Lines() {
-			c.label = max(c.label, runeLen(r.Label))
+			// A row whose label can change keeps its width whatever it says
+			// now, so a name arriving does not move every column in the pane.
+			c.label = max(c.label, runeLen(r.Label), r.LabelWidth)
 		}
 		for _, cell := range s.Cells {
 			c.label = max(c.label, runeLen(cell.Label)+2+runeLen(cell.Note))

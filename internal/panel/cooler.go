@@ -72,6 +72,13 @@ type Cooler struct {
 	// the card -- and never runs nvidia-smi.
 	load     func() (float64, bool)
 	graphics func(context.Context) core.Graphics
+
+	// cpuName is the processor's model, read on the first poll that asks and
+	// kept: it does not change while the machine is up. Empty unless
+	// NewCooler sets it, for the reason load is.
+	cpuName  func() string
+	cpuNamed bool
+	cpuModel string
 }
 
 // coolerDrivers are the drivers the cooler section asks.
@@ -83,6 +90,7 @@ func NewCooler() *Cooler {
 	c := newCooler(sanshoku.Scan, cpuPackage)
 	c.load = core.NewCPULoad(core.ProcStatPath).Load
 	c.graphics = core.NewGraphicsReader().Read
+	c.cpuName = func() string { return core.CPUName(core.CPUInfoPath) }
 	return c
 }
 
@@ -98,6 +106,7 @@ func newCooler(scan Scan, sensor func() (float64, error)) *Cooler {
 
 		load:     func() (float64, bool) { return 0, false },
 		graphics: func(context.Context) core.Graphics { return core.Graphics{} },
+		cpuName:  func() string { return "" },
 	}
 }
 
@@ -153,6 +162,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 
 	if v, err := c.sensor(); err == nil {
 		out.CPU, out.HasCPU = v, true
+		out.CPUName = c.processorName()
 	} else {
 		reasons = append(reasons, view.Reason{
 			Label: "CPU", Text: "no sensor", Status: view.Info,
@@ -165,6 +175,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	if g := c.graphics(ctx); g.HasTemperature {
 		out.GPU, out.HasGPU = g.Temperature, true
 		out.GPULoad, out.HasGPULoad = g.Load, g.HasLoad
+		out.GPUName = g.Name
 	} else {
 		// Aside: most machines have no card this build can read, and a line
 		// saying so on every one of them would be the card talking about
@@ -175,10 +186,11 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		})
 	}
 
-	status, why, err := c.liquid(ctx)
+	status, name, why, err := c.liquid(ctx)
 	reasons = append(reasons, why...)
 	if status != nil {
 		out.Coolant, out.HasLiquid = status.Coolant, true
+		out.CoolerName = name
 		out.PumpRPM, out.HasPump = status.PumpRPM, status.HasPump
 		out.FanRPM, out.HasFan = status.FanRPM, status.HasFan
 	}
@@ -196,7 +208,10 @@ One cooler. A Kraken lists more than one node and only one answers, so once a
 device is held no further candidate is opened: opening a node that does not
 answer costs the driver's probe timeout, every five seconds, for nothing.
 */
-func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, []view.Reason, error) {
+//
+// The name is the cooler's own, as sanshoku identifies it ("NZXT Kraken Elite
+// V2"), for the coolant's label (spec 031).
+func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, string, []view.Reason, error) {
 	var reasons []view.Reason
 	var errs []error
 
@@ -223,6 +238,7 @@ func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, []view.Reason, er
 	c.held.prune()
 
 	var status *cooling.Status
+	name := ""
 	for _, cand := range candidates {
 		if !c.held.has(cand) && len(c.held.devices) > 0 {
 			continue
@@ -247,6 +263,7 @@ func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, []view.Reason, er
 		case err == nil:
 			if status == nil {
 				status = &s
+				name = dev.Identity().Name
 			}
 		case errors.Is(err, sanshoku.ErrGone):
 			c.held.drop(cand)
@@ -261,7 +278,16 @@ func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, []view.Reason, er
 			Detail: "no supported cooler detected",
 		})
 	}
-	return status, reasons, errors.Join(errs...)
+	return status, name, reasons, errors.Join(errs...)
+}
+
+// processorName is the processor's model, read once.
+func (c *Cooler) processorName() string {
+	if !c.cpuNamed {
+		c.cpuNamed = true
+		c.cpuModel = c.cpuName()
+	}
+	return c.cpuModel
 }
 
 /*
@@ -286,10 +312,12 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 
 	if !out.HasCPU && c.reading.HasCPU {
 		out.CPU, out.HasCPU = c.reading.CPU, true
+		out.CPUName = c.reading.CPUName
 		c.gone = true
 	}
 	if !out.HasLiquid && c.reading.HasLiquid {
 		out.Coolant, out.HasLiquid = c.reading.Coolant, true
+		out.CoolerName = c.reading.CoolerName
 		out.PumpRPM, out.HasPump = c.reading.PumpRPM, c.reading.HasPump
 		out.FanRPM, out.HasFan = c.reading.FanRPM, c.reading.HasFan
 		c.gone = true
@@ -303,8 +331,17 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 	if !out.HasGPU && c.reading.HasGPU {
 		out.GPU, out.HasGPU = c.reading.GPU, true
 		out.GPULoad, out.HasGPULoad = c.reading.GPULoad, c.reading.HasGPULoad
+		out.GPUName = c.reading.GPUName
 		out.GPUStale = true
 	}
+
+	// A name, once heard, is kept by a row that is still there: a poll that
+	// read the temperature and not the name (nvidia-smi's answer cut short)
+	// should not put "GPU" back for five seconds and move nothing but the
+	// reader's attention.
+	out.CPUName = keepName(out.HasCPU, out.CPUName, c.reading.CPUName)
+	out.GPUName = keepName(out.HasGPU, out.GPUName, c.reading.GPUName)
+	out.CoolerName = keepName(out.HasLiquid, out.CoolerName, c.reading.CoolerName)
 
 	// Only a sample that was actually taken goes on the plot. A trail fed the
 	// value it already held would draw a flat line through an outage and call
@@ -324,6 +361,14 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 
 	c.reading = out
 	return out.HasCPU || out.HasGPU || out.HasLiquid
+}
+
+// keepName is a row's name, or the one it had when this poll brought none.
+func keepName(has bool, name, was string) string {
+	if has && name == "" {
+		return was
+	}
+	return name
 }
 
 // Section turns the reading into rows and a plot.
