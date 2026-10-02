@@ -190,7 +190,32 @@ const (
 	Warn
 	// Bad is a failure.
 	Bad
+
+	// Accent and Strong are emphasis, not verdicts (spec 031): a reading
+	// that is large enough to be worth finding at a glance, and is not wrong
+	// for being large. A bandwidth rate is the case: 80 MiB/s is a file
+	// arriving, not a fault, and drawing it in a verdict's colour would teach
+	// the reader that a download is an alarm.
+	//
+	// Accent is drawn in the scheme's info colour -- the colour Info names
+	// and does not draw on a row, where Info is plain text. Strong is the
+	// strongest emphasis a shell has that is not the error colour, in bold
+	// where the shell has bold. They come after Bad so that every status a
+	// cache already holds keeps its number.
+	Accent
+	// Strong is the strongest emphasis: see Accent.
+	Strong
 )
+
+// Part is one piece of a row's value with a status of its own.
+//
+// For a value that carries two readings with two verdicts: an interface's
+// down and up rates on one line (spec 031). The texts are the same padded
+// strings the value is made of, so colouring them moves nothing.
+type Part struct {
+	Text   string
+	Status Status
+}
 
 // Row is one label-and-value line.
 //
@@ -213,6 +238,23 @@ type Row struct {
 	// when nvidia-smi does not answer in time (spec 026); a whole source that
 	// has stopped is the section's Gone instead.
 	Stale bool
+
+	// Parts colour the value piece by piece, and are empty for a row whose
+	// value takes Status whole, which is most of them. When there are parts
+	// their texts joined are Value exactly: Value is still what every width
+	// is measured from, and Parts only say how to colour it.
+	Parts []Part `json:",omitempty"`
+
+	// Tip is what the row says when the pointer rests on it: the full name a
+	// label was shortened from (spec 031). A shell without a pointer prints
+	// it where it has room for it -- doctor does -- or not at all.
+	Tip string `json:",omitempty"`
+
+	// LabelWidth is the width the label column keeps for this row whatever
+	// its label says, for a label that can change while the panel is up: a
+	// processor's name that arrives a poll after "CPU". Zero for a label that
+	// is what it is.
+	LabelWidth int `json:",omitempty"`
 }
 
 // Section is a titled group of rows and meters, which is what a card is in the
@@ -340,8 +382,17 @@ func (s Section) Lines() []Row {
 // The details live here rather than on the card because they are the answer to
 // a question a reader only sometimes asks -- "why not?" -- and a panel that
 // spent two lines on an exit status would be a panel about itself.
+//
+// The rows' tips come first, one per line: the full names of the parts the
+// labels shortened (spec 031). The design system's card takes one tip for the
+// whole card, so a row's tip is a line of the card's.
 func (s Section) Hover() string {
 	var parts []string
+	for _, r := range s.Rows {
+		if r.Tip != "" {
+			parts = append(parts, r.Tip)
+		}
+	}
 	if s.Note != "" {
 		parts = append(parts, s.Note)
 	}

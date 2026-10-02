@@ -150,11 +150,11 @@ func TestNoSensorAndNoNvidiaSMIIsNoGPU(t *testing.T) {
 
 // The real runner, against a script standing in for nvidia-smi on PATH: the
 // flags it is given are the ones ParseSMI expects the answer to.
-func TestNvidiaSMIIsAskedForTwoColumnsWithoutUnits(t *testing.T) {
+func TestNvidiaSMIIsAskedForThreeColumnsWithoutUnits(t *testing.T) {
 	dir := t.TempDir()
 	script := "#!/bin/sh\n" +
-		`[ "$1" = "--query-gpu=temperature.gpu,utilization.gpu" ] && ` +
-		`[ "$2" = "--format=csv,noheader,nounits" ] && echo "52, 7" && exit 0` + "\n" +
+		`[ "$1" = "--query-gpu=temperature.gpu,utilization.gpu,name" ] && ` +
+		`[ "$2" = "--format=csv,noheader,nounits" ] && echo "52, 7, NVIDIA GeForce RTX 3080" && exit 0` + "\n" +
 		"exit 9\n"
 	//nolint:gosec // an executable the test needs to run
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "nvidia-smi"), []byte(script), 0o700))
@@ -166,4 +166,5 @@ func TestNvidiaSMIIsAskedForTwoColumnsWithoutUnits(t *testing.T) {
 	assert.True(t, gotTemp && gotLoad)
 	assert.InDelta(t, 52, temp, 0.001)
 	assert.InDelta(t, 7, load, 0.001)
+	assert.Equal(t, "NVIDIA GeForce RTX 3080", core.SMIName(out))
 }

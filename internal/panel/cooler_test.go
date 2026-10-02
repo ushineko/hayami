@@ -151,7 +151,7 @@ func TestACoolerThatComesBackIsNotGoneAnyMore(t *testing.T) {
 
 	sec := c.Section()
 	assert.False(t, sec.Gone)
-	assert.Contains(t, labelled(t, sec, "Coolant").Value, "39.4")
+	assert.Contains(t, labelled(t, sec, "Kraken Elite V2").Value, "39.4")
 	assert.Empty(t, sec.Reasons, "a reason outlived the thing it was about")
 }
 
@@ -450,11 +450,59 @@ func TestACardThatMissesAPollKeepsItsRow(t *testing.T) {
 	assert.Contains(t, gpu.Value, "41.0")
 	assert.True(t, gpu.Stale)
 	assert.False(t, labelled(t, sec, "CPU").Stale)
-	assert.False(t, labelled(t, sec, "Coolant").Stale)
+	assert.False(t, labelled(t, sec, "Kraken Elite V2").Stale)
 	assert.Len(t, sec.Trails[2].Samples, 1, "a missed poll is not a sample")
 
 	// And the next answer is live again.
 	r.gpu = card
 	poll(t, c)
 	assert.False(t, labelled(t, c.Section(), "GPU").Stale)
+}
+
+// Spec 031, R2.1-R2.3. Each row is labelled with the part it reads: the
+// processor's model, the card's, and the cooler's as sanshoku identifies it.
+// The full names are the rows' tips.
+func TestTheRowsAreNamedForTheirHardware(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	r.gpu = card
+	r.gpu.Name = "NVIDIA GeForce RTX 4090"
+	c := r.section()
+	panel.SetCPUName(c, func() string { return "Intel(R) Core(TM) i9-14900K" })
+
+	poll(t, c)
+	sec := c.Section()
+
+	assert.Equal(t, "CPU: Intel(R) Core(TM) i9-14900K", labelled(t, sec, "i9-14900K").Tip)
+	assert.Equal(t, "GPU: NVIDIA GeForce RTX 4090", labelled(t, sec, "RTX 4090").Tip)
+	assert.Equal(t, "Coolant: NZXT Kraken Elite V2", labelled(t, sec, "Kraken Elite V2").Tip)
+}
+
+// R2.5. The processor's model is read once, not every five seconds: it does
+// not change while the machine is up.
+func TestTheProcessorIsNamedOnce(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	c := r.section()
+	asked := 0
+	panel.SetCPUName(c, func() string { asked++; return "AMD Ryzen 9 7950X 16-Core Processor" })
+
+	poll(t, c)
+	poll(t, c)
+
+	assert.Equal(t, 1, asked)
+	labelled(t, c.Section(), "Ryzen 9 7950X")
+}
+
+// R2.5. A card whose name did not come with this poll keeps the one it had,
+// rather than going back to "GPU" for five seconds.
+func TestANameOnceHeardIsKept(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	r.gpu = card
+	r.gpu.Name = "NVIDIA GeForce RTX 3080"
+	c := r.section()
+	poll(t, c)
+
+	r.gpu.Name = ""
+	poll(t, c)
+
+	labelled(t, c.Section(), "RTX 3080")
 }

@@ -23,6 +23,13 @@ func Painter() view.Painter {
 	warn := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(3)) // yellow
 	bad := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(1))  // red
 	dim := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(8))  // bright black
+
+	// The two emphases a rate takes (spec 031). Blue is the scheme's info
+	// colour, which Info itself does not draw on a row; magenta in bold is
+	// the strongest the palette has that no verdict uses. Never red: a fast
+	// download is not a failure.
+	accent := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(4))            // blue
+	strong := lipgloss.NewStyle().Foreground(lipgloss.ANSIColor(5)).Bold(true) // magenta, bold
 	plain := lipgloss.NewStyle()
 
 	return func(text string, status view.Status) string {
@@ -35,6 +42,10 @@ func Painter() view.Painter {
 			return warn.Render(text)
 		case view.Bad:
 			return bad.Render(text)
+		case view.Accent:
+			return accent.Render(text)
+		case view.Strong:
+			return strong.Render(text)
 		default:
 			return plain.Render(text)
 		}

@@ -52,6 +52,16 @@ type Entry struct {
 // Cache is every section's last reading, by section key.
 type Cache map[string]Entry
 
+// File is where another file of this program's cache lives, beside the
+// readings.
+func File(name string) (string, error) {
+	dir, err := dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
+}
+
 // Path is where the cache lives.
 func Path() (string, error) {
 	dir, err := dir()
@@ -111,18 +121,27 @@ rather than half of one, which is the difference between a cold start and a
 parse failure on every start until someone deletes the file.
 */
 func Save(path string, c Cache) error {
+	raw, err := json.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("encoding the readings: %w", err)
+	}
+	return WriteAtomic(path, raw)
+}
+
+/*
+WriteAtomic puts raw at path through a temporary file beside it and a rename,
+so a reader finds the previous contents or the new ones and never half of
+either. Save's reason, shared with the peripherals source's memory of devices
+(spec 032), which lives in the same directory.
+*/
+func WriteAtomic(path string, raw []byte) error {
 	// The user's own, and nobody else's business: these are readings from
 	// their hardware. The temporary file below is created 0600 already.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("making the cache directory: %w", err)
 	}
 
-	raw, err := json.Marshal(c)
-	if err != nil {
-		return fmt.Errorf("encoding the readings: %w", err)
-	}
-
-	tmp, err := os.CreateTemp(filepath.Dir(path), FileName+".*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
 	if err != nil {
 		return fmt.Errorf("opening a temporary cache file: %w", err)
 	}

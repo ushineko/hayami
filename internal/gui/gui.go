@@ -13,12 +13,14 @@ import (
 	"image/color"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	fynetheme "fyne.io/fyne/v2/theme"
 
 	fd "github.com/ushineko/fynedesygn"
@@ -107,6 +109,10 @@ type card struct {
 	// peripherals.
 	grid  *glance.CellGrid
 	cells []*glance.Cell
+
+	// pinned marks the rows built with their label column held at the name
+	// column's width (spec 031), by position.
+	pinned []bool
 }
 
 // SparkCapacity is how many samples the window's plot holds.
@@ -216,6 +222,7 @@ func New(a fyne.App, o Options) *Panel {
 		app:   a,
 	}
 
+	nameColumn := nameColumnWidth(a, o)
 	for _, s := range o.Sources {
 		// The section the card is built from decides its shape for the life
 		// of the program, because the library takes its objects now. Where
@@ -235,9 +242,15 @@ func New(a fyne.App, o Options) *Panel {
 			if i < len(lines) {
 				r = lines[i]
 			}
-			row := glance.NewRow(r.Label, r.Value)
+			// A row whose label is a hardware name has its label column
+			// pinned, so the name arriving -- or being longer than "CPU" --
+			// cannot widen the card (spec 031). By position, as the spares
+			// are: the cooler's named rows come first and stay first.
+			pin := r.LabelWidth > 0
+			row := glance.NewRowWidth(r.Label, r.Value, pinWidth(pin, nameColumn))
 			row.SetShown(i < len(lines))
 			holder.rows = append(holder.rows, row)
+			holder.pinned = append(holder.pinned, pin)
 			c.AddRow(row)
 		}
 		for _, m := range sec.Meters {
@@ -550,13 +563,19 @@ func (p *Panel) rebuild(c *card, want []view.Row) {
 	rows := c.card.Rows()
 	for i, r := range want {
 		if i < len(rows) {
-			rows[i].SetLabel(r.Label)
-			rows[i].Set(reading(r))
+			label := r.Label
+			if i < len(c.pinned) && c.pinned[i] {
+				// A reason's sentence landing in a row built for a name is
+				// cut where it can be read, not clipped mid-letter.
+				label = view.Cut(label, view.LabelWidth)
+			}
+			rows[i].SetLabel(label)
+			rows[i].Set(p.value(r))
 			rows[i].SetShown(true)
 			continue
 		}
 		row := glance.NewRow(r.Label, r.Value)
-		row.Set(reading(r))
+		row.Set(p.value(r))
 		c.card.AddRow(row)
 		c.rows = append(c.rows, row)
 	}
@@ -576,6 +595,98 @@ func reading(r view.Row) glance.Reading {
 	rd := glance.Known(text, status(r.Status))
 	rd.Stale = r.Stale
 	return rd
+}
+
+/*
+value is what a row's value draws: its reading, and for a row with parts each
+part in its own colour (spec 031) -- a bandwidth row's down and up rates in
+their own bands, independently.
+
+The emphases the design system has no status for are given colours: Accent the
+scheme's info colour, Strong the design system's categorical magenta, the one
+of its colours no verdict and no first or second plot trace takes, and bold.
+Warn is the library's own amber. Resolved in the panel's theme for the reason
+trailColour gives; a stale row is dimmed by the library, parts and all.
+*/
+func (p *Panel) value(r view.Row) glance.Reading {
+	if len(r.Parts) == 0 {
+		return reading(r)
+	}
+	th, variant := p.theme()
+	parts := make([]glance.Part, 0, len(r.Parts))
+	for _, part := range r.Parts {
+		gp := glance.Part{Text: part.Text, Status: status(part.Status)}
+		switch part.Status {
+		case view.Accent:
+			gp.Colour = th.Color(widgets.StatusColorName(fd.StatusInfo), variant)
+		case view.Strong:
+			gp.Colour, gp.Bold = glance.SeriesColour(th, StrongSeries), true
+		}
+		parts = append(parts, gp)
+	}
+	if r.Unit != "" {
+		parts = append(parts, glance.Part{Text: " " + r.Unit, Status: fd.StatusInfo})
+	}
+	rd := glance.Parted(parts...)
+	rd.Stale = r.Stale
+	return rd
+}
+
+/*
+nameColumnWidth is the width a hardware name's label column is pinned to:
+view.LabelWidth characters in the panel's own face and size (spec 031).
+
+Measured on lower-case letters, the width of a typical name's characters: every
+short name either desk produces measures well inside it ("Kraken Elite V2" is
+84 of 111 at the default size), and a pin measured on capitals would widen
+the cooler card on a desk whose names are short. A name of fifteen capitals is
+clipped at the edge; its full form is in the tip.
+
+From the settings the panel will be drawn in, not the application's theme,
+because the rows are built before Apply gives the panel its face. A text size
+changed while the panel is up is not followed until the next start: the
+library takes the width at build time.
+*/
+func nameColumnWidth(a fyne.App, o Options) float32 {
+	c := config.Default()
+	if o.Store != nil {
+		c = o.Store.Config()
+	}
+	var th fyne.Theme
+	if a != nil {
+		th = c.PanelAppearance(Appearance(a, o.Store)).Theme()
+	}
+	if th == nil {
+		th = fynetheme.DefaultTheme()
+	}
+	t := canvas.NewText(strings.Repeat("n", view.LabelWidth), nil)
+	t.TextSize = th.Size(fynetheme.SizeNameText)
+	t.FontSource = th.Font(fyne.TextStyle{})
+	return t.MinSize().Width
+}
+
+// pinWidth is the label width a row is built with: the name column for a row
+// that holds a name, and zero -- the library's unpinned row -- for the rest.
+func pinWidth(pin bool, nameColumn float32) float32 {
+	if pin {
+		return nameColumn
+	}
+	return 0
+}
+
+// StrongSeries is the design system's series colour Strong is drawn in:
+// magenta, the third of its categorical colours. A bandwidth card shares it
+// with the trace of a fourth interface, which is further down a card than most
+// desks reach.
+const StrongSeries = 3
+
+// theme is the panel's own theme and the variant it is drawn in.
+func (p *Panel) theme() (fyne.Theme, fyne.ThemeVariant) {
+	variant := fynetheme.VariantDark
+	if p.app != nil {
+		variant = p.app.Settings().ThemeVariant()
+	}
+	return p.win.Panel().Theme(), variant
 }
 
 // trailColour is what a plot's line is drawn in: the trail's own status, or
@@ -603,11 +714,7 @@ func reading(r view.Row) glance.Reading {
 // them apart. The view marks every such trail Coloured; the coolant is not,
 // and keeps its band colour, which is a verdict.
 func (p *Panel) trailColour(t view.Trail, sec view.Section) color.Color {
-	th := p.win.Panel().Theme()
-	variant := fynetheme.VariantDark
-	if p.app != nil {
-		variant = p.app.Settings().ThemeVariant()
-	}
+	th, variant := p.theme()
 	if sec.Gone {
 		return th.Color(fynetheme.ColorNameDisabled, variant)
 	}

@@ -229,3 +229,15 @@ func CellBar(p *Panel, key string, n int, width float32) (fraction float32, fill
 	}
 	return rects[1].Size().Width / rects[0].Size().Width, rects[1].FillColor, true
 }
+
+// PanelSize is the size the panel asks its window for.
+func PanelSize(p *Panel) fyne.Size { return p.win.Panel().Size() }
+
+// RowParts are the parts a card's nth row's value is drawn in.
+func RowParts(p *Panel, key string, n int) []glance.Part {
+	c, ok := p.cards[key]
+	if !ok || n >= len(c.rows) {
+		return nil
+	}
+	return c.rows[n].Reading().Parts
+}

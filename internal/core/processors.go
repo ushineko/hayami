@@ -123,10 +123,15 @@ func procStat(path string) (busy, idle float64, err error) {
 // not a card index, because the numbers move between boots.
 const BusyGlob = "/sys/class/drm/card*/device/gpu_busy_percent"
 
-// SMIFlag is what nvidia-smi is asked for, in the order ParseSMI expects. One
-// constant flag rather than a query put together: an argument the subprocess
-// checker can see is not anybody's input.
-const SMIFlag = "--query-gpu=temperature.gpu,utilization.gpu"
+// SMIFlag is what nvidia-smi is asked for, in the order ParseSMI and SMIName
+// expect. One constant flag rather than a query put together: an argument the
+// subprocess checker can see is not anybody's input.
+//
+// The name is the third column and the last (spec 031): one more field in the
+// query the panel already makes, rather than a second process for a fact that
+// does not change. Last, because it is the one field that is text, and a
+// card's name with a comma in it would otherwise push the numbers along.
+const SMIFlag = "--query-gpu=temperature.gpu,utilization.gpu,name"
 
 // SMITimeout bounds the nvidia-smi call. A sensor read that hangs must not
 // hold up a poll, let alone the shutdown it would be blocking.
@@ -139,6 +144,10 @@ type Graphics struct {
 	HasTemperature bool    `json:"has_temperature"`
 	Load           float64 `json:"load"`
 	HasLoad        bool    `json:"has_load"`
+
+	// Name is the card's model, "NVIDIA GeForce RTX 4090", from nvidia-smi
+	// or from the PCI ID database, and empty where neither had one.
+	Name string `json:"name,omitempty"`
 }
 
 /*
@@ -161,11 +170,21 @@ type GraphicsReader struct {
 	Busy string
 	// SMI runs nvidia-smi and returns what it printed.
 	SMI func(context.Context) (string, error)
+	// PCIIDs is the PCI ID database a card the kernel reads is named from:
+	// PCIIDsPath, or a test's. Empty names no card that way.
+	PCIIDs string
+
+	// name is the kernel-read card's name, looked up once: named says the
+	// lookup was made, whether or not it found one. The database is a
+	// megabyte and a half, and a card does not change its name between polls.
+	mu    sync.Mutex
+	name  string
+	named bool
 }
 
 // NewGraphicsReader reads this machine's card.
 func NewGraphicsReader() *GraphicsReader {
-	return &GraphicsReader{Root: hwmon.Root, Busy: BusyGlob, SMI: NvidiaSMI}
+	return &GraphicsReader{Root: hwmon.Root, Busy: BusyGlob, SMI: NvidiaSMI, PCIIDs: PCIIDsPath}
 }
 
 // Read is the card's temperature and load. The kernel first; nvidia-smi only
@@ -173,11 +192,20 @@ func NewGraphicsReader() *GraphicsReader {
 // an error: a card that cannot be read is absent, and absence is the answer.
 func (g *GraphicsReader) Read(ctx context.Context) Graphics {
 	var out Graphics
-	if _, t, err := hwmon.First(g.Root, hwmon.GPU); err == nil {
+	device := ""
+	if sensor, t, err := hwmon.First(g.Root, hwmon.GPU); err == nil {
 		out.Temperature, out.HasTemperature = t, true
+		device = chipDevice(g.Root, sensor.Chip)
 	}
-	if load, ok := busyIn(g.Busy); ok {
+	if load, path, ok := busyIn(g.Busy); ok {
 		out.Load, out.HasLoad = load, true
+		if device == "" {
+			// The busy file sits in the card's own device directory.
+			device = filepath.Dir(path)
+		}
+	}
+	if device != "" {
+		out.Name = g.kernelName(device)
 	}
 	if (out.HasTemperature && out.HasLoad) || g.SMI == nil {
 		return out
@@ -186,6 +214,9 @@ func (g *GraphicsReader) Read(ctx context.Context) Graphics {
 	text, err := g.SMI(ctx)
 	if err != nil {
 		return out
+	}
+	if out.Name == "" {
+		out.Name = SMIName(text)
 	}
 	t, load, gotTemp, gotLoad := ParseSMI(text)
 	if !out.HasTemperature && gotTemp {
@@ -211,14 +242,28 @@ func NvidiaSMI(ctx context.Context) (string, error) {
 	return string(out), nil
 }
 
-// busyIn is the first readable busy file matching pattern.
-func busyIn(pattern string) (float64, bool) {
+// kernelName is the name of the card at a sysfs device directory, from the
+// PCI ID database, looked up on the first call and remembered after it.
+func (g *GraphicsReader) kernelName(device string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.named {
+		g.named = true
+		if vendor, id, ok := pciID(device); ok && g.PCIIDs != "" {
+			g.name = PCIName(g.PCIIDs, vendor, id)
+		}
+	}
+	return g.name
+}
+
+// busyIn is the first readable busy file matching pattern, and where it is.
+func busyIn(pattern string) (float64, string, bool) {
 	if pattern == "" {
-		return 0, false
+		return 0, "", false
 	}
 	found, err := filepath.Glob(pattern)
 	if err != nil {
-		return 0, false
+		return 0, "", false
 	}
 	for _, path := range found {
 		body, err := os.ReadFile(path) //nolint:gosec // sysfs, or a test's file
@@ -229,9 +274,9 @@ func busyIn(pattern string) (float64, bool) {
 		if err != nil {
 			continue
 		}
-		return v, true
+		return v, path, true
 	}
-	return 0, false
+	return 0, "", false
 }
 
 /*
@@ -257,6 +302,28 @@ func ParseSMI(out string) (temperature, load float64, gotTemp, gotLoad bool) {
 		}
 	}
 	return temperature, load, gotTemp, gotLoad
+}
+
+/*
+SMIName is the card's name from the same line ParseSMI reads: the third column
+and everything after it, so a name that contains a comma is kept whole.
+
+	41, 4, NVIDIA GeForce RTX 4090
+
+Empty where there is no third column -- an older answer, or a test's -- or
+where nvidia-smi says it does not know ("[N/A]").
+*/
+func SMIName(out string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	parts := strings.SplitN(line, ",", 3)
+	if len(parts) < 3 {
+		return ""
+	}
+	name := strings.TrimSpace(parts[2])
+	if strings.HasPrefix(name, "[") {
+		return ""
+	}
+	return name
 }
 
 // leading is the first figure in a field like " 3 %".

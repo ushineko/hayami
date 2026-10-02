@@ -325,3 +325,20 @@ func TestAMachineWithNoGPUIsOKAndSaysSo(t *testing.T) {
 	findings = cli.DiagnoseSources(t.Context(), []panel.Source{sectionSource{sec}})
 	assert.Equal(t, cli.StatePartial, findings[0].State)
 }
+
+// Spec 031, R2.5. A label cut to fit the card is printed in full by doctor,
+// which has no hover to put it in.
+func TestDoctorPrintsTheFullNames(t *testing.T) {
+	sec := view.Cooler(view.CoolerReading{
+		CPU: 60, HasCPU: true, CPUName: "Intel(R) Core(TM) i9-14900K",
+		GPU: 52, HasGPU: true, GPUName: "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]",
+	})
+
+	findings := cli.DiagnoseSources(t.Context(), []panel.Source{sectionSource{sec}})
+	var out bytes.Buffer
+	require.NoError(t, cli.Report(&out, findings))
+
+	assert.Contains(t, out.String(), "i9-14900K 60.0 °C", "the summary uses the short name")
+	assert.Contains(t, out.String(), "CPU: Intel(R) Core(TM) i9-14900K")
+	assert.Contains(t, out.String(), "GPU: Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]")
+}
