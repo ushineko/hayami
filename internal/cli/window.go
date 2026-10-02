@@ -39,7 +39,7 @@ func windowStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Say whether the rule is installed, and at what opacity",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: withRules(func(cmd *cobra.Command, _ []string) error {
 			current, err := desktop.Current(PanelAppID)
 			if err != nil {
 				return err
@@ -50,7 +50,7 @@ func windowStatusCmd() *cobra.Command {
 			}
 			cmd.Println("Frameless and on top.")
 			return nil
-		},
+		}),
 	}
 }
 
@@ -60,7 +60,7 @@ func windowInstallCmd() *cobra.Command {
 		Use:   "install",
 		Short: "Take the panel's titlebar away and keep it on top",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: withRules(func(cmd *cobra.Command, _ []string) error {
 			err := desktop.Install(PanelAppID)
 			if err != nil && !errors.Is(err, desktop.ErrNoKWin) {
 				return err
@@ -73,7 +73,7 @@ func windowInstallCmd() *cobra.Command {
 				cmd.Println("KWin did not answer, so it takes effect when it next starts.")
 			}
 			return nil
-		},
+		}),
 	}
 	return cmd
 }
@@ -84,13 +84,26 @@ func windowRemoveCmd() *cobra.Command {
 		Use:   "remove",
 		Short: "Give the panel its titlebar back",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		RunE: withRules(func(cmd *cobra.Command, _ []string) error {
 			err := desktop.Remove(PanelAppID)
 			if err != nil && !errors.Is(err, desktop.ErrNoKWin) {
 				return fmt.Errorf("%w", err)
 			}
 			cmd.Println("Removed. The panel gets its titlebar back when it next starts.")
 			return nil
-		},
+		}),
+	}
+}
+
+// withRules runs a subcommand where window rules apply. Elsewhere it says why
+// there is nothing to do and succeeds: the panel already has what the rule
+// would give it.
+func withRules(run func(*cobra.Command, []string) error) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		if !desktop.RulesApply {
+			cmd.Println(desktop.NoRules)
+			return nil
+		}
+		return run(cmd, args)
 	}
 }

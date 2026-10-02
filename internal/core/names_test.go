@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,6 +75,9 @@ func TestACardIsNamedFromThePCIDatabase(t *testing.T) {
 // R2.2. An AMD card found through hwmon is named from the database, by the
 // PCI function behind the chip, and the lookup is made once.
 func TestAnAMDCardIsNamedThroughItsChip(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a sysfs PCI address has colons, which a Windows filename cannot")
+	}
 	dir := t.TempDir()
 	root, busy := amdgpu(t, dir)
 	device := filepath.Join(dir, "pci", "0000:03:00.0")

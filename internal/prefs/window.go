@@ -35,9 +35,12 @@ into the user's own kwinrulesrc — the file holding every window rule they
 have — so it happens here, when they ask, and not on a first run.
 */
 func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
-	current, err := desktop.Current(PanelAppID)
-	if err != nil {
-		return container.NewVBox(widgets.Dim("The window rules could not be read: " + err.Error()))
+	var current desktop.Rule
+	if desktop.RulesApply {
+		var err error
+		if current, err = desktop.Current(PanelAppID); err != nil {
+			return container.NewVBox(widgets.Dim("The window rules could not be read: " + err.Error()))
+		}
 	}
 
 	c := w.opts.Store.Config()
@@ -64,25 +67,33 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	slider.OnChanged = func(v float64) { value.SetText(fmt.Sprintf("%d %%", int(v))) }
 	slider.OnChangeEnded = func(v float64) { w.setOpacity(int(v)) }
 
-	return container.NewVBox(
-		widgets.DimWrapped("The panel's own faces and size. This window keeps the ones on its "+
+	items := []fyne.CanvasObject{
+		widgets.DimWrapped("The panel's own faces and size. This window keeps the ones on its " +
 			"Appearance screen: the two are read at different distances."),
 		w.faces(s, panel),
 		widget.NewSeparator(),
-		widgets.DimWrapped("What the compositor grants. A glance window is read without being touched, "+
+		widgets.DimWrapped("What the compositor grants. A glance window is read without being touched, " +
 			"so it has no titlebar and sits above other windows."),
-		rule,
-		widgets.DimWrapped("Installs a KWin rule you can see and remove in System Settings. "+
-			"Plasma only, and only for the titlebar: nothing else here needs it."),
-		widgets.DimWrapped("Turning it on takes effect at once. Turning it off takes effect when "+
-			"the panel next starts, because a window that has lost its titlebar "+
-			"cannot be given one back."),
+	}
+	if desktop.RulesApply {
+		items = append(items,
+			rule,
+			widgets.DimWrapped("Installs a KWin rule you can see and remove in System Settings. "+
+				"Plasma only, and only for the titlebar: nothing else here needs it."),
+			widgets.DimWrapped("Turning it on takes effect at once. Turning it off takes effect when "+
+				"the panel next starts, because a window that has lost its titlebar "+
+				"cannot be given one back."))
+	} else {
+		items = append(items, widgets.DimWrapped(desktop.NoRules))
+	}
+	items = append(items,
 		widget.NewSeparator(),
 		widgets.DimWrapped("How solid the cards are. The space around them is always clear, "+
 			"so the desktop shows through the panel whatever this says."),
 		container.NewBorder(nil, nil, nil, value, slider),
 		widgets.DimWrapped("Drawn by the panel itself, so it works on any desktop."),
 	)
+	return container.NewVBox(items...)
 }
 
 // setRule installs or removes the rule and says what happened.

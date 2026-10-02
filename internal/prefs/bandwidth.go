@@ -129,7 +129,7 @@ func (w *Window) interfaceRow(s *shell.Shell, name string, on bool) fyne.CanvasO
 
 // interfaces are the machine's own, from the kernel's table.
 func interfaces() ([]string, error) {
-	counters, err := core.ReadNetDev()
+	counters, err := core.ReadCounters()
 	if err != nil {
 		return nil, err
 	}

@@ -9,8 +9,9 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	github.com/ushineko/fynedesygn v0.1.80
-	github.com/ushineko/sanshoku v0.1.6
+	github.com/ushineko/fynedesygn v0.1.81
+	github.com/ushineko/sanshoku v0.1.7
+	golang.org/x/sys v0.48.0
 )
 
 require (
@@ -58,6 +59,5 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 )

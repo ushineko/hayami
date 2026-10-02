@@ -42,6 +42,9 @@ func TestTheBandwidthCardPlotsFourTraces(t *testing.T) {
 	require.NotNil(t, p)
 
 	for range 3 {
+		// A rate needs time to have passed, and polls this close together
+		// can read one instant on a clock as coarse as Windows'.
+		time.Sleep(2 * time.Millisecond)
 		_, err = src.Poll(t.Context())
 		require.NoError(t, err)
 	}

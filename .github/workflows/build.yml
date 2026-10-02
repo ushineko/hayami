@@ -53,6 +53,28 @@ jobs:
       - name: The terminal panel builds without cgo
         run: CGO_ENABLED=0 go build ./cmd/hayami-tui
 
+  # Spec 033. Both panels build and every test passes on Windows. The desktop
+  # panel needs cgo; the runner image carries a mingw gcc on PATH.
+  windows:
+    name: Test on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -tags migrated_fynedo ./...
+
+      - name: Build
+        shell: bash
+        run: |
+          CGO_ENABLED=1 go build -tags migrated_fynedo -ldflags "-H windowsgui" -o hayami.exe ./cmd/hayami
+          CGO_ENABLED=0 go build -o hayami-tui.exe ./cmd/hayami-tui
+
   # The Release is published here and never by hand. Pushing a v* tag is the
   # whole of the ceremony: the job checks the tag against VERSION, builds the
   # tarball and attaches it.

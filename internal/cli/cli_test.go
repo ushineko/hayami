@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/hayami/internal/cli"
+	"github.com/ushineko/hayami/internal/desktop"
+	"github.com/ushineko/hayami/internal/testenv"
 )
 
 // run executes the terminal command tree with arguments and returns what it
@@ -104,8 +106,9 @@ func TestAnUnreadableSettingsFileIsReportedAndSurvived(t *testing.T) {
 // its own, so without this the way back is System Settings or editing
 // kwinrulesrc by hand.
 func TestTheWindowRuleCanBeDrivenFromTheCommandLine(t *testing.T) {
+	withRules(t, true)
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	testenv.Config(t, dir)
 	// No compositor to tell, which is the ordinary case under test and must
 	// not make any of these fail.
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
@@ -208,4 +211,29 @@ func TestTheHelpNamesThePreferencesPages(t *testing.T) {
 	_, out, err := startGUI(t, "--help")
 	require.NoError(t, err)
 	assert.Contains(t, out, "on one of: sections, window, about")
+}
+
+// Where there is no KWin the window command says why there is nothing to do,
+// and succeeds: the panel already has no titlebar and stays on top there. It
+// writes no rules file, because nothing would ever read it.
+func TestWithoutKWinTheWindowCommandSaysWhyAndSucceeds(t *testing.T) {
+	withRules(t, false)
+	dir := t.TempDir()
+	testenv.Config(t, dir)
+
+	for _, sub := range []string{"status", "install", "remove"} {
+		out, err := runGUI(t, "window", sub)
+		require.NoError(t, err, sub)
+		assert.Contains(t, out, desktop.NoRules, sub)
+	}
+	_, err := os.Stat(filepath.Join(dir, "kwinrulesrc"))
+	assert.True(t, os.IsNotExist(err), "a rules file was written where nothing reads one")
+}
+
+// withRules pretends to be a platform where window rules do, or do not, apply.
+func withRules(t *testing.T, on bool) {
+	t.Helper()
+	was := desktop.RulesApply
+	desktop.RulesApply = on
+	t.Cleanup(func() { desktop.RulesApply = was })
 }

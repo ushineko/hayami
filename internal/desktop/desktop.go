@@ -27,6 +27,7 @@ package desktop
 import (
 	"errors"
 	"fmt"
+	"runtime"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/ushineko/fynedesygn/glance/kwin"
@@ -66,6 +67,18 @@ const DefaultOpacity = 95
 // Not a failure of the panel. A desktop that is not Plasma gets a window with
 // a titlebar, which is what every desktop gave before this package existed.
 var ErrNoKWin = errors.New("kwin is not answering")
+
+// RulesApply is whether a window rule means anything on this platform. KWin
+// is Linux's. On Windows the toolkit already gives the panel no titlebar and
+// keeps it on top, and the panel is moved by dragging it, so there is nothing
+// to install and a control offering to would be offering Plasma.
+var RulesApply = rulesApply(runtime.GOOS)
+
+func rulesApply(goos string) bool { return goos == "linux" }
+
+// NoRules is what to say instead, where RulesApply is false.
+const NoRules = "Window rules are KWin's, on Linux. Here the panel has no titlebar " +
+	"and stays on top by itself: drag it anywhere to move it, and it opens where it was left."
 
 // Rule is the state of hayami's window rule.
 type Rule struct {

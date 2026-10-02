@@ -68,7 +68,7 @@ type BandwidthSection struct {
 // own.
 func NewBandwidthSection(names []string, read func() (map[string]Counters, error)) *BandwidthSection {
 	if read == nil {
-		read = ReadNetDev
+		read = ReadCounters
 	}
 	return &BandwidthSection{
 		names: names, sampler: NewBandwidth(), read: read, trails: map[string]*Trail{},

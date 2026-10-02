@@ -1,6 +1,7 @@
 package desktop_test
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,11 @@ func TestRestoringBeforeWatchingIsRefused(t *testing.T) {
 	pos := desktop.NewPosition(appID, "example")
 
 	err := pos.Restore(10, 20)
-	assert.ErrorIs(t, err, desktop.ErrNoKWin)
+	assert.Error(t, err)
+	if runtime.GOOS != "windows" {
+		// On Windows there is no bus: the window is found and placed directly.
+		assert.ErrorIs(t, err, desktop.ErrNoKWin)
+	}
 }
 
 // Stopping what was never started is nothing, so a panel that failed to
