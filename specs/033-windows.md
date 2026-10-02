@@ -2,7 +2,7 @@
 
 **Issue**: #115
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -78,7 +78,7 @@ nothing. That is its own piece of work, device by device.
 - [x] `go test -tags migrated_fynedo ./...` passes on Windows 11, and no file
   under the real `%APPDATA%`, `%LOCALAPPDATA%` or `~/.cache` changes during
   the run (compared before and after).
-- [ ] `make test` and `make lint` pass on Linux (CI).
+- [x] `make test` and `make lint` pass on Linux (CI): PR #116, with the new Windows job.
 - [x] On a real window on Windows 11: the panel starts, is translucent, is
   dragged by a real pointer by exactly the distance moved, saves the place,
   and reopens there. Screenshots looked at.
