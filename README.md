@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.4
+**Version**: 0.8.5
 
 *a chart you read at a glance*
 
@@ -269,7 +269,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.5 (2026-10-01)
 
 - **New**: a restart remembers the peripherals. The devices the panel has
   heard are kept in `~/.cache/hayami/peripherals.json`, so a restarted panel
