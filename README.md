@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.5
+**Version**: 0.8.6
 
 *a chart you read at a glance*
 
@@ -307,7 +307,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.8.6 (2026-10-01)
 
 - **Add**: Windows (spec 033). Both panels build and run there; usage and
   bandwidth read, and the device sections find nothing yet.
