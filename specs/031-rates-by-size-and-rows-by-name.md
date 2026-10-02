@@ -111,15 +111,19 @@ rate grew or a name arrived.
   shells. The terminal draws `Accent` blue (ANSI 4) and `Strong` magenta in
   bold (ANSI 5); the window draws `Accent` in the theme's primary colour and
   `Strong` in the design system's categorical magenta
-  (`glance.SeriesColour(th, 3)`), the one colour of its set no verdict takes.
+  (`glance.SeriesColour(th, 3)`) in bold, the one colour of its set no verdict
+  takes.
 - **Parts.** `Row.Parts` are the four pieces of a bandwidth value (arrow, down
   rate, arrow, up rate); their texts joined are `Row.Value` exactly, and a test
-  holds the value to the string it was before parts. `Row.Status` is the
-  strongest part, which is what a shell that draws the value as one piece uses.
+  holds the value to the string it was before parts. Both shells draw them as
+  parts; the row's own status stays Info.
 - **Label width.** `view.LabelWidth` is 15 characters, the widest short name
   on either desk ("Kraken Elite V2"). The cooler's three named rows carry
   `Row.LabelWidth`, and the pane's row arrangement reserves it in its label
   column, so a name arriving moves no other section's columns.
+- **Window label column.** Pinned to fifteen lower-case letters in the panel's
+  face (111 px at the default size; "Kraken Elite V2" measures 84), not
+  capitals, which would widen the card for names that are never that wide.
 - **Tooltips.** `Row.Tip` holds "CPU: <full name>"; `Section.Hover` puts the
   rows' tips first, so the window shows them in the card's existing tip.
   `hayami doctor` prints them under the cooler's summary.
@@ -143,31 +147,42 @@ rate grew or a name arrived.
 | Falsified: names not shortened | `TestTheCoolerCardIsTheSameSizeWithNames` fails (panel 335.7 → 344.2 and 407.9 px wide) |
 | `hayami-tui doctor`, the desk with the Kraken, throwaway settings | `i9-14900K`, `RTX 4090`, `Kraken Elite V2`; full names printed under the summary |
 | `hayami-tui doctor`, the other desk, throwaway settings | `i7-13700K`, `RTX 3080`, Coolant "no cooler" |
-| Headless window render (Fyne test driver, scratch test not committed) | panel 288×280 with and without names and in every band; whole row in the faster rate's band |
+| Headless window render (Fyne test driver, scratch test not committed) | panel and cooler card the same size with and without names on both desks; down and up coloured independently |
+| Falsified: label column not pinned | `TestTheCoolerCardIsTheSameSizeWithNames` and `TestTheLongestNamesDoNotWidenTheCard` fail |
 
-Measured in `TestTheCoolerCardIsTheSameSizeWithNames` (test theme): on the
-Kraken desk the cooler card is 280.1 px wide with names and without, because the
-speeds row decides it. On the other desk it grows from 194.2 to 230.2 px, under
-the bandwidth card's 335.7, so the panel does not move. The longest names the
-view makes, on that desk, measure 277.9 px.
+Measured in `TestTheCoolerCardIsTheSameSizeWithNames` (test theme): the cooler
+card is 280.1 px wide on the Kraken desk and 276.7 px on the other, the same to
+the pixel with names and without. Pinning costs the other desk's card the width
+of the column it reserves (it was 194.2 px with "CPU"), still inside the
+bandwidth card's 335.7 px, so the panel is the width it was.
 
 ### Gaps found
 
-For fynedesygn's `glance` package; nothing was changed there.
+Found against fynedesygn v0.1.79; three are resolved by fynedesygn spec 051
+(issue #158), which this branch builds against from its worktree until
+v0.1.80 is released.
 
-1. **A row value of several coloured parts.** `glance.Row` draws its value as
-   one `canvas.Text` in one colour, so the window colours a bandwidth row in its
-   faster rate's band (R1.1 asks for each rate in its own). Needed: a value made
-   of segments, each with a status or colour, laid out as one monospace run so
-   widths are unchanged.
-2. **Bold on a row's value**, for `Strong`. The window has the colour and not
-   the weight.
-3. **A fixed pixel width for a row's label column**, as `glance.NewMeter` takes
-   one. The window's no-reflow guarantee for names is a measurement against the
-   bandwidth card, not a property: a label of fifteen wide capitals, or a cooler
-   card shown alone, could still widen the panel when a name arrives.
-4. **A tip per row.** The full names are lines of the card's tip, which is the
-   whole card's hover; R2.5 asks for the row's.
+1. **A row value of several coloured parts.** Resolved by 051:
+   `glance.Reading.Parts` and `glance.Parted`. The window now draws each rate
+   as its own part in its own band, and the "row in its faster rate's colour"
+   stopgap and `Row.Status` as the strongest part are gone.
+2. **Bold on a row's value**, for `Strong`. Resolved by 051: `glance.Part.Bold`
+   (drawn where the theme has a bold monospace face).
+3. **A fixed pixel width for a row's label column.** Resolved by 051:
+   `glance.NewRowWidth`. The cooler's named rows are built with their label
+   column pinned to fifteen lower-case letters in the panel's face and size,
+   so a name -- any name, fifteen capitals included -- cannot change the card's
+   size. One limit remains: the width is taken when the rows are built, so a
+   text size changed in the preferences is not followed by the pin until the
+   next start. Pinned rows are chosen by the first section's rows, so a panel
+   restored from a cache written before this change pins nothing until it is
+   restarted once.
+4. **A tip per row.** Resolved by the card's tooltip: the rows' full names are
+   its first lines, which is where the reader's pointer already is.
+
+Bandwidth interface labels are not pinned: they come from the settings, do not
+change while the panel is up, and pinning them would only move today's
+columns.
 
 Desk criteria (photographs on both desks and of `hayami-tui`) are not done.
 

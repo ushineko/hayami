@@ -275,15 +275,15 @@ MIT. See [LICENSE](LICENSE).
   apart: the info colour from 1 MiB/s, amber from 10 MiB/s, and the strongest
   accent (magenta, bold in the terminal) from 100 MiB/s. Below 1 MiB/s a rate
   is drawn as before, and no rate is ever red: a download is not a fault. The
-  totals stay uncoloured. The window colours a row in its faster rate's band
-  until the design system can colour part of a value (spec 031).
+  totals stay uncoloured (spec 031, fynedesygn 051).
 
 - **Feature**: the cooler's rows are named for their hardware -- "i9-14900K",
   "RTX 4090", "Kraken Elite V2" -- instead of CPU, GPU and Coolant. The
   processor's model comes from `/proc/cpuinfo`, the card's from `nvidia-smi`
   (one more column in the query already made) or from the PCI ID database,
   the cooler's from its own identity. Names are shortened to the model and cut
-  at fifteen characters; the full name is in the window's tooltip and in
+  at fifteen characters, in a label column of fixed width so a name never
+  changes the card's size; the full name is in the window's tooltip and in
   `hayami doctor`. A name that cannot be read leaves the old label (spec 031,
   issue #112).
 

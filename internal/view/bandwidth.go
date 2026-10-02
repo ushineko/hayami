@@ -66,7 +66,7 @@ have two chances to drag it about.
 */
 func interfaceRow(r BandwidthReading, unitWidth int) Row {
 	parts := rates(r, unitWidth)
-	row := Row{Label: r.Name, Parts: parts, Status: strongest(parts)}
+	row := Row{Label: r.Name, Parts: parts}
 	for _, p := range parts {
 		row.Value += p.Text
 	}
@@ -129,32 +129,6 @@ func RateBand(bytesPerSecond float64, has bool) Status {
 		return Warn
 	default:
 		return Strong
-	}
-}
-
-// strongest is the most emphatic of a row's parts, which is the colour a shell
-// that draws the value as one piece gives it.
-func strongest(parts []Part) Status {
-	out := Info
-	for _, p := range parts {
-		if emphasis(p.Status) > emphasis(out) {
-			out = p.Status
-		}
-	}
-	return out
-}
-
-// emphasis ranks a rate's band. Only the statuses RateBand gives are ranked.
-func emphasis(s Status) int {
-	switch s {
-	case Accent:
-		return 1
-	case Warn:
-		return 2
-	case Strong:
-		return 3
-	default:
-		return 0
 	}
 }
 

@@ -273,7 +273,7 @@ func TestTheTotalsTakeNoBand(t *testing.T) {
 	flat := view.Section{Rows: s.Rows}.Lines()
 	require.Len(t, flat, 1)
 	assert.NotEmpty(t, flat[0].Detail)
-	assert.Equal(t, view.Strong, flat[0].Status, "the row is drawn in its strongest rate's band")
+	assert.Equal(t, view.Info, flat[0].Status, "the bands are in the parts, not on the row")
 
 	var painted []string
 	view.RenderWith([]view.Section{s}, view.ArrangeStack, 60, func(text string, st view.Status) string {

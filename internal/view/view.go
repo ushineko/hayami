@@ -242,8 +242,7 @@ type Row struct {
 	// Parts colour the value piece by piece, and are empty for a row whose
 	// value takes Status whole, which is most of them. When there are parts
 	// their texts joined are Value exactly: Value is still what every width
-	// is measured from, and Parts only say how to colour it. Status is then
-	// the row's colour where a shell draws the value as one piece.
+	// is measured from, and Parts only say how to colour it.
 	Parts []Part `json:",omitempty"`
 
 	// Tip is what the row says when the pointer rests on it: the full name a

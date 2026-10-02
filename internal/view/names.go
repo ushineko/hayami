@@ -113,3 +113,8 @@ func named(r Row, role, full string) Row {
 	r.LabelWidth = LabelWidth
 	return r
 }
+
+// Cut is a label cut to a width with an ellipsis, for a shell that holds a
+// label column at LabelWidth and is handed a label that is not a name: a
+// reason's sentence landing in a row that was built for one.
+func Cut(s string, width int) string { return truncate(s, width) }

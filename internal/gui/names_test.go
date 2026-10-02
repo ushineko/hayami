@@ -2,13 +2,15 @@ package gui_test
 
 import (
 	"context"
-	"image/color"
 	"testing"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	fd "github.com/ushineko/fynedesygn"
+	"github.com/ushineko/fynedesygn/glance"
 
 	"github.com/ushineko/hayami/internal/gui"
 	"github.com/ushineko/hayami/internal/panel"
@@ -54,10 +56,10 @@ Spec 031, R2.5. The cooler card is the same size with names as without: the
 panel was the size it was, and it stays it when the names arrive.
 
 On both desks, which differ in the way that matters: the one with the Kraken
-has a speeds row, and the other has no coolant and no speeds, so its cooler card
-is three rows narrower in what decides its width. The panel's width is its
-widest card, the bandwidth card, and a name is held to LabelWidth so that it
-cannot make the cooler card the widest.
+has a speeds row that decides the card's width, and the other has no coolant
+and no speeds, so there the processor's row does -- and a name used to widen
+it from 194 to 230 px. The named rows' label column is pinned now, so the card
+is the same size to the pixel.
 */
 func TestTheCoolerCardIsTheSameSizeWithNames(t *testing.T) {
 	other := func(named bool) view.CoolerReading {
@@ -85,39 +87,31 @@ func TestTheCoolerCardIsTheSameSizeWithNames(t *testing.T) {
 		t.Logf("%s: cooler card %v unnamed, %v named; bandwidth card %v; panel %v",
 			name, cardBefore, gui.CardMinSize(p, "cooler"), gui.CardMinSize(p, "bandwidth"), panelBefore)
 		assert.Equal(t, panelBefore, gui.PanelSize(p), "%s: the panel changed size when the names arrived", name)
-		assert.InDelta(t, cardBefore.Height, gui.CardMinSize(p, "cooler").Height, 0.01,
-			"%s: the cooler card changed height", name)
-		assert.LessOrEqual(t, gui.CardMinSize(p, "cooler").Width, gui.CardMinSize(p, "bandwidth").Width,
-			"%s: a name made the cooler card the widest, and the panel follows the widest", name)
+		assert.Equal(t, cardBefore, gui.CardMinSize(p, "cooler"), "%s: the cooler card changed size", name)
 	}
 }
 
-/*
-The longest names the view makes, on the desk whose cooler card is narrowest:
-a name cut at LabelWidth ("RX 7900 XT/790…") and one exactly that wide ("Kraken
-Elite V2"), on every row. They still do not make the cooler card the widest.
-
-**This is a measurement, not a guarantee.** The label is drawn in a
-proportional face, so LabelWidth characters of capitals would be wider than
-these, and a lone cooler card -- the bandwidth card hidden -- has nothing wider
-to hide behind. A row with a label column of fixed pixel width needs the design
-system; it is in spec 031's gaps.
-*/
-func TestTheLongestNamesStillFit(t *testing.T) {
-	a := test.NewTempApp(t)
-	r := desk(true)
-	r.HasLiquid, r.HasPump, r.HasFan = false, false, false
-	r.CPUName = "NZXT Kraken Elite V2"
-	r.GPUName = "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]"
-	cooler := &fixed{view.Cooler(r)}
-	bandwidth := &fixed{interfaces()}
-	p := gui.New(a, gui.Options{Sources: []panel.Source{bandwidth, cooler}, Title: "hayami"})
-	p.Draw("bandwidth", bandwidth.sec, true)
-	p.Draw("cooler", cooler.sec, true)
-
-	t.Logf("cooler card %v with %q and %q; bandwidth card %v", gui.CardMinSize(p, "cooler"),
-		cooler.sec.Rows[0].Label, cooler.sec.Rows[1].Label, gui.CardMinSize(p, "bandwidth"))
-	assert.LessOrEqual(t, gui.CardMinSize(p, "cooler").Width, gui.CardMinSize(p, "bandwidth").Width)
+// The longest names the view makes -- one cut at LabelWidth, one exactly that
+// wide, and fifteen capitals -- leave the cooler card the size "CPU" does.
+func TestTheLongestNamesDoNotWidenTheCard(t *testing.T) {
+	size := func(cpu, gpu string) (fyne.Size, []string) {
+		a := test.NewTempApp(t)
+		r := desk(false)
+		r.HasLiquid, r.HasPump, r.HasFan = false, false, false
+		r.CPUName, r.GPUName = cpu, gpu
+		cooler := &fixed{view.Cooler(r)}
+		p := gui.New(a, gui.Options{Sources: []panel.Source{cooler}, Title: "hayami"})
+		p.Draw("cooler", cooler.sec, true)
+		return gui.CardMinSize(p, "cooler"), gui.CardRows(p, "cooler")
+	}
+	plain, _ := size("", "")
+	for _, names := range [][2]string{
+		{"NZXT Kraken Elite V2", "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]"},
+		{"WWWWWWWWWWWWWWWWWWWW", "MMMMMMMMMMMMMMMMMMMM"},
+	} {
+		got, rows := size(names[0], names[1])
+		assert.Equal(t, plain, got, "the card changed size with %q", rows)
+	}
 }
 
 // R2.5. The full names are the card's tip, the window's hover.
@@ -134,32 +128,47 @@ func TestTheFullNamesAreTheTip(t *testing.T) {
 }
 
 /*
-R1.2, R3.1. The window draws a bandwidth row in the colour of its strongest
-rate: the info colour from 1 MiB/s, amber from 10, the design system's magenta
-from 100, and the row's own text below 1. One colour for the row, because the
-library's row has one; the pane colours each rate.
+R1.1, R3.1. The window draws each rate as its own part in its own band, the
+down and the up independently: the info colour from 1 MiB/s, amber from 10, the
+design system's magenta in bold from 100, the row's own text below 1. The
+arrows stay plain, and the parts spell the value the row measures.
 */
-func TestTheWindowColoursARowByItsStrongestRate(t *testing.T) {
+func TestTheWindowColoursEachRateOnItsOwn(t *testing.T) {
 	a := test.NewTempApp(t)
 	src := &fixed{view.Bandwidth([]view.BandwidthReading{{Name: "enp5s0", HasRate: true}})}
 	p := gui.New(a, gui.Options{Sources: []panel.Source{src}, Title: "hayami"})
 
-	colour := func(rx, tx float64) color.Color {
+	parts := func(rx, tx float64) (down, up glance.Part) {
 		sec := view.Bandwidth([]view.BandwidthReading{{Name: "enp5s0", RxRate: rx, TxRate: tx, HasRate: true}})
 		p.Draw("bandwidth", sec, true)
-		return gui.RowColour(p, "bandwidth", 0)
+		ps := gui.RowParts(p, "bandwidth", 0)
+		require.Len(t, ps, 4)
+		text := ""
+		for _, part := range ps {
+			text += part.Text
+		}
+		assert.Equal(t, sec.Rows[0].Value, text, "the parts are not the value")
+		assert.Nil(t, ps[0].Colour, "an arrow took a colour")
+		assert.Nil(t, ps[2].Colour, "an arrow took a colour")
+		return ps[1], ps[3]
 	}
 
-	assert.Nil(t, colour(12<<10, 1<<10), "a quiet interface took a colour")
-	assert.Equal(t, "info", gui.Status(p, "bandwidth", 0))
+	down, up := parts(12<<10, 40<<20)
+	assert.Nil(t, down.Colour, "a quiet rate took a colour")
+	assert.Equal(t, fd.StatusInfo, down.Status)
+	assert.Equal(t, fd.StatusWarn, up.Status, "the up rate's band is its own")
 
-	assert.Nil(t, colour(1<<10, 40<<20), "amber is the Warn status, which the library colours itself")
-	assert.Equal(t, "warn", gui.Status(p, "bandwidth", 0), "the up rate's band did not reach the row")
+	down, up = parts(2<<20, 400<<20)
+	require.NotNil(t, down.Colour, "1 MiB/s and up is the info colour")
+	require.NotNil(t, up.Colour)
+	assert.False(t, down.Bold)
+	assert.True(t, up.Bold, "the strongest band is bold")
+	assert.NotEqual(t, down.Colour, up.Colour)
 
-	accent := colour(2<<20, 1<<10)
-	strong := colour(400<<20, 2<<20)
-	require.NotNil(t, accent)
-	require.NotNil(t, strong)
-	assert.NotEqual(t, accent, strong)
-	assert.NotEqual(t, "bad", gui.Status(p, "bandwidth", 0), "a fast rate is not a failure")
+	down, up = parts(400<<20, 1<<10)
+	assert.True(t, down.Bold)
+	assert.Nil(t, up.Colour, "the down rate's band reached the up rate")
+	for _, part := range gui.RowParts(p, "bandwidth", 0) {
+		assert.NotEqual(t, fd.StatusBad, part.Status, "a fast rate is not a failure")
+	}
 }
