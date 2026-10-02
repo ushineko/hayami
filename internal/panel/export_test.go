@@ -42,3 +42,7 @@ func SetProcessors(c *Cooler, load func() (float64, bool), graphics func(context
 // SetCPUName replaces where the processor's model is read from, so a test
 // names it without /proc/cpuinfo.
 func SetCPUName(c *Cooler, name func() string) { c.cpuName = name }
+
+// RememberIn keeps a source's memory of devices in a test's file, and loads
+// what is already there (spec 032).
+func RememberIn(p *Peripherals, path string) { p.remember(path) }

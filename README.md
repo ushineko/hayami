@@ -271,6 +271,12 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **New**: a restart remembers the peripherals. The devices the panel has
+  heard are kept in `~/.cache/hayami/peripherals.json`, so a restarted panel
+  with the mouse asleep or the headphones off draws them dim at their last
+  level, as a panel that kept running does, rather than "nothing paired". A
+  device not heard for seven days is forgotten (spec 032, #113).
+
 - **Feature**: a bandwidth rate is coloured by its size, the down and the up
   apart: the info colour from 1 MiB/s, amber from 10 MiB/s, and the strongest
   accent (magenta, bold in the terminal) from 100 MiB/s. Below 1 MiB/s a rate

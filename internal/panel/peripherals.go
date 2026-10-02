@@ -16,6 +16,7 @@ import (
 	"github.com/ushineko/sanshoku/razer"
 	"github.com/ushineko/sanshoku/steelseries"
 
+	"github.com/ushineko/hayami/internal/readings"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -45,6 +46,12 @@ type Peripherals struct {
 	// always draws two cells, and a headset switched off is the one it should
 	// be drawing dim rather than a placeholder.
 	seen map[string]remembered
+
+	// known is where seen is kept between runs, and saved the bytes last
+	// written there (spec 032). Empty is a source that remembers nothing
+	// across a restart, which is what the tests build unless they ask.
+	known string
+	saved []byte
 
 	// reasons are the sources that had nothing to say and why, rebuilt every
 	// poll. A source that found something contributes none: five lines
@@ -105,7 +112,19 @@ type remembered struct {
 
 // NewPeripherals builds the peripherals source over sanshoku's drivers.
 func NewPeripherals() *Peripherals {
-	return newPeripherals(sanshoku.Scan, time.Now)
+	p := newPeripherals(sanshoku.Scan, time.Now)
+	if path, err := readings.File(knownFile); err == nil {
+		p.remember(path)
+	}
+	return p
+}
+
+// remember keeps the source's memory of devices in a file, and loads what it
+// held: the devices heard within ForgetAfter, as not answering yet.
+func (p *Peripherals) remember(path string) {
+	p.known = path
+	p.seen = loadKnown(path, p.now())
+	p.saved, _ = encodeKnown(p.seen)
 }
 
 // newPeripherals builds the source over a scan and a clock, which is the seam
@@ -181,6 +200,7 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.reading = p.readings(found)
+	_ = p.saveKnown() // a cache: see saveKnown
 	if len(p.reading.Devices) > 0 {
 		// The card is showing hardware. What else is *absent* is doctor's
 		// business, not the panel's -- but a device that is present and
@@ -383,6 +403,11 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 
 	var out []view.PeripheralReading
 	for name, was := range p.seen {
+		if !fresh[name] && was.reading.Stale && now.Sub(was.reading.Seen) > ForgetAfter {
+			// Not heard for a week: put away, not asleep (spec 032).
+			delete(p.seen, name)
+			continue
+		}
 		if !fresh[name] && !was.reading.Stale {
 			// Written back, so the poll it answers again in knows it was
 			// away.

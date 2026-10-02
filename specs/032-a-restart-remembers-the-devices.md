@@ -38,19 +38,19 @@ answers, and the first poll's answer, with the devices asleep, is "nothing".
 
 ## Acceptance Criteria
 
-- [ ] `go test ./...` and `make lint` pass.
-- [ ] A test: a device read, then the source rebuilt from the saved file with
+- [x] `go test ./...` and `make lint` pass.
+- [x] A test: a device read, then the source rebuilt from the saved file with
       no device answering, gives that device dim at its last level, in the
       slot it had.
-- [ ] A test: a device last heard eight days ago is not loaded, and one six
+- [x] A test: a device last heard eight days ago is not loaded, and one six
       days ago is; a running source forgets a device after seven days unheard.
-- [ ] A test: a device saved as quiet that answers on the first poll is live,
+- [x] A test: a device saved as quiet that answers on the first poll is live,
       and its detection time is that poll.
-- [ ] A test: a malformed file loads as empty.
+- [x] A test: a malformed file loads as empty.
 - [ ] **On the desk:** with the mouse asleep or the headphones off, a
       restarted panel on njv-cachyos shows them dim at their last level
       rather than "nothing paired".
-- [ ] README changelog under Unreleased.
+- [x] README changelog under Unreleased.
 
 ## Risks & Assumptions
 
