@@ -313,7 +313,7 @@ MIT. See [LICENSE](LICENSE).
   bandwidth read, and the device sections find nothing yet.
   `scripts\install_windows.ps1` and `uninstall_windows.ps1` install for the
   current user. The panel is dragged from anywhere on it and remembers where
-  it was put. With sanshoku SANSHOKU_VERSION and fynedesygn FYNEDESYGN_VERSION,
+  it was put. With sanshoku v0.1.7 and fynedesygn v0.1.81,
   which carry their Windows fixes.
 - **Fix**: the tests are sandboxed on Windows. They took the home, cache and
   settings directories away by their Unix names only, so on Windows they read

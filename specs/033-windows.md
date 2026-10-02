@@ -92,7 +92,7 @@ nothing. That is its own piece of work, device by device.
   shortcuts.
 - [x] Falsified: the filter test fails with the filter removed; the BOM test
   fails with the BOM removed.
-- [ ] `go.mod` requires released sanshoku and fynedesygn versions, and the
+- [x] `go.mod` requires released sanshoku and fynedesygn versions, and the
   above still holds against them.
 
 ## Risks & Assumptions
@@ -128,3 +128,15 @@ against local branches of sanshoku (spec 011) and fynedesygn (spec 052):
   `y: 481`; a restart opened the window at (1134, 481).
 - Bandwidth: two interfaces chosen in the preferences, one of them a
   tunnel; the panel and `hayami-tui` showed rates and totals for both.
+
+2026-10-01, after rebasing onto 0.8.5 and requiring sanshoku v0.1.7 and
+fynedesygn v0.1.81 from the module proxy:
+
+- Full suite on Windows: every package ok; the real per-user directories did
+  not change.
+- The panel reopened at its saved place, (1434, 581), with Restore now waiting
+  for the window; a real-pointer drag moved it by (300, 100), and right-click
+  opened the menu afterwards.
+- `install_windows.ps1 -Autostart` built against the real `go.mod` under
+  Windows PowerShell 5.1 and installed version 0.8.5;
+  `uninstall_windows.ps1` removed it.
