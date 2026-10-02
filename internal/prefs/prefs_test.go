@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/desktop"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/prefs"
+	"github.com/ushineko/hayami/internal/testenv"
 )
 
 func store(t *testing.T, body string) *config.Store {
@@ -108,30 +110,60 @@ func TestEveryKnownSectionIsOfferedByName(t *testing.T) {
 	assert.Contains(t, offered, "peripherals")
 }
 
-// AC10. The Window section offers the rule and the opacity.
+// AC10. The Window section offers the rule and the opacity -- the rule only
+// where KWin is, and elsewhere it says why there is none rather than offering
+// a control for a desktop that is not there.
 func TestTheWindowSectionOffersTheRuleAndTheOpacity(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, c := range []struct {
+		name  string
+		rules bool
+	}{{"with kwin", true}, {"without kwin", false}} {
+		rules := c.rules
+		t.Run(c.name, func(t *testing.T) {
+			withRules(t, rules)
+			testenv.Config(t, t.TempDir())
 
-	a := test.NewApp()
-	t.Cleanup(a.Quit)
+			a := test.NewApp()
+			t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, "")})
-	w.Shell().Select("Window")
+			w := prefs.New(a, prefs.Options{Store: store(t, "")})
+			w.Shell().Select("Window")
 
-	var checks []string
-	sliders := 0
+			checks, labels, sliders := windowSection(w)
+
+			assert.Positive(t, sliders, "the window section offers no opacity")
+			if !rules {
+				assert.Empty(t, checks, "a KWin rule was offered where there is no KWin")
+				assert.Contains(t, labels, desktop.NoRules, "the section does not say why there is no rule")
+				return
+			}
+			require.NotEmpty(t, checks, "the window section offers no toggle")
+			assert.Contains(t, checks[0], "Frameless")
+		})
+	}
+}
+
+// withRules pretends to be a platform where window rules do, or do not, apply.
+func withRules(t *testing.T, on bool) {
+	t.Helper()
+	was := desktop.RulesApply
+	desktop.RulesApply = on
+	t.Cleanup(func() { desktop.RulesApply = was })
+}
+
+// windowSection lists what the Window section shows.
+func windowSection(w *prefs.Window) (checks, labels []string, sliders int) {
 	for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
 		switch v := o.(type) {
 		case *widget.Check:
 			checks = append(checks, v.Text)
+		case *widget.Label:
+			labels = append(labels, v.Text)
 		case *widget.Slider:
 			sliders++
 		}
 	}
-
-	require.NotEmpty(t, checks, "the window section offers no toggle")
-	assert.Contains(t, checks[0], "Frameless")
-	assert.Positive(t, sliders, "the window section offers no opacity")
+	return checks, labels, sliders
 }
 
 // AC10. The opacity chosen here reaches the store, because it is the value

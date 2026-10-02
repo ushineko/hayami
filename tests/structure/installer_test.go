@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -33,6 +34,7 @@ where /usr/bin is always on the session PATH; the installer is what has to know
 where it put things.
 */
 func TestTheInstalledEntryNamesTheBinaryAbsolutely(t *testing.T) {
+	linuxOnly(t)
 	root := repoRoot(t)
 	home := t.TempDir()
 
@@ -89,6 +91,7 @@ func TestThePackagedEntryIsSystemShapedAndKeepsItsName(t *testing.T) {
 // checkout without its binaries built is enough and nothing is written.
 func installer(t *testing.T, script, udevDir string) string {
 	t.Helper()
+	linuxOnly(t)
 	root := repoRoot(t)
 	cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, script), "--dry-run")
 	cmd.Dir = root
@@ -182,4 +185,13 @@ func TestTheUninstallerMirrorsTheUdevRule(t *testing.T) {
 	out = installer(t, "uninstall.sh", readOnlyDir(t, []byte("# somebody else's\n")))
 	assert.Contains(t, out, "Left ")
 	assert.NotContains(t, out, "sudo rm ")
+}
+
+// linuxOnly skips a test of install.sh or uninstall.sh anywhere else: they
+// install for a Linux desktop, and Windows has scripts/install_windows.ps1.
+func linuxOnly(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("install.sh installs for a Linux desktop")
+	}
 }

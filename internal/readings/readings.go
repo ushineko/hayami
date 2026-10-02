@@ -74,6 +74,9 @@ func Path() (string, error) {
 // dir is the platform's cache directory for this program, following the same
 // order internal/usage does for the cache it shares with the Python tools.
 func dir() (string, error) {
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		return filepath.Join(local, DirName), nil
+	}
 	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
 		return filepath.Join(xdg, DirName), nil
 	}

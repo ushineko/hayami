@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/usage"
 )
 
@@ -19,8 +20,7 @@ import (
 func tempCache(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", dir)
-	t.Setenv("LOCALAPPDATA", "")
+	testenv.Cache(t, dir)
 	return filepath.Join(dir, usage.DirName)
 }
 

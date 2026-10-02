@@ -17,6 +17,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/tui"
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -67,8 +68,8 @@ func TestTheTerminalPanelDrawsEverySection(t *testing.T) {
 // that does not resolve, and no credential store or cache.
 func noMachine(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	testenv.Home(t, t.TempDir())
+	testenv.Cache(t, t.TempDir())
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
 	sys, dev := hidraw.SysRoot, hidraw.DevRoot

@@ -53,6 +53,7 @@ func TestEveryGalleryImageIsInTheReadme(t *testing.T) {
 
 	shown := readmeImages(t)
 	for _, shot := range shots {
+		shot = filepath.ToSlash(shot) // the README's paths, whatever the host's
 		alt, ok := shown[shot]
 		if assert.True(t, ok, "%s is not displayed by the README", shot) {
 			assert.NotEmpty(t, strings.TrimSpace(alt),

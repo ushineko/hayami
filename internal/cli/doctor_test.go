@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/ushineko/hayami/internal/cli"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -65,8 +67,8 @@ because what is asserted is that the section *says* which.
 func bare(t *testing.T) {
 	t.Helper()
 	t.Setenv("PATH", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	testenv.Home(t, t.TempDir())
+	testenv.Cache(t, t.TempDir())
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
 	noDevices(t)
 }
@@ -251,6 +253,9 @@ never had OpenRazer's package looks like. Nothing is opened but a file this
 test made.
 */
 func TestDoctorSaysInstallTheUdevRuleForADeviceThatMayNotBeOpened(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("a udev rule, and the hidraw node it would grant, are Linux's")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root may open anything, so there is no permission to be refused")
 	}

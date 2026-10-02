@@ -14,6 +14,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -126,8 +127,8 @@ would be asserting the stub.
 */
 func TestAUsageAccountWaitingOutABackoffSaysSo(t *testing.T) {
 	cache := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", cache)
-	t.Setenv("HOME", t.TempDir()) // no credential store, so nothing fetches
+	testenv.Cache(t, cache)
+	testenv.Home(t, t.TempDir())  // no credential store, so nothing fetches
 	t.Setenv("PATH", t.TempDir()) // and no codex either
 
 	// A gate an hour out, and nothing behind it.
@@ -155,8 +156,8 @@ func TestAUsageAccountWaitingOutABackoffSaysSo(t *testing.T) {
 // rather than marked: nothing has gone wrong yet.
 func TestAnAccountThatHasNeverFetchedIsNotMarkedAsAFailure(t *testing.T) {
 	cache := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", cache)
-	t.Setenv("HOME", t.TempDir())
+	testenv.Cache(t, cache)
+	testenv.Home(t, t.TempDir())
 	t.Setenv("PATH", t.TempDir())
 
 	dir := filepath.Join(cache, "claude-usage-widget")

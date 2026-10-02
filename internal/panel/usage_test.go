@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/testenv"
 )
 
 // A token must not reach anything the program prints. --readings is the
@@ -45,10 +46,9 @@ func TestEverySectionKeyBuildsASource(t *testing.T) {
 // A section with nothing to say is not drawn, rather than drawn empty. On a
 // machine with no cache and no credentials that is what usage is.
 func TestASectionWithNothingToSayIsNotDrawn(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("LOCALAPPDATA", "")
+	testenv.Cache(t, t.TempDir())
 	t.Setenv("CLAUDE_USAGE_PROFILE_ROOT", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
+	testenv.Home(t, t.TempDir())
 	t.Setenv("PATH", "") // no codex to ask
 
 	u := panel.NewUsage()

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/usage"
 )
 
@@ -44,10 +46,7 @@ func TestTheSlugNamesTheSameFileThePythonNames(t *testing.T) {
 // thing that would notice the rule changing.
 func TestTheSlugAgreesWithThePythonItself(t *testing.T) {
 	src := pythonCache(t)
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("no python3; the cross-check needs the program that owns the format")
-	}
+	python := pythonInterpreter(t)
 
 	script := `
 import sys, importlib.util
@@ -72,13 +71,37 @@ for line in sys.stdin.read().splitlines():
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "python said: %s", out)
 
-	got := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	// Windows' Python ends its lines with CRLF.
+	got := strings.Split(strings.TrimRight(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n"), "\n")
 	want := []string{"", "-max", "-work", "-codex", "-codex-max",
 		"-with_space", "-with_dot", "-with_slash", "-keeps-hyphen_and_underscore"}
 	require.Len(t, got, len(want))
 	for i := range want {
 		assert.Equal(t, want[i], got[i], "the Python and this package disagree on case %d", i)
 	}
+}
+
+// pythonInterpreter finds a Python that runs, or skips.
+//
+// Found is not enough. Windows puts a python3.exe and a python.exe on the PATH
+// that are Store installers, not interpreters: they exit 9009 and print where
+// to get Python. So each candidate is asked to run something first.
+func pythonInterpreter(t *testing.T) string {
+	t.Helper()
+	for _, name := range []string{"python3", "python"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		err = exec.CommandContext(ctx, path, "-c", "import sys").Run()
+		cancel()
+		if err == nil {
+			return path
+		}
+	}
+	t.Skip("no python that runs; the cross-check needs the program that owns the format")
+	return ""
 }
 
 // pythonCache finds the module that owns the format, or skips.
@@ -94,7 +117,7 @@ func pythonCache(t *testing.T) string {
 }
 
 func TestTheCacheDirectoryIsTheWidgetsAndNotThisPrograms(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", "/tmp/somewhere")
+	testenv.Cache(t, "/tmp/somewhere")
 
 	dir, err := usage.Dir()
 
@@ -103,8 +126,24 @@ func TestTheCacheDirectoryIsTheWidgetsAndNotThisPrograms(t *testing.T) {
 		"renaming this directory would be leaving the cache, not joining it")
 }
 
+// On Windows the widget keeps its cache under LOCALAPPDATA, in a "cache"
+// directory of its own, and that wins over everything else: it is the Windows
+// widget's file hayami has to share, not one of its own beside it.
+func TestLocalAppDataIsWhereTheWindowsWidgetKeepsTheCache(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS has its own place and does not read LOCALAPPDATA")
+	}
+	testenv.Cache(t, "/tmp/somewhere")
+	t.Setenv("LOCALAPPDATA", "/tmp/local")
+
+	dir, err := usage.Dir()
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join("/tmp/local", "claude-usage-widget", "cache"), dir)
+}
+
 func TestThePathAndTheLockAreSiblings(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	testenv.Cache(t, t.TempDir())
 
 	path, err := usage.Path("max", usage.ProviderClaude)
 	require.NoError(t, err)

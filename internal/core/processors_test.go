@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -151,6 +152,9 @@ func TestNoSensorAndNoNvidiaSMIIsNoGPU(t *testing.T) {
 // The real runner, against a script standing in for nvidia-smi on PATH: the
 // flags it is given are the ones ParseSMI expects the answer to.
 func TestNvidiaSMIIsAskedForThreeColumnsWithoutUnits(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for nvidia-smi")
+	}
 	dir := t.TempDir()
 	script := "#!/bin/sh\n" +
 		`[ "$1" = "--query-gpu=temperature.gpu,utilization.gpu,name" ] && ` +

@@ -95,3 +95,32 @@ func TestAnInterfaceTheKernelDoesNotHaveIsNotPresent(t *testing.T) {
 
 	assert.False(t, got[0].Present)
 }
+
+// A chooser groups interfaces by kind, and the names it groups are the
+// platform's own. Windows' are the defaults it gives every machine, not any
+// one machine's: its loopback, its numbered virtual adapters and its IPv6
+// transition tunnels are churn, and its tailscale interface is capitalised.
+func TestInterfacesAreClassifiedOnEitherPlatform(t *testing.T) {
+	cases := map[string]core.InterfaceKind{
+		"eth0":                              core.KindOrdinary,
+		"wlp3s0":                            core.KindOrdinary,
+		"lo":                                core.KindVirtual,
+		"veth1a2b3c":                        core.KindVirtual,
+		"docker0":                           core.KindVirtual,
+		"tailscale0":                        core.KindTunnel,
+		"wg0":                               core.KindTunnel,
+		"Ethernet":                          core.KindOrdinary,
+		"Ethernet 2":                        core.KindOrdinary,
+		"Wi-Fi":                             core.KindOrdinary,
+		"Tailscale":                         core.KindTunnel,
+		"Loopback Pseudo-Interface 1":       core.KindVirtual,
+		"Local Area Connection* 3":          core.KindVirtual,
+		"vEthernet (Default Switch)":        core.KindVirtual,
+		"6to4 Adapter":                      core.KindVirtual,
+		"Teredo Tunneling Pseudo-Interface": core.KindVirtual,
+		"Ethernet (Kernel Debugger)":        core.KindVirtual,
+	}
+	for name, want := range cases {
+		assert.Equal(t, want, core.ClassifyInterface(name), "%q", name)
+	}
+}

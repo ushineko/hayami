@@ -1,8 +1,6 @@
 package core
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"time"
 )
@@ -83,16 +81,6 @@ func (b *Bandwidth) Sample(now time.Time, names []string, counters map[string]Co
 	return out
 }
 
-// ReadNetDev reads the kernel's table from the usual place.
-func ReadNetDev() (map[string]Counters, error) {
-	f, err := os.Open(NetDevPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening the interface table: %w", err)
-	}
-	defer func() { _ = f.Close() }() // read-only; a failed close says nothing useful
-	return ParseNetDev(f)
-}
-
 // InterfaceNames lists every interface the kernel reports, for a program
 // offering the user a choice. The loopback is included: hiding it here would
 // be this package deciding what is interesting.
@@ -132,8 +120,16 @@ const (
 	KindVirtual
 )
 
-// virtualPrefixes are the names a container or VM runtime creates.
-var virtualPrefixes = []string{"veth", "br-", "docker", "virbr", "vnet", "cni", "flannel", "kube"}
+// virtualPrefixes are the names a container or VM runtime creates, and the
+// ones Windows gives its own pseudo-interfaces: the loopback, the numbered
+// "Local Area Connection*" adapters (Wi-Fi Direct and the WAN miniports), the
+// IPv6 transition tunnels nothing on a modern network carries, and the
+// kernel-debugger NIC. Hyper-V's "vEthernet (...)" switches match "veth".
+var virtualPrefixes = []string{
+	"veth", "br-", "docker", "virbr", "vnet", "cni", "flannel", "kube",
+	"loopback pseudo-interface", "local area connection*", "6to4 adapter",
+	"teredo tunneling", "microsoft ip-https", "isatap", "ethernet (kernel debugger)",
+}
 
 // tunnelPrefixes are the overlays worth putting near the top.
 var tunnelPrefixes = []string{"tailscale", "wg", "tun", "ppp", "zt"}
@@ -144,11 +140,13 @@ var tunnelPrefixes = []string{"tailscale", "wg", "tun", "ppp", "zt"}
 // a container. The prefixes are the conventions the runtimes follow and they
 // are a heuristic -- a machine that names its ethernet "tunnel0" is misread,
 // and the cost of that is one row in the wrong group of a list that has a
-// "show everything" beside it.
+// "show everything" beside it. Case is ignored, because Windows capitalises
+// what Linux does not: its tailscale interface is "Tailscale".
 func ClassifyInterface(name string) InterfaceKind {
 	if name == "lo" {
 		return KindVirtual
 	}
+	name = strings.ToLower(name)
 	for _, p := range virtualPrefixes {
 		if strings.HasPrefix(name, p) {
 			return KindVirtual

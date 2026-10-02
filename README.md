@@ -6,7 +6,9 @@
 
 A panel for Linux showing peripheral battery, network bandwidth,
 liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
-frameless always-on-top window, and in a terminal as a pane.
+frameless always-on-top window, and in a terminal as a pane. It also runs on
+Windows, where usage and bandwidth read and the device sections do not yet
+(see [On Windows](#on-windows)).
 
 > **Status**: in use, and it installs. Four sections draw in both panels from
 > settings both read: the peripherals, bandwidth, the cooler, and usage —
@@ -67,7 +69,7 @@ and the choice holds in both shells.
 | Section | Reads |
 |---|---|
 | Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
-| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
+| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; on Windows, the interface table (`GetIfTable2`), named as Network Connections names them; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
 | Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. A five-minute trend of the coolant, the processor and the graphics card |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
 
@@ -143,6 +145,42 @@ needs root is the udev rule below, and the installer does not become root to
 write it. The titlebar is not part of it either: that is a KWin rule the
 program offers from its preferences window or with `hayami window install`,
 because it writes into the same `kwinrulesrc` as every other rule you have.
+
+### On Windows
+
+From a checkout, in PowerShell. The desktop panel links OpenGL through cgo, so
+the build needs Go and an x86_64 mingw gcc (`winget install --id
+BrechtSanders.WinLibs.POSIX.UCRT -e`); one on `PATH` is used, or the one
+winget installed is found where winget put it.
+
+```
+.\scripts\install_windows.ps1               # both programs, and a Start menu shortcut
+.\scripts\install_windows.ps1 -Autostart    # and start the panel when you log in
+.\scripts\install_windows.ps1 -DryRun       # show what that would do, change nothing
+.\scripts\uninstall_windows.ps1             # remove exactly those, keeping your settings
+```
+
+Everything is per-user, under `%LOCALAPPDATA%\Programs\hayami`: no
+administrator rights, no registry writes, no `PATH` changes. Settings live in
+`%APPDATA%\hayami\settings.yaml` and the last readings in
+`%LOCALAPPDATA%\hayami\sections.json`.
+
+What differs from Linux:
+
+- **The window needs no rule.** It has no titlebar, stays on top and is
+  translucent by itself. There is no Alt-drag on Windows, so the panel is
+  dragged from anywhere on it, and it opens where it was left -- unless no
+  monitor covers that place any more, in which case it opens where Windows
+  puts it.
+- **Usage shares the Windows widget's cache**, in
+  `%LOCALAPPDATA%\claude-usage-widget\cache`, exactly as it shares the
+  Python tools' on Linux.
+- **Bandwidth** offers the interfaces Network Connections shows; Windows'
+  loopback, its `Local Area Connection*` adapters and its IPv6 transition
+  tunnels are kept behind "Show every interface".
+- **Peripherals and the cooler find nothing yet.** sanshoku reads devices
+  through Linux interfaces; on Windows it builds and reports that there is
+  nothing to read. Reading them there is its own piece of work.
 
 ### The udev rule
 
@@ -268,6 +306,24 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Add**: Windows (spec 033). Both panels build and run there; usage and
+  bandwidth read, and the device sections find nothing yet.
+  `scripts\install_windows.ps1` and `uninstall_windows.ps1` install for the
+  current user. The panel is dragged from anywhere on it and remembers where
+  it was put. With sanshoku SANSHOKU_VERSION and fynedesygn FYNEDESYGN_VERSION,
+  which carry their Windows fixes.
+- **Fix**: the tests are sandboxed on Windows. They took the home, cache and
+  settings directories away by their Unix names only, so on Windows they read
+  the real usage cache and would have found the real credential store.
+  `internal/testenv` sets every name either platform reads.
+- **Change**: the cache of last readings is under `%LOCALAPPDATA%` where
+  that is set, as the usage cache already was. Linux is unchanged.
+- **Chore**: `.gitattributes` pins LF, and CRLF for the PowerShell scripts;
+  a Windows checkout had failed the byte-for-byte README and desktop-entry
+  tests.
 
 ### 0.8.5 (2026-10-01)
 
