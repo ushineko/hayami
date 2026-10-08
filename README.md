@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.0
+**Version**: 0.9.1
 
 *a chart you read at a glance*
 
@@ -384,7 +384,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.1 (2026-10-08)
 
 - **Fix**: the panel starts from the Start menu, a desktop shortcut and the
   `-Autostart` login shortcut on Windows. cobra took any program Explorer
