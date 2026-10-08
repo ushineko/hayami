@@ -14,7 +14,7 @@
   detail="no supported cooler detected"
 ## cooler: an absence the source explains
 - label="CPU" text="no sensor" status=0 aside=true actionable=false
-  detail="LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run"
+  detail="LibreHardwareMonitor is running but its web server is off: Options > Remote Web Server > Run"
 - label="" text="no GPU sensor" status=0 aside=true actionable=false
   detail="<gpu-sensors>"
 - label="Coolant" text="no cooler" status=0 aside=false actionable=false

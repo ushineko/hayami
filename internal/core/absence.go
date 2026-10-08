@@ -23,9 +23,13 @@ const (
 	// AbsenceLHMServerOff is LibreHardwareMonitor running with its web server
 	// off.
 	AbsenceLHMServerOff AbsenceCode = "lhm-server-off"
-	// AbsenceLHMNotRunning is PawnIO installed and LibreHardwareMonitor not
-	// started.
+	// AbsenceLHMNotRunning is PawnIO installed, LibreHardwareMonitor not
+	// started, and nothing registered to start it at logon.
 	AbsenceLHMNotRunning AbsenceCode = "lhm-not-running"
+	// AbsenceLHMTaskStopped is LibreHardwareMonitor's startup task
+	// registered and LibreHardwareMonitor not running: it was closed, or it
+	// has not started since the task was made (spec 042).
+	AbsenceLHMTaskStopped AbsenceCode = "lhm-task-stopped"
 	// AbsenceLHMNotInstalled is neither LibreHardwareMonitor nor PawnIO.
 	AbsenceLHMNotInstalled AbsenceCode = "lhm-not-installed"
 	// AbsenceLHMUnexpected is LibreHardwareMonitor answering in a way this

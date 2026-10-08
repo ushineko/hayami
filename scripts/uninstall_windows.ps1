@@ -28,8 +28,14 @@ function Fail($message) { Write-Host "[FAIL] $message" -ForegroundColor Red; exi
 if ($env:OS -ne "Windows_NT") { Fail "This removes the Windows install; on Linux run ./uninstall.sh." }
 
 $Panel = Join-Path $Destination "hayami.exe"
-$running = Get-Process hayami -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Panel }
-if ($running -and -not $DryRun) { Fail "hayami is running from $Destination. Quit it (right-click the panel, Quit) and run this again." }
+$Pane = Join-Path $Destination "hayami-tui.exe"
+# A running program's file cannot be deleted, and unlike an install there is
+# no new copy to put in its place: say which is running and stop.
+$running = Get-Process hayami, hayami-tui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Panel -or $_.Path -eq $Pane }
+if ($running -and -not $DryRun) {
+    $names = ($running | Select-Object -ExpandProperty ProcessName -Unique) -join " and "
+    Fail "$names is running from $Destination. Quit it (the panel: right-click, Quit; the terminal pane: q) and run this again."
+}
 
 Write-Host "Removing hayami ..."
 $removed = 0
@@ -55,5 +61,9 @@ Write-Host ""
 Write-Host "Left alone:"
 Write-Host "  $(Join-Path $env:APPDATA 'hayami\settings.yaml')   your settings"
 Write-Host "  $(Join-Path $env:LOCALAPPDATA 'hayami\sections.json')   the last readings"
-Write-Host "  LibreHardwareMonitor and PawnIO, if -WithSensors installed them: other programs, which"
-Write-Host "  may have other uses. winget uninstall --id LibreHardwareMonitor.LibreHardwareMonitor removes it."
+Write-Host "  LibreHardwareMonitor and PawnIO, if -WithSensors set them up: other programs, which"
+Write-Host "  may have other uses, and LibreHardwareMonitor's startup task. To remove them too, as"
+Write-Host "  administrator:"
+Write-Host "    Unregister-ScheduledTask -TaskName LibreHardwareMonitor"
+Write-Host "    winget uninstall --id LibreHardwareMonitor.LibreHardwareMonitor"
+Write-Host "  and PawnIO from Settings, Apps."
