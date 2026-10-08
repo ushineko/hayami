@@ -84,9 +84,9 @@ func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}}
 
 // NewCooler builds the cooler source over sanshoku's NZXT driver and the
 // processor's temperature: the kernel's sensors on Linux, LibreHardwareMonitor
-// at lhm on Windows (spec 036; empty is its default address).
-func NewCooler(lhm string) *Cooler {
-	c := newCooler(DeviceScan, core.HostCPUTemperature(lhm))
+// at lhm on Windows (spec 036; empty is its default address), over scan.
+func NewCooler(lhm string, scan Scan) *Cooler {
+	c := newCooler(scan, core.HostCPUTemperature(lhm))
 	c.load = core.HostCPULoad().Load
 	c.graphics = core.NewGraphicsReader().Read
 	c.cpuName = core.HostCPUName
@@ -110,7 +110,7 @@ func newCooler(scan Scan, sensor func(context.Context) (float64, error)) *Cooler
 }
 
 // Key names the section.
-func (c *Cooler) Key() string { return "cooler" }
+func (c *Cooler) Key() string { return view.CoolerInfo.Key }
 
 // Interval is CoolerInterval.
 func (c *Cooler) Interval() time.Duration { return CoolerInterval }

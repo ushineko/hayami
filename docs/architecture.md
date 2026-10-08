@@ -66,16 +66,18 @@ sign that a table is missing, and a review will ask for one.
 
 Tables that exist: the fixed-width formatters (`view/format.go`), name
 shortening (`view.nameRules`), the peripherals vendor list, sanshoku's support
-table. Threshold bands (`view.Bands`, #127) are in place; the section registry
-(#126) is being built.
+table, threshold bands (`view.Bands`) and the section registry.
 
 ### 3. A section is one registry entry
 
-A section is declared once, with its key, title, icon, whether it is on by
-default, and the constructor for its source. The key lists, the default
-settings, the preferences list, `--sections` and the icon lookup all read that
-entry. Adding a section is an entry, a source and a view builder; nothing else
-spells its key (#126).
+A section is declared once: its key, title, icon and whether it is on by
+default in `view.Sections()` (`internal/view/sections.go`), and its source's
+constructor in `panel.Specs()` (`internal/panel/registry.go`), which takes one
+`panel.Env` and panics if the two lists disagree. The key lists, the default
+settings, the preferences list, `--sections` and the icon lookup all read
+them. Adding a section is an entry in each, a glyph in `gui/icons.go`, a source
+and a view builder; nothing else spells its key. A setting a source needs goes
+in `Env`, not in a new parameter.
 
 Every section renders in all three arrangements (stack, grid, row), in both
 shells, and a hidden section's source is not polled.
@@ -167,8 +169,8 @@ fields defaulted in the constructor (`Cooler.load`,
 `GraphicsReader.Native`, `BandwidthSection.read`), or as a small interface. A
 test replaces them. It does not reach for real hardware, the real settings
 file, the real usage cache or the network. Package-level variables that tests
-reassign are not added. The one that exists, `panel.DeviceScan`, is being
-removed (#126).
+reassign are not added. `panel.DefaultScan` remains as the fallback when an
+`Env` carries no scan, until the commands take an `Env` from their callers.
 
 ## Adding things
 
@@ -177,7 +179,7 @@ removed (#126).
 | Support for a device | A sanshoku driver and its support-table entry, with a bench reading from the device; a sanshoku release | In hayami: `go get` the release, plus a `vendors()` row while rule 1's aim is unbuilt |
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | The existing chain in `core` (rule 4), in priority order for each platform | The absence it can report, as a typed absence |
-| A section | A registry entry, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled |
+| A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | Today a `config.Config` field; settings by section are planned | The preferences window, if a person would change it more than once |
 | A platform | `_<os>.go` files in `core` (and `desktop`); every `_other` stays honest | CI builds and tests on it |
@@ -205,7 +207,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 |---|---|---|---|
 | sanshoku as the only device layer | 1 | In place | |
 | Drivers describe themselves; hayami derives its vendor list | 1 | Planned (phase 3) | |
-| Section registry | 3 | In progress | #126 |
+| Section registry | 3 | In place | #126 |
 | Threshold bands | 7 | In place | #127 |
 | Typed absences, one reason helper | 6 | In place | #128 |
 | One window-test harness, rows found by label | Testing | In progress | #129 |
