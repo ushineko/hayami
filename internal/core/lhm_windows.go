@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // lhmProcess is LibreHardwareMonitor's executable, as a process list shows it.
@@ -14,15 +15,40 @@ const lhmProcess = "librehardwaremonitor.exe"
 const pawnIOService = "PawnIO"
 
 /*
-ProbeLHMHost says whether PawnIO is installed and LibreHardwareMonitor is
-running, for the reason given when its web server does not answer.
+lhmTaskKey is where Task Scheduler indexes LibreHardwareMonitor's startup
+task: the name its own Run On Windows Startup gives it, in the root folder.
+The index under HKLM is readable without administrator rights, where Task
+Scheduler's COM interface would need a COM runtime and the task's file under
+System32\Tasks is not readable at all (spec 042).
+*/
+const lhmTaskKey = `SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\LibreHardwareMonitor`
 
-Both are asked read-only, and neither needs administrator rights: the service
-manager is opened to connect and the service to query its status, which any
-user may; the process list names every process, elevated ones included.
+/*
+ProbeLHMHost says whether PawnIO is installed, LibreHardwareMonitor is
+running and its startup task is registered, for the reason given when its web
+server does not answer.
+
+All three are asked read-only, and none needs administrator rights: the
+service manager is opened to connect and the service to query its status,
+which any user may; the process list names every process, elevated ones
+included; the task index is a registry key any user may read.
 */
 func ProbeLHMHost() LHMHost {
-	return LHMHost{PawnIO: serviceInstalled(pawnIOService), Running: processRunning(lhmProcess)}
+	return LHMHost{
+		PawnIO:  serviceInstalled(pawnIOService),
+		Running: processRunning(lhmProcess),
+		Task:    keyExists(registry.LOCAL_MACHINE, lhmTaskKey),
+	}
+}
+
+// keyExists is whether a registry key can be opened to read.
+func keyExists(root registry.Key, path string) bool {
+	k, err := registry.OpenKey(root, path, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	_ = k.Close()
+	return true
 }
 
 func serviceInstalled(name string) bool {
