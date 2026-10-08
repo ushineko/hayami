@@ -1,6 +1,9 @@
 package window_test
 
-import "image"
+import (
+	"image"
+	"image/color"
+)
 
 // inkLevel is the brightness above which a pixel is a value's or a label's
 // text. The cards are dark, their text near white; the heading and the reasons
@@ -11,7 +14,25 @@ const inkLevel = 170
 type span struct{ From, To int }
 
 // ink says whether the pixel at x, y is text.
-func ink(img *image.NRGBA, x, y int) bool { return luminance(img.At(x, y)) > inkLevel }
+//
+// Bright is not enough: the trend plot's light-blue line is as bright as
+// text where it is anti-aliased, and a plot that slopes across fifteen rows
+// read as a line of text, a line the card does not have (spec 041). The
+// plot's colours are blue-led -- purple, light blue, teal -- and text is
+// neutral or a status colour (green, amber, red), none of which is.
+func ink(img *image.NRGBA, x, y int) bool {
+	c := img.At(x, y)
+	return luminance(c) > inkLevel && !plotted(c)
+}
+
+// plotted says whether c is one of the plot's blue-led colours: blue well
+// above red and not below green. Measured on the window: (176,144,240),
+// (96,192,240), (64,144,176) are the plot; (96,192,80) is a battery's green.
+func plotted(c color.Color) bool {
+	r, g, b, _ := c.RGBA()
+	r, g, b = r>>8, g>>8, b>>8
+	return b > r+48 && b >= g
+}
 
 // lines are the horizontal bands of the picture that carry text, top to
 // bottom: one per row of the card.

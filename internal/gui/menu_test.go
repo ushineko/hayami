@@ -20,6 +20,9 @@ func store(t *testing.T) *config.Store {
 	t.Helper()
 	s, err := config.Open(filepath.Join(t.TempDir(), "settings.yaml"))
 	require.NoError(t, err)
+	// Closed before the directory goes, so no write the menu scheduled lands
+	// after the test (#125).
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
 	return s
 }
 

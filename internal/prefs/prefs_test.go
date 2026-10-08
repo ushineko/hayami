@@ -26,6 +26,15 @@ func store(t *testing.T, body string) *config.Store {
 	}
 	s, err := config.Open(path)
 	require.NoError(t, err)
+	// Closed when the test ends, before its directory goes (#125). A change
+	// the window made is a write scheduled a second later; left running, it
+	// fired after the test, into a directory already removed, and its error
+	// reached the shell's flash from the timer's goroutine while the next
+	// test was drawing -- two goroutines measuring text at once, which
+	// crashed the text shaper on Windows CI. Three tests here ended with a
+	// write pending. Cleanups run last-first, so this one runs before
+	// TempDir's.
+	t.Cleanup(func() { assert.NoError(t, s.Close()) })
 	return s
 }
 
