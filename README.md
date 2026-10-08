@@ -176,6 +176,14 @@ What differs from Linux:
   dragged from anywhere on it, and it opens where it was left -- unless no
   monitor covers that place any more, in which case it opens where Windows
   puts it.
+- **It stands aside for a full-screen app.** While the window in front covers
+  the whole of the panel's monitor -- a browser in full screen (F11, or a web
+  player's full-screen button), a game in windowed or borderless full screen --
+  the panel hides, and it comes back, without taking the focus, when you
+  return to the desktop. A maximised window does not count, nor does a
+  full-screen app on another monitor. On by default; Preferences, Window,
+  "Hide while a full-screen app is in front" turns it off. On Plasma, KWin
+  already covers the panel with an active full-screen window.
 - **Usage shares the Windows widget's cache**, in
   `%LOCALAPPDATA%\claude-usage-widget\cache`, exactly as it shares the
   Python tools' on Linux.
@@ -383,6 +391,16 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Add**: the panel hides while a full-screen app is in front on its monitor,
+  on Windows (spec 051, #167): a browser in full screen or a game in windowed
+  or borderless full screen, decided by the window covering the whole monitor
+  (fynedesygn 0.1.89). It comes back, in place and without the focus, on
+  returning to the desktop. On by default, with a checkbox in Preferences,
+  Window. Linux is unchanged: KWin already covers the panel with an active
+  full-screen window.
 
 ### 0.9.3 (2026-10-08)
 

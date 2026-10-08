@@ -205,3 +205,25 @@ func TestClosingTheStoreTwiceIsNotAnError(t *testing.T) {
 	require.NoError(t, s.Close())
 	require.NoError(t, s.Close())
 }
+
+// Spec 051. Hiding while a full-screen app is in front is on unless turned
+// off: a settings file written before it existed carries nothing, and nothing
+// is on. Turned off, it stays off across a restart.
+func TestHidingForAFullScreenAppIsOnUnlessTurnedOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	require.NoError(t, os.WriteFile(path,
+		[]byte("hayami:\n    sections:\n        - usage\n"), 0o600))
+
+	s, err := config.Open(path)
+	require.NoError(t, err)
+	assert.True(t, s.Config().HidesForFullscreen(), "a file without the setting hides for a full-screen app")
+
+	require.NoError(t, s.SetConfig(s.Config().WithHideForFullscreen(false)))
+	require.NoError(t, s.Flush())
+	again, err := config.Open(path)
+	require.NoError(t, err)
+	assert.False(t, again.Config().HidesForFullscreen(), "turned off, it came back on after a restart")
+
+	require.NoError(t, again.SetConfig(again.Config().WithHideForFullscreen(true)))
+	assert.True(t, again.Config().HidesForFullscreen())
+}

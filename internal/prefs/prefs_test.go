@@ -1,6 +1,7 @@
 package prefs_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -140,6 +141,11 @@ func TestTheWindowSectionOffersTheRuleAndTheOpacity(t *testing.T) {
 		rules := c.rules
 		t.Run(c.name, func(t *testing.T) {
 			withRules(t, rules)
+			// About the rule alone: the full-screen checkbox (spec 051) is tested
+			// on its own.
+			wasFS := desktop.HidesForFullscreen
+			desktop.HidesForFullscreen = false
+			t.Cleanup(func() { desktop.HidesForFullscreen = wasFS })
 			testenv.Config(t, t.TempDir())
 
 			a := test.NewApp()
@@ -273,4 +279,40 @@ func TestTheWindowOpensOnTheNamedPage(t *testing.T) {
 
 	w.ShowPage("Window")
 	assert.Equal(t, "Window", w.Shell().Current().Title())
+}
+
+// Spec 051. The Window section offers hiding for a full-screen app where the
+// panel has to do it itself (Windows), ticked by default, and a tap saves it;
+// where the window manager does it (KWin) it is not offered.
+func TestTheWindowSectionOffersHidingForAFullScreenApp(t *testing.T) {
+	const label = "Hide while a full-screen app is in front"
+	for _, on := range []bool{true, false} {
+		t.Run(fmt.Sprint("platform hides: ", on), func(t *testing.T) {
+			was := desktop.HidesForFullscreen
+			desktop.HidesForFullscreen = on
+			t.Cleanup(func() { desktop.HidesForFullscreen = was })
+			testenv.Config(t, t.TempDir())
+
+			a := test.NewApp()
+			t.Cleanup(a.Quit)
+			s := store(t, "")
+			w := prefs.New(a, prefs.Options{Store: s})
+			w.Shell().Select("Window")
+
+			var check *widget.Check
+			for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
+				if c, ok := o.(*widget.Check); ok && c.Text == label {
+					check = c
+				}
+			}
+			if !on {
+				assert.Nil(t, check, "offered where the window manager already does it")
+				return
+			}
+			require.NotNil(t, check, "not offered on a platform that needs it")
+			assert.True(t, check.Checked, "not ticked by default")
+			test.Tap(check)
+			assert.False(t, s.Config().HidesForFullscreen(), "unticking it was not saved")
+		})
+	}
 }
