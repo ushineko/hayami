@@ -19,6 +19,16 @@
 .PARAMETER Autostart
     Also start the panel when you log in.
 
+.PARAMETER WithSensors
+    Also install LibreHardwareMonitor, which is where the panel reads the
+    processor's temperature on Windows (spec 036). Opt-in, because it is a
+    second program, it runs as administrator, and it loads a kernel driver
+    (PawnIO). With this switch: winget installs it (and passing the switch
+    accepts winget's source and package agreements for that one package);
+    its settings are written with the web server on, if it has none yet; and
+    it is started elevated, so Windows asks (UAC) and LibreHardwareMonitor
+    offers PawnIO itself. Nothing else is installed for you.
+
 .PARAMETER DryRun
     Say what would be done and change nothing. Needs neither Go nor gcc.
 
@@ -34,6 +44,7 @@
 [CmdletBinding()]
 param(
     [switch] $Autostart,
+    [switch] $WithSensors,
     [switch] $DryRun,
     [switch] $SkipBuild,
     [string] $Destination = (Join-Path $env:LOCALAPPDATA "Programs\hayami"),
@@ -111,6 +122,76 @@ function New-Shortcut($path, $target) {
     Write-Ok $path
 }
 
+# LibreHardwareMonitor, where winget's portable install puts it.
+$SensorsPackage = "LibreHardwareMonitor.LibreHardwareMonitor"
+function Find-Sensors {
+    $packages = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+    return Get-ChildItem $packages -Directory -Filter "$SensorsPackage*" -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName "LibreHardwareMonitor.exe" } |
+        Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+
+# The settings LibreHardwareMonitor reads at start, beside its executable:
+# the web server on, on its default port, with no password, which is what
+# hayami asks (spec 036).
+$SensorsConfig = @"
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <appSettings>
+    <add key="runWebServerMenuItem" value="true" />
+    <add key="listenerIp" value="127.0.0.1" />
+    <add key="listenerPort" value="8085" />
+    <add key="authenticationEnabled" value="false" />
+  </appSettings>
+</configuration>
+"@
+
+function Install-Sensors {
+    Write-Step "LibreHardwareMonitor, for the processor's temperature"
+    $exe = Find-Sensors
+    if ($exe) {
+        Write-Ok "already installed: $exe"
+    } elseif ($DryRun) {
+        Write-Note "would run: winget install --id $SensorsPackage --exact --accept-source-agreements --accept-package-agreements"
+    } else {
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Note "winget is not here. Install LibreHardwareMonitor from"
+            Write-Note "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases and see the README, On Windows."
+            return
+        }
+        & winget install --id $SensorsPackage --exact --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -ne 0) { Write-Note "winget did not install it; the panel runs without a CPU temperature."; return }
+        $exe = Find-Sensors
+        if (-not $exe) { Write-Note "installed, but not where winget puts it; see the README, On Windows."; return }
+        Write-Ok $exe
+    }
+
+    $config = if ($exe) { [IO.Path]::ChangeExtension($exe, ".config") } else { "LibreHardwareMonitor.config, beside it" }
+    if ($exe -and (Test-Path $config)) {
+        Write-Ok "its settings are left as they are: $config"
+        Write-Note "hayami reads its web server, on port 8085: Options -> Remote Web Server -> Run."
+    } elseif ($DryRun) {
+        Write-Note "would write, if it has no settings yet: $config (web server on, port 8085)"
+    } else {
+        [IO.File]::WriteAllText($config, $SensorsConfig, (New-Object Text.UTF8Encoding $false))
+        Write-Ok "settings: web server on, port 8085: $config"
+    }
+
+    if ($DryRun) {
+        Write-Note "would start it as administrator: Windows asks (UAC), and it offers PawnIO itself"
+    } elseif (Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue) {
+        Write-Ok "already running"
+    } else {
+        Write-Note "starting it as administrator: Windows asks (UAC), and on its first start it"
+        Write-Note "offers to install PawnIO, the driver it reads the processor through. Say yes."
+        try { Start-Process -FilePath $exe -Verb RunAs } catch { Write-Note "not started: $($_.Exception.Message)" }
+    }
+    Write-Note "In LibreHardwareMonitor: Options -> Run On Windows Startup keeps it running after a restart."
+    Write-Note "Its web server listens on every network interface whatever its address setting says;"
+    Write-Note "Windows Firewall's default (block inbound) is what keeps port 8085 off your network."
+    Write-Note "Do not add an inbound rule for it: the same server can change fan settings."
+}
+
 Write-Host "Installing hayami $Version from $Root"
 
 if ($DryRun) {
@@ -140,6 +221,7 @@ if ($Autostart) {
     Write-Step "Starting it at login"
     New-Shortcut $Startup $Panel
 }
+if ($WithSensors) { Install-Sensors }
 
 Write-Host ""
 Write-Host "Done."
@@ -150,4 +232,7 @@ Write-Host "  hayami-tui    the same readings in a terminal: $Pane"
 if (-not $Autostart) {
     Write-Host ""
     Write-Host "  .\scripts\install_windows.ps1 -Autostart    and start it when you log in"
+}
+if (-not $WithSensors) {
+    Write-Host "  .\scripts\install_windows.ps1 -WithSensors  and LibreHardwareMonitor, for the CPU temperature"
 }

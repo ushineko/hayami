@@ -21,8 +21,12 @@ func NewPeripheralsOver(scan Scan, now func() time.Time) *Peripherals {
 // NewCoolerOver builds the cooler source over a test's scan and processor
 // sensor, so the suite touches neither the real hwmon tree nor a real device.
 func NewCoolerOver(scan Scan, sensor func() (float64, error)) *Cooler {
-	return newCooler(scan, sensor)
+	return newCooler(scan, func(context.Context) (float64, error) { return sensor() })
 }
+
+// SensorDetail is what the reason for a missing processor temperature says
+// for err.
+func SensorDetail(err error) string { return sensorDetail(err) }
 
 // UdevDetail is the detail a device that may not be opened is given.
 const UdevDetail = udevDetail
