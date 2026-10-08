@@ -70,7 +70,7 @@ and the choice holds in both shells.
 |---|---|
 | Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; on Windows, the interface table (`GetIfTable2`), named as Network Connections names them; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
-| Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. A five-minute trend of the coolant, the processor and the graphics card |
+| Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. On Windows, `GetSystemTimes` for the processor's load and D3DKMT and the `GPU Engine` counters for the card (spec 034). A five-minute trend of the coolant, the processor and the graphics card |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
 
 ## Arrangements
@@ -178,9 +178,17 @@ What differs from Linux:
 - **Bandwidth** offers the interfaces Network Connections shows; Windows'
   loopback, its `Local Area Connection*` adapters and its IPv6 transition
   tunnels are kept behind "Show every interface".
-- **Peripherals and the cooler find nothing yet.** sanshoku reads devices
-  through Linux interfaces; on Windows it builds and reports that there is
-  nothing to read. Reading them there is its own piece of work.
+- **The cooler card shows the processor and the graphics card** (spec 034).
+  The processor's load is GetSystemTimes and its name the registry's; Windows
+  offers no processor temperature without a kernel driver, so its row is the
+  load alone. The card's temperature, load and name come from D3DKMT and the
+  `GPU Engine` performance counters, which are Task Manager's sources, for any
+  vendor's card; `nvidia-smi` is asked only for what they left out. The load
+  is the busiest engine, as Task Manager gives it, which reads lower than
+  `nvidia-smi`'s figure for the same card.
+- **Peripherals and the liquid cooler find nothing yet.** sanshoku reads
+  devices through Linux interfaces; on Windows it builds and reports that
+  there is nothing to read. Reading them there is its own piece of work.
 
 ### The udev rule
 
@@ -306,6 +314,16 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Add**: the processor and the graphics card on Windows (spec 034). The
+  processor's load from GetSystemTimes and its name from the registry; the
+  card's temperature, load and name from D3DKMT and the `GPU Engine`
+  counters, with `nvidia-smi` only as the fallback.
+- **Change**: a processor with a load and no temperature is a row of its
+  own, its temperature column left empty at its width. It was no row at all,
+  which on Windows was every machine.
 
 ### 0.8.6 (2026-10-01)
 

@@ -139,7 +139,11 @@ This repository is **public**. The following hold without exception:
   (spec 026): that driver registers no hwmon, and what it offers instead,
   NVML, is a vendor library and not a kernel node, reachable from Go only
   through cgo, which the terminal panel is built without. It runs only when
-  hwmon and `gpu_busy_percent` have nothing, with a two-second timeout.
+  hwmon and `gpu_busy_percent` have nothing, with a two-second timeout. On
+  Windows it is only a fallback (spec 034): D3DKMT in gdi32 and the
+  `GPU Engine` performance counters give any vendor's card its temperature,
+  load and name without a process, and nvidia-smi is run only for what they
+  left out.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that

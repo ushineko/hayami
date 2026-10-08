@@ -2,6 +2,7 @@ package view_test
 
 import (
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,37 @@ func TestTheGPURowIsNotDrawnWithoutATemperature(t *testing.T) {
 
 	for _, row := range s.Rows {
 		assert.NotEqual(t, "GPU", row.Label)
+	}
+}
+
+// Spec 034. A processor with a load and no temperature -- every Windows
+// machine -- is a row, its load in the column the card's is in and its
+// temperature and unit as spaces: the row is as wide as the card's, so the
+// value and unit columns line up, and a temperature that arrived later would
+// move nothing.
+func TestAProcessorWithALoadAndNoTemperatureIsARowOfTheSameWidth(t *testing.T) {
+	r := processors()
+	r.HasCPU, r.HasLiquid = false, false
+	s := view.Cooler(r)
+
+	require.Len(t, s.Rows, 2)
+	cpu, gpu := s.Rows[0], s.Rows[1]
+	assert.Equal(t, "CPU", cpu.Label)
+	assert.Equal(t, " 12 %      ", cpu.Value)
+	assert.Equal(t, "   ", cpu.Unit, "no unit for no temperature, and the unit's width kept")
+	assert.Equal(t, len(gpu.Value), len(cpu.Value))
+	assert.Equal(t, utf8.RuneCountInString(gpu.Unit), utf8.RuneCountInString(cpu.Unit))
+	assert.Equal(t, gpu.Value[:view.LoadWidth], "  4 %", "the loads share a column")
+}
+
+// Spec 034. A processor with neither a load nor a temperature is no row.
+func TestAProcessorWithNothingIsNoRow(t *testing.T) {
+	r := processors()
+	r.HasCPU, r.HasCPULoad = false, false
+	s := view.Cooler(r)
+
+	for _, row := range s.Rows {
+		assert.NotEqual(t, "CPU", row.Label)
 	}
 }
 
