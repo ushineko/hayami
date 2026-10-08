@@ -388,15 +388,9 @@ func peripheral(d PeripheralReading) Cell {
 	// it, which is the whole of what "this is the last number heard" needs to
 	// say; blanking the verdict as well would take a low battery's colour away
 	// at the moment it is least likely to be charged.
-	switch {
-	case d.Charge != Draining:
-		cell.Status = Info
-	case d.Level <= BatteryCritical:
-		cell.Status = Bad
-	case d.Level <= BatteryLow:
-		cell.Status = Warn
-	default:
-		cell.Status = Good
+	cell.Status = Info
+	if d.Charge == Draining {
+		cell.Status = BatteryBands.Of(float64(d.Level))
 	}
 	return cell
 }
@@ -445,17 +439,9 @@ func bandCell(d PeripheralReading) Cell {
 		cell.Note = chargeNote(d)
 	}
 
-	// The same thresholds a percentage cell uses, applied to what exists: the
-	// lowest step is critical and the one above it is low.
-	switch {
-	case d.Charge != Draining:
-		cell.Status = Info
-	case d.Segments <= 1:
-		cell.Status = Bad
-	case d.Segments == 2:
-		cell.Status = Warn
-	default:
-		cell.Status = Good
+	cell.Status = Info
+	if d.Charge == Draining {
+		cell.Status = SegmentBands.Of(float64(d.Segments))
 	}
 	return cell
 }

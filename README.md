@@ -365,6 +365,10 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: every reading's colour thresholds are a table (spec 039):
+  `view.Bands`, one ascending list per reading, in place of five hand-written
+  ladders (rates, coolant, battery, quota, the Wi-Fi bars). Nothing draws
+  differently; a test pins each status at and around every threshold.
 - **Add**: a Wi-Fi interface's link (spec 037). Its row leads with the signal
   in the battery's four bars, by RSSI, and a line under its totals gives the
   strength, band, channel and link rate; the tip has the generation, Windows'

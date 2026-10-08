@@ -60,6 +60,21 @@ func TestTheBatterysStatusAtEveryThreshold(t *testing.T) {
 	}
 }
 
+func TestTheBatteryBandsStatusAtEveryStep(t *testing.T) {
+	cases := []struct {
+		segments int
+		charge   Charge
+		want     Status
+	}{
+		{1, Draining, Bad}, {2, Draining, Warn}, {3, Draining, Good}, {4, Draining, Good},
+		{1, Draining + 1, Info}, {4, Draining + 1, Info},
+	}
+	for _, c := range cases {
+		got := peripheral(PeripheralReading{Name: "x", Segments: c.segments, Charge: c.charge})
+		assert.Equal(t, c.want, got.Status, "band %d charge %d", c.segments, c.charge)
+	}
+}
+
 func TestTheRatesStatusAtEveryThreshold(t *testing.T) {
 	cases := []struct {
 		v    float64
