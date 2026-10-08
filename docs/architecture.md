@@ -103,6 +103,17 @@ and wording. The processor's temperature and the graphics card are chains;
 set, so a Windows host never looks under `/sys`. Adding a source is a provider
 and a row in its platform's chain; the reason for a gap names it by itself.
 
+What the chains read reaches the view as a list, not a field per part. A
+cooler reading is `view.CoolerReading{Probes}` (`internal/view/cooler.go`):
+each probe has an ID, a role, a name and its values as `view.Opt`, and
+`view.Cooler` draws whatever probes there are, in the order and with the
+colours its role table (`coolerRoles`) gives each role. A second graphics card
+or a motherboard temperature is another probe from its source, and nothing in
+the view changes. Each row carries its probe's ID (`view.Row.ID`), and the
+window matches a poll's rows to the card's by it: a row arriving is inserted
+above the plot, a row leaving is removed, and a value changing moves nothing
+(spec 044).
+
 ### 5. Platform code: one file per platform, in core
 
 Platform differences are build-tagged files with the same function signatures:
@@ -192,6 +203,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | Support for a device | A sanshoku driver and its support-table entry, with a bench reading from the device; a sanshoku release | In hayami: `go get` the release, plus a `vendors()` row while rule 1's aim is unbuilt |
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
+| Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | Today a `config.Config` field; settings by section are planned | The preferences window, if a person would change it more than once |
@@ -225,7 +237,8 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Typed absences, one reason helper | 6 | In place | #128 |
 | One window-test harness, rows found by label | Testing | In place | #129 |
 | `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | In place | #137 |
-| Cooler and link readings as lists of probes | 4 | Planned (phase 2) | |
+| Cooler reading as a list of probes; rows matched by ID in the window | 4 | In place | #138 |
+| Wi-Fi link reading with `Opt` values instead of `Has` flags | 4 | Planned | |
 | Settings by section | Adding things | Planned (phase 4) | |
 | Parity test that compares what the shells draw; `row` drawn by the window | 3 | Planned (phase 4) | |
 

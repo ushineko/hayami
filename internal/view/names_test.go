@@ -47,7 +47,7 @@ func TestANameTheRulesWouldEmptyIsKept(t *testing.T) {
 // exactly that width, and the full name is the row's tip.
 func TestALongNameIsCutAndKeptWholeInTheTip(t *testing.T) {
 	full := "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]"
-	s := view.Cooler(view.CoolerReading{GPU: 52, HasGPU: true, GPUName: full})
+	s := view.Cooler(view.CoolerReading{Probes: []view.Probe{{ID: "gpu", Role: view.RoleGPU, Name: full, Temp: view.Some(52.0)}}})
 
 	require.Len(t, s.Rows, 1)
 	label := s.Rows[0].Label
@@ -72,8 +72,11 @@ func TestTheDesksNamesFitTheColumn(t *testing.T) {
 // R2.6. Where a name could not be read the row keeps its old label, and has
 // no tip.
 func TestAnUnreadNameKeepsTheOldLabel(t *testing.T) {
-	s := view.Cooler(view.CoolerReading{CPU: 60, HasCPU: true, GPU: 41, HasGPU: true,
-		Coolant: 38.9, HasLiquid: true})
+	s := view.Cooler(view.CoolerReading{Probes: []view.Probe{
+		{ID: "cpu", Role: view.RoleCPU, Temp: view.Some(60.0)},
+		{ID: "gpu", Role: view.RoleGPU, Temp: view.Some(41.0)},
+		{ID: "coolant", Role: view.RoleCoolant, Temp: view.Some(38.9)},
+	}})
 
 	require.Len(t, s.Rows, 3)
 	for i, want := range []string{"CPU", "GPU", "Coolant"} {
@@ -87,11 +90,14 @@ func TestAnUnreadNameKeepsTheOldLabel(t *testing.T) {
 // column, the line is the same length, and nothing else in the pane -- a
 // usage meter whose bar starts after the label column -- moves either.
 func TestANameArrivingMovesNoValue(t *testing.T) {
-	unnamed := view.CoolerReading{CPU: 60, HasCPU: true, CPULoad: 12, HasCPULoad: true,
-		Coolant: 38.9, HasLiquid: true}
-	withNames := unnamed
-	withNames.CPUName = "Intel(R) Core(TM) i9-14900K"
-	withNames.CoolerName = "NZXT Kraken Elite V2"
+	reading := func(cpu, cooler string) view.CoolerReading {
+		return view.CoolerReading{Probes: []view.Probe{
+			{ID: "cpu", Role: view.RoleCPU, Name: cpu, Load: view.Some(12.0), Temp: view.Some(60.0)},
+			{ID: "coolant", Role: view.RoleCoolant, Name: cooler, Temp: view.Some(38.9)},
+		}}
+	}
+	unnamed := reading("", "")
+	withNames := reading("Intel(R) Core(TM) i9-14900K", "NZXT Kraken Elite V2")
 	meter := view.Section{Key: "usage", Title: "Usage", Meters: []view.Meter{
 		{Label: "CC max", Caption: "5h: 4 %", Reset: "in 2h", Fraction: 0.04},
 	}}

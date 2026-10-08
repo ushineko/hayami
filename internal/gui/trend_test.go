@@ -69,11 +69,11 @@ func (coolerSource) Interval() time.Duration            { return time.Hour }
 func (coolerSource) Poll(context.Context) (bool, error) { return true, nil }
 func (coolerSource) Data() any                          { return nil }
 func (coolerSource) Section() view.Section {
-	return view.Cooler(view.CoolerReading{
-		HasLiquid: true, Coolant: 46, Trail: []float64{45.8, 46, 46.2},
-		HasCPU: true, CPU: 70, CPUTrail: []float64{65, 80, 98},
-		HasGPU: true, GPU: 41, GPUTrail: []float64{40, 41, 43},
-	})
+	return view.Cooler(view.CoolerReading{Probes: []view.Probe{
+		{ID: "coolant", Role: view.RoleCoolant, Temp: view.Some(46.0), Trail: []float64{45.8, 46, 46.2}},
+		{ID: "cpu", Role: view.RoleCPU, Temp: view.Some(70.0), Trail: []float64{65, 80, 98}},
+		{ID: "gpu", Role: view.RoleGPU, Temp: view.Some(41.0), Trail: []float64{40, 41, 43}},
+	}})
 }
 
 // The cooler keeps its own kind of plot: each series on its own range, which

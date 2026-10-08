@@ -385,6 +385,17 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: the cooler is a list of probes (spec 044). A reading is
+  whatever parts the machine has -- a processor, a graphics card, a coolant,
+  a fan and a pump -- each with an ID and its values present or not, and the
+  card draws them in the order and colours a table of roles gives. A second
+  graphics card would be a second row with no new code. The window matches a
+  poll's rows to the card's by ID: a row arriving goes in above the plot, one
+  leaving is removed, and a value changing moves nothing. This replaces four
+  hidden spare rows per card, a fifth of which went under the plot. Requires
+  fynedesygn v0.1.85. The `readings` JSON gives the cooler as `probes`. The
+  last-readings cache gains a version, so the first start after upgrading
+  draws one blank frame before the first poll.
 - **Change**: the cooler's sources are chains, and a platform is one table
   (spec 043). `core.Chain` asks providers in order and records what it
   tried; the processor's temperature and the graphics card are chains, and
