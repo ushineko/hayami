@@ -25,12 +25,14 @@ jobs:
       # separate binary and is built with CGO off below.
       # Fyne over GLFW: OpenGL, X11 and Wayland headers. This Fyne builds GLFW
       # with both back ends, so the Wayland ones are not optional even on a
-      # runner that has no display at all.
+      # runner that has no display at all. tmux is for the usage pane test,
+      # which skips without it: a terminal is what that claim is made against.
       - name: Install the window's build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols
+            gcc libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev wayland-protocols \
+            tmux
 
       # Two binaries reached main in one day -- a 35 MB test build and a 20 MB
       # hayami-tui -- both by `git add -A`, and the second slipped past the

@@ -48,7 +48,17 @@ func TestTheUsagePaneIsLaidOutLikeTheWidgets(t *testing.T) {
 	writeInventedCache(t, cache, time.Now())
 
 	const width, height = 200, 6
-	socket := "hayami-pane-test-" + fmt.Sprint(os.Getpid())
+	// The server's socket is the test's own file (-S), not a name under
+	// /tmp/tmux-$UID (-L), so nothing outlives the test even if the server
+	// does (#79). A Unix socket's path is capped near 104 bytes, which a long
+	// TMPDIR (macOS) can pass; then a short directory of the test's own.
+	socket := filepath.Join(dir, "tmux.sock")
+	if len(socket) > 100 {
+		short, err := os.MkdirTemp("/tmp", "hayami-tmux-")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(short) })
+		socket = filepath.Join(short, "s")
+	}
 	env := []string{
 		"HOME=" + home,
 		"PATH=" + filepath.Join(dir, "nothing"),
@@ -58,19 +68,19 @@ func TestTheUsagePaneIsLaidOutLikeTheWidgets(t *testing.T) {
 		"TERM=xterm-256color",
 		"NO_COLOR=1",
 	}
-	start := exec.CommandContext(t.Context(), tmux, "-L", socket, "-f", "/dev/null",
+	start := exec.CommandContext(t.Context(), tmux, "-S", socket, "-f", "/dev/null",
 		"new-session", "-d", "-x", fmt.Sprint(width), "-y", fmt.Sprint(height),
 		bin+" --sections usage --arrangement row")
 	start.Env = env
 	out, err = start.CombinedOutput()
 	require.NoError(t, err, "%s", out)
 	// Cleanup runs after t.Context() is cancelled, so it has its own.
-	t.Cleanup(func() { _ = exec.CommandContext(context.Background(), tmux, "-L", socket, "kill-server").Run() })
+	t.Cleanup(func() { _ = exec.CommandContext(context.Background(), tmux, "-S", socket, "kill-server").Run() })
 
 	var lines []string
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		got, err := exec.CommandContext(t.Context(), tmux, "-L", socket,
+		got, err := exec.CommandContext(t.Context(), tmux, "-S", socket,
 			"capture-pane", "-p").Output()
 		require.NoError(t, err)
 		lines = nonEmpty(string(got))
