@@ -120,12 +120,14 @@ Adding a setting to a section now touches **2 places**, or 3 with a widget:
 
 ## Gaps found
 
-- The preferences' interface chooser does not list the active Wi-Fi interface
-  ("Wi-Fi 2") on this desk, before this change and after it: seen in both
-  photographs, and not this spec's.
+- Not a gap, recorded because it looked like one: the chooser did not list
+  "Wi-Fi 2" because the desk's duplicate adapters had been removed and the
+  live ones renamed, so the active interface is now "Wi-Fi", which it lists.
+  A setting naming the old alias shows the "not present" reason by design
+  (interfaces are keyed by alias, spec 033).
 - `internal/core`'s `TestAnOversizedAnswerIsRefused` failed once under the
   full suite's load (1.65 s) and passes alone in 0.06 s; a timing flake, not
-  this spec's.
+  this spec's. Tracked as #151.
 
 ## Verification
 
