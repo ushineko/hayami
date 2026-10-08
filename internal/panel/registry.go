@@ -2,6 +2,7 @@ package panel
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/ushineko/sanshoku"
 
@@ -30,6 +31,12 @@ type Env struct {
 
 	// Scan lists the devices the device sections find; nil is DefaultScan.
 	Scan Scan
+
+	// Host is what this platform offers the sources: the chains the cooler
+	// reads through, the network readers, the advice for a device that would
+	// not open, the Bluetooth drivers (spec 043). Nil is this platform's own,
+	// built over LHM. A test passes one of its own.
+	Host *core.Host
 }
 
 // scan is the env's scan, or the default.
@@ -38,6 +45,37 @@ func (e Env) scan() Scan {
 		return e.Scan
 	}
 	return DefaultScan
+}
+
+// platform is this platform's host as a test seam builds over it: the
+// constructors a test calls directly (newCooler, newPeripherals) take their
+// words and drivers from it, as the program's sources do from their Env. Built
+// once; nothing reassigns it.
+var platform = sync.OnceValue(func() *core.Host {
+	h := core.NewHost(core.HostConfig{})
+	return &h
+})
+
+// withHost is the env with its Host filled in: this platform's, where it
+// names none, built once for every source that reads it.
+func (e Env) withHost() Env {
+	if e.Host == nil {
+		h := core.NewHost(core.HostConfig{LHM: e.LHM})
+		e.Host = &h
+	}
+	return e
+}
+
+// bandwidth is the bandwidth source over the env's counters, or the host's
+// counters and Wi-Fi where the env names no counters. A test's counters read
+// no Wi-Fi, as they always have.
+func (e Env) bandwidth() Source {
+	if e.Counters != nil {
+		return NewBandwidth(e.Interfaces, e.Counters)
+	}
+	b := NewBandwidth(e.Interfaces, e.Host.Counters)
+	b.SetWirelessReader(e.Host.Wireless)
+	return b
 }
 
 // Spec is one section: what it is called and drawn with, and how its source
@@ -55,10 +93,10 @@ two to each other: a section in one and not the other fails it rather than
 being a section the settings can name and nothing draws.
 */
 var builders = map[string]func(Env) Source{
-	view.BandwidthInfo.Key:   func(e Env) Source { return NewBandwidth(e.Interfaces, e.Counters) },
+	view.BandwidthInfo.Key:   Env.bandwidth,
 	view.UsageInfo.Key:       func(Env) Source { return NewUsage() },
-	view.CoolerInfo.Key:      func(e Env) Source { return NewCooler(e.LHM, e.scan()) },
-	view.PeripheralsInfo.Key: func(e Env) Source { return NewPeripherals(e.scan()) },
+	view.CoolerInfo.Key:      func(e Env) Source { return NewCooler(e.Host, e.scan()) },
+	view.PeripheralsInfo.Key: func(e Env) Source { return NewPeripherals(e.scan(), e.Host) },
 }
 
 // Specs are the sections this build has, in view.Sections' order, each with
@@ -72,7 +110,7 @@ func Specs() []Spec {
 		if !ok {
 			panic(fmt.Sprintf("panel: section %q has no builder", info.Key))
 		}
-		out = append(out, Spec{SectionInfo: info, New: build})
+		out = append(out, Spec{SectionInfo: info, New: func(e Env) Source { return build(e.withHost()) }})
 	}
 	if len(builders) != len(out) {
 		panic(fmt.Sprintf("panel: %d builders for %d sections: one builds a section view.Sections does not list",
@@ -85,6 +123,7 @@ func Specs() []Spec {
 // no section is skipped: a settings file written by a newer build should not
 // stop an older one starting.
 func Sources(keys []string, env Env) []Source {
+	env = env.withHost()
 	var out []Source
 	for _, key := range keys {
 		if build, ok := builders[key]; ok {

@@ -32,10 +32,14 @@ type held struct {
 
 	// listed is this poll's candidates, by key, so prune knows what has gone.
 	listed map[string]bool
+
+	// permission is the host's account of an Open refused for want of
+	// permission, with its platform's advice (spec 043).
+	permission func(error) (*core.Absence, bool)
 }
 
-func newHeld(scan Scan) *held {
-	return &held{scan: scan, devices: make(map[string]sanshoku.Device)}
+func newHeld(scan Scan, permission func(error) (*core.Absence, bool)) *held {
+	return &held{scan: scan, devices: make(map[string]sanshoku.Device), permission: permission}
 }
 
 // key is a candidate's place in the map. The driver is part of it because
@@ -111,8 +115,8 @@ func (h *held) prune() {
 // found the device absent after all (a Kraken node that does not answer the
 // status probe, beside the one that does), and failed for anything else, which
 // the section reports in its own words and returns for logging.
-func openFailure(c sanshoku.Candidate, err error) (said *view.Reason, failed bool) {
-	if refused, ok := core.PermissionAbsence(err); ok {
+func (h *held) openFailure(c sanshoku.Candidate, err error) (said *view.Reason, failed bool) {
+	if refused, ok := h.permission(err); ok {
 		// Not a failure to log every poll: nothing will change until
 		// somebody does what the detail says.
 		r := reason(view.Reason{Text: c.Name + " is not permitted", Status: view.Warn}, refused)

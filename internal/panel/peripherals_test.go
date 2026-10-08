@@ -508,7 +508,7 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 		"no Razer device",
 		"no SteelSeries device",
 		"no AULA receiver",
-	}, bluetoothAbsent...), reasonTexts(sec))
+	}, panel.BluetoothAbsent()...), reasonTexts(sec))
 	for _, r := range sec.Reasons {
 		assert.Equal(t, view.Info, r.Status, "%q was marked as a failure", r.Text)
 	}
@@ -598,10 +598,8 @@ func TestADeviceThatMayNotBeOpenedSaysWhatToDo(t *testing.T) {
 	require.True(t, drawn)
 	r := find(t, p.Section(), "Razer Mouse Dock Pro is not permitted")
 	assert.Equal(t, view.Warn, r.Status)
+	// The words are the platform's, pinned in core beside them (spec 043).
 	assert.Equal(t, panel.PermissionDetail, r.Detail)
-	for _, word := range permissionWords {
-		assert.Contains(t, r.Detail, word)
-	}
 	assert.False(t, r.Aside, "the one line a reader can act on stays on a full card")
 }
 

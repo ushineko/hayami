@@ -27,14 +27,25 @@ func NewCoolerOver(scan Scan, sensor func() (float64, error)) *Cooler {
 // SensorDetail is what the reason for a missing processor temperature says
 // for err.
 func SensorDetail(err error) string {
-	return reason(view.Reason{Detail: core.CPUSensorDetail()}, err).Detail
+	return reason(view.Reason{Detail: platform().CPUSensorDetail()}, err).Detail
 }
 
 // PermissionDetail is the detail a device that may not be opened is given.
 const PermissionDetail = core.PermissionDetail
 
-// GPUSensorDetail is what the reason for a missing graphics card says.
-func GPUSensorDetail() string { return core.GPUSensorDetail() }
+// GPUSensorDetail is what the reason for a missing graphics card says, every
+// route tried.
+func GPUSensorDetail() string { return platform().GPUSensorDetail() }
+
+// BluetoothAbsent is the Bluetooth vendor's line on a desk with nothing on
+// it, where this platform's host has Bluetooth drivers; nothing where it has
+// none (spec 035).
+func BluetoothAbsent() []string {
+	if len(platform().Bluetooth) == 0 {
+		return nil
+	}
+	return []string{"no Bluetooth device with a battery"}
+}
 
 // SetUsageRead replaces the gather, so a test can drive the usage section's
 // reasons without a cache directory or a credential store.
@@ -45,7 +56,24 @@ func SetUsageRead(u *Usage, read func(context.Context) ([]view.UsageWindow, time
 // SetProcessors replaces the processor's load and the graphics card's reader,
 // so a test drives both without /proc/stat, the card or nvidia-smi.
 func SetProcessors(c *Cooler, load func() (float64, bool), graphics func(context.Context) core.Graphics) {
-	c.load, c.graphics = load, graphics
+	c.load = load
+	c.graphics = func(ctx context.Context) (core.Graphics, error) { return graphics(ctx), nil }
+}
+
+// SetGraphics replaces the graphics card's reader with one that also says why
+// it has no temperature, as a host's chain does.
+func SetGraphics(c *Cooler, graphics func(context.Context) (core.Graphics, error)) {
+	c.graphics = graphics
+}
+
+// NewCoolerOn builds the cooler source over a test's host and scan, which is
+// NewCooler with nothing of the machine's in it.
+func NewCoolerOn(h *core.Host, scan Scan) *Cooler { return NewCooler(h, scan) }
+
+// NewPeripheralsOn builds the peripherals source over a test's host, scan and
+// clock.
+func NewPeripheralsOn(h *core.Host, scan Scan, now func() time.Time) *Peripherals {
+	return newPeripheralsOn(h, scan, now)
 }
 
 // SetCPUName replaces where the processor's model is read from, so a test

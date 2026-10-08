@@ -16,6 +16,7 @@ import (
 	"github.com/ushineko/sanshoku/razer"
 	"github.com/ushineko/sanshoku/steelseries"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/readings"
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -40,6 +41,10 @@ const PeripheralsInterval = 15 * time.Second
 type Peripherals struct {
 	mu      sync.Mutex
 	reading view.PeripheralsReading
+
+	// vendors are the drivers this source asks, in order: every HID vendor,
+	// then the host's Bluetooth where it has any (spec 043).
+	vendors []vendor
 
 	// seen is what each device last said, by name, and when. A device stays
 	// in it for the session once it has given a level (spec 022): the card
@@ -87,18 +92,24 @@ type vendor struct {
 
 // vendors are the peripherals drivers, in the order they are asked and their
 // reasons are given: logitech, razer, steelseries, aula, then Bluetooth where
-// this system has one hayami can read (apple, bluez; not on Windows).
+// the host has drivers for it (apple and bluez on Linux; none on Windows,
+// spec 035) -- one line for those drivers, because to a reader "no Bluetooth
+// device with a battery" is one fact whichever protocol would have read it.
 //
 // AULA is quiet for the reason Razer is: its receiver is listed whether or
 // not the keyboard is switched to it, and a receiver with a keyboard on its
 // cable answers nothing (spec 035).
-func vendors() []vendor {
-	return append([]vendor{
+func vendors(bluetooth []sanshoku.Driver) []vendor {
+	out := []vendor{
 		{name: "Logitech", absent: "no Logitech receiver", drivers: []sanshoku.Driver{logitech.Driver{}}},
 		{name: "Razer", absent: "no Razer device", drivers: []sanshoku.Driver{razer.Driver{}}, quiet: true},
 		{name: "SteelSeries", absent: "no SteelSeries device", drivers: []sanshoku.Driver{steelseries.Driver{}}, quiet: true},
 		{name: "AULA", absent: "no AULA receiver", drivers: []sanshoku.Driver{aula.Driver{}}, quiet: true},
-	}, bluetooth()...)
+	}
+	if len(bluetooth) > 0 {
+		out = append(out, vendor{name: "Bluetooth", absent: "no Bluetooth device with a battery", drivers: bluetooth})
+	}
+	return out
 }
 
 // remembered is one device's last reading that had a level in it.
@@ -113,9 +124,9 @@ type remembered struct {
 }
 
 // NewPeripherals builds the peripherals source over sanshoku's drivers,
-// found by scan.
-func NewPeripherals(scan Scan) *Peripherals {
-	p := newPeripherals(scan, time.Now)
+// found by scan, with the host's Bluetooth drivers and permission advice.
+func NewPeripherals(scan Scan, h *core.Host) *Peripherals {
+	p := newPeripheralsOn(h, scan, time.Now)
 	if path, err := readings.File(knownFile); err == nil {
 		p.remember(path)
 	}
@@ -131,9 +142,17 @@ func (p *Peripherals) remember(path string) {
 }
 
 // newPeripherals builds the source over a scan and a clock, which is the seam
-// the tests use.
+// the tests use, on this platform's host.
 func newPeripherals(scan Scan, now func() time.Time) *Peripherals {
-	return &Peripherals{seen: make(map[string]remembered), held: newHeld(scan), now: now}
+	return newPeripheralsOn(platform(), scan, now)
+}
+
+// newPeripheralsOn is newPeripherals over a given host.
+func newPeripheralsOn(h *core.Host, scan Scan, now func() time.Time) *Peripherals {
+	return &Peripherals{
+		seen: make(map[string]remembered), held: newHeld(scan, h.Permission), now: now,
+		vendors: vendors(h.Bluetooth),
+	}
 }
 
 // Key names the section.
@@ -174,7 +193,7 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 
 	p.held.begin()
 	var found []battery.Battery
-	for _, v := range vendors() {
+	for _, v := range p.vendors {
 		got, why, keep, err := p.pollVendor(ctx, v)
 		found = append(found, got.batteries...)
 		reasons = append(reasons, why...)
@@ -262,7 +281,7 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 		for _, c := range candidates {
 			dev, err := p.held.device(ctx, c)
 			if err != nil {
-				r, failed := openFailure(c, err)
+				r, failed := p.held.openFailure(c, err)
 				switch {
 				case failed:
 					warn(err)
