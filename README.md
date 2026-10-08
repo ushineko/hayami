@@ -386,6 +386,10 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: an answer from LibreHardwareMonitor that declares itself over the
+  8 MiB cap is refused before any of it is read, rather than read up to the
+  cap first; the request's timeout is its client's (#151). The test of the
+  cap no longer races the one-second timeout under a loaded test run.
 - **Add**: the window draws the row arrangement (spec 049), with fynedesygn
   v0.1.86's `glance.Lines`: one line per reading, no card headings, no plots,
   and no second line under a reading, as the terminal draws it. It used to
