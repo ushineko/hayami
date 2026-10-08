@@ -39,7 +39,7 @@ const CPUAverageWindow = 12
 // coolant and the pump from the cooler itself.
 type Cooler struct {
 	mu      sync.Mutex
-	reading view.CoolerReading
+	reading coolerState
 	trail   *view.Series
 	cpu     *view.Averaged
 	gpu     *view.Averaged
@@ -139,7 +139,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	c.polling.Lock()
 	defer c.polling.Unlock()
 
-	var out view.CoolerReading
+	var out coolerState
 	var reasons []view.Reason
 
 	out.CPULoad, out.HasCPULoad = c.load()
@@ -298,7 +298,7 @@ make the window jump around.
 A field that was never there stays absent. Gone is for a source that answered
 and has stopped, not for hardware this machine does not have.
 */
-func (c *Cooler) record(out view.CoolerReading) bool {
+func (c *Cooler) record(out coolerState) bool {
 	c.gone = false
 
 	if !out.HasCPU && c.reading.HasCPU {
@@ -366,15 +366,99 @@ func keepName(has bool, name, was string) string {
 func (c *Cooler) Section() view.Section {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	s := view.Cooler(c.reading)
+	s := view.Cooler(c.reading.probes())
 	s.Gone = c.gone
 	s.Reasons = c.reasons
 	return s
 }
 
-// Data is the reading as plain values, for the JSON the command line prints.
+// Data is the reading as plain values, for the JSON the command line prints:
+// its probes.
 func (c *Cooler) Data() any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.reading
+	return c.reading.probes()
+}
+
+/*
+coolerState is what this source knows between polls: the processor and the
+graphics card from the host's chains (spec 043), the coolant, pump and fan from
+the cooler, each with whether it is there, and the trails.
+
+It stays a struct of the parts this source reads because record's rules are
+about those parts -- the coolant kept and the section Gone, the card kept and
+its row dim -- and probes turns it into the list the view draws (spec 044). A
+source that reads more probes, a second card or a motherboard's sensors, adds
+them in probes and nothing in the view changes.
+*/
+type coolerState struct {
+	CPU       float64
+	HasCPU    bool
+	Coolant   float64
+	HasLiquid bool
+	PumpRPM   int
+	HasPump   bool
+	FanRPM    int
+	HasFan    bool
+
+	CPULoad    float64
+	HasCPULoad bool
+
+	GPU        float64
+	HasGPU     bool
+	GPULoad    float64
+	HasGPULoad bool
+
+	Trail    []float64
+	CPUTrail []float64
+	GPUTrail []float64
+
+	CPUName    string
+	GPUName    string
+	CoolerName string
+
+	GPUStale bool
+}
+
+// The probes' IDs: one of each part this source reads.
+const (
+	probeCPU     = "cpu"
+	probeGPU     = "gpu"
+	probeCoolant = "coolant"
+	probeFan     = "fan"
+	probePump    = "pump"
+)
+
+// probes is the state as the view's list: a probe for each part that is
+// there, which is the rule the fixed rows had -- a processor with a load or a
+// temperature, a card with a temperature, a coolant, a fan or pump speed.
+func (s coolerState) probes() view.CoolerReading {
+	var out []view.Probe
+	if s.HasCPU || s.HasCPULoad {
+		out = append(out, view.Probe{
+			ID: probeCPU, Role: view.RoleCPU, Name: s.CPUName,
+			Load: view.Maybe(s.CPULoad, s.HasCPULoad), Temp: view.Maybe(s.CPU, s.HasCPU),
+			Trail: s.CPUTrail,
+		})
+	}
+	if s.HasGPU {
+		out = append(out, view.Probe{
+			ID: probeGPU, Role: view.RoleGPU, Name: s.GPUName,
+			Load: view.Maybe(s.GPULoad, s.HasGPULoad), Temp: view.Some(s.GPU),
+			Trail: s.GPUTrail, Stale: s.GPUStale,
+		})
+	}
+	if s.HasLiquid {
+		out = append(out, view.Probe{
+			ID: probeCoolant, Role: view.RoleCoolant, Name: s.CoolerName,
+			Temp: view.Some(s.Coolant), Trail: s.Trail,
+		})
+	}
+	if s.HasFan {
+		out = append(out, view.Probe{ID: probeFan, Role: view.RoleFan, Name: s.CoolerName, RPM: view.Some(s.FanRPM)})
+	}
+	if s.HasPump {
+		out = append(out, view.Probe{ID: probePump, Role: view.RolePump, Name: s.CoolerName, RPM: view.Some(s.PumpRPM)})
+	}
+	return view.CoolerReading{Probes: out}
 }

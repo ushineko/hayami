@@ -25,8 +25,19 @@ func TestTheCoolantsStatusAtEveryThreshold(t *testing.T) {
 		{54.9, Warn}, {55, Bad}, {55.1, Bad}, {90, Bad},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, coolant(c.v), "coolant %v", c.v)
+		assert.Equal(t, c.want, roleVerdict(RoleCoolant, c.v), "coolant %v", c.v)
 	}
+}
+
+// roleVerdict is the colour a role's row is drawn in at v, through the table
+// the cooler draws from (spec 044).
+func roleVerdict(role Role, v float64) Status {
+	for _, s := range coolerRoles {
+		if s.role == role {
+			return s.verdict(v)
+		}
+	}
+	return Info
 }
 
 func TestTheQuotasStatusAtEveryThreshold(t *testing.T) {

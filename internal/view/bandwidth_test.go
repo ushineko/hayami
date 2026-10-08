@@ -182,7 +182,7 @@ func TestTwoInterfacesAreFourTrailsUnderOneScale(t *testing.T) {
 
 // The cooler keeps its own-range plot: the zero value of TrailScale.
 func TestTheCoolerKeepsEachTrailOnItsOwnScale(t *testing.T) {
-	s := view.Cooler(view.CoolerReading{HasLiquid: true, Coolant: 46, Trail: []float64{46}})
+	s := view.Cooler(view.CoolerReading{Probes: []view.Probe{{ID: "coolant", Role: view.RoleCoolant, Temp: view.Some(46.0), Trail: []float64{46}}}})
 
 	assert.Equal(t, view.ScaleEach, s.TrailScale)
 }

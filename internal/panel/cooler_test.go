@@ -503,7 +503,10 @@ func TestAProcessorWithALoadAndNoTemperatureIsARow(t *testing.T) {
 	assert.True(t, drawn, "a load alone is a section worth drawing")
 	row := labelled(t, sec, view.NameLabel("CPU", "AMD Ryzen 5 2600X Six-Core Processor"))
 	assert.Equal(t, " 12 %      ", row.Value, "the temperature's column is kept, empty")
-	assert.Equal(t, "AMD Ryzen 5 2600X Six-Core Processor", c.Data().(view.CoolerReading).CPUName)
+	data := c.Data().(view.CoolerReading)
+	require.NotEmpty(t, data.Probes)
+	assert.Equal(t, "cpu", data.Probes[0].ID)
+	assert.Equal(t, "AMD Ryzen 5 2600X Six-Core Processor", data.Probes[0].Name)
 	reason := find(t, sec, "no sensor")
 	assert.True(t, reason.Aside, "a row with a load is not told on the card that it has no temperature")
 }

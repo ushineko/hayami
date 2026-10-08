@@ -311,7 +311,10 @@ func (sectionSource) Data() any                          { return nil }
 // machine with no graphics card this build can read has a cooler that is ok,
 // and doctor still says why there is no GPU row (spec 026).
 func TestAMachineWithNoGPUIsOKAndSaysSo(t *testing.T) {
-	sec := view.Cooler(view.CoolerReading{CPU: 60, HasCPU: true, Coolant: 38.9, HasLiquid: true})
+	sec := view.Cooler(view.CoolerReading{Probes: []view.Probe{
+		{ID: "cpu", Role: view.RoleCPU, Temp: view.Some(60.0)},
+		{ID: "coolant", Role: view.RoleCoolant, Temp: view.Some(38.9)},
+	}})
 	sec.Reasons = []view.Reason{{Text: "no GPU sensor", Status: view.Info, Aside: true}}
 
 	findings := cli.DiagnoseSources(t.Context(), []panel.Source{sectionSource{sec}})
@@ -332,10 +335,10 @@ func TestAMachineWithNoGPUIsOKAndSaysSo(t *testing.T) {
 // Spec 031, R2.5. A label cut to fit the card is printed in full by doctor,
 // which has no hover to put it in.
 func TestDoctorPrintsTheFullNames(t *testing.T) {
-	sec := view.Cooler(view.CoolerReading{
-		CPU: 60, HasCPU: true, CPUName: "Intel(R) Core(TM) i9-14900K",
-		GPU: 52, HasGPU: true, GPUName: "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]",
-	})
+	sec := view.Cooler(view.CoolerReading{Probes: []view.Probe{
+		{ID: "cpu", Role: view.RoleCPU, Name: "Intel(R) Core(TM) i9-14900K", Temp: view.Some(60.0)},
+		{ID: "gpu", Role: view.RoleGPU, Name: "Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]", Temp: view.Some(52.0)},
+	}})
 
 	findings := cli.DiagnoseSources(t.Context(), []panel.Source{sectionSource{sec}})
 	var out bytes.Buffer

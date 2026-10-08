@@ -264,6 +264,13 @@ type Row struct {
 	// processor's name that arrives a poll after "CPU". Zero for a label that
 	// is what it is.
 	LabelWidth int `json:",omitempty"`
+
+	// ID names the row for as long as it is the same reading: "cpu", "gpu:1",
+	// "coolant". A shell matches a poll's rows to the ones it drew by it, so
+	// a row arriving or leaving is placed without disturbing the others, and
+	// a label changing ("CPU" to a model name) is the same row (spec 044).
+	// Empty for a row whose builder gives none; a shell derives one.
+	ID string `json:",omitempty"`
 }
 
 // DetailLines are the row's detail lines, in order, and none for a row

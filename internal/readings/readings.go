@@ -52,6 +52,27 @@ type Entry struct {
 // Cache is every section's last reading, by section key.
 type Cache map[string]Entry
 
+/*
+FormatVersion is the shape of view.Section this program writes and reads back.
+
+The cache stores the rendered section itself, so a change to the section's
+model is a change to this file. Additive fields are harmless, but a reshaped
+one is not: spec 044 gave every row an ID the window matches rows by, and a
+section from before it has none. A file of another version is a cold start --
+one blank first frame, which spec 033 accepted for a move of this file -- rather
+than an old section drawn by new rules. Raised whenever Section changes shape.
+
+1 is spec 044's. A file from before it has no version at all, which reads as
+zero.
+*/
+const FormatVersion = 1
+
+// file is the cache on disk: its version and its sections.
+type file struct {
+	Version  int   `json:"version"`
+	Sections Cache `json:"sections"`
+}
+
 // File is where another file of this program's cache lives, beside the
 // readings.
 func File(name string) (string, error) {
@@ -90,10 +111,10 @@ func dir() (string, error) {
 /*
 Load reads the cache, dropping anything older than MaxAge.
 
-A file that is not there, cannot be read or does not parse gives an empty
-cache and no error. That is the whole contract of the thing: a panel must
-start whatever state this file is in, including half-written by a previous
-version or by a process that was killed.
+A file that is not there, cannot be read, does not parse or was written in
+another FormatVersion gives an empty cache and no error. That is the whole
+contract of the thing: a panel must start whatever state this file is in,
+including half-written by a previous version or by a process that was killed.
 */
 func Load(path string, now time.Time) Cache {
 	raw, err := os.ReadFile(path) //nolint:gosec // a path this package composed
@@ -101,13 +122,13 @@ func Load(path string, now time.Time) Cache {
 		return Cache{}
 	}
 
-	var c Cache
-	if err := json.Unmarshal(raw, &c); err != nil {
+	var f file
+	if err := json.Unmarshal(raw, &f); err != nil || f.Version != FormatVersion {
 		return Cache{}
 	}
 
-	out := make(Cache, len(c))
-	for key, e := range c {
+	out := make(Cache, len(f.Sections))
+	for key, e := range f.Sections {
 		if now.Sub(e.At) <= MaxAge {
 			out[key] = e
 		}
@@ -124,7 +145,7 @@ rather than half of one, which is the difference between a cold start and a
 parse failure on every start until someone deletes the file.
 */
 func Save(path string, c Cache) error {
-	raw, err := json.Marshal(c)
+	raw, err := json.Marshal(file{Version: FormatVersion, Sections: c})
 	if err != nil {
 		return fmt.Errorf("encoding the readings: %w", err)
 	}

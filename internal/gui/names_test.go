@@ -29,15 +29,24 @@ func (f *fixed) Data() any                          { return nil }
 // desk is a reading from the desk with the Kraken: the processor, the card,
 // the coolant and the pump, named or not.
 func desk(named bool) view.CoolerReading {
-	r := view.CoolerReading{
-		CPU: 61, HasCPU: true, CPULoad: 12, HasCPULoad: true,
-		GPU: 44, HasGPU: true, GPULoad: 7, HasGPULoad: true,
-		Coolant: 31.4, HasLiquid: true, PumpRPM: 2650, HasPump: true, FanRPM: 1210, HasFan: true,
-	}
 	if named {
-		r.CPUName = "Intel(R) Core(TM) i9-14900K"
-		r.GPUName = "NVIDIA GeForce RTX 4090"
-		r.CoolerName = "NZXT Kraken Elite V2"
+		return machine("Intel(R) Core(TM) i9-14900K", "NVIDIA GeForce RTX 4090", "NZXT Kraken Elite V2", true)
+	}
+	return machine("", "", "", true)
+}
+
+// machine is a processor and a card with those names, and with kraken a
+// coolant, a pump and a fan named cooler.
+func machine(cpu, gpu, cooler string, kraken bool) view.CoolerReading {
+	r := view.CoolerReading{Probes: []view.Probe{
+		{ID: "cpu", Role: view.RoleCPU, Name: cpu, Load: view.Some(12.0), Temp: view.Some(61.0)},
+		{ID: "gpu", Role: view.RoleGPU, Name: gpu, Load: view.Some(7.0), Temp: view.Some(44.0)},
+	}}
+	if kraken {
+		r.Probes = append(r.Probes,
+			view.Probe{ID: "coolant", Role: view.RoleCoolant, Name: cooler, Temp: view.Some(31.4)},
+			view.Probe{ID: "fan", Role: view.RoleFan, Name: cooler, RPM: view.Some(1210)},
+			view.Probe{ID: "pump", Role: view.RolePump, Name: cooler, RPM: view.Some(2650)})
 	}
 	return r
 }
@@ -63,12 +72,10 @@ is the same size to the pixel.
 */
 func TestTheCoolerCardIsTheSameSizeWithNames(t *testing.T) {
 	other := func(named bool) view.CoolerReading {
-		r := desk(named)
-		r.HasLiquid, r.HasPump, r.HasFan, r.CoolerName = false, false, false, ""
 		if named {
-			r.CPUName, r.GPUName = "13th Gen Intel(R) Core(TM) i7-13700K", "NVIDIA GeForce RTX 3080"
+			return machine("13th Gen Intel(R) Core(TM) i7-13700K", "NVIDIA GeForce RTX 3080", "", false)
 		}
-		return r
+		return machine("", "", "", false)
 	}
 	for name, reading := range map[string]func(bool) view.CoolerReading{"kraken": desk, "other": other} {
 		a := test.NewTempApp(t)
@@ -96,10 +103,7 @@ func TestTheCoolerCardIsTheSameSizeWithNames(t *testing.T) {
 func TestTheLongestNamesDoNotWidenTheCard(t *testing.T) {
 	size := func(cpu, gpu string) (fyne.Size, []string) {
 		a := test.NewTempApp(t)
-		r := desk(false)
-		r.HasLiquid, r.HasPump, r.HasFan = false, false, false
-		r.CPUName, r.GPUName = cpu, gpu
-		cooler := &fixed{view.Cooler(r)}
+		cooler := &fixed{view.Cooler(machine(cpu, gpu, "", false))}
 		p := gui.New(a, gui.Options{Sources: []panel.Source{cooler}, Title: "hayami"})
 		p.Draw("cooler", cooler.sec, true)
 		return gui.CardMinSize(p, "cooler"), gui.CardRows(p, "cooler")

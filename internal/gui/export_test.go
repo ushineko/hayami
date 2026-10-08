@@ -145,7 +145,7 @@ func CardRows(p *Panel, key string) []string {
 		return nil
 	}
 	var out []string
-	for _, r := range c.rows {
+	for _, r := range c.card.Rows() {
 		if !r.Shown() {
 			continue
 		}
@@ -236,11 +236,41 @@ func CellBar(p *Panel, key string, n int, width float32) (fraction float32, fill
 // PanelSize is the size the panel asks its window for.
 func PanelSize(p *Panel) fyne.Size { return p.win.Panel().Size() }
 
+// RowPlace is one row of a card laid out: its ID, its label, and its top.
+type RowPlace struct {
+	ID    string
+	Label string
+	Top   float32
+}
+
+// LaidOut is key's card laid out at its own size: its rows in order, where
+// each sits, and the plot's top (zero where there is no plot). The rows and the
+// plot are in one column in the card, so their tops compare.
+func LaidOut(p *Panel, key string) (rows []RowPlace, plotTop float32) {
+	c, ok := p.cards[key]
+	if !ok {
+		return nil, 0
+	}
+	obj := c.card.Object()
+	obj.Resize(obj.MinSize())
+	for _, r := range c.card.Rows() {
+		label := ""
+		if t := texts(r.Object()); len(t) > 0 {
+			label = t[0]
+		}
+		rows = append(rows, RowPlace{ID: r.ID(), Label: label, Top: r.Object().Position().Y})
+	}
+	if c.spark != nil {
+		plotTop = c.spark.Position().Y
+	}
+	return rows, plotTop
+}
+
 // RowParts are the parts a card's nth row's value is drawn in.
 func RowParts(p *Panel, key string, n int) []glance.Part {
 	c, ok := p.cards[key]
-	if !ok || n >= len(c.rows) {
+	if !ok || n >= len(c.card.Rows()) {
 		return nil
 	}
-	return c.rows[n].Reading().Parts
+	return c.card.Rows()[n].Reading().Parts
 }
