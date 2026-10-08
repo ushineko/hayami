@@ -2,7 +2,7 @@
 
 **Issue**: #118
 
-## Status: IMPLEMENTED — two criteria open (a live falsification of the window test; the K800, deferred)
+## Status: IMPLEMENTED — one criterion open (the K800, deferred)
 
 ## Context
 
@@ -84,9 +84,11 @@ its link is awake; after it has been idle the first reply takes about a second
 - [x] The window test's assertion rejects a card of reasons and placeholders:
   run over the picture of the run that drew no device (6 lines) it fails,
   over the one that drew the F75 (3 lines) it passes.
-- [ ] Falsified live: the window test with the AULA vendor removed, on a desk
-  where the keyboard answers. Not done: by then both devices had gone to
-  sleep and the test skipped (it skips when nothing answers).
+- [x] Falsified live, with the keyboard and the mouse awake: with the AULA and
+  Razer vendors given no drivers the test fails ("7" lines, where a drawn
+  device is at most 3); restored, it passes. Removing the AULA vendor alone
+  does not fail it while the mouse answers, because the test asks for a live
+  device on the card, not a particular one.
 - [ ] The K800 on its Unifying receiver, through the panel. Deferred: the
   keyboard is in storage.
 
@@ -139,3 +141,7 @@ sanshoku v0.1.8:
   ```
 
   No line about BlueZ or Bluetooth.
+
+2026-10-07, later, with the F75 woken by hand (it sleeps, and only a key
+press wakes it): the window test passes; with the Razer and AULA vendors given
+no drivers it fails on seven text lines; restored, it passes.
