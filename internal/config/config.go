@@ -11,6 +11,7 @@ that rule exists for.
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -40,7 +41,9 @@ type Config struct {
 	// Arrangement is "stack", "grid" or "row".
 	Arrangement string `json:"arrangement"`
 
-	// Interfaces are the network interfaces the bandwidth section watches.
+	// Interfaces are the network interfaces the bandwidth section watches, as
+	// files from before spec 046 carry them. Read through Bandwidth.Get, which
+	// prefers the section's own entry; Bandwidth.Set writes both.
 	Interfaces []string `json:"interfaces"`
 
 	// Font and Mono are the panel's own faces: the interface family and the
@@ -98,6 +101,13 @@ type Config struct {
 	// only: it is set once, to match a port changed in LibreHardwareMonitor,
 	// and a preferences page for one address would be a page for nobody.
 	LHM string `json:"lhm,omitempty"`
+
+	// LHM above is the cooler's setting as files from before spec 046 carry
+	// it; read it through Cooler.Get.
+
+	// SectionSettings are each section's own settings, by section key, each
+	// decoded by the Setting the section declares (sections.go, spec 046).
+	SectionSettings map[string]json.RawMessage `json:"sectionSettings,omitempty"`
 }
 
 // Position is where the panel last was, and whether it has ever been told.

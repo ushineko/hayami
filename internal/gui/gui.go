@@ -334,7 +334,7 @@ func (p *Panel) Apply(c config.Config) {
 	}
 	for _, s := range p.opts.Sources {
 		if b, ok := s.(*panel.Bandwidth); ok {
-			b.SetInterfaces(c.Interfaces)
+			b.SetInterfaces(config.Bandwidth.Get(c).Interfaces)
 		}
 	}
 }

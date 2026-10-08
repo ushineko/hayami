@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/testenv"
@@ -40,7 +41,7 @@ func TestFeatureParity(t *testing.T) {
 	specs := panel.Specs()
 	require.NotEmpty(t, specs)
 
-	env := panel.Env{Interfaces: []string{"eth0"}, Counters: fakeCounters}
+	env := panel.Env{Settings: config.Bandwidth.Set(config.Config{}, config.BandwidthSettings{Interfaces: []string{"eth0"}}), Counters: fakeCounters}
 	for _, spec := range specs {
 		t.Run(spec.Key, func(t *testing.T) {
 			src := spec.New(env)
@@ -67,7 +68,7 @@ func TestFeatureParity(t *testing.T) {
 // already lost.
 func TestTheTerminalPanelDrawsEverySection(t *testing.T) {
 	noMachine(t)
-	sources := panel.Sources(panel.Keys(), panel.Env{Interfaces: []string{"eth0"}, Counters: fakeCounters})
+	sources := panel.Sources(panel.Keys(), panel.Env{Settings: config.Bandwidth.Set(config.Config{}, config.BandwidthSettings{Interfaces: []string{"eth0"}}), Counters: fakeCounters})
 	m := tui.New(tui.Options{Sources: sources, Arrangement: view.ArrangeStack})
 
 	for _, s := range sources {

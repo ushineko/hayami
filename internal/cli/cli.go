@@ -105,7 +105,7 @@ func (o Options) Sources(read func() (map[string]core.Counters, error)) []panel.
 // Env is what this run's sources are built over, from its settings. read is
 // the source of interface counters; nil is the system's own table.
 func (o Options) Env(read func() (map[string]core.Counters, error)) panel.Env {
-	return panel.Env{Interfaces: o.Config.Interfaces, Counters: read, LHM: o.Config.LHM}
+	return panel.Env{Settings: o.Config, Counters: read}
 }
 
 /*

@@ -6,28 +6,26 @@ import (
 
 	"github.com/ushineko/sanshoku"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
 
 /*
-Env is what the sources are built over: the settings each one reads and the
-seams a test replaces. One value rather than a parameter per section's
-setting, which is how Sources had grown (the interfaces positionally, the
-LibreHardwareMonitor address as a variadic option): a section that gains a
-setting gains a field here and its constructor reads it.
+Env is what the sources are built over: the settings they read and the seams a
+test replaces. One value rather than a parameter per section's setting, which
+is how Sources had grown (the interfaces positionally, the LibreHardwareMonitor
+address as a variadic option). A section's own settings are in Settings, each
+under the config.Setting the section declares (spec 046): a section that gains
+a setting declares it there and its builder reads it, and Env gains nothing.
 */
 type Env struct {
-	// Interfaces are the network interfaces the bandwidth section watches.
-	Interfaces []string
-
 	// Counters reads the interface counters; nil is the system's own table.
 	Counters func() (map[string]core.Counters, error)
 
-	// LHM is where LibreHardwareMonitor serves its sensor tree, for the
-	// processor's temperature on Windows (spec 036); empty is its default
-	// address.
-	LHM string
+	// Settings are the configuration the sections read their own settings
+	// from, through config.Bandwidth, config.Cooler and the rest.
+	Settings config.Config
 
 	// Scan lists the devices the device sections find; nil is DefaultScan.
 	Scan Scan
@@ -35,7 +33,7 @@ type Env struct {
 	// Host is what this platform offers the sources: the chains the cooler
 	// reads through, the network readers, the advice for a device that would
 	// not open, the Bluetooth drivers (spec 043). Nil is this platform's own,
-	// built over LHM. A test passes one of its own.
+	// built over the cooler's LibreHardwareMonitor address. A test passes one of its own.
 	Host *core.Host
 }
 
@@ -60,7 +58,7 @@ var platform = sync.OnceValue(func() *core.Host {
 // names none, built once for every source that reads it.
 func (e Env) withHost() Env {
 	if e.Host == nil {
-		h := core.NewHost(core.HostConfig{LHM: e.LHM})
+		h := core.NewHost(core.HostConfig{LHM: config.Cooler.Get(e.Settings).LHM})
 		e.Host = &h
 	}
 	return e
@@ -70,10 +68,11 @@ func (e Env) withHost() Env {
 // counters and Wi-Fi where the env names no counters. A test's counters read
 // no Wi-Fi, as they always have.
 func (e Env) bandwidth() Source {
+	names := config.Bandwidth.Get(e.Settings).Interfaces
 	if e.Counters != nil {
-		return NewBandwidth(e.Interfaces, e.Counters)
+		return NewBandwidth(names, e.Counters)
 	}
-	b := NewBandwidth(e.Interfaces, e.Host.Counters)
+	b := NewBandwidth(names, e.Host.Counters)
 	b.SetWirelessReader(e.Host.Wireless)
 	return b
 }

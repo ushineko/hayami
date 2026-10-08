@@ -385,6 +385,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: each section's settings are its own (spec 046). The settings
+  file keeps them under `sectionSettings`, by section: the bandwidth
+  section's interfaces, the cooler's LibreHardwareMonitor address. A file
+  from an earlier version is read as before, and a save writes the old
+  fields too, so an earlier version reading the same file still finds them.
+  A section that needs a setting declares it in one place; the panel, the
+  terminal and the preferences read it from there.
 - **Change**: the cooler is a list of probes (spec 044). A reading is
   whatever parts the machine has -- a processor, a graphics card, a coolant,
   a fan and a pump -- each with an ID and its values present or not, and the
