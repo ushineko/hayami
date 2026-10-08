@@ -99,8 +99,10 @@ mode, which is why there is no separate widget for the terminal:
 Two binaries and one program. `cmd/hayami` is the desktop panel and
 `cmd/hayami-tui` is the terminal panel; `internal/core` produces readings with
 no toolkit in sight, `internal/view` describes a section as data, and each
-shell only arranges it. A parity test holds the two shells to the same
-capabilities.
+shell only arranges it. Devices are read through
+[sanshoku](https://github.com/ushineko/sanshoku) and nowhere else. The layers,
+the rules a change is held to, and where to add a device, a reading or a
+section are in [docs/architecture.md](docs/architecture.md).
 
 The window is a glance window from
 [fynedesygn](https://github.com/ushineko/fynedesygn) — frameless, fixed to its
@@ -365,6 +367,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Docs**: `docs/architecture.md`, the layers and the rules a change is held
+  to (device knowledge in sanshoku, tables over switches, one section registry,
+  sensor providers in chains, platform files in core, typed absences, threshold
+  bands), where each kind of addition goes, and which of those mechanisms are
+  in place and which are planned.
 - **Add**: a Wi-Fi interface's link (spec 037). Its row leads with the signal
   in the battery's four bars, by RSSI, and a line under its totals gives the
   strength, band, channel and link rate; the tip has the generation, Windows'
