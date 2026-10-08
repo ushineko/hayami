@@ -502,7 +502,10 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 
 	sec := p.Section()
 	// Bluetooth's line is the platform's: it has none on Windows (spec 035).
-	assert.Equal(t, append([]string{
+	// Every vendor is named; their order is sanshoku's driver order (spec
+	// 048), which vendors_test.go pins for each platform, so it is not
+	// repeated here -- it was, and it broke on Linux when the order moved.
+	assert.ElementsMatch(t, append([]string{
 		"no Logitech receiver",
 		"no Razer device",
 		"no SteelSeries device",
