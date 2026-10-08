@@ -385,6 +385,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: each section's settings are its own (spec 046). The settings
+  file keeps them under `sectionSettings`, by section: the bandwidth
+  section's interfaces, the cooler's LibreHardwareMonitor address. A file
+  from an earlier version is read as before, and a save writes the old
+  fields too, so an earlier version reading the same file still finds them.
+  A section that needs a setting declares it in one place; the panel, the
+  terminal and the preferences read it from there.
 - **Change (internal)**: the parity test compares what the two shells draw
   (spec 047). Every label, value, detail line, cell and meter a section holds
   must be on the window's card and in the terminal's rendering in stack, grid

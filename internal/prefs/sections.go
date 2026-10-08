@@ -29,13 +29,37 @@ func (w *Window) buildSections(s *shell.Shell) fyne.CanvasObject {
 		widgets.DimWrapped("How they are laid out. A grid reflows into columns when the panel "+
 			"is wide enough for them; a narrow one is a stack either way."),
 		w.arrangement(s),
-		widget.NewSeparator(),
-		// The interfaces live here rather than on a screen of their own.
-		// They are one section's setting, and a whole navigation entry for a
-		// list of checkboxes was more than it was worth once the list was
-		// short enough to read.
-		w.buildInterfaces(s),
+		w.sectionSettings(s),
 	)
+}
+
+/*
+sectionPrefs are the sections' own preferences, by section key (spec 046). A
+section whose setting a person changes more than once declares its widget
+here; one whose setting is file-only (the cooler's LibreHardwareMonitor
+address, spec 036) has none. The setting itself is declared in config
+(config.Bandwidth, config.Cooler); a widget reads and writes it through that.
+A test holds each key here to a section this build has.
+
+They live on this page rather than on screens of their own: each is one
+section's setting, and a navigation entry for a list of checkboxes was more
+than it was worth once the list was short enough to read.
+*/
+var sectionPrefs = map[string]func(*Window, *shell.Shell) fyne.CanvasObject{
+	view.BandwidthInfo.Key: (*Window).buildInterfaces,
+}
+
+// sectionSettings is each section's own preferences, in section order, each
+// under a separator.
+func (w *Window) sectionSettings(s *shell.Shell) fyne.CanvasObject {
+	out := container.NewVBox()
+	for _, key := range panel.Keys() {
+		if build, ok := sectionPrefs[key]; ok {
+			out.Add(widget.NewSeparator())
+			out.Add(build(w, s))
+		}
+	}
+	return out
 }
 
 // ordered is every section this build has, the chosen ones first in their

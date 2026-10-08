@@ -100,6 +100,16 @@ func TestAChangeReachesTheStoreWithoutASaveButton(t *testing.T) {
 // exactly why it is asserted rather than assumed. A section wired into the
 // panel and not into the preferences would be one a reader could see and not
 // turn off, and nothing else in the suite would notice.
+// Spec 046. A section's own preferences belong to a section this build has.
+func TestEverySectionsPreferencesBelongToASection(t *testing.T) {
+	keys := prefs.SectionPrefKeys()
+	require.NotEmpty(t, keys, "the bandwidth section's interface chooser is one")
+	for _, key := range keys {
+		_, ok := view.SectionByKey(key)
+		assert.True(t, ok, "preferences for %q, which is no section", key)
+	}
+}
+
 func TestEveryKnownSectionIsOfferedByName(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)

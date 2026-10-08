@@ -35,6 +35,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/view"
@@ -97,15 +98,20 @@ type panelSettings struct {
 func (s panelSettings) yaml() string {
 	var b strings.Builder
 	b.WriteString("hayami:\n    sections: [" + strings.Join(s.Sections, ", ") + "]\n")
+	// Each section's own settings, in the shape spec 046 writes; the root
+	// fields older files carry are the config tests' to cover.
+	if len(s.Interfaces) > 0 || s.LHM != "" {
+		b.WriteString("    sectionSettings:\n")
+	}
 	if len(s.Interfaces) > 0 {
 		quoted := make([]string, len(s.Interfaces))
 		for i, n := range s.Interfaces {
 			quoted[i] = fmt.Sprintf("%q", n)
 		}
-		b.WriteString("    interfaces: [" + strings.Join(quoted, ", ") + "]\n")
+		b.WriteString("        bandwidth:\n            interfaces: [" + strings.Join(quoted, ", ") + "]\n")
 	}
 	if s.LHM != "" {
-		b.WriteString("    lhm: " + s.LHM + "\n")
+		b.WriteString("        cooler:\n            lhm: " + s.LHM + "\n")
 	}
 	// Placed says the position is one: zero is a legal coordinate.
 	fmt.Fprintf(&b, "    x: %d\n    y: %d\n    placed: true\n", s.x, s.y)
@@ -212,7 +218,9 @@ func cardOf(t *testing.T, key string, s panelSettings) card {
 	t.Helper()
 	// A nil reader and scan are the panel's own: the counters, the Wi-Fi
 	// descriptions and the devices on the desk.
-	sources := panel.Sources([]string{key}, panel.Env{Interfaces: s.Interfaces, LHM: s.LHM})
+	settings := config.Bandwidth.Set(config.Config{}, config.BandwidthSettings{Interfaces: s.Interfaces})
+	settings = config.Cooler.Set(settings, config.CoolerSettings{LHM: s.LHM})
+	sources := panel.Sources([]string{key}, panel.Env{Settings: settings})
 	require.Len(t, sources, 1, "no source for section %q", key)
 	src := sources[0]
 	polls := 1

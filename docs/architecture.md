@@ -79,8 +79,11 @@ constructor in `panel.Specs()` (`internal/panel/registry.go`), which takes one
 `panel.Env` and panics if the two lists disagree. The key lists, the default
 settings, the preferences list, `--sections` and the icon lookup all read
 them. Adding a section is an entry in each, a glyph in `gui/icons.go`, a source
-and a view builder; nothing else spells its key. A setting a source needs goes
-in `Env`, not in a new parameter.
+and a view builder; nothing else spells its key. A setting a section needs is
+a `config.Setting` declared in `internal/config/sections.go`, stored under
+`sectionSettings.<key>` in the settings file; its builder reads it from
+`panel.Env.Settings`, and a widget in the preferences' `sectionPrefs` table
+where a person would change it more than once. `Env` gains no field for it.
 
 Every section renders in all three arrangements (stack, grid, row), in both
 shells, and a hidden section's source is not polled. What the two shells draw
@@ -214,7 +217,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
-| A setting | Today a `config.Config` field; settings by section are planned | The preferences window, if a person would change it more than once |
+| A setting | A `config.Setting` in `internal/config/sections.go`, read by the section's builder from `Env.Settings` | A `sectionPrefs` widget in `internal/prefs/sections.go`, if a person would change it more than once |
 | A usage provider | An entry in `usage`'s provider table (`internal/usage/providers.go`: cache name, display name, shorthand, decoder) and one in the panel's (`usageProviders`: how its accounts are found and fetched), beside its fetch and decode code | Its cache file's suffix is its name, and the default provider has none: the slug is shared with the Python tools |
 | A platform | `_<os>.go` files in `core` (and `desktop`), including its `core.NewHost`; every `_other` stays honest | CI builds and tests on it |
 
@@ -249,7 +252,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Usage providers as a table | 2 | In place | #145 |
 | Cooler reading as a list of probes; rows matched by ID in the window | 4 | In place | #138 |
 | Wi-Fi link reading with `Opt` values instead of `Has` flags | 4 | Planned | |
-| Settings by section | Adding things | Planned (phase 4) | |
+| Settings by section | Adding things | In place | #143 |
 | Parity test that compares what the shells draw | 3 | In place | #144 |
 | `row` drawn by the window | 3 | Waiting on fynedesygn#170 | #144 |
 

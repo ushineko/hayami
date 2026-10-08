@@ -11,6 +11,8 @@ import (
 	"github.com/ushineko/fynedesygn/shell"
 	"github.com/ushineko/fynedesygn/widgets"
 
+	"github.com/ushineko/hayami/internal/config"
+
 	"github.com/ushineko/hayami/internal/core"
 )
 
@@ -36,10 +38,10 @@ func (w *Window) buildInterfaces(s *shell.Shell) fyne.CanvasObject {
 
 	rows := container.NewVBox()
 	redraw := func() {
-		c := w.opts.Store.Config()
+		watching := config.Bandwidth.Get(w.opts.Store.Config()).Interfaces
 		rows.Objects = nil
-		for _, name := range order(names, c.Interfaces, w.showAll) {
-			rows.Add(w.interfaceRow(s, name, watched(c.Interfaces, name)))
+		for _, name := range order(names, watching, w.showAll) {
+			rows.Add(w.interfaceRow(s, name, watched(watching, name)))
 		}
 		rows.Refresh()
 	}
@@ -51,9 +53,9 @@ func (w *Window) buildInterfaces(s *shell.Shell) fyne.CanvasObject {
 	})
 	all.SetChecked(w.showAll)
 
-	c := w.opts.Store.Config()
+	watching := config.Bandwidth.Get(w.opts.Store.Config()).Interfaces
 	note := "Which interfaces the bandwidth section watches. None, until you say."
-	if hidden := len(names) - len(order(names, c.Interfaces, false)); hidden > 0 {
+	if hidden := len(names) - len(order(names, watching, false)); hidden > 0 {
 		note += fmt.Sprintf(" %d are hidden: container and virtual interfaces.", hidden)
 	}
 
@@ -107,21 +109,22 @@ func (w *Window) interfaceRow(s *shell.Shell, name string, on bool) fyne.CanvasO
 	check.SetChecked(on)
 	check.OnChanged = func(watch bool) {
 		c := w.opts.Store.Config()
+		b := config.Bandwidth.Get(c)
 		if watch {
-			if !watched(c.Interfaces, name) {
-				c.Interfaces = append(c.Interfaces, name)
-				sort.Strings(c.Interfaces)
+			if !watched(b.Interfaces, name) {
+				b.Interfaces = append(b.Interfaces, name)
+				sort.Strings(b.Interfaces)
 			}
 		} else {
-			kept := c.Interfaces[:0]
-			for _, got := range c.Interfaces {
+			kept := make([]string, 0, len(b.Interfaces))
+			for _, got := range b.Interfaces {
 				if got != name {
 					kept = append(kept, got)
 				}
 			}
-			c.Interfaces = kept
+			b.Interfaces = kept
 		}
-		w.save(c)
+		w.save(config.Bandwidth.Set(c, b))
 		s.Invalidate()
 	}
 	return check

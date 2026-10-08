@@ -18,6 +18,7 @@ import (
 	"github.com/ushineko/sanshoku/hidraw"
 
 	"github.com/ushineko/hayami/internal/cli"
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/testenv"
@@ -162,7 +163,7 @@ off not appearing is the same mistake in miniature.
 */
 func TestDoctorReportsEverySectionIncludingTheOnesThatAreOff(t *testing.T) {
 	bare(t)
-	findings := cli.Diagnose(t.Context(), []string{"bandwidth"}, panel.Env{Interfaces: []string{"eth0"}, Counters: counters})
+	findings := cli.Diagnose(t.Context(), []string{"bandwidth"}, panel.Env{Settings: config.Bandwidth.Set(config.Config{}, config.BandwidthSettings{Interfaces: []string{"eth0"}}), Counters: counters})
 
 	assert.Equal(t, []string{"bandwidth", "cooler", "peripherals", "usage"}, cli.Keys(findings))
 
