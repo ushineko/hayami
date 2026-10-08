@@ -91,6 +91,11 @@ type Panel struct {
 	// live is the sources that have answered this run. Until one has, its
 	// card shows what the cache remembered.
 	live map[string]bool
+
+	// row is whether the window draws the row arrangement (spec 049): one line
+	// per reading, so a row's detail lines are left out, as the terminal
+	// leaves them out.
+	row bool
 }
 
 // card is one section's card and the pieces in it, kept so a poll repaints
@@ -118,6 +123,10 @@ type card struct {
 	// nameColumn is the width a pinned label column is held at, for a row
 	// built after the card.
 	nameColumn float32
+
+	// lines are the rows the section last gave, by ID and before detail lines
+	// are flattened in, so a change of arrangement can redraw them.
+	lines []view.Row
 }
 
 // SparkCapacity is how many samples the window's plot holds.
@@ -238,7 +247,8 @@ func New(a fyne.App, o Options) *Panel {
 		holder := &card{card: c, pinned: map[string]bool{}, nameColumn: nameColumn}
 		// The rows the section has now; a row that arrives later is inserted
 		// among them by its ID, above the plot (spec 044).
-		for _, r := range flatten(rowIDs(sec.Lines())) {
+		holder.lines = rowIDs(sec.Lines())
+		for _, r := range flatten(holder.lines, true) {
 			c.AddRow(holder.newRow(r))
 		}
 		for _, m := range sec.Meters {
@@ -322,7 +332,17 @@ window says. It is in this spec's gaps.
 */
 func (p *Panel) Apply(c config.Config) {
 	p.applyTheme(c)
-	p.win.Panel().SetArrangement(arrangement(c))
+	arr := arrangement(c)
+	// Row is one line per reading in both shells (spec 049): the detail lines
+	// a stacked card draws under a reading go, and come back on leaving it.
+	// The rows change first, so the arrangement's one resize covers both.
+	if row := arr == glance.Lines; row != p.row {
+		p.row = row
+		for _, card := range p.cards {
+			p.rebuild(card, flatten(card.lines, !row))
+		}
+	}
+	p.win.Panel().SetArrangement(arr)
 
 	// And repaint in it. A card restyles its title and its rows; a meter and
 	// a sparkline go in as plain canvas objects and have to be told, and
@@ -406,7 +426,8 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 
 	// The rows matched by ID: set in place, inserted, or removed (spec 044).
 	// The panel is re-measured below in every case.
-	p.rebuild(c, flatten(rowIDs(sec.Lines())))
+	c.lines = rowIDs(sec.Lines())
+	p.rebuild(c, flatten(c.lines, !p.row))
 
 	// A cell the card was not built with cannot be added now, for the reason
 	// the meters below give: the library takes objects at build time. A
@@ -528,12 +549,15 @@ func (p *Panel) drawCells(c *card, cells []view.Cell, dim bool) {
 //
 // A detail line's ID is its row's and its place under it, so a detail whose
 // figures change every poll -- an interface's totals -- is the same row.
-func flatten(rows []view.Row) []view.Row {
+func flatten(rows []view.Row, details bool) []view.Row {
 	out := make([]view.Row, 0, len(rows))
 	for _, r := range rows {
 		bare := r
 		bare.Detail = ""
 		out = append(out, bare)
+		if !details {
+			continue
+		}
 		for i, d := range r.DetailLines() {
 			out = append(out, view.Row{ID: fmt.Sprintf("%s/detail:%d", r.ID, i+1), Value: d, Status: view.Info})
 		}
@@ -771,21 +795,27 @@ func (p *Panel) trailColour(t view.Trail, sec view.Section) color.Color {
 }
 
 /*
-arrangement is how the window lays its cards out.
+arrangement is how the window lays its cards out: all three of the view's.
 
-Two of the view's three reach the window. Grid reflows the cards into columns
-when the panel is wide enough for them, and stack is one above another; row
-is a pane's shape -- one line per reading with its bar taking the slack --
-and the design system has no panel arrangement for it (fynedesygn#170), so
-the window stacks. Building one here from glance's pieces is what the design
-system's rules forbid; the parity test (spec 047) records the gap.
+Grid reflows the cards into columns when the panel is wide enough for them,
+stack is one above another, and row is a pane's shape -- one line per
+reading with its bar taking the slack, no headings and no plots -- which the
+design system draws as glance.Lines (fynedesygn spec 057, this spec 049).
+Until it did, the window stacked a row setting (spec 047).
 
 The window used to ignore the setting entirely, and its own preferences
 screen said so: three choices, none of which it honoured.
 */
 func arrangement(c config.Config) glance.Arrangement {
-	if a, err := c.ParseArrangement(); err == nil && a == view.ArrangeGrid {
+	a, err := c.ParseArrangement()
+	if err != nil {
+		return glance.Stack
+	}
+	switch a {
+	case view.ArrangeGrid:
 		return glance.Grid
+	case view.ArrangeRow:
+		return glance.Lines
 	}
 	return glance.Stack
 }
