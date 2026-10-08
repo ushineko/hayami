@@ -205,6 +205,15 @@ function Confirm-Sensors($url, $seconds) {
     return $false
 }
 
+# Write-FirewallNote says what keeps LibreHardwareMonitor's web server off the
+# network, on every path that sets it up or would: it listens on every
+# interface whatever its address setting says.
+function Write-FirewallNote($port) {
+    Write-Note "Its web server listens on every network interface whatever its address setting says;"
+    Write-Note "Windows Firewall's default (block inbound) is what keeps port $port off your network."
+    Write-Note "Do not add an inbound rule for it: the same server can change fan settings."
+}
+
 function Install-Sensors {
     Write-Step "LibreHardwareMonitor, for the processor's temperature"
     $exe = Find-Sensors
@@ -235,6 +244,7 @@ function Install-Sensors {
         Write-Note "start minimized, closing the window hides it in the notification area"
         Write-Note "would register the startup task '$SensorsTask': at logon, highest privileges"
         Write-Note "would start it through the task: one UAC prompt for all of this; it offers PawnIO itself"
+        Write-FirewallNote $port
         return
     }
 
@@ -300,9 +310,7 @@ if (-not (Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)) { Sta
         Write-Step "Checking $url"
         [void](Confirm-Sensors $url $(if ($DryRun) { 2 } else { 30 }))
     }
-    Write-Note "Its web server listens on every network interface whatever its address setting says;"
-    Write-Note "Windows Firewall's default (block inbound) is what keeps port $port off your network."
-    Write-Note "Do not add an inbound rule for it: the same server can change fan settings."
+    Write-FirewallNote $port
 }
 
 Write-Host "Installing hayami $Version from $Root"

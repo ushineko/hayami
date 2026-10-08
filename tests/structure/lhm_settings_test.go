@@ -174,6 +174,9 @@ func TestADryRunOnAFreshMachineSaysEverySensorsStep(t *testing.T) {
 		"closing the window hides it in the notification area",
 		"would register the startup task 'LibreHardwareMonitor': at logon, highest privileges",
 		"would start it through the task: one UAC prompt for all of this",
+		// The firewall is what keeps its web server off the network, whether it
+		// is installed yet or not: CI's runner, without it, once went without.
+		"Windows Firewall's default (block inbound) is what keeps port 8085 off your network",
 	} {
 		assert.Contains(t, text, step)
 	}
