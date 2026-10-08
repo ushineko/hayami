@@ -385,6 +385,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: the usage providers are a table (spec 045). `usage` names each
+  provider once, with its cache name, display name, shorthand and decoder, and
+  the panel's table says how its accounts are found and fetched; the branches
+  on Codex and Claude are gone. Nothing the section shows changes, held by a
+  pinned file written before the change, and the cache's names are untouched.
 - **Change**: the cooler's sources are chains, and a platform is one table
   (spec 043). `core.Chain` asks providers in order and records what it
   tried; the processor's temperature and the graphics card are chains, and
