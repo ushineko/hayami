@@ -82,8 +82,9 @@ mode, which is why there is no separate widget for the terminal:
 - **grid** — columns that reflow to the width, in the manner of `btop`. Both
   shells: a desktop panel wide enough for two columns draws two.
 - **row** — one full-width line per reading, its bar stretching to the pane.
-  The terminal only for now: the design system has no panel arrangement for
-  it yet (fynedesygn#170), so a window set to it stacks.
+  Both shells: the window draws it with the design system's `glance.Lines`,
+  with no card headings, no plots and no second line under a reading (spec
+  049); the terminal pane also draws each trend as a named line.
   This is what a `herdr` pane wants, and it replaces
   `claude-usage-widget-windows`'s `--tui` and `--line`:
 
@@ -385,6 +386,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Add**: the window draws the row arrangement (spec 049), with fynedesygn
+  v0.1.86's `glance.Lines`: one line per reading, no card headings, no plots,
+  and no second line under a reading, as the terminal draws it. It used to
+  stack, and the preferences marked row "terminal only". The parity test now
+  draws the window in each arrangement.
 - **Change**: each section's settings are its own (spec 046). The settings
   file keeps them under `sectionSettings`, by section: the bandwidth
   section's interfaces, the cooler's LibreHardwareMonitor address. A file

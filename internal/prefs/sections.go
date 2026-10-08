@@ -221,7 +221,7 @@ func describe(a view.Arrangement) string {
 	case view.ArrangeGrid:
 		return "columns that reflow to the width"
 	case view.ArrangeRow:
-		return "one line per reading, its bar stretching to the pane (terminal only)"
+		return "one line per reading, its bar stretching to the width"
 	default:
 		return "one section above another"
 	}
