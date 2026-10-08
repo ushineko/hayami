@@ -274,3 +274,38 @@ func RowParts(p *Panel, key string, n int) []glance.Part {
 	}
 	return c.card.Rows()[n].Reading().Parts
 }
+
+// CardText is everything key's card draws as text, in drawing order, from its
+// visible objects only: a hidden spare cell or a removed row says nothing. The
+// parity test (spec 047) holds it against what the terminal draws.
+func CardText(p *Panel, key string) []string {
+	c, ok := p.cards[key]
+	if !ok {
+		return nil
+	}
+	return visibleTexts(c.card.Object())
+}
+
+// visibleTexts is texts, skipping any object that is not visible and
+// everything under it.
+func visibleTexts(o fyne.CanvasObject) []string {
+	if o == nil || !o.Visible() {
+		return nil
+	}
+	var out []string
+	switch v := o.(type) {
+	case *canvas.Text:
+		if v.Text != "" {
+			out = append(out, v.Text)
+		}
+	case *fyne.Container:
+		for _, child := range v.Objects {
+			out = append(out, visibleTexts(child)...)
+		}
+	case fyne.Widget:
+		for _, child := range test.WidgetRenderer(v).Objects() {
+			out = append(out, visibleTexts(child)...)
+		}
+	}
+	return out
+}

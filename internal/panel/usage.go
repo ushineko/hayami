@@ -2,7 +2,6 @@ package panel
 
 import (
 	"context"
-	"encoding/json"
 	"os/exec"
 	"sort"
 	"sync"
@@ -117,12 +116,12 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 	if err != nil {
 		return nil, time.Time{}, nil, err
 	}
-	stores, badges := claudeStores()
-	accounts = merge(accounts, stores)
+	states := loadProviders()
+	accounts = merge(accounts, states)
 
 	if len(accounts) == 0 {
 		return nil, time.Time{}, []view.Reason{{
-			Text: "no Claude or Codex account", Status: view.Info,
+			Text: "no " + usage.Displays() + " account", Status: view.Info,
 			Detail: "no credential store and nothing in the usage cache",
 		}}, nil
 	}
@@ -131,9 +130,9 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 	var reasons []view.Reason
 	var oldest time.Time
 	for _, a := range accounts {
-		result, ferr := refresh(ctx, now, a, stores)
+		result, ferr := refresh(ctx, now, a, states)
 
-		windows, err := decode(now, a, result.Data)
+		windows, err := usage.Decode(now, a, result.Data)
 		if err != nil {
 			// One account's payload not decoding is one account, not the
 			// section. The canary in internal/usage reports a format change;
@@ -149,7 +148,7 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 		for _, w := range windows {
 			out = append(out, view.UsageWindow{
 				Account:  a.Label(),
-				Badge:    badges[a.Name],
+				Badge:    states[a.Provider].badges[a.Name],
 				Name:     w.Name,
 				Fraction: w.Fraction,
 				ResetsAt: w.ResetsAt,
@@ -211,8 +210,11 @@ func silence(now time.Time, a usage.Account, err error) view.Reason {
 // The error is returned as well as the result, because the two are not the
 // same thing: a failed fetch still yields the last good reading, and a section
 // that draws stale numbers should still be able to say why they are stale.
-func refresh(ctx context.Context, now time.Time, a usage.Account, stores map[string]claude.Store) (usage.Result, error) {
-	fetch := fetcher(ctx, a, stores)
+func refresh(ctx context.Context, now time.Time, a usage.Account, states map[string]providerState) (usage.Result, error) {
+	var fetch usage.Fetch
+	if st, ok := states[a.Provider]; ok && st.fetcher != nil {
+		fetch = st.fetcher(ctx, a.Name)
+	}
 	if fetch == nil {
 		entry, err := usage.Read(a.Name, a.Provider)
 		if err != nil || entry == nil {
@@ -226,29 +228,6 @@ func refresh(ctx context.Context, now time.Time, a usage.Account, stores map[str
 	// an empty panel.
 	result, err := usage.Cached(now, UsageTTL, a.Name, a.Provider, false, fetch)
 	return result, err
-}
-
-// fetcher is how this account is fetched, or nil when it cannot be.
-func fetcher(ctx context.Context, a usage.Account, stores map[string]claude.Store) usage.Fetch {
-	if a.Provider == usage.ProviderCodex {
-		if !codexInstalled() {
-			return nil
-		}
-		return fetchCodex(ctx)
-	}
-	store, ok := stores[a.Name]
-	if !ok {
-		return nil
-	}
-	return fetchClaude(ctx, store)
-}
-
-// decode reads a payload for the provider it came from.
-func decode(now time.Time, a usage.Account, data json.RawMessage) ([]usage.Window, error) {
-	if a.Provider == usage.ProviderCodex {
-		return usage.Codex(data)
-	}
-	return usage.Claude(now, data)
 }
 
 // claudeStores are the credential stores by profile name, with each one's
@@ -271,27 +250,105 @@ func claudeStores() (map[string]claude.Store, map[string]string) {
 	return stores, badges
 }
 
-// merge adds an account for every credential store the cache does not already
-// know, so a profile that has just been logged in appears before anything has
-// written a cache file for it.
-func merge(accounts []usage.Account, stores map[string]claude.Store) []usage.Account {
-	have := map[string]bool{}
+// merge adds an account for every one a provider announces that the cache does
+// not already know, so a profile that has just been logged in appears before
+// anything has written a cache file for it: providers in the table's order,
+// each one's accounts by name.
+func merge(accounts []usage.Account, states map[string]providerState) []usage.Account {
+	have := map[usage.Account]bool{}
 	for _, a := range accounts {
-		if a.Provider == usage.ProviderClaude {
-			have[a.Name] = true
-		}
+		have[a] = true
 	}
-	names := make([]string, 0, len(stores))
-	for name := range stores {
-		if !have[name] {
-			names = append(names, name)
+	for _, p := range usageProviders {
+		names := append([]string(nil), states[p.name].announced...)
+		sort.Strings(names)
+		for _, name := range names {
+			if a := (usage.Account{Provider: p.name, Name: name}); !have[a] {
+				accounts = append(accounts, a)
+			}
 		}
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		accounts = append(accounts, usage.Account{Provider: usage.ProviderClaude, Name: name})
 	}
 	return accounts
+}
+
+/*
+usageProvider is how this program fetches one provider's accounts, as data
+(spec 045). What the cache calls a provider, its label and its decoder are
+usage.Spec's; this is the part that needs credentials and a network, which the
+cache package keeps out of.
+
+Adding a provider is an entry here and one in usage's table, beside its fetch
+and decode code; nothing else names it.
+*/
+type usageProvider struct {
+	name string
+
+	// load reads what this machine holds for the provider, once per poll.
+	load func() providerState
+}
+
+// providerState is one provider's credentials as one poll found them.
+type providerState struct {
+	// announced are accounts drawn before the cache has a file for them: a
+	// profile that has just been logged in.
+	announced []string
+
+	// badges are the plan letters by account name.
+	badges map[string]string
+
+	// fetcher is how one account is fetched; nil, or a nil result, is an
+	// account read and not fetched, which is what one with no credentials is.
+	fetcher func(ctx context.Context, name string) usage.Fetch
+}
+
+// usageProviders are the providers this program fetches for, in usage's table
+// order.
+var usageProviders = []usageProvider{
+	{name: usage.ProviderClaude, load: loadClaude},
+	{name: usage.ProviderCodex, load: loadCodex},
+}
+
+// loadProviders is every provider's state for one poll.
+func loadProviders() map[string]providerState {
+	out := make(map[string]providerState, len(usageProviders))
+	for _, p := range usageProviders {
+		out[p.name] = p.load()
+	}
+	return out
+}
+
+// loadClaude finds the credential stores: each is an account, announced,
+// badged with its plan, and fetched with its own token.
+func loadClaude() providerState {
+	stores, badges := claudeStores()
+	names := make([]string, 0, len(stores))
+	for name := range stores {
+		names = append(names, name)
+	}
+	return providerState{
+		announced: names,
+		badges:    badges,
+		fetcher: func(ctx context.Context, name string) usage.Fetch {
+			store, ok := stores[name]
+			if !ok {
+				return nil
+			}
+			return fetchClaude(ctx, store)
+		},
+	}
+}
+
+// loadCodex announces nothing: Codex has one account, and the cache names it.
+// It is fetched through the app-server when there is one to ask.
+func loadCodex() providerState {
+	return providerState{
+		fetcher: func(ctx context.Context, _ string) usage.Fetch {
+			if !codexInstalled() {
+				return nil
+			}
+			return fetchCodex(ctx)
+		},
+	}
 }
 
 // codexInstalled reports whether there is an app-server to ask. A machine

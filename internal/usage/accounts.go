@@ -11,7 +11,7 @@ import (
 // Account is one cached reading's owner: a provider and, for Claude, a profile
 // name.
 type Account struct {
-	// Provider is ProviderClaude or ProviderCodex.
+	// Provider is a Spec's Name: ProviderClaude or ProviderCodex.
 	Provider string
 
 	// Name is the profile, as the cache filename spells it. Empty for the
@@ -40,10 +40,7 @@ const (
 // wide. The shorthand says which provider, so Codex is "CX" rather than
 // "Codex", and a nameless Claude account is "CC" alone.
 func (a Account) Label() string {
-	short := ShortClaude
-	if a.Provider == ProviderCodex {
-		short = ShortCodex
-	}
+	short := Lookup(a.Provider).Short
 	if a.Name == "" {
 		return short
 	}
@@ -57,7 +54,8 @@ func (a Account) Label() string {
 // reading credentials is one that cannot leak or damage them, and discovery
 // from the credential store arrives only where fetching needs it.
 //
-// The order is stable: Claude before Codex, and profiles alphabetically, so a
+// The order is stable: providers in the table's order (Claude before Codex),
+// and profiles alphabetically, so a
 // pane's lines do not change places between two runs.
 func Accounts() ([]Account, error) {
 	dir, err := Dir()
@@ -92,7 +90,7 @@ func Accounts() ([]Account, error) {
 
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Provider != out[j].Provider {
-			return out[i].Provider == ProviderClaude
+			return rank(out[i].Provider) < rank(out[j].Provider)
 		}
 		return out[i].Name < out[j].Name
 	})
@@ -124,7 +122,7 @@ property the package docstring claims and keeps.
 func withoutSupersededDefault(accounts []Account, has func(Account) bool) []Account {
 	named := false
 	for _, a := range accounts {
-		if a.Provider == ProviderClaude && a.Name != "" && has(a) {
+		if a.Provider == DefaultProvider && a.Name != "" && has(a) {
 			named = true
 		}
 	}
@@ -133,7 +131,7 @@ func withoutSupersededDefault(accounts []Account, has func(Account) bool) []Acco
 	}
 	out := accounts[:0]
 	for _, a := range accounts {
-		if a.Provider == ProviderClaude && a.Name == "" {
+		if a.Provider == DefaultProvider && a.Name == "" {
 			continue
 		}
 		out = append(out, a)
@@ -156,11 +154,15 @@ func hasData(a Account) bool {
 // An account name may itself contain a hyphen, so the provider is taken from
 // the front and everything after it is the name.
 func account(suffix string) Account {
-	rest, ok := strings.CutPrefix(suffix, "-"+ProviderCodex)
-	if ok {
-		return Account{Provider: ProviderCodex, Name: strings.TrimPrefix(rest, "-")}
+	for _, p := range providers {
+		if p.Name == DefaultProvider {
+			continue
+		}
+		if rest, ok := strings.CutPrefix(suffix, "-"+p.Name); ok {
+			return Account{Provider: p.Name, Name: strings.TrimPrefix(rest, "-")}
+		}
 	}
-	return Account{Provider: ProviderClaude, Name: strings.TrimPrefix(suffix, "-")}
+	return Account{Provider: DefaultProvider, Name: strings.TrimPrefix(suffix, "-")}
 }
 
 // Windows reads one account's cached windows, with the age of the reading.
@@ -175,11 +177,6 @@ func Windows(now time.Time, a Account) ([]Window, Result, error) {
 	}
 	r := served(*entry)
 
-	var windows []Window
-	if a.Provider == ProviderCodex {
-		windows, err = Codex(entry.Data)
-	} else {
-		windows, err = Claude(now, entry.Data)
-	}
+	windows, err := Decode(now, a, entry.Data)
 	return windows, r, err
 }

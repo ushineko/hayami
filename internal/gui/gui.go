@@ -776,7 +776,9 @@ arrangement is how the window lays its cards out.
 Two of the view's three reach the window. Grid reflows the cards into columns
 when the panel is wide enough for them, and stack is one above another; row
 is a pane's shape -- one line per reading with its bar taking the slack --
-and there is nothing for a window to do with it, so it stacks.
+and the design system has no panel arrangement for it (fynedesygn#170), so
+the window stacks. Building one here from glance's pieces is what the design
+system's rules forbid; the parity test (spec 047) records the gap.
 
 The window used to ignore the setting entirely, and its own preferences
 screen said so: three choices, none of which it honoured.

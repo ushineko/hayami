@@ -58,8 +58,20 @@ func TestTheInstallerReplacesARunningProgram(t *testing.T) {
 		}
 	}
 	t.Cleanup(stop)
-	// The image is mapped once the process exists; a moment makes sure.
-	time.Sleep(200 * time.Millisecond)
+	// Windows maps the image as the process starts, not when Start returns:
+	// wait until writing to the file is refused, which is the state under
+	// test. A fixed pause raced under a loaded parallel run, and the install
+	// then overwrote a file nothing held yet.
+	held := false
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		f, err := os.OpenFile(target, os.O_WRONLY, 0)
+		if err != nil {
+			held = true
+			break
+		}
+		_ = f.Close()
+	}
+	require.True(t, held, "the running program never held its file")
 
 	fresh := filepath.Join(dir, "new-build.exe")
 	require.NoError(t, os.WriteFile(fresh, []byte("the new build"), 0o600))

@@ -2,9 +2,12 @@
 Package structure holds the tests that are about the shape of the program
 rather than about what it computes.
 
-The parity test is the one that matters. Two shells drawing the same sections
-drift the moment one of them learns something the other does not, and the
-drift is invisible until a user asks why the terminal is missing a reading.
+Two shells drawing the same sections drift the moment one of them learns
+something the other does not, and the drift is invisible until a user asks why
+the terminal is missing a reading. What each shell draws is compared in
+internal/gui (TestTheWindowAndTheTerminalDrawTheSameFacts, spec 047); these
+tests hold the structure that makes the comparison mean something: one
+registry, one kind of source, and a terminal that draws every one of them.
 */
 package structure_test
 
@@ -22,21 +25,16 @@ import (
 	"github.com/ushineko/hayami/internal/view"
 )
 
-// allowList names a section one shell draws and the other cannot, with the
-// reason. It is empty, and a section added to it is a decision someone made on
-// purpose rather than a difference that crept in.
-var allowList = map[string]string{}
-
 // Both shells hold the same sources, built by the same function from the same
-// settings. This is the whole of parity: neither shell constructs a section of
-// its own, so neither can have one the other lacks.
+// settings: neither shell constructs a section of its own, so neither can have
+// one the other lacks. Whether they then draw the same thing is spec 047's test.
 //
 // Every section in the registry (spec 038) builds a source under its own key,
 // and the section that source draws carries the registry's title and icon:
 // the builder took them from the one list rather than spelling them again.
 // That every icon has a glyph in the window is internal/gui's
 // TestEverySectionHasAnIcon.
-func TestFeatureParity(t *testing.T) {
+func TestEveryRegistryEntryBuildsItsSource(t *testing.T) {
 	noMachine(t)
 	specs := panel.Specs()
 	require.NotEmpty(t, specs)
@@ -53,14 +51,6 @@ func TestFeatureParity(t *testing.T) {
 		})
 	}
 
-	drawn := make([]string, 0, len(specs))
-	for _, s := range panel.Sources(panel.Keys(), env) {
-		drawn = append(drawn, s.Key())
-	}
-	assert.Equal(t, panel.Keys(), drawn,
-		"a section this build knows was not built from its own key")
-	assert.Empty(t, allowList,
-		"a section is drawn by one shell and not the other; say why here or fix it")
 }
 
 // The terminal panel renders whatever it is given, and what it is given is

@@ -72,7 +72,7 @@ func Dir() (string, error) {
 func Slug(account, provider string) string {
 	safeProvider := sanitise(provider)
 	suffix := ""
-	if safeProvider != ProviderClaude {
+	if safeProvider != DefaultProvider {
 		suffix = "-" + safeProvider
 	}
 	if account == "" {
