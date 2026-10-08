@@ -2,6 +2,7 @@ package gui_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,10 +228,43 @@ func TestTheWindowFollowsTheArrangementSetting(t *testing.T) {
 	p.Apply(config.Config{Arrangement: "stack"})
 	assert.Equal(t, glance.Stack, p.Window().Panel().Arrangement())
 
-	// A pane's shape is not a window's: row stacks rather than doing
-	// something arbitrary.
+	// Row is one line per reading, drawn by the design system's Lines
+	// (spec 049). It used to stack, for want of one.
 	p.Apply(config.Config{Arrangement: "row"})
-	assert.Equal(t, glance.Stack, p.Window().Panel().Arrangement())
+	assert.Equal(t, glance.Lines, p.Window().Panel().Arrangement())
+}
+
+/*
+Spec 049. In row a reading is one line in the window as in the terminal: the
+detail lines a stacked card draws under a reading (a Wi-Fi interface's
+totals and link) go, and come back when the window leaves row. The panel is
+re-measured once for the switch, by the arrangement.
+*/
+func TestRowLeavesOutDetailLinesAndStackBringsThemBack(t *testing.T) {
+	a := test.NewTempApp(t)
+	sec := view.Bandwidth([]view.BandwidthReading{{
+		Name: "Wi-Fi", RxRate: 6400, TxRate: 46000, RxTotal: 33 << 30, TxTotal: 187 << 20,
+		HasRate: true, HasTotal: true,
+	}})
+	src := &fixed{sec}
+	p := gui.New(a, gui.Options{Sources: []panel.Source{src}, Title: "hayami"})
+	p.Draw(sec.Key, sec, true)
+
+	total := sec.Rows[0].DetailLines()[0]
+	text := func() string { return strings.Join(gui.CardText(p, sec.Key), " ") }
+	require.Contains(t, text(), strings.Fields(total)[0], "a stacked card did not draw the totals line")
+
+	arrange := func(a string) {
+		c := config.Default()
+		c.Arrangement = a
+		p.Apply(c)
+	}
+	arrange("row")
+	require.NotEmpty(t, text(), "the card is hidden, which proves nothing about its lines")
+	assert.NotContains(t, text(), strings.Fields(total)[0], "row drew a reading's detail line")
+
+	arrange("stack")
+	assert.Contains(t, text(), strings.Fields(total)[0], "the detail line did not come back on leaving row")
 }
 
 /*

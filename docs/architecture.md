@@ -87,10 +87,13 @@ where a person would change it more than once. `Env` gains no field for it.
 
 Every section renders in all three arrangements (stack, grid, row), in both
 shells, and a hidden section's source is not polled. What the two shells draw
-is compared fact by fact (`internal/gui/parity_test.go`, spec 047): every
+is compared fact by fact, the window drawn in each arrangement
+(`internal/gui/parity_test.go`, specs 047 and 049): in stack and grid every
 label, value, detail line, cell and meter a section holds must be on the
-window's card and in the terminal's rendering in each arrangement, unless the
-test's allow-list says why not. A new section adds a fixture there.
+window's card and in the terminal's rendering; in row the two must agree,
+since what row leaves out (headings, detail lines, stats) is the
+arrangement's shape. A difference needs a reason in the test's allow-list.
+A new section adds a fixture there.
 
 ### 4. A sensor source is a provider in a chain
 
@@ -254,10 +257,11 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Wi-Fi link reading with `Opt` values instead of `Has` flags | 4 | Planned | |
 | Settings by section | Adding things | In place | #143 |
 | Parity test that compares what the shells draw | 3 | In place | #144 |
-| `row` drawn by the window | 3 | Waiting on fynedesygn#170 | #144 |
+| `row` drawn by the window | 3 | In place | #153 |
 
-The window draws `row` as `stack` (`gui.go`, `arrangement`): the design
-system has no row arrangement for a panel (fynedesygn#170), and building one in
-`internal/gui` is what the design system's rules forbid. The preferences offer
-`row` marked "terminal only", because the setting is shared and the terminal
-pane honours it. This is the one known gap against rule 3.
+The window draws `row` with the design system's `glance.Lines` (fynedesygn
+spec 057; spec 049): no card headings, no plots, and no detail lines under a
+reading, as the terminal draws it. Two differences remain and are named in the
+parity test's allow-list: the terminal spells a usage meter the usage widget's
+way in a row (spec 019), and it draws each trend as a named line where the
+window's row leaves plots out.

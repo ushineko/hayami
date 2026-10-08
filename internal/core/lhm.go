@@ -160,12 +160,16 @@ var (
 	ErrLHMNoSensor = errors.New("LibreHardwareMonitor has no CPU temperature")
 )
 
-// FetchLHM reads the sensor tree at url, within LHMTimeout. It only ever asks
-// for the tree: the same server takes requests that set a fan's speed, and
-// nothing here makes one.
+// FetchLHM reads the sensor tree at url, within the client's timeout, or
+// LHMTimeout for a client that has none (NewLHM gives its client LHMTimeout).
+// It only ever asks for the tree: the same server takes requests that set a
+// fan's speed, and nothing here makes one.
 func FetchLHM(ctx context.Context, client *http.Client, url string) (LHMNode, error) {
-	ctx, cancel := context.WithTimeout(ctx, LHMTimeout)
-	defer cancel()
+	if client.Timeout == 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, LHMTimeout)
+		defer cancel()
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -187,18 +191,29 @@ func FetchLHM(ctx context.Context, client *http.Client, url string) (LHMNode, er
 		return LHMNode{}, fmt.Errorf("%s answered %s", url, resp.Status)
 	}
 
+	// An answer that says it is over the cap is refused before a byte of it is
+	// read; one that does not say (chunked) is read up to the cap and no
+	// further.
+	if resp.ContentLength > lhmMaxBody {
+		return LHMNode{}, tooLarge(url)
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, lhmMaxBody+1))
 	if err != nil {
 		return LHMNode{}, fmt.Errorf("reading %s: %w", url, err)
 	}
 	if len(body) > lhmMaxBody {
-		return LHMNode{}, fmt.Errorf("%s answered more than %d MiB, which is not a sensor tree", url, lhmMaxBody>>20)
+		return LHMNode{}, tooLarge(url)
 	}
 	var root LHMNode
 	if err := json.Unmarshal(body, &root); err != nil {
 		return LHMNode{}, fmt.Errorf("%s did not answer with a sensor tree: %w", url, err)
 	}
 	return root, nil
+}
+
+// tooLarge is the error for an answer over lhmMaxBody.
+func tooLarge(url string) error {
+	return fmt.Errorf("%s answered more than %d MiB, which is not a sensor tree", url, lhmMaxBody>>20)
 }
 
 /*
