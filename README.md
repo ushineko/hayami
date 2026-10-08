@@ -392,6 +392,11 @@ MIT. See [LICENSE](LICENSE).
   arrangement's single line per reading and its usage-widget spelling). It
   replaces a test that checked each section key built a source under that
   key. The window still stacks `row`, now waiting on fynedesygn#170.
+- **Change**: the usage providers are a table (spec 045). `usage` names each
+  provider once, with its cache name, display name, shorthand and decoder, and
+  the panel's table says how its accounts are found and fetched; the branches
+  on Codex and Claude are gone. Nothing the section shows changes, held by a
+  pinned file written before the change, and the cache's names are untouched.
 - **Change**: the cooler is a list of probes (spec 044). A reading is
   whatever parts the machine has -- a processor, a graphics card, a coolant,
   a fan and a pump -- each with an ID and its values present or not, and the

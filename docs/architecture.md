@@ -211,6 +211,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | Today a `config.Config` field; settings by section are planned | The preferences window, if a person would change it more than once |
+| A usage provider | An entry in `usage`'s provider table (`internal/usage/providers.go`: cache name, display name, shorthand, decoder) and one in the panel's (`usageProviders`: how its accounts are found and fetched), beside its fetch and decode code | Its cache file's suffix is its name, and the default provider has none: the slug is shared with the Python tools |
 | A platform | `_<os>.go` files in `core` (and `desktop`), including its `core.NewHost`; every `_other` stays honest | CI builds and tests on it |
 
 ## Testing
@@ -241,6 +242,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Typed absences, one reason helper | 6 | In place | #128 |
 | One window-test harness, rows found by label | Testing | In place | #129 |
 | `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | In place | #137 |
+| Usage providers as a table | 2 | In place | #145 |
 | Cooler reading as a list of probes; rows matched by ID in the window | 4 | In place | #138 |
 | Wi-Fi link reading with `Opt` values instead of `Has` flags | 4 | Planned | |
 | Settings by section | Adding things | Planned (phase 4) | |
