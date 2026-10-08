@@ -1,0 +1,24 @@
+## nothing at all
+- reason label="" text="no Claude or Codex account" status=0 detail="no credential store and nothing in the usage cache"
+## cached accounts, no store, no codex
+- window account="CC work" badge="" name="5h" fraction=0.1250 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CC work" badge="" name="7d" fraction=0.4000 resets=2030-01-05T16:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="5h" fraction=0.2500 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="7d" fraction=0.6000 resets=2030-01-05T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="limit" fraction=0.3300 resets=2030-01-03T11:00:00Z detail="400.50 / 1200.00" used="400.5" limit="1200" severity=""
+## a codex on the path
+- window account="CX" badge="" name="5h" fraction=0.2500 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="7d" fraction=0.6000 resets=2030-01-05T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="limit" fraction=0.3300 resets=2030-01-03T11:00:00Z detail="400.50 / 1200.00" used="400.5" limit="1200" severity=""
+## stores with plans
+- window account="CC max" badge="M" name="5h" fraction=0.1250 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CC max" badge="M" name="7d" fraction=0.4000 resets=2030-01-05T16:00:00Z detail="" used="" limit="" severity=""
+- reason label="CC work" text="waiting to retry" status=2 detail="an earlier fetch failed; the shared cache's gate opens at HH:MM"
+## the pre-profile file beside a profile
+- window account="CC max" badge="" name="5h" fraction=0.1250 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CC max" badge="" name="7d" fraction=0.4000 resets=2030-01-05T16:00:00Z detail="" used="" limit="" severity=""
+## a payload that does not decode
+- window account="CX" badge="" name="5h" fraction=0.2500 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="7d" fraction=0.6000 resets=2030-01-05T11:00:00Z detail="" used="" limit="" severity=""
+- window account="CX" badge="" name="limit" fraction=0.3300 resets=2030-01-03T11:00:00Z detail="400.50 / 1200.00" used="400.5" limit="1200" severity=""
+- reason label="CC work" text="unreadable reading" status=2 detail="reading the Claude usage payload: json: cannot unmarshal string into Go struct field claudePayload.five_hour.utilization of type float64"
