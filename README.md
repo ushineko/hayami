@@ -82,8 +82,8 @@ mode, which is why there is no separate widget for the terminal:
 - **grid** — columns that reflow to the width, in the manner of `btop`. Both
   shells: a desktop panel wide enough for two columns draws two.
 - **row** — one full-width line per reading, its bar stretching to the pane.
-  The terminal only; there is nothing for a window to do with it, so a window
-  set to it stacks.
+  The terminal only for now: the design system has no panel arrangement for
+  it yet (fynedesygn#170), so a window set to it stacks.
   This is what a `herdr` pane wants, and it replaces
   `claude-usage-widget-windows`'s `--tui` and `--line`:
 
@@ -385,6 +385,13 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change (internal)**: the parity test compares what the two shells draw
+  (spec 047). Every label, value, detail line, cell and meter a section holds
+  must be on the window's card and in the terminal's rendering in stack, grid
+  and row; the few differences are an allow-list with reasons (the row
+  arrangement's single line per reading and its usage-widget spelling). It
+  replaces a test that checked each section key built a source under that
+  key. The window still stacks `row`, now waiting on fynedesygn#170.
 - **Change**: the cooler is a list of probes (spec 044). A reading is
   whatever parts the machine has -- a processor, a graphics card, a coolant,
   a fan and a pump -- each with an ID and its values present or not, and the

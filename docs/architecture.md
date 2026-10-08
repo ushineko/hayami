@@ -80,7 +80,11 @@ and a view builder; nothing else spells its key. A setting a source needs goes
 in `Env`, not in a new parameter.
 
 Every section renders in all three arrangements (stack, grid, row), in both
-shells, and a hidden section's source is not polled.
+shells, and a hidden section's source is not polled. What the two shells draw
+is compared fact by fact (`internal/gui/parity_test.go`, spec 047): every
+label, value, detail line, cell and meter a section holds must be on the
+window's card and in the terminal's rendering in each arrangement, unless the
+test's allow-list says why not. A new section adds a fixture there.
 
 ### 4. A sensor source is a provider in a chain
 
@@ -204,7 +208,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
-| A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled |
+| A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | Today a `config.Config` field; settings by section are planned | The preferences window, if a person would change it more than once |
 | A platform | `_<os>.go` files in `core` (and `desktop`), including its `core.NewHost`; every `_other` stays honest | CI builds and tests on it |
@@ -240,8 +244,11 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Cooler reading as a list of probes; rows matched by ID in the window | 4 | In place | #138 |
 | Wi-Fi link reading with `Opt` values instead of `Has` flags | 4 | Planned | |
 | Settings by section | Adding things | Planned (phase 4) | |
-| Parity test that compares what the shells draw; `row` drawn by the window | 3 | Planned (phase 4) | |
+| Parity test that compares what the shells draw | 3 | In place | #144 |
+| `row` drawn by the window | 3 | Waiting on fynedesygn#170 | #144 |
 
-The window draws `row` as `stack` today (`gui.go`, `arrangement`), and the
-parity test only checks that every key builds a source. Both are known gaps
-against rule 3.
+The window draws `row` as `stack` (`gui.go`, `arrangement`): the design
+system has no row arrangement for a panel (fynedesygn#170), and building one in
+`internal/gui` is what the design system's rules forbid. The preferences offer
+`row` marked "terminal only", because the setting is shared and the terminal
+pane honours it. This is the one known gap against rule 3.
