@@ -365,6 +365,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: a reason for a missing reading is told by the source that knows
+  it (spec 040). Core returns a typed absence, one helper turns it into the
+  line the panel draws, and whether a line stays on a full card is decided by
+  a flag, not by its wording. What every reason says is unchanged, held by a
+  pinned file written before the change.
 - **Add**: a Wi-Fi interface's link (spec 037). Its row leads with the signal
   in the battery's four bars, by RSSI, and a line under its totals gives the
   strength, band, channel and link rate; the tip has the generation, Windows'
