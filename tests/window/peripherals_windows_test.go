@@ -3,6 +3,7 @@ package window_test
 import (
 	"context"
 	"image"
+	"image/color"
 	"testing"
 	"time"
 
@@ -98,20 +99,51 @@ func TestThePeripheralsAreDrawnOnWindows(t *testing.T) {
 	t.Logf("picture: %s", p.path)
 	t.Logf("text lines: %v", p.text)
 
-	// A card drawing a device says nothing about what is absent: the reasons
-	// are dropped. A heading, the cells' names and their levels is three
-	// lines at most; a card with no device is the heading, a reason per
-	// vendor and two placeholder cells.
+	// A device is drawn with its level in a battery colour (spec 018): green,
+	// amber or red. A card with no device is the heading, a reason per vendor
+	// and placeholder cells, all in the text colours, so it has no such line.
+	// Counting lines instead held only while one device was awake: devices
+	// stack, two lines each, and two awake read as a card of reasons.
 	require.NotEmpty(t, p.text, "no line of text at all")
-	require.LessOrEqual(t, len(p.text), 3,
+	levels := levelLines(p.img, p.text)
+	t.Logf("lines in a battery colour: %d", levels)
+	require.Positive(t, levels,
 		"the card is reasons and placeholders, not devices: the section drew none of %v", live)
 }
 
-// drawsDevices is whether the card is a heading and cells only.
-func drawsDevices(img *image.NRGBA, text []span) bool {
-	if len(text) == 0 || len(text) > 3 {
-		return false
+// drawsDevices is whether the card shows a device's level.
+func drawsDevices(img *image.NRGBA, text []span) bool { return levelLines(img, text) > 0 }
+
+// levelLines counts the text lines drawn in a battery colour: saturated, and
+// not the plot's blue-led colours. Text, reasons and placeholders are grey
+// or white, which a saturation floor leaves out.
+func levelLines(img *image.NRGBA, text []span) int {
+	n := 0
+	for _, line := range text {
+		coloured := 0
+		for y := line.From; y <= line.To; y++ {
+			for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
+				if batteryColour(img.At(x, y)) {
+					coloured++
+				}
+			}
+		}
+		if coloured >= levelInk {
+			n++
+		}
 	}
-	last := text[len(text)-1]
-	return len(words(img, last, (last.To-last.From+1)*3/4)) >= 1
+	return n
+}
+
+// levelInk is how many coloured pixels make a line a level: a two-digit
+// percentage at the panel's size is several hundred; anti-aliased edges of
+// grey text are a handful.
+const levelInk = 60
+
+// batteryColour is a pixel that is clearly coloured and not blue-led.
+func batteryColour(c color.Color) bool {
+	r, g, b, _ := c.RGBA()
+	r, g, b = r>>8, g>>8, b>>8
+	hi, lo := max(r, g, b), min(r, g, b)
+	return hi-lo > 80 && !plotted(c)
 }

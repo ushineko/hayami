@@ -94,3 +94,5 @@ than on the change.
 - Falsifications as above, each restored, `git diff` clean afterwards.
 - Full suite: every package ok except `internal/usage`'s Python cross-check,
   which fails on `main` on this machine too.
+
+2026-10-07, after merging main (specs 038 and 040): `cardOf` takes a `panel.Env`. With both the Basilisk and the F75 awake, the peripherals test failed on a correct card: devices stack, a name and a level each, so two devices are five text lines, and the test allowed three. It now counts lines drawn in a battery colour (a device's level, spec 018), which a card of reasons and placeholders has none of. Passes with the devices awake (two coloured lines for one device: its level and its bar); with the Razer and AULA vendors given no drivers it fails on zero; restored, it passes. The LibreHardwareMonitor case ran and passed now that LibreHardwareMonitor is running.

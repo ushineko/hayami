@@ -201,12 +201,9 @@ type card []view.Row
 // rows' detail lines are complete only from the second poll.
 func cardOf(t *testing.T, key string, s panelSettings) card {
 	t.Helper()
-	var opts []panel.Option
-	if s.LHM != "" {
-		opts = append(opts, panel.WithLHM(s.LHM))
-	}
-	// A nil reader is the panel's own: the counters and the Wi-Fi descriptions.
-	sources := panel.Sources([]string{key}, s.Interfaces, nil, opts...)
+	// A nil reader and scan are the panel's own: the counters, the Wi-Fi
+	// descriptions and the devices on the desk.
+	sources := panel.Sources([]string{key}, panel.Env{Interfaces: s.Interfaces, LHM: s.LHM})
 	require.Len(t, sources, 1, "no source for section %q", key)
 	src := sources[0]
 	polls := 1

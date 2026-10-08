@@ -210,7 +210,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Section registry | 3 | In place | #126 |
 | Threshold bands | 7 | In place | #127 |
 | Typed absences, one reason helper | 6 | In place | #128 |
-| One window-test harness, rows found by label | Testing | In progress | #129 |
+| One window-test harness, rows found by label | Testing | In place | #129 |
 | `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | Planned (phase 2) | |
 | Cooler and link readings as lists of probes | 4 | Planned (phase 2) | |
 | Settings by section | Adding things | Planned (phase 4) | |
