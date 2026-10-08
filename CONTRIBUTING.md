@@ -74,8 +74,8 @@ or to how a section renders, needs a reading from a running panel.
 
 Paste, at minimum:
 
-- which section changed (peripherals, bandwidth, cooler, usage) and the device
-  or source behind it;
+- the platform (Linux or Windows), which section changed (peripherals,
+  bandwidth, cooler, usage), and the device or source behind it;
 - the value hayami displayed **and** the same value from an independent source
   — `liquidctl status`, `sensors`, the vendor tool, the upstream API — so the
   two can be compared;
@@ -98,15 +98,16 @@ contributor's future PRs declined on sight.
 
 ## Scope
 
-An at-a-glance panel for Linux: peripheral battery, network bandwidth,
+An at-a-glance panel showing peripheral battery, network bandwidth,
 liquid-cooler thermals, and coding-agent usage — as a frameless always-on-top
 desktop window, and as a terminal pane. Both panels read the same settings and
-are expected to stay in step.
+are expected to stay in step. Linux is the primary platform; on Windows the
+usage and bandwidth sections read and the device sections do not yet.
 
 In scope: new sections, data sources, rendering, and settings. Device access
 belongs in [sanshoku](https://github.com/ushineko/sanshoku) — a change that
 adds device support generally belongs there first, with hayami consuming it.
-Out of scope: becoming a general system monitor, and non-Linux platforms.
+Out of scope: becoming a general system monitor.
 
 Changes that alter the project's direction — the interaction model, the
 architecture, persistence formats, or the public interface — start as a GitHub
@@ -124,8 +125,9 @@ make lint
 make build
 ```
 
-Go 1.26 or newer. The desktop panel needs CGO, OpenGL and X11/Wayland headers;
-`make test` and the terminal pane do not.
+Go 1.26 or newer. The desktop panel needs CGO, OpenGL and X11/Wayland headers
+on Linux; `make test` and the terminal pane do not. The build must keep working
+on both Linux and Windows.
 
 ## What gets checked on your PR
 
