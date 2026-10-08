@@ -174,7 +174,7 @@ func FetchLHM(ctx context.Context, client *http.Client, url string) (LHMNode, er
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled) {
-			return LHMNode{}, ctx.Err()
+			return LHMNode{}, fmt.Errorf("asking %s: %w", url, ctx.Err())
 		}
 		return LHMNode{}, fmt.Errorf("%w at %s: %w", ErrLHMUnreachable, url, err)
 	}
@@ -266,7 +266,7 @@ func (l *LHM) CPUTemperature(ctx context.Context) (float64, error) {
 			Detail: "LibreHardwareMonitor has no CPU temperature: is PawnIO installed? LibreHardwareMonitor offers it on first start"}
 	}
 	if ctx.Err() != nil {
-		return 0, ctx.Err()
+		return 0, fmt.Errorf("reading LibreHardwareMonitor: %w", ctx.Err())
 	}
 	switch {
 	case errors.Is(err, ErrLHMAuth):
