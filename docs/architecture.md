@@ -66,8 +66,8 @@ sign that a table is missing, and a review will ask for one.
 
 Tables that exist: the fixed-width formatters (`view/format.go`), name
 shortening (`view.nameRules`), the peripherals vendor list, sanshoku's support
-table. Tables being built: the section registry (#126) and threshold bands
-(#127).
+table. Threshold bands (`view.Bands`, #127) are in place; the section registry
+(#126) is being built.
 
 ### 3. A section is one registry entry
 
@@ -124,9 +124,10 @@ on hover and in `doctor`, not as a line on the card.
 
 ### 7. Thresholds are bands
 
-A status chosen by value (warn, bad) comes from a `view.Bands` table:
-ascending thresholds mapped to statuses. It doesn't come from comparisons
-written inline (#127). A new reading with a status adds a table, not a ladder.
+A status chosen by value (warn, bad) comes from a `view.Bands` table
+(`internal/view/bands.go`): ascending thresholds mapped to statuses. It
+doesn't come from comparisons written inline. A new reading with a status
+adds a table, not a ladder.
 
 ### 8. The glance rules
 
@@ -203,7 +204,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | sanshoku as the only device layer | 1 | In place | |
 | Drivers describe themselves; hayami derives its vendor list | 1 | Planned (phase 3) | |
 | Section registry | 3 | In progress | #126 |
-| Threshold bands | 7 | In progress | #127 |
+| Threshold bands | 7 | In place | #127 |
 | Typed absences, one reason helper | 6 | In progress | #128 |
 | One window-test harness, rows found by label | Testing | In progress | #129 |
 | `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | Planned (phase 2) | |
