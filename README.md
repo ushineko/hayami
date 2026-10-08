@@ -156,6 +156,7 @@ winget installed is found where winget put it.
 ```
 .\scripts\install_windows.ps1               # both programs, and a Start menu shortcut
 .\scripts\install_windows.ps1 -Autostart    # and start the panel when you log in
+.\scripts\install_windows.ps1 -WithSensors  # and LibreHardwareMonitor, for the CPU temperature
 .\scripts\install_windows.ps1 -DryRun       # show what that would do, change nothing
 .\scripts\uninstall_windows.ps1             # remove exactly those, keeping your settings
 ```
@@ -179,9 +180,11 @@ What differs from Linux:
   loopback, its `Local Area Connection*` adapters and its IPv6 transition
   tunnels are kept behind "Show every interface".
 - **The cooler card shows the processor and the graphics card** (spec 034).
-  The processor's load is GetSystemTimes and its name the registry's; Windows
-  offers no processor temperature without a kernel driver, so its row is the
-  load alone. The card's temperature, load and name come from D3DKMT and the
+  The processor's load is GetSystemTimes and its name the registry's. Windows
+  offers no processor temperature without a kernel driver, so the temperature
+  comes from LibreHardwareMonitor where it is running (below), and otherwise
+  the row is the load alone, with the reason on hover and in `doctor`. The
+  card's temperature, load and name come from D3DKMT and the
   `GPU Engine` performance counters, which are Task Manager's sources, for any
   vendor's card; `nvidia-smi` is asked only for what they left out. The load
   is the busiest engine, as Task Manager gives it, which reads lower than
@@ -199,6 +202,35 @@ What differs from Linux:
   the headphones itself and tells the computer neither their battery nor
   whether they are connected.
 - **The liquid cooler finds nothing yet**: the Kraken is read on Linux only.
+
+#### The processor's temperature: LibreHardwareMonitor
+
+Windows keeps a processor's temperature behind a kernel driver, and hayami
+loads none. [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
+does, through its PawnIO driver, and serves what it reads from a web server of
+its own; the panel reads that, at `http://127.0.0.1:8085/data.json` (spec
+036). It is optional, and hayami never installs it unasked:
+`install_windows.ps1 -WithSensors` does the steps below for you, or by hand:
+
+1. `winget install --id LibreHardwareMonitor.LibreHardwareMonitor -e`
+2. Run it as administrator. On its first start it offers to install PawnIO,
+   the driver it reads the processor through: say yes.
+3. **Options → Remote Web Server → Run**, on port 8085, with authentication
+   off: hayami sends no password.
+4. **Options → Run On Windows Startup**, so it is there after a restart.
+
+**Its web server listens on every network interface.** Its address setting
+is not honoured for `127.0.0.1` (it checks the address against the machine's
+DNS names, which never include loopback, and falls back to all of them), and
+the same server accepts requests that change fan settings. Windows Firewall's
+default, blocking inbound connections, is what keeps port 8085 off your
+network: add no rule that allows it. hayami only ever asks for `data.json`.
+
+Another port is a line in `settings.yaml`:
+`lhm: http://127.0.0.1:9000/data.json`. Where there is no temperature, the
+reason on hover and in `doctor` says which step is missing: nothing installed,
+LibreHardwareMonitor not running, its web server off, no PawnIO, or a password
+set. `uninstall_windows.ps1` leaves LibreHardwareMonitor alone.
 
 ### The udev rule
 
@@ -334,6 +366,11 @@ MIT. See [LICENSE](LICENSE).
 - **Change**: a processor with a load and no temperature is a row of its
   own, its temperature column left empty at its width. It was no row at all,
   which on Windows was every machine.
+- **Add**: the processor's temperature on Windows from LibreHardwareMonitor
+  (spec 036), read from its web server's `data.json` by label. Where it is
+  missing, the reason says which of the setup steps is. The address is the
+  `lhm` setting. `install_windows.ps1 -WithSensors` installs and starts
+  LibreHardwareMonitor, on request only.
 - **Add**: peripherals on Windows (spec 035), with sanshoku v0.1.8, which
   reads HID devices there. Logitech, Razer and SteelSeries are asked; the
   Bluetooth drivers are not, since they read Linux services. A device

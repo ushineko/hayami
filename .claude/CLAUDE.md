@@ -144,6 +144,14 @@ This repository is **public**. The following hold without exception:
   `GPU Engine` performance counters give any vendor's card its temperature,
   load and name without a process, and nvidia-smi is run only for what they
   left out.
+- **The processor's temperature on Windows is LibreHardwareMonitor's**
+  (spec 036). Windows keeps it behind a kernel driver and hayami loads none;
+  LibreHardwareMonitor does (PawnIO) and serves what it reads as `data.json`
+  over HTTP. hayami reads another program's output over loopback: not a
+  subprocess, not a device. It only ever GETs `data.json` -- the same server
+  takes requests that set fan speeds -- and matches sensors by label, never by
+  index. It is never installed unasked: `install_windows.ps1 -WithSensors` is
+  the one opt-in route.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that
@@ -209,8 +217,9 @@ tree contains, which is a different question.
   business needing a display library.
 - Runtime, all optional and each absent is a reported state rather than a
   failure: BlueZ (`org.bluez.Battery1`), `tailscale`, and the udev rule in
-  `packaging/60-sanshoku.rules` that lets the user open the devices. No
-  Python, no Qt.
+  `packaging/60-sanshoku.rules` that lets the user open the devices; on
+  Windows, LibreHardwareMonitor with its web server on, for the processor's
+  temperature. No Python, no Qt.
 
 ---
 
