@@ -31,6 +31,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
 
@@ -85,6 +86,11 @@ type panelSettings struct {
 	// Settle is how long the panel is given after its window appears, for
 	// its first polls.
 	Settle time.Duration
+
+	// x and y are where the window opens, set by start: away from the
+	// pointer, so the panel never opens under it and shows a row's tip over
+	// the card it is reading.
+	x, y int
 }
 
 // yaml is the settings file for s.
@@ -101,6 +107,8 @@ func (s panelSettings) yaml() string {
 	if s.LHM != "" {
 		b.WriteString("    lhm: " + s.LHM + "\n")
 	}
+	// Placed says the position is one: zero is a legal coordinate.
+	fmt.Fprintf(&b, "    x: %d\n    y: %d\n    placed: true\n", s.x, s.y)
 	return b.String()
 }
 
@@ -118,6 +126,7 @@ func start(t *testing.T, s panelSettings) uintptr {
 	testenv.Home(t, home)
 	testenv.Cache(t, filepath.Join(home, "cache"))
 	testenv.Config(t, filepath.Join(home, "config"))
+	s.x, s.y = awayFromPointer()
 	path := filepath.Join(dir, "settings.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(s.yaml()), 0o600))
 
@@ -265,4 +274,45 @@ func abs(v int) int {
 		return -v
 	}
 	return v
+}
+
+var (
+	getCursorPos     = user32.NewProc("GetCursorPos")
+	getSystemMetrics = user32.NewProc("GetSystemMetrics")
+)
+
+// The primary screen's size, for GetSystemMetrics.
+const (
+	smCXScreen = 0
+	smCYScreen = 1
+)
+
+// panelReach is more than the panel's size with any of the sections the tests
+// draw: a corner this far from the pointer keeps the window clear of it.
+const panelReach = 600
+
+/*
+awayFromPointer is a top-left corner for the window in the quadrant of the
+primary screen farthest from the pointer.
+
+A window that opens under a resting pointer gets a hover, and a row with a
+tip shows it over the card: the picture then holds the tip's lines, not the
+card's. That happened on a desk whose pointer rested where the panel opens,
+and a test that moved the person's pointer would be worse than one that moves
+its own window.
+*/
+func awayFromPointer() (x, y int) {
+	var p struct{ X, Y int32 }
+	_, _, _ = getCursorPos.Call(uintptr(unsafe.Pointer(&p)))
+	pw, _, _ := getSystemMetrics.Call(smCXScreen)
+	ph, _, _ := getSystemMetrics.Call(smCYScreen)
+	w, h := int(pw), int(ph)
+	x, y = 40, 40
+	if int(p.X) < w/2 {
+		x = w - panelReach
+	}
+	if int(p.Y) < h/2 {
+		y = h - panelReach
+	}
+	return max(x, 0), max(y, 0)
 }
