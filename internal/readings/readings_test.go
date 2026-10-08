@@ -3,6 +3,7 @@ package readings_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -85,6 +86,35 @@ func TestATruncatedCacheIsAColdStart(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{"peripherals":{"at":`), 0o600))
 
 	assert.Empty(t, readings.Load(path, time.Now()))
+}
+
+// Spec 044. A cache written before the section's rows had IDs -- a file with
+// no version, the sections at its top level -- is a cold start, not old
+// sections drawn by new rules. So is one from a version this build does not
+// know.
+func TestACacheFromAnotherVersionIsAColdStart(t *testing.T) {
+	now := time.Now()
+	at := now.Format(time.RFC3339Nano)
+	for name, body := range map[string]string{
+		"before versions": `{"cooler":{"at":"` + at + `","section":{"Key":"cooler","Title":"Cooler"}}}`,
+		"a later version": `{"version":999,"sections":{"cooler":{"at":"` + at + `","section":{"Key":"cooler","Title":"Cooler"}}}}`,
+	} {
+		path := filepath.Join(t.TempDir(), readings.FileName)
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+
+		assert.Empty(t, readings.Load(path, now), name)
+	}
+}
+
+// Spec 044. What Save writes is this version's, and Load reads it back.
+func TestTheCacheCarriesItsVersion(t *testing.T) {
+	now := time.Now()
+	path := saved(t, now)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"version":`+strconv.Itoa(readings.FormatVersion))
+	assert.NotEmpty(t, readings.Load(path, now))
 }
 
 // AC7. The write is atomic, so a cache that exists is a cache that parses:

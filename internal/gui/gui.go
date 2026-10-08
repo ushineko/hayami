@@ -13,6 +13,7 @@ import (
 	"image/color"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -97,7 +98,6 @@ type Panel struct {
 // and rebuilding at that rate would fight the no-reflow rule.
 type card struct {
 	card   *glance.Card
-	rows   []*glance.Row
 	meters []*glance.Meter
 
 	// spark is the section's trend, for a section that has one. Nil for the
@@ -111,8 +111,13 @@ type card struct {
 	cells []*glance.Cell
 
 	// pinned marks the rows built with their label column held at the name
-	// column's width (spec 031), by position.
-	pinned []bool
+	// column's width (spec 031), by row ID: the pin travels with the row
+	// (spec 044), wherever a row arriving above it puts it.
+	pinned map[string]bool
+
+	// nameColumn is the width a pinned label column is held at, for a row
+	// built after the card.
+	nameColumn float32
 }
 
 // SparkCapacity is how many samples the window's plot holds.
@@ -140,24 +145,21 @@ ever had at once. They cost nothing while they are hidden.
 const CellSlack = 4
 
 /*
-RowSlack is how many spare rows a card is built with.
+A card's rows follow what is read (spec 044).
 
-The same constraint as CellSlack and a sharper consequence. A card's objects go
-into one container in the order they are added, so a row added after the card
-was built lands *under* the sparkline rather than above it -- the reason row
-"Coolant  no cooler" drawn through the plot, which is what the first
-photograph of this change showed.
+A card is built from what the first poll or the cache had, and a row arrives
+whenever a source has something new to say: a reason when the cooler stops
+answering, a second graphics card, a probe a provider reports. Each row has an
+ID (rowIDs), and a poll's rows are matched to the card's by it: a row the card
+has is set in place, a new one is inserted at its position among the rows --
+always above the plot, which the library guarantees -- and one that has gone is
+removed. A value changing is never one of these, so it never moves anything;
+a row arriving or leaving is a change of shape, and the panel is re-measured
+after it, as after a card being shown.
 
-A card is built from what the first poll or the cache had, and a reason arrives
-whenever a source cannot read something: at the first poll, or an hour later
-when the cooler stops answering. So the rows cannot be counted in advance and the
-spares have to be there from the start.
-
-Four, which covers every section this build has: the cooler's two readings and
-two reasons, the peripherals' three sources, the bandwidth's interfaces one at
-a time. They are hidden and cost nothing, the way the cells do.
+This replaced four spare rows built hidden with every card (RowSlack), which
+pinned labels by position and put a fifth row under the plot.
 */
-const RowSlack = 4
 
 // MeterLabelWidth pins a card's meter labels to one column, so several meters
 // stacked in a card line their captions up and two windows of the same quota
@@ -233,25 +235,11 @@ func New(a fyne.App, o Options) *Panel {
 		}
 		c := glance.NewCard(sec.Title)
 		c.SetIcon(sectionIcon(sec.Icon))
-		holder := &card{card: c}
-		// Built with spares, and before the plot, because a row added later
-		// goes in under it. See RowSlack.
-		lines := flatten(sec.Lines())
-		for i := range len(lines) + RowSlack {
-			var r view.Row
-			if i < len(lines) {
-				r = lines[i]
-			}
-			// A row whose label is a hardware name has its label column
-			// pinned, so the name arriving -- or being longer than "CPU" --
-			// cannot widen the card (spec 031). By position, as the spares
-			// are: the cooler's named rows come first and stay first.
-			pin := r.LabelWidth > 0
-			row := glance.NewRowWidth(r.Label, r.Value, pinWidth(pin, nameColumn))
-			row.SetShown(i < len(lines))
-			holder.rows = append(holder.rows, row)
-			holder.pinned = append(holder.pinned, pin)
-			c.AddRow(row)
+		holder := &card{card: c, pinned: map[string]bool{}, nameColumn: nameColumn}
+		// The rows the section has now; a row that arrives later is inserted
+		// among them by its ID, above the plot (spec 044).
+		for _, r := range flatten(rowIDs(sec.Lines())) {
+			c.AddRow(holder.newRow(r))
 		}
 		for _, m := range sec.Meters {
 			// The window arranges in one column, not the pane's three: the
@@ -416,11 +404,9 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// is only ever detail -- the peripherals the two cells had no room for.
 	c.card.SetTip(sec.Hover())
 
-	// One path, not two. A card is built with spare rows now (RowSlack), so
-	// the count it holds never equals the count a section wants and the fast
-	// path was never taken; rebuild does the same work plus a SetShown, which
-	// is what makes the spares spare.
-	p.rebuild(c, flatten(sec.Lines()))
+	// The rows matched by ID: set in place, inserted, or removed (spec 044).
+	// The panel is re-measured below in every case.
+	p.rebuild(c, flatten(rowIDs(sec.Lines())))
 
 	// A cell the card was not built with cannot be added now, for the reason
 	// the meters below give: the library takes objects at build time. A
@@ -539,50 +525,106 @@ func (p *Panel) drawCells(c *card, cells []view.Cell, dim bool) {
 // value and the window draws it as its own quiet row, which keeps both shells
 // showing the same numbers. A row for it in the library would be better and is
 // in this spec's gaps.
+//
+// A detail line's ID is its row's and its place under it, so a detail whose
+// figures change every poll -- an interface's totals -- is the same row.
 func flatten(rows []view.Row) []view.Row {
 	out := make([]view.Row, 0, len(rows))
 	for _, r := range rows {
 		bare := r
 		bare.Detail = ""
 		out = append(out, bare)
-		for _, d := range r.DetailLines() {
-			out = append(out, view.Row{Value: d, Status: view.Info})
+		for i, d := range r.DetailLines() {
+			out = append(out, view.Row{ID: fmt.Sprintf("%s/detail:%d", r.ID, i+1), Value: d, Status: view.Info})
 		}
 	}
 	return out
 }
 
-// rebuild sets a card's rows, showing as many as the section has and hiding
-// the spares it was built with.
-//
-// A row beyond the spares is added, which puts it under the plot rather than
-// above it -- see RowSlack. It is the case the slack exists to keep from
-// happening rather than a case that is handled well, and a section that
-// reached it would be a section this build did not anticipate.
-func (p *Panel) rebuild(c *card, want []view.Row) {
-	rows := c.card.Rows()
-	for i, r := range want {
-		if i < len(rows) {
-			label := r.Label
-			if i < len(c.pinned) && c.pinned[i] {
-				// A reason's sentence landing in a row built for a name is
-				// cut where it can be read, not clipped mid-letter.
-				label = view.Cut(label, view.LabelWidth)
-			}
-			rows[i].SetLabel(label)
-			rows[i].Set(p.value(r))
-			rows[i].SetShown(true)
-			continue
+/*
+rowIDs gives every row an ID, keeping the one its builder gave (spec 044).
+
+A row without one is named by what does not change while it is the same row:
+its label ("label:Wi-Fi 2"), or for a row with no label, its text -- a reason's
+sentence ("text:no interfaces chosen"). A value is never part of it: a rate
+that changes every poll would make every poll a new row. Two rows that would
+share a name are told apart by their order ("#2"), which is stable for as long
+as the section emits them in the same order.
+*/
+func rowIDs(rows []view.Row) []view.Row {
+	out := make([]view.Row, len(rows))
+	seen := map[string]int{}
+	for i, r := range rows {
+		id := r.ID
+		switch {
+		case id != "":
+		case r.Label != "":
+			id = "label:" + r.Label
+		default:
+			id = "text:" + r.Value
 		}
-		row := glance.NewRow(r.Label, r.Value)
-		row.Set(p.value(r))
-		c.card.AddRow(row)
-		c.rows = append(c.rows, row)
+		seen[id]++
+		if n := seen[id]; n > 1 {
+			id = fmt.Sprintf("%s#%d", id, n)
+		}
+		r.ID = id
+		out[i] = r
 	}
-	// A row the section no longer has is hidden rather than removed: the
-	// library has no remove, and a hidden row costs nothing.
-	for i := len(want); i < len(c.rows); i++ {
-		c.rows[i].SetShown(false)
+	return out
+}
+
+// newRow builds the card's row for r. A row whose label is a hardware name
+// has its label column pinned, so the name arriving -- or being longer than
+// "CPU" -- cannot widen the card (spec 031); the pin is the row's own.
+func (c *card) newRow(r view.Row) *glance.Row {
+	pin := r.LabelWidth > 0
+	row := glance.NewRowWidth(r.Label, r.Value, pinWidth(pin, c.nameColumn))
+	row.SetID(r.ID)
+	c.pinned[r.ID] = pin
+	return row
+}
+
+/*
+rebuild brings a card's rows into line with want, by ID (spec 044).
+
+A row the card has is set in place. A row it does not have is built and
+inserted at its position among the rows, which the library puts above the
+plot. A row the section no longer has is removed. A row in the wrong place --
+two rows that swapped -- is moved. None of this happens because a value
+changed, so a value never moves anything; Draw re-measures the panel after.
+*/
+func (p *Panel) rebuild(c *card, want []view.Row) {
+	keep := make(map[string]bool, len(want))
+	for _, r := range want {
+		keep[r.ID] = true
+	}
+	for _, row := range slices.Clone(c.card.Rows()) {
+		if !keep[row.ID()] {
+			c.card.RemoveRow(row.ID())
+			delete(c.pinned, row.ID())
+		}
+	}
+	for i, r := range want {
+		row := c.card.RowByID(r.ID)
+		if rows := c.card.Rows(); row == nil || i >= len(rows) || rows[i] != row {
+			if row != nil {
+				c.card.RemoveRow(r.ID)
+			} else {
+				row = c.newRow(r)
+			}
+			// Cannot fail: i is at most the rows' length, and the ID is not
+			// on the card -- it was just removed or never there.
+			_ = c.card.InsertRow(i, row)
+		}
+		label := r.Label
+		if c.pinned[r.ID] {
+			// A sentence landing in a row built for a name is cut where it
+			// can be read, not clipped mid-letter.
+			label = view.Cut(label, view.LabelWidth)
+		}
+		row.SetLabel(label)
+		row.Set(p.value(r))
+		row.SetShown(true)
 	}
 }
 
