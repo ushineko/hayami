@@ -106,6 +106,14 @@ This repository is **public**. The following hold without exception:
 
 ## Architecture rules
 
+`docs/architecture.md` is the guide contributors are held to: the layers, the
+rules (device knowledge in sanshoku, tables over switches, one section
+registry, sensor providers in chains, platform files in core, typed absences,
+threshold bands) and where each kind of addition goes. Follow it; this section
+is the project's history of those rules, and when the two disagree the guide
+is updated, not ignored. A change that moves a mechanism from planned to in
+place updates the guide's Status table in the same PR.
+
 - **Two binaries, one program.** `cmd/hayami` is the desktop panel, linked
   windowed; `cmd/hayami-tui` is the terminal panel, linked as a console
   application. Following `~/git/jira-viewer`, which does the same thing for
@@ -225,9 +233,9 @@ tree contains, which is a different question.
 
 ## Git
 
-The convention across the ushineko repositories. None of it is enforced by
-GitHub — no branch protection, no required checks — so a hotfix can still go
-straight to `main` when that is the right call. It is habit, not a gate.
+The convention across the ushineko repositories. `main` is protected: the CI
+checks are required, and a contributor's PR needs a maintainer's approving
+review. Maintainers merge their own work (CONTRIBUTING.md, MAINTAINERS.md).
 
 - Feature work happens on a branch and lands on `main` through a PR.
 - Branch names: `feat/`, `fix/`, `chore/` or `docs/` and a short slug.

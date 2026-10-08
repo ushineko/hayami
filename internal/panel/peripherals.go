@@ -212,7 +212,7 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		for i := range present {
 			// A device that may not be opened is not a footnote: it is the
 			// one line here a reader can act on, and it stays drawn.
-			if present[i].Detail != permissionDetail {
+			if !present[i].Actionable {
 				present[i].Aside = true
 			}
 		}
@@ -237,9 +237,9 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 	warn := func(err error) {
 		out.said = true
 		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: article(v.name) + " " + v.name + " device would not answer", Status: view.Warn, Detail: err.Error(),
-		})
+		reasons = append(reasons, reason(view.Reason{
+			Text: article(v.name) + " " + v.name + " device would not answer", Status: view.Warn,
+		}, err))
 	}
 
 	for _, d := range v.drivers {
@@ -252,7 +252,7 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 			// rows, which is what it should look like -- and the reason says
 			// which of the two it is, because "no adapter" and "nothing
 			// connected" are different things to go and do something about.
-			reasons = append(reasons, view.Reason{Text: "no Bluetooth adapter", Status: view.Info, Detail: err.Error()})
+			reasons = append(reasons, reason(view.Reason{Text: "no Bluetooth adapter", Status: view.Info}, err))
 			out.said = true
 		case err != nil:
 			warn(err)

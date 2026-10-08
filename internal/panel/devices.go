@@ -7,6 +7,7 @@ import (
 
 	"github.com/ushineko/sanshoku"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -110,14 +111,14 @@ func (h *held) prune() {
 // found the device absent after all (a Kraken node that does not answer the
 // status probe, beside the one that does), and failed for anything else, which
 // the section reports in its own words and returns for logging.
-func openFailure(c sanshoku.Candidate, err error) (reason *view.Reason, failed bool) {
-	switch {
-	case permitted(err):
+func openFailure(c sanshoku.Candidate, err error) (said *view.Reason, failed bool) {
+	if refused, ok := core.PermissionAbsence(err); ok {
 		// Not a failure to log every poll: nothing will change until
 		// somebody does what the detail says.
-		return &view.Reason{
-			Text: c.Name + " is not permitted", Status: view.Warn, Detail: permissionDetail,
-		}, false
+		r := reason(view.Reason{Text: c.Name + " is not permitted", Status: view.Warn}, refused)
+		return &r, false
+	}
+	switch {
 	case errors.Is(err, sanshoku.ErrUnsupported):
 		// Detected and deliberately not spoken to (spec 017). The name is the
 		// label and the verdict one word, so the line is a row like any other

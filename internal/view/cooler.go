@@ -175,13 +175,4 @@ func speeds(r CoolerReading, unit int) Row {
 }
 
 // coolant is the verdict on a liquid temperature.
-func coolant(v float64) Status {
-	switch {
-	case v >= CoolantHot:
-		return Bad
-	case v >= CoolantWarm:
-		return Warn
-	default:
-		return Good
-	}
-}
+func coolant(v float64) Status { return CoolantBands.Of(v) }

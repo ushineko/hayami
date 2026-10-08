@@ -62,16 +62,12 @@ func (b *Bandwidth) Section() view.Section {
 			Detail: "pick one in the preferences, or pass --sections",
 		})
 	}
-	if errors.Is(b.WirelessErr(), core.ErrWirelessDenied) {
+	if err := b.WirelessErr(); errors.Is(err, core.ErrWirelessDenied) {
 		// Aside: the row already shows what it could read, blank where it
 		// could not, and a line on the card about a privacy setting would be
 		// there every day on every machine that keeps it. The pointer and
-		// doctor say it.
-		reasons = append(reasons, view.Reason{
-			Label: "Wi-Fi", Text: "details withheld", Status: view.Info, Aside: true,
-			Detail: "Windows withholds Wi-Fi details from desktop apps without location access: " +
-				"Settings, Privacy & security, Location (ms-settings:privacy-location)",
-		})
+		// doctor say it; the words are the source's (spec 040).
+		reasons = append(reasons, reason(view.Reason{Label: "Wi-Fi", Status: view.Info, Aside: true}, err))
 	}
 	sec.Reasons = reasons
 	return sec
