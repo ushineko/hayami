@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.1
+**Version**: 0.9.2
 
 *a chart you read at a glance*
 
@@ -384,7 +384,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.2 (2026-10-08)
 
 - **Change**: the panel snaps to the screen's edges when dragged on Windows
   (fynedesygn 0.1.87, its spec 058).
