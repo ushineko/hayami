@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.8.6
+**Version**: 0.9.0
 
 *a chart you read at a glance*
 
@@ -384,7 +384,15 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.0 (2026-10-08)
+
+The desk on Windows: the processor, the graphics card, Wi-Fi and the
+peripherals read there, the processor's temperature through
+LibreHardwareMonitor (`install_windows.ps1 -WithSensors`), and the window
+draws all three arrangements. Inside, the architecture review's four phases
+(docs/architecture.md). On upgrading: settings are read in the old shape and
+written in both; the readings cache is discarded once (one blank first
+frame); and `hayami-tui readings` gives the cooler as a list of probes.
 
 - **Fix**: an answer from LibreHardwareMonitor that declares itself over the
   8 MiB cap is refused before any of it is read, rather than read up to the
