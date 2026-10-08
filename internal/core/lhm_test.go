@@ -234,7 +234,7 @@ func TestAnOversizedAnswerIsRefused(t *testing.T) {
 		_, _ = w.Write([]byte("{}"))
 	}))
 	t.Cleanup(declared.Close)
-	_, err := patient(declared.URL+"/data.json").CPUTemperature(t.Context())
+	_, err := patient(declared.URL + "/data.json").CPUTemperature(t.Context())
 	assert.Contains(t, absence(t, err), "not a sensor tree", "an answer declared over the cap was read")
 
 	// One that declares nothing (chunked) is read up to the cap and refused.
@@ -244,7 +244,7 @@ func TestAnOversizedAnswerIsRefused(t *testing.T) {
 		_, _ = w.Write([]byte(`{"Text":"` + strings.Repeat("x", 9<<20) + `"}`))
 	}))
 	t.Cleanup(chunked.Close)
-	_, err = patient(chunked.URL+"/data.json").CPUTemperature(t.Context())
+	_, err = patient(chunked.URL + "/data.json").CPUTemperature(t.Context())
 	assert.Contains(t, absence(t, err), "not a sensor tree", "an undeclared answer over the cap was read in full")
 }
 
