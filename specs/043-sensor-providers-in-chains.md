@@ -99,8 +99,11 @@ Touch points to add a new sensor source, before:
   to back on this desk, are identical with digits masked.
 - [x] `go test -tags migrated_fynedo ./...` on Windows: every package ok but
   `internal/usage`'s Python cross-check, which fails on `main` here too
-  (`structlog` missing). Window tests for the processors and
-  LibreHardwareMonitor pass.
+  (`structlog` missing).
+- [x] Window tests for the processors and LibreHardwareMonitor pass, after
+  merging #139. They had failed on this desk, and on `main` too, because the
+  panel opened under the resting pointer and a row's tip covered the card;
+  #139 opens it in the corner farthest from the pointer.
 - [x] `go vet` for linux and darwin (core, panel; cli, view and
   `cmd/hayami-tui` for linux) and windows; golangci-lint v2.12.2 0 issues on
   core, panel and cli for windows and linux; `hayami-tui` builds with
