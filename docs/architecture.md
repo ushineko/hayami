@@ -51,11 +51,13 @@ hayami. Support for a new device is a sanshoku driver, with its entry in
 sanshoku's support table and a bench reading from the real device, released.
 Then hayami runs `go get`.
 
-hayami's side today is one row per vendor in `vendors()`
-(`internal/panel/peripherals.go`). The aim is none: sanshoku drivers describe
-themselves (vendor, whether a silent device is listed, platforms) and hayami
-builds its list from them. Until then, `panel/peripherals.go` still imports
-`logitech` and `hidraw` for receiver presence. Don't add more of those imports.
+hayami's side is nothing. Each sanshoku driver describes itself
+(`sanshoku.Description`: its name, what it finds, whether a silent device is
+listed, the systems it reads on), and `vendors()`
+(`internal/panel/peripherals.go`) builds the list from `all.Drivers()`: the
+battery drivers that read on the host's platform, grouped by name. A
+receiver's presence is the generic `sanshoku.Presencer`. No driver package is
+imported outside the tests (spec 048), and none should be.
 
 ### 2. Tables over switches
 
@@ -65,8 +67,9 @@ reads the table. A `switch` or `if` chain on a string key or a platform is a
 sign that a table is missing, and a review will ask for one.
 
 Tables that exist: the fixed-width formatters (`view/format.go`), name
-shortening (`view.nameRules`), the peripherals vendor list, sanshoku's support
-table, threshold bands (`view.Bands`) and the section registry.
+shortening (`view.nameRules`), sanshoku's driver descriptions and support
+table (from which the peripherals vendor list is built), threshold bands
+(`view.Bands`) and the section registry.
 
 ### 3. A section is one registry entry
 
@@ -134,8 +137,9 @@ What a platform offers is one value, `core.Host`, declared by `core.NewHost`
 in `host_linux.go`, `host_windows.go` and `host_other.go`: the processor and
 card chains and their accounts of absence, the load and name readers, the
 interface and Wi-Fi readers, the advice for a device that would not open, and
-the Bluetooth drivers it can use. `panel` takes it through `panel.Env.Host`
-(nil is this platform's own), and a test builds one of its own. A file that
+its platform name, which the device drivers' descriptions are asked about
+(spec 048). `panel` takes it through `panel.Env.Host` (nil is this platform's
+own), and a test builds one of its own. A file that
 only one platform can have, such as `lhm_other.go` (LibreHardwareMonitor is a
 Windows program), uses `!windows` and returns absence.
 
@@ -207,7 +211,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 
 | To add | Where | Also |
 |---|---|---|
-| Support for a device | A sanshoku driver and its support-table entry, with a bench reading from the device; a sanshoku release | In hayami: `go get` the release, plus a `vendors()` row while rule 1's aim is unbuilt |
+| Support for a device | A sanshoku driver and its support-table entry, with a bench reading from the device; a sanshoku release | In hayami: `go get` the release, nothing else |
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
@@ -239,7 +243,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Mechanism | Rule | State | Issue |
 |---|---|---|---|
 | sanshoku as the only device layer | 1 | In place | |
-| Drivers describe themselves; hayami derives its vendor list | 1 | Planned (phase 3) | |
+| Drivers describe themselves; hayami derives its vendor list | 1 | In place | #141 |
 | Section registry | 3 | In place | #126 |
 | Threshold bands | 7 | In place | #127 |
 | Typed absences, one reason helper | 6 | In place | #128 |

@@ -9,12 +9,8 @@ import (
 	"time"
 
 	"github.com/ushineko/sanshoku"
-	"github.com/ushineko/sanshoku/aula"
+	"github.com/ushineko/sanshoku/all"
 	"github.com/ushineko/sanshoku/battery"
-	"github.com/ushineko/sanshoku/hidraw"
-	"github.com/ushineko/sanshoku/logitech"
-	"github.com/ushineko/sanshoku/razer"
-	"github.com/ushineko/sanshoku/steelseries"
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/readings"
@@ -42,8 +38,8 @@ type Peripherals struct {
 	mu      sync.Mutex
 	reading view.PeripheralsReading
 
-	// vendors are the drivers this source asks, in order: every HID vendor,
-	// then the host's Bluetooth where it has any (spec 043).
+	// vendors are the drivers this source asks, in order: sanshoku's battery
+	// drivers that read on the host's platform (spec 048).
 	vendors []vendor
 
 	// seen is what each device last said, by name, and when. A device stays
@@ -80,34 +76,51 @@ type Peripherals struct {
 // Bluetooth device with a battery" is one fact whichever protocol would have
 // read it.
 type vendor struct {
-	name    string
-	absent  string
-	drivers []sanshoku.Driver
+	// name is the vendor as a person knows it ("Logitech", "Bluetooth"), and
+	// finds what the thing found is called ("receiver", "device with a
+	// battery"): together the line for nothing found and, for a receiver,
+	// what it says about itself.
+	name, finds string
+	drivers     []sanshoku.Driver
 
 	// quiet is whether a device that is listed and reads nothing gets a line
-	// of its own. Not Logitech, whose receiver says what is quiet on it, and
-	// not Bluetooth, where a device is listed only when it has a level.
+	// of its own: the driver's to say (a Razer dock, an AULA receiver).
 	quiet bool
 }
 
-// vendors are the peripherals drivers, in the order they are asked and their
-// reasons are given: logitech, razer, steelseries, aula, then Bluetooth where
-// the host has drivers for it (apple and bluez on Linux; none on Windows,
-// spec 035) -- one line for those drivers, because to a reader "no Bluetooth
-// device with a battery" is one fact whichever protocol would have read it.
-//
-// AULA is quiet for the reason Razer is: its receiver is listed whether or
-// not the keyboard is switched to it, and a receiver with a keyboard on its
-// cable answers nothing (spec 035).
-func vendors(bluetooth []sanshoku.Driver) []vendor {
-	out := []vendor{
-		{name: "Logitech", absent: "no Logitech receiver", drivers: []sanshoku.Driver{logitech.Driver{}}},
-		{name: "Razer", absent: "no Razer device", drivers: []sanshoku.Driver{razer.Driver{}}, quiet: true},
-		{name: "SteelSeries", absent: "no SteelSeries device", drivers: []sanshoku.Driver{steelseries.Driver{}}, quiet: true},
-		{name: "AULA", absent: "no AULA receiver", drivers: []sanshoku.Driver{aula.Driver{}}, quiet: true},
-	}
-	if len(bluetooth) > 0 {
-		out = append(out, vendor{name: "Bluetooth", absent: "no Bluetooth device with a battery", drivers: bluetooth})
+// absent is the line for a vendor nothing was found of.
+func (v vendor) absent() string { return "no " + v.name + " " + v.finds }
+
+/*
+vendors are sanshoku's battery drivers that read on platform, grouped by the
+name a person knows them by, in the module's order (spec 048).
+
+Each driver describes itself: its name, what it finds, whether a device that
+is listed and reads nothing is worth a line, and the systems it reads on. So a
+device added to sanshoku is a vendor here with no change to this file, and
+Bluetooth is asked where its drivers say they read (Linux) and nowhere else.
+Two drivers with one name are one vendor: to a reader "no Bluetooth device
+with a battery" is one fact whichever protocol would have read it.
+
+A driver that does not describe itself is not asked. Every driver in the
+module does, and a test there holds it; one that did not would have no name
+to give a line, and guessing one is how this file used to carry a table of
+its own.
+*/
+func vendors(platform string) []vendor {
+	var out []vendor
+	at := map[string]int{}
+	for _, d := range all.Drivers() {
+		desc, ok := sanshoku.Describe(d)
+		if !ok || !desc.Offers("battery") || !desc.On(platform) {
+			continue
+		}
+		if i, seen := at[desc.Name]; seen {
+			out[i].drivers = append(out[i].drivers, d)
+			continue
+		}
+		at[desc.Name] = len(out)
+		out = append(out, vendor{name: desc.Name, finds: desc.Finds, drivers: []sanshoku.Driver{d}, quiet: desc.Quiet})
 	}
 	return out
 }
@@ -123,8 +136,8 @@ type remembered struct {
 	since time.Time
 }
 
-// NewPeripherals builds the peripherals source over sanshoku's drivers,
-// found by scan, with the host's Bluetooth drivers and permission advice.
+// NewPeripherals builds the peripherals source over sanshoku's drivers for
+// the host's platform, found by scan, with the host's permission advice.
 func NewPeripherals(scan Scan, h *core.Host) *Peripherals {
 	p := newPeripheralsOn(h, scan, time.Now)
 	if path, err := readings.File(knownFile); err == nil {
@@ -151,7 +164,7 @@ func newPeripherals(scan Scan, now func() time.Time) *Peripherals {
 func newPeripheralsOn(h *core.Host, scan Scan, now func() time.Time) *Peripherals {
 	return &Peripherals{
 		seen: make(map[string]remembered), held: newHeld(scan, h.Permission), now: now,
-		vendors: vendors(h.Bluetooth),
+		vendors: vendors(h.Platform),
 	}
 }
 
@@ -169,8 +182,9 @@ type vendorPoll struct {
 	// read how many of them are held and answered a read without an error.
 	listed, read int
 
-	// presence is the Logitech receivers' Presence, summed.
-	presence logitech.Presence
+	// presence is the vendor's receivers' Presence, summed: what a receiver
+	// that read nothing says about itself.
+	presence sanshoku.Presence
 
 	// said is a reason already given for the vendor as a whole -- it would
 	// not answer, or there is no Bluetooth adapter -- so it says nothing
@@ -199,8 +213,8 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		reasons = append(reasons, why...)
 		present = append(present, keep...)
 		errs = append(errs, err)
-		if v.name == "Logitech" && !got.said && len(got.batteries) == 0 {
-			if r := receiverReason(got.presence); r != nil {
+		if !got.said && len(got.batteries) == 0 {
+			if r := receiverReason(v, got.presence); r != nil {
 				reasons = append(reasons, *r)
 			}
 		}
@@ -209,8 +223,8 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		// Named, because it answered -- something is there.
 		for _, name := range got.presence.TooOld {
 			present = append(present, view.Reason{
-				Label: name, Text: "speaks HID++ 1.0", Status: view.Info,
-				Detail: "found, and not read: its HID++ 1.0 battery register would not answer",
+				Label: name, Text: "speaks " + got.presence.OldProtocol, Status: view.Info,
+				Detail: "found, and not read: its " + got.presence.OldProtocol + " battery register would not answer",
 			})
 		}
 	}
@@ -308,8 +322,8 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 				warn(err)
 			}
 			// Asked after the read, because it is what that read found.
-			if pr, ok := dev.(logitech.Presencer); ok {
-				out.presence = addPresence(out.presence, pr.Presence(), hidraw.PairedChild(c.Phys))
+			if pr, ok := dev.(sanshoku.Presencer); ok {
+				out.presence = out.presence.Add(pr.Presence())
 			}
 		}
 	}
@@ -317,7 +331,7 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 	switch {
 	case out.said:
 	case out.listed == 0:
-		reasons = append(reasons, view.Reason{Text: v.absent, Status: view.Info})
+		reasons = append(reasons, view.Reason{Text: v.absent(), Status: view.Info})
 	case v.quiet && out.read > 0 && len(out.batteries) == 0:
 		// Listed, opened and asked, and nothing came back: a mouse asleep in
 		// its dock. Saying nothing made the vendor look absent; saying "no
@@ -489,26 +503,14 @@ func charge(s battery.State) view.Charge {
 	}
 }
 
-// addPresence sums two receivers' Presence, which is how a card with two
-// receivers on it counts what is quiet across both.
-//
-// A paired child's node -- one device behind a receiver, with its own node --
-// adds nothing to Quiet: the receiver's node asked every index, that device's
-// among them, and counting it again put "8 indices" on a receiver that
-// numbers six.
-func addPresence(a, b logitech.Presence, child bool) logitech.Presence {
-	a.Nodes += b.Nodes
-	if !child {
-		a.Quiet += b.Quiet
-	}
-	a.TooOld = append(a.TooOld, b.TooOld...)
-	return a
-}
-
 /*
-receiverReason is what a Logitech receiver that read nothing says about itself,
-or nothing when no receiver was opened: an absent one is "no Logitech
-receiver" already, and one that may not be opened says so by name.
+receiverReason is what a vendor's receiver that read nothing says about
+itself, or nothing when no receiver was opened: an absent one is "no Logitech
+receiver" already, and one that may not be opened says so by name. Which
+vendors have receivers is the drivers' to say, through sanshoku.Presencer
+(spec 048); only Logitech's does today. A paired child's node reports no quiet
+slots of its own (sanshoku spec 014), so a card with a receiver and its
+child's node counts each slot once.
 
 Counted, and described as exactly what it is. Not named, because a pairing
 table outlives the hardware in it: the receiver this was written against
@@ -520,18 +522,19 @@ code for an empty slot as for a sleeping device, so a count of unanswered
 indices is all this knows -- the first draft of this line said "8 paired
 slots" on a receiver with two pairings (issue #66).
 */
-func receiverReason(presence logitech.Presence) *view.Reason {
+func receiverReason(v vendor, presence sanshoku.Presence) *view.Reason {
+	its := article(v.name) + " " + v.name + " " + v.finds
 	switch {
 	case presence.Nodes == 0:
 		return nil
 	case presence.Quiet > 0:
 		return &view.Reason{
-			Text: "a Logitech receiver, with nothing awake on it", Status: view.Info,
+			Text: its + ", with nothing awake on it", Status: view.Info,
 			Detail: fmt.Sprintf("%d %s asked and none answered; a sleeping device and an empty slot say the same thing",
 				presence.Quiet, plural(presence.Quiet, "index", "indices")),
 		}
 	default:
-		return &view.Reason{Text: "a Logitech receiver, with nothing paired to it", Status: view.Info}
+		return &view.Reason{Text: its + ", with nothing paired to it", Status: view.Info}
 	}
 }
 

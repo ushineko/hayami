@@ -38,13 +38,36 @@ const PermissionDetail = core.PermissionDetail
 func GPUSensorDetail() string { return platform().GPUSensorDetail() }
 
 // BluetoothAbsent is the Bluetooth vendor's line on a desk with nothing on
-// it, where this platform's host has Bluetooth drivers; nothing where it has
-// none (spec 035).
+// it, where this platform's drivers read Bluetooth; nothing where none does
+// (spec 035, spec 048).
 func BluetoothAbsent() []string {
-	if len(platform().Bluetooth) == 0 {
-		return nil
+	for _, v := range vendors(platform().Platform) {
+		if v.name == "Bluetooth" {
+			return []string{v.absent()}
+		}
 	}
-	return []string{"no Bluetooth device with a battery"}
+	return nil
+}
+
+// Vendor is one vendor as the peripherals section asks it, for the tests
+// that pin the list (spec 048).
+type Vendor struct {
+	Name, Absent string
+	Quiet        bool
+	Drivers      []string
+}
+
+// Vendors is the vendor list for platform.
+func Vendors(platform string) []Vendor {
+	var out []Vendor
+	for _, v := range vendors(platform) {
+		names := make([]string, 0, len(v.drivers))
+		for _, d := range v.drivers {
+			names = append(names, d.Name())
+		}
+		out = append(out, Vendor{Name: v.name, Absent: v.absent(), Quiet: v.quiet, Drivers: names})
+	}
+	return out
 }
 
 // SetUsageRead replaces the gather, so a test can drive the usage section's

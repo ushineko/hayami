@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ushineko/sanshoku"
 	"github.com/ushineko/sanshoku/battery"
-	"github.com/ushineko/sanshoku/logitech"
 
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/view"
@@ -44,7 +43,7 @@ type peripheral struct {
 	says     []battery.Battery
 	openErr  error
 	readErr  error
-	presence logitech.Presence
+	presence sanshoku.Presence
 
 	opens, closes int
 }
@@ -59,7 +58,7 @@ func (d *peripheral) Batteries(context.Context) ([]battery.Battery, error) {
 	return d.says, d.readErr
 }
 
-func (d *peripheral) Presence() logitech.Presence { return d.presence }
+func (d *peripheral) Presence() sanshoku.Presence { return d.presence }
 
 // desk is what a fake scan finds: the devices on it, and a driver's own
 // failure to list, by driver name.
@@ -109,7 +108,7 @@ func (k *desk) section(c *clock) *panel.Peripherals {
 func receiver(says ...battery.Battery) *peripheral {
 	return &peripheral{
 		driver: "logitech", name: "Logitech USB Receiver", path: "/dev/hidraw10",
-		says: says, presence: logitech.Presence{Nodes: 1},
+		says: says, presence: sanshoku.Presence{Nodes: 1},
 	}
 }
 
@@ -503,7 +502,10 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 
 	sec := p.Section()
 	// Bluetooth's line is the platform's: it has none on Windows (spec 035).
-	assert.Equal(t, append([]string{
+	// Every vendor is named; their order is sanshoku's driver order (spec
+	// 048), which vendors_test.go pins for each platform, so it is not
+	// repeated here -- it was, and it broke on Linux when the order moved.
+	assert.ElementsMatch(t, append([]string{
 		"no Logitech receiver",
 		"no Razer device",
 		"no SteelSeries device",
@@ -683,7 +685,7 @@ func TestAnUnsupportedDeviceStepsAsideWhenTwoOthersAreDrawing(t *testing.T) {
 // receiverSays is what a section says about a receiver that read nothing and
 // reported the given Presence, which is the whole of what these sentences
 // turn on.
-func receiverSays(t *testing.T, presence logitech.Presence) []string {
+func receiverSays(t *testing.T, presence sanshoku.Presence) []string {
 	t.Helper()
 	rx := receiver()
 	rx.presence = presence
@@ -703,14 +705,14 @@ about, so each gets its own words.
 func TestTheReceiverSaysWhichOfTheseItIs(t *testing.T) {
 	for _, c := range []struct {
 		name     string
-		presence logitech.Presence
+		presence sanshoku.Presence
 		want     string
 	}{
-		{"a receiver with empty slots", logitech.Presence{Nodes: 1},
+		{"a receiver with empty slots", sanshoku.Presence{Nodes: 1},
 			"a Logitech receiver, with nothing paired to it"},
-		{"a receiver whose devices are quiet", logitech.Presence{Nodes: 1, Quiet: 2},
+		{"a receiver whose devices are quiet", sanshoku.Presence{Nodes: 1, Quiet: 2},
 			"a Logitech receiver, with nothing awake on it"},
-		{"a device whose HID++ 1.0 register would not read", logitech.Presence{Nodes: 1, TooOld: []string{"Logitech K800"}},
+		{"a device whose HID++ 1.0 register would not read", sanshoku.Presence{Nodes: 1, TooOld: []string{"Logitech K800"}, OldProtocol: "HID++ 1.0"},
 			"speaks HID++ 1.0"},
 	} {
 		assert.Contains(t, receiverSays(t, c.presence), c.want, c.name)
@@ -727,8 +729,8 @@ func TestTheReceiverSaysWhichOfTheseItIs(t *testing.T) {
 func TestQuietIndicesAreSummedAcrossReceivers(t *testing.T) {
 	a, b := receiver(), receiver()
 	b.path = "/dev/hidraw11"
-	a.presence = logitech.Presence{Nodes: 1, Quiet: 1}
-	b.presence = logitech.Presence{Nodes: 1, Quiet: 2}
+	a.presence = sanshoku.Presence{Nodes: 1, Quiet: 1}
+	b.presence = sanshoku.Presence{Nodes: 1, Quiet: 2}
 	p := (&desk{devices: []*peripheral{a, b}}).section(nil)
 	poll(t, p)
 
@@ -746,7 +748,7 @@ unpair. Naming it would put a device on the panel that was never on the desk —
 which this build has drawn once already, and once is enough.
 */
 func TestAQuietSlotIsCountedAndNeverNamed(t *testing.T) {
-	texts := receiverSays(t, logitech.Presence{Nodes: 1, Quiet: 1})
+	texts := receiverSays(t, sanshoku.Presence{Nodes: 1, Quiet: 1})
 
 	for _, text := range texts {
 		assert.NotContains(t, text, "Performance MX")
@@ -799,14 +801,19 @@ R3.5. A paired child's quiet is not counted again.
 A Unifying receiver's paired devices have nodes of their own, and each is asked
 there as well as on the receiver's node, which asked every index. The Unifying
 machine reported "8 indices" on a receiver that numbers six.
+
+Since sanshoku v0.1.9 the child's node reports no quiet slots of its own (its
+spec 014), so the de-duplication is the driver's and this test holds the sum:
+the receiver's two, and the child's none, are two (spec 048). Before, hayami
+dropped the child's count itself by reading its physical path.
 */
 func TestAChildNodesQuietIsNotCountedTwice(t *testing.T) {
 	rx := receiver()
 	rx.phys = "usb-0000:00:14.0-3/input2"
-	rx.presence = logitech.Presence{Nodes: 1, Quiet: 2}
+	rx.presence = sanshoku.Presence{Nodes: 1, Quiet: 2}
 	child := receiver()
 	child.name, child.path, child.phys = "Logitech K800", "/dev/hidraw7", "usb-0000:00:14.0-3/input2:1"
-	child.presence = logitech.Presence{Nodes: 1, Quiet: 1}
+	child.presence = sanshoku.Presence{Nodes: 1}
 	p := (&desk{devices: []*peripheral{rx, child}}).section(nil)
 
 	poll(t, p)

@@ -12,15 +12,13 @@ import (
 )
 
 /*
-Spec 035, moved here by spec 043. Windows' table asks no Bluetooth driver:
-sanshoku's read BlueZ and an L2CAP socket, neither of which Windows gives a
-program, and asked anyway they put a line about a Linux service into every
-doctor run.
+Spec 048. Windows' table names its platform, which is what the device
+drivers' descriptions are asked about: Bluetooth's say Linux, so none is asked
+here (spec 035; the panel's vendor tests hold the list).
 */
-func TestWindowsOffersNoBluetoothDriver(t *testing.T) {
+func TestWindowsTableNamesItsPlatform(t *testing.T) {
 	h := core.NewHost(core.HostConfig{})
 	assert.Equal(t, "windows", h.Platform)
-	assert.Empty(t, h.Bluetooth)
 }
 
 /*
