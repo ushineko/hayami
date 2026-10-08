@@ -385,6 +385,10 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: an answer from LibreHardwareMonitor that declares itself over the
+  8 MiB cap is refused before any of it is read, rather than read up to the
+  cap first; the request's timeout is its client's (#151). The test of the
+  cap no longer races the one-second timeout under a loaded test run.
 - **Change**: each section's settings are its own (spec 046). The settings
   file keeps them under `sectionSettings`, by section: the bandwidth
   section's interfaces, the cooler's LibreHardwareMonitor address. A file

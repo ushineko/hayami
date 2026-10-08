@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -224,9 +225,36 @@ func TestASlowServerIsNotWaitedOn(t *testing.T) {
 
 // R1. A body far past any sensor tree is refused rather than held.
 func TestAnOversizedAnswerIsRefused(t *testing.T) {
-	srv := serve(t, http.StatusOK, []byte(`{"Text":"`+strings.Repeat("x", 9<<20)+`"}`))
-	_, err := reader(srv.URL+"/data.json", core.LHMHost{}).CPUTemperature(t.Context())
-	assert.Contains(t, absence(t, err), "not a sensor tree")
+	// An answer that declares more than the cap is refused on its header.
+	// This one declares nine mebibytes and sends two bytes: read instead, it
+	// would end early and say so, so only the header can give this reason.
+	declared := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(9<<20))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	t.Cleanup(declared.Close)
+	_, err := patient(declared.URL + "/data.json").CPUTemperature(t.Context())
+	assert.Contains(t, absence(t, err), "not a sensor tree", "an answer declared over the cap was read")
+
+	// One that declares nothing (chunked) is read up to the cap and refused.
+	chunked := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		_, _ = w.Write([]byte(`{"Text":"` + strings.Repeat("x", 9<<20) + `"}`))
+	}))
+	t.Cleanup(chunked.Close)
+	_, err = patient(chunked.URL + "/data.json").CPUTemperature(t.Context())
+	assert.Contains(t, absence(t, err), "not a sensor tree", "an undeclared answer over the cap was read in full")
+}
+
+// patient is a reader whose client waits as long as a loaded test machine
+// needs: the size checks are about size, and a one-second timeout under a
+// full parallel run made them about time (#151).
+func patient(url string) *core.LHM {
+	l := reader(url, core.LHMHost{})
+	l.Client = &http.Client{Timeout: time.Minute}
+	return l
 }
 
 // R1. A cancelled poll is the caller's, not an absence to explain.
