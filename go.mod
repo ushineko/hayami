@@ -11,7 +11,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	github.com/ushineko/fynedesygn v0.1.85
-	github.com/ushineko/sanshoku v0.1.8
+	github.com/ushineko/sanshoku v0.1.9
 	golang.org/x/sys v0.48.0
 )
 

@@ -1,9 +1,6 @@
 package core
 
 import (
-	"errors"
-	"io/fs"
-
 	"github.com/ushineko/sanshoku"
 )
 
@@ -22,13 +19,11 @@ const PermissionDetail = "Windows refused to open it; another program may hold i
 PermissionAbsence is an Open refused for want of permission, as the absence a
 reader can act on. ok is false for any other failure.
 
-sanshoku.IsPermission asks for EACCES and EPERM, which on Windows are Go's own
-numbers and never what the system returns: ERROR_ACCESS_DENIED arrives as
-itself. fs.ErrPermission is what an Errno says it is on either system, so it is
-asked as well.
+sanshoku.IsPermission recognises ERROR_ACCESS_DENIED since sanshoku v0.1.9
+(its #39); before that hayami asked fs.ErrPermission itself (spec 035).
 */
 func PermissionAbsence(err error) (a *Absence, ok bool) {
-	if !sanshoku.IsPermission(err) && !errors.Is(err, fs.ErrPermission) {
+	if !sanshoku.IsPermission(err) {
 		return nil, false
 	}
 	return &Absence{Code: AbsencePermission, Detail: PermissionDetail, Actionable: true, Err: err}, true

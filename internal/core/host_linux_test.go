@@ -12,18 +12,12 @@ import (
 	"github.com/ushineko/hayami/internal/core"
 )
 
-// Spec 043. Linux's table reads the kernel's sensors under hwmon.Root, asks
-// BlueZ and Apple's accessory protocol for Bluetooth batteries, and tells a
-// device the logged-in user may not open about the udev rule.
+// Spec 043. Linux's table reads the kernel's sensors under hwmon.Root and tells
+// a device the logged-in user may not open about the udev rule. Which device
+// drivers read here is theirs to say (spec 048; the panel's vendor tests).
 func TestLinuxsTable(t *testing.T) {
 	h := core.NewHost(core.HostConfig{})
 	assert.Equal(t, "linux", h.Platform)
-
-	names := make([]string, 0, len(h.Bluetooth))
-	for _, d := range h.Bluetooth {
-		names = append(names, d.Name())
-	}
-	assert.Equal(t, []string{"apple", "bluez"}, names)
 
 	assert.Contains(t, h.CPUSensorDetail(), hwmon.Root)
 	for _, s := range hwmon.CPU {
