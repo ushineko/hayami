@@ -81,6 +81,15 @@ func (d pinDesk) build(t *testing.T) {
 // hhmm is a clock time, which depends on the machine's zone.
 var hhmm = regexp.MustCompile(`\b\d{2}:\d{2}\b`)
 
+// goType is the Go type encoding/json names in a decode error, which differs
+// between Go releases for the same input.
+var goType = regexp.MustCompile(`Go struct field \w+\.`)
+
+// maskUsage removes what depends on the machine or the toolchain from a detail.
+func maskUsage(s string) string {
+	return goType.ReplaceAllString(hhmm.ReplaceAllString(s, "HH:MM"), "Go struct field ")
+}
+
 // render is what the usage section says, as text: its windows and its reasons.
 func render(s view.Section, windows []view.UsageWindow) string {
 	var b strings.Builder
@@ -89,7 +98,7 @@ func render(s view.Section, windows []view.UsageWindow) string {
 			w.Account, w.Badge, w.Name, w.Fraction, w.ResetsAt.UTC().Format(time.RFC3339), w.Detail, w.Used, w.Limit, w.Severity)
 	}
 	for _, r := range s.Reasons {
-		fmt.Fprintf(&b, "- reason label=%q text=%q status=%d detail=%q\n", r.Label, r.Text, r.Status, hhmm.ReplaceAllString(r.Detail, "HH:MM"))
+		fmt.Fprintf(&b, "- reason label=%q text=%q status=%d detail=%q\n", r.Label, r.Text, r.Status, maskUsage(r.Detail))
 	}
 	return b.String()
 }

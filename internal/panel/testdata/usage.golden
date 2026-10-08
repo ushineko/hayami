@@ -21,4 +21,4 @@
 - window account="CX" badge="" name="5h" fraction=0.2500 resets=2030-01-01T11:00:00Z detail="" used="" limit="" severity=""
 - window account="CX" badge="" name="7d" fraction=0.6000 resets=2030-01-05T11:00:00Z detail="" used="" limit="" severity=""
 - window account="CX" badge="" name="limit" fraction=0.3300 resets=2030-01-03T11:00:00Z detail="400.50 / 1200.00" used="400.5" limit="1200" severity=""
-- reason label="CC work" text="unreadable reading" status=2 detail="reading the Claude usage payload: json: cannot unmarshal string into Go struct field claudePayload.five_hour.utilization of type float64"
+- reason label="CC work" text="unreadable reading" status=2 detail="reading the Claude usage payload: json: cannot unmarshal string into Go struct field five_hour.utilization of type float64"
