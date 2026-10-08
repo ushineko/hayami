@@ -68,10 +68,17 @@ func paritySections(t *testing.T) []view.Section {
 		{ID: "fan", Role: view.RoleFan, RPM: view.Some(900)},
 	}})
 
+	// One mouse on two links (spec 050): remembered through its dongle and live
+	// on its cable. Both shells draw the live one and name the other in the
+	// note.
 	peripherals := view.Peripherals(view.PeripheralsReading{Devices: []view.PeripheralReading{
-		{Name: "Basilisk Ultimate Dongle", Level: 48, Kind: view.KindMouse, Seen: now},
+		{Name: "Basilisk Ultimate Dongle", Level: 48, Kind: view.KindMouse, Stale: true, Seen: now.Add(-time.Hour)},
+		{Name: "Basilisk Ultimate", Level: 53, Kind: view.KindMouse, Charge: view.Filling, Since: now, Seen: now},
 		{Name: "F75", Level: 100, Kind: view.KindKeyboard, Seen: now},
 	}})
+	require.Equal(t, "Basilisk Ultimate", peripherals.Cells[0].Label, "the live mouse is not the one drawn")
+	require.Equal(t, "F75", peripherals.Cells[1].Label, "the remembered mouse took the right slot")
+	require.Contains(t, peripherals.Note, "Basilisk Ultimate Dongle")
 
 	usage := view.Usage(now, []view.UsageWindow{
 		{Account: "CC max", Name: "5h", Fraction: 0.10, ResetsAt: now.Add(2 * time.Hour)},

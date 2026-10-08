@@ -384,6 +384,14 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: one mouse on the peripherals card. The mouse slot shows a mouse that
+  is answering before one that is remembered, and every other mouse is named
+  in the note instead of taking the other slot: a mouse read through its
+  dongle and then charging on its cable showed twice (spec 050, #162). With
+  sanshoku v0.1.10 the Basilisk Ultimate on its cable is a mouse.
+
 ### 0.9.1 (2026-10-08)
 
 - **Fix**: the panel starts from the Start menu, a desktop shortcut and the

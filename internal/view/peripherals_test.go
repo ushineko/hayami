@@ -134,9 +134,11 @@ func TestTheMouseComesFirst(t *testing.T) {
 	assert.Contains(t, s.Note, "A Gamepad")
 }
 
-// AC15. Within a kind it is still by name, so a cell moves only when the
-// hardware does.
-func TestTwoDevicesOfOneKindAreOrderedByName(t *testing.T) {
+// AC15, as spec 050 left it. Two mice found at once: the mouse slot takes the
+// first by name, so a cell moves only when the hardware does, and the other
+// is named in the note. It used to take the right slot too; a desk has one
+// mouse, and two on the card was one mouse seen through two links.
+func TestTwoMiceShowOneTheOtherInTheNote(t *testing.T) {
 	first := reading("MX Master 3S", 40)
 	first.Kind = view.KindMouse
 	second := reading("G502 X PLUS", 78)
@@ -147,7 +149,49 @@ func TestTwoDevicesOfOneKindAreOrderedByName(t *testing.T) {
 
 	require.Len(t, s.Cells, 2)
 	assert.Equal(t, "G502 X PLUS", s.Cells[0].Label)
-	assert.Equal(t, "MX Master 3S", s.Cells[1].Label)
+	assert.Equal(t, view.NoDevice, s.Cells[1].Label, "a second mouse took the right slot")
+	assert.Contains(t, s.Note, "MX Master 3S")
+}
+
+/*
+Spec 050. The Basilisk Ultimate remembered through its dongle (spec 032), and
+live on its cable: one mouse on the card, the live one, and the remembered one
+in the note, never in the right slot. A headset beside them keeps the right
+slot.
+*/
+func TestALiveMouseTakesTheSlotFromARememberedOne(t *testing.T) {
+	now := time.Now()
+	remembered := reading("Basilisk Ultimate Dongle", 23)
+	remembered.Kind, remembered.Stale, remembered.Seen = view.KindMouse, true, now
+	live := reading("Basilisk Ultimate", 53)
+	live.Kind, live.Since = view.KindMouse, now.Add(-time.Hour)
+
+	shown, overflow := view.SelectPeripherals([]view.PeripheralReading{remembered, live})
+	require.Len(t, shown, 1)
+	assert.Equal(t, "Basilisk Ultimate", shown[0].Name, "the remembered mouse held the slot over the live one")
+	require.Len(t, overflow, 1)
+	assert.Equal(t, "Basilisk Ultimate Dongle", overflow[0].Name)
+
+	headset := reading("Arctis Nova Pro Wireless", 70)
+	headset.Kind, headset.Since = view.KindHeadset, now.Add(-2*time.Hour)
+	shown, overflow = view.SelectPeripherals([]view.PeripheralReading{remembered, live, headset})
+	require.Len(t, shown, 2)
+	assert.Equal(t, []string{"Basilisk Ultimate", "Arctis Nova Pro Wireless"}, []string{shown[0].Name, shown[1].Name})
+	assert.Equal(t, []string{"Basilisk Ultimate Dongle"}, []string{overflow[0].Name})
+}
+
+// Spec 050. With every mouse quiet, the slot shows the one heard last.
+func TestTheMouseHeardLastTakesTheSlotWhenNoneAnswers(t *testing.T) {
+	now := time.Now()
+	older := reading("G502 X PLUS", 60)
+	older.Kind, older.Stale, older.Seen = view.KindMouse, true, now.Add(-time.Hour)
+	newer := reading("Basilisk Ultimate", 40)
+	newer.Kind, newer.Stale, newer.Seen = view.KindMouse, true, now
+
+	shown, overflow := view.SelectPeripherals([]view.PeripheralReading{older, newer})
+	require.Len(t, shown, 1)
+	assert.Equal(t, "Basilisk Ultimate", shown[0].Name)
+	assert.Equal(t, "G502 X PLUS", overflow[0].Name)
 }
 
 // The state is said under every cell, not only the ones doing something
