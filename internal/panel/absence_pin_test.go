@@ -92,7 +92,7 @@ func reasonScenarios(t *testing.T) []scenario {
 	add("cooler: nothing at all", (&rig{cpuErr: errors.New("no hwmon")}).section())
 	add("cooler: a load and no temperature", (&rig{cpuErr: errors.New("no hwmon"), load: 3, hasLoad: true}).section())
 	for _, a := range []string{
-		"LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run",
+		"LibreHardwareMonitor is running but its web server is off: Options > Remote Web Server > Run",
 		"Windows needs LibreHardwareMonitor and its PawnIO driver for a CPU temperature: see README, On Windows",
 	} {
 		add("cooler: an absence the source explains", (&rig{cpuErr: &core.SensorAbsence{Detail: a}, load: 3, hasLoad: true}).section())

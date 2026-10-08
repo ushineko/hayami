@@ -229,7 +229,7 @@ type LHMHost struct {
 	// Running is whether a LibreHardwareMonitor process is running.
 	Running bool
 	// Task is whether LibreHardwareMonitor's startup task is registered: the
-	// one its own Options → Run On Windows Startup makes, and
+	// one its own Options > Run On Windows Startup makes, and
 	// install_windows.ps1 -WithSensors registers (spec 042).
 	Task bool
 }
@@ -276,13 +276,13 @@ func (l *LHM) CPUTemperature(ctx context.Context) (float64, error) {
 		switch {
 		case host.Running:
 			return 0, &Absence{Code: AbsenceLHMServerOff, Err: err,
-				Detail: "LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run"}
+				Detail: "LibreHardwareMonitor is running but its web server is off: Options > Remote Web Server > Run"}
 		case host.Task:
 			return 0, &Absence{Code: AbsenceLHMTaskStopped, Err: err,
-				Detail: "LibreHardwareMonitor is not running, though its startup task is registered: start it as administrator, or log off and on (Options → Minimize On Close keeps a closed window from quitting it)"}
+				Detail: "LibreHardwareMonitor is not running, though its startup task is registered: start it as administrator, or log off and on (Options > Minimize On Close keeps a closed window from quitting it)"}
 		case host.PawnIO:
 			return 0, &Absence{Code: AbsenceLHMNotRunning, Err: err,
-				Detail: "LibreHardwareMonitor is not running and does not start with Windows: start it as administrator and turn on Options → Run On Windows Startup, or run install_windows.ps1 -WithSensors"}
+				Detail: "LibreHardwareMonitor is not running and does not start with Windows: start it as administrator and turn on Options > Run On Windows Startup, or run install_windows.ps1 -WithSensors"}
 		default:
 			return 0, &Absence{Code: AbsenceLHMNotInstalled, Err: err,
 				Detail: "Windows needs LibreHardwareMonitor and its PawnIO driver for a CPU temperature: see README, On Windows"}

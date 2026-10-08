@@ -179,9 +179,9 @@ func TestNothingAnsweringIsToldApartByWhatTheMachineHas(t *testing.T) {
 		want string
 	}{
 		{core.LHMHost{}, "Windows needs LibreHardwareMonitor and its PawnIO driver"},
-		{core.LHMHost{PawnIO: true, Running: true}, "its web server is off: Options → Remote Web Server → Run"},
+		{core.LHMHost{PawnIO: true, Running: true}, "its web server is off: Options > Remote Web Server > Run"},
 		{core.LHMHost{Running: true}, "its web server is off"},
-		{core.LHMHost{PawnIO: true}, "does not start with Windows: start it as administrator and turn on Options → Run On Windows Startup, or run install_windows.ps1 -WithSensors"},
+		{core.LHMHost{PawnIO: true}, "does not start with Windows: start it as administrator and turn on Options > Run On Windows Startup, or run install_windows.ps1 -WithSensors"},
 		// Spec 042. A registered startup task is a LibreHardwareMonitor
 		// that was closed, not one that was never set to start.
 		{core.LHMHost{PawnIO: true, Task: true}, "though its startup task is registered: start it as administrator, or log off and on"},
