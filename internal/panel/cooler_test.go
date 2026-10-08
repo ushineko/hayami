@@ -523,3 +523,22 @@ func TestAProcessorWithNothingIsNoRowAndAReasonOnTheCard(t *testing.T) {
 	}
 	assert.False(t, find(t, sec, "no sensor").Aside)
 }
+
+// Spec 036. Where the source says which way the temperature is missing --
+// LibreHardwareMonitor's four -- that sentence is the reason's detail, kept
+// off the card when the row is drawn on its load.
+func TestTheSourcesOwnAccountOfAMissingTemperatureIsTheReason(t *testing.T) {
+	const detail = "LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run"
+	r := &rig{cpuErr: &core.SensorAbsence{Detail: detail, Err: core.ErrLHMUnreachable}, load: 12, hasLoad: true}
+	c := r.section()
+
+	_, err := c.Poll(context.Background())
+	require.NoError(t, err)
+
+	reason := find(t, c.Section(), "no sensor")
+	assert.Equal(t, detail, reason.Detail)
+	assert.True(t, reason.Aside, "a missing temperature is the normal state on Windows and is not said on the card")
+
+	assert.Equal(t, detail, panel.SensorDetail(r.cpuErr))
+	assert.NotEqual(t, detail, panel.SensorDetail(hwmon.ErrNoSensor), "an error with no account of its own gets the platform's")
+}

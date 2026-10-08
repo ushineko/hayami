@@ -3,6 +3,7 @@
 package panel
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -28,4 +29,20 @@ func gpuSensorDetail() string {
 		names = append(names, s.String())
 	}
 	return fmt.Sprintf("looked under %s and tried %s", hwmon.Root, strings.Join(append(names, "nvidia-smi"), ", "))
+}
+
+// cpuPackage is the first processor sensor this machine has, in hwmon.CPU's
+// order.
+func cpuPackage() (float64, error) {
+	_, v, err := hwmon.First(hwmon.Root, hwmon.CPU)
+	if err != nil {
+		return 0, fmt.Errorf("reading the processor temperature: %w", err)
+	}
+	return v, nil
+}
+
+// cpuTemperature is the processor's temperature from the kernel's sensors.
+// The LibreHardwareMonitor address is a Windows setting and is not used here.
+func cpuTemperature(string) func(context.Context) (float64, error) {
+	return func(context.Context) (float64, error) { return cpuPackage() }
 }
