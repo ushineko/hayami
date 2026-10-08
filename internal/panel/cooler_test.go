@@ -351,25 +351,6 @@ func TestAnUnsupportedCoolerIsNamed(t *testing.T) {
 	assert.Equal(t, view.Info, r.Status)
 }
 
-// R3.8. A processor this build cannot find lists every sensor it looked for,
-// not the last one tried: "no coretemp/Package id 0" on an AMD machine sent
-// somebody looking for an Intel driver that was never going to be there.
-func TestAProcessorWithNoSensorNamesEverySensorLookedFor(t *testing.T) {
-	r, _ := withKraken(38.9, 2650)
-	r.cpuErr = hwmon.ErrNoSensor
-	c := r.section()
-
-	poll(t, c)
-
-	reason := find(t, c.Section(), "no sensor")
-	assert.Equal(t, "CPU", reason.Label)
-	assert.Equal(t, view.Info, reason.Status)
-	for _, s := range hwmon.CPU {
-		assert.Contains(t, reason.Detail, s.String())
-	}
-	assert.Contains(t, reason.Detail, hwmon.Root)
-}
-
 // A cooler with both readings says nothing extra. A card that explained itself
 // while showing its numbers would be a panel talking about itself.
 func TestACoolerThatReadsEverythingSaysNothingExtra(t *testing.T) {
@@ -505,4 +486,40 @@ func TestANameOnceHeardIsKept(t *testing.T) {
 	poll(t, c)
 
 	labelled(t, c.Section(), "RTX 3080")
+}
+
+// Spec 034. A processor with a load and no temperature -- every Windows
+// machine -- is a row of its own, named, and the reason the temperature is
+// missing is kept off the card: the row already says what it can.
+func TestAProcessorWithALoadAndNoTemperatureIsARow(t *testing.T) {
+	r := &rig{cpuErr: hwmon.ErrNoSensor, load: 12, hasLoad: true}
+	c := r.section()
+	panel.SetCPUName(c, func() string { return "AMD Ryzen 5 2600X Six-Core Processor" })
+
+	drawn, err := c.Poll(context.Background())
+	require.NoError(t, err)
+	sec := c.Section()
+
+	assert.True(t, drawn, "a load alone is a section worth drawing")
+	row := labelled(t, sec, view.NameLabel("CPU", "AMD Ryzen 5 2600X Six-Core Processor"))
+	assert.Equal(t, " 12 %      ", row.Value, "the temperature's column is kept, empty")
+	assert.Equal(t, "AMD Ryzen 5 2600X Six-Core Processor", c.Data().(view.CoolerReading).CPUName)
+	reason := find(t, sec, "no sensor")
+	assert.True(t, reason.Aside, "a row with a load is not told on the card that it has no temperature")
+}
+
+// Spec 034. With neither a load nor a temperature there is no row, and the
+// reason is the only word about the processor, so it stays on the card.
+func TestAProcessorWithNothingIsNoRowAndAReasonOnTheCard(t *testing.T) {
+	r, _ := withKraken(38.9, 2650)
+	r.cpuErr = hwmon.ErrNoSensor
+	c := r.section()
+
+	poll(t, c)
+	sec := c.Section()
+
+	for _, row := range sec.Rows {
+		assert.NotEqual(t, "CPU", row.Label)
+	}
+	assert.False(t, find(t, sec, "no sensor").Aside)
 }

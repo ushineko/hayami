@@ -18,8 +18,9 @@ import (
 const ProcStatPath = "/proc/stat"
 
 /*
-CPULoad is the processor's utilisation, from /proc/stat. hotaru's
-readings.CPU, which is the source of record for this reading.
+CPULoad is the processor's utilisation, from /proc/stat, or from
+GetSystemTimes on Windows (spec 034). hotaru's readings.CPU, which is the
+source of record for this reading.
 
 The kernel counts jiffies since boot, so utilisation is a rate and needs two
 samples to exist at all. Reporting the since-boot average instead would be a
@@ -33,8 +34,13 @@ poll has no load, and a command that polls once -- `--once`, `doctor`,
 feel slower for it. Later calls difference against the previous one.
 */
 type CPULoad struct {
-	mu                 sync.Mutex
-	path               string
+	mu sync.Mutex
+
+	// sample reads the counters: /proc/stat on Linux, GetSystemTimes on
+	// Windows (spec 034), or a test's. Busy and idle are in whatever unit
+	// the source counts; only their ratio is used.
+	sample func() (busy, idle float64, err error)
+
 	lastBusy, lastIdle float64
 	seen               bool
 
@@ -48,7 +54,12 @@ const CPUWarmup = 200 * time.Millisecond
 
 // NewCPULoad reads the counters at path: ProcStatPath, or a test's file.
 func NewCPULoad(path string) *CPULoad {
-	return &CPULoad{path: path, wait: func() { time.Sleep(CPUWarmup) }}
+	return newCPULoad(func() (float64, float64, error) { return procStat(path) })
+}
+
+// newCPULoad differences whatever sample reads.
+func newCPULoad(sample func() (busy, idle float64, err error)) *CPULoad {
+	return &CPULoad{sample: sample, wait: func() { time.Sleep(CPUWarmup) }}
 }
 
 // Load is the percentage busy since the previous call, and whether there is
@@ -60,7 +71,7 @@ func (c *CPULoad) Load() (float64, bool) {
 	defer c.mu.Unlock()
 
 	if !c.seen {
-		busy, idle, err := procStat(c.path)
+		busy, idle, err := c.sample()
 		if err != nil {
 			return 0, false
 		}
@@ -68,7 +79,7 @@ func (c *CPULoad) Load() (float64, bool) {
 		c.wait()
 	}
 
-	busy, idle, err := procStat(c.path)
+	busy, idle, err := c.sample()
 	if err != nil {
 		return 0, false
 	}
@@ -151,19 +162,25 @@ type Graphics struct {
 }
 
 /*
-GraphicsReader reads the card by whichever route the machine has: hwmon and
-the AMD busy file where the kernel has a driver, nvidia-smi where it does not.
+GraphicsReader reads the card by whichever route the machine has: D3DKMT and
+the GPU Engine counters on Windows, hwmon and the AMD busy file where the Linux
+kernel has a driver, nvidia-smi where neither answers.
 
 **nvidia-smi is the one subprocess the direct-access rule allows here.**
 Devices are read directly, through sanshoku, and no subprocess reads one; but
 NVIDIA's proprietary driver registers no hwmon and no busy file, and what it
 does offer is NVML, a vendor library and not a kernel node. Reaching it from
 Go is cgo, which the terminal panel is built without. hotaru has made the same
-call at a two-second cadence for months; here it is every five.
+call at a two-second cadence for months; here it is every five. On Windows it
+is only a fallback: D3DKMT reports any vendor's card without a process, and
+nvidia-smi is run only for what it left out.
 
 Each field is replaceable, so a test reads a tree it built and runs no tool.
 */
 type GraphicsReader struct {
+	// Native is the platform's own report of the card: D3DKMT and PDH on
+	// Windows (spec 034), nil elsewhere. What it gives is not asked again.
+	Native func(context.Context) Graphics
 	// Root is the hwmon tree: hwmon.Root, or a test's.
 	Root string
 	// Busy is the pattern the AMD busy file is looked for under.
@@ -184,27 +201,35 @@ type GraphicsReader struct {
 
 // NewGraphicsReader reads this machine's card.
 func NewGraphicsReader() *GraphicsReader {
-	return &GraphicsReader{Root: hwmon.Root, Busy: BusyGlob, SMI: NvidiaSMI, PCIIDs: PCIIDsPath}
+	return &GraphicsReader{Native: nativeGraphics(), Root: hwmon.Root, Busy: BusyGlob, SMI: NvidiaSMI, PCIIDs: PCIIDsPath}
 }
 
-// Read is the card's temperature and load. The kernel first; nvidia-smi only
-// for what the kernel did not say, and once for both numbers. Nothing here is
-// an error: a card that cannot be read is absent, and absence is the answer.
+// Read is the card's temperature and load. The platform's own report first
+// (D3DKMT and PDH on Windows), the kernel next, and nvidia-smi only for what
+// neither said, once for both numbers. Nothing here is an error: a card that
+// cannot be read is absent, and absence is the answer.
 func (g *GraphicsReader) Read(ctx context.Context) Graphics {
 	var out Graphics
-	device := ""
-	if sensor, t, err := hwmon.First(g.Root, hwmon.GPU); err == nil {
-		out.Temperature, out.HasTemperature = t, true
-		device = chipDevice(g.Root, sensor.Chip)
+	if g.Native != nil {
+		out = g.Native(ctx)
 	}
-	if load, path, ok := busyIn(g.Busy); ok {
-		out.Load, out.HasLoad = load, true
-		if device == "" {
-			// The busy file sits in the card's own device directory.
-			device = filepath.Dir(path)
+	device := ""
+	if !out.HasTemperature {
+		if sensor, t, err := hwmon.First(g.Root, hwmon.GPU); err == nil {
+			out.Temperature, out.HasTemperature = t, true
+			device = chipDevice(g.Root, sensor.Chip)
 		}
 	}
-	if device != "" {
+	if !out.HasLoad {
+		if load, path, ok := busyIn(g.Busy); ok {
+			out.Load, out.HasLoad = load, true
+			if device == "" {
+				// The busy file sits in the card's own device directory.
+				device = filepath.Dir(path)
+			}
+		}
+	}
+	if out.Name == "" && device != "" {
 		out.Name = g.kernelName(device)
 	}
 	if (out.HasTemperature && out.HasLoad) || g.SMI == nil {

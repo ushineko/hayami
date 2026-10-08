@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -88,9 +87,9 @@ func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}}
 // kernel's processor sensors.
 func NewCooler() *Cooler {
 	c := newCooler(DeviceScan, cpuPackage)
-	c.load = core.NewCPULoad(core.ProcStatPath).Load
+	c.load = core.HostCPULoad().Load
 	c.graphics = core.NewGraphicsReader().Read
-	c.cpuName = func() string { return core.CPUName(core.CPUInfoPath) }
+	c.cpuName = core.HostCPUName
 	return c
 }
 
@@ -120,27 +119,6 @@ func cpuPackage() (float64, error) {
 	return v, nil
 }
 
-// cpuSensors names every sensor looked for, for the reason given when none
-// reads: "no coretemp/Package id 0" on an AMD machine sent somebody looking
-// for an Intel driver that was never going to be there.
-func cpuSensors() string {
-	names := make([]string, 0, len(hwmon.CPU))
-	for _, s := range hwmon.CPU {
-		names = append(names, s.String())
-	}
-	return strings.Join(names, ", ")
-}
-
-// gpuSensors is every route to the card's temperature, for the reason given
-// when none answers.
-func gpuSensors() string {
-	names := make([]string, 0, len(hwmon.GPU)+1)
-	for _, s := range hwmon.GPU {
-		names = append(names, s.String())
-	}
-	return strings.Join(append(names, "nvidia-smi"), ", ")
-}
-
 // Key names the section.
 func (c *Cooler) Key() string { return "cooler" }
 
@@ -160,17 +138,24 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	var out view.CoolerReading
 	var reasons []view.Reason
 
+	out.CPULoad, out.HasCPULoad = c.load()
 	if v, err := c.sensor(); err == nil {
 		out.CPU, out.HasCPU = v, true
-		out.CPUName = c.processorName()
 	} else {
+		// Aside where the row is drawn anyway, on its load (spec 034): on
+		// Windows that is every machine, and a line under the row saying the
+		// temperature is missing would be the card talking about itself.
+		// Where there is no row it is the only word about the processor, and
+		// is said on the card.
 		reasons = append(reasons, view.Reason{
-			Label: "CPU", Text: "no sensor", Status: view.Info,
+			Label: "CPU", Text: "no sensor", Status: view.Info, Aside: out.HasCPULoad,
 			// Every sensor looked for, not the last one tried.
-			Detail: fmt.Sprintf("looked under %s for %s", hwmon.Root, cpuSensors()),
+			Detail: cpuSensorDetail(),
 		})
 	}
-	out.CPULoad, out.HasCPULoad = c.load()
+	if out.HasCPU || out.HasCPULoad {
+		out.CPUName = c.processorName()
+	}
 
 	if g := c.graphics(ctx); g.HasTemperature {
 		out.GPU, out.HasGPU = g.Temperature, true
@@ -182,7 +167,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		// itself. Doctor and the hover note still say it.
 		reasons = append(reasons, view.Reason{
 			Text: "no GPU sensor", Status: view.Info, Aside: true,
-			Detail: fmt.Sprintf("looked under %s and tried %s", hwmon.Root, gpuSensors()),
+			Detail: gpuSensorDetail(),
 		})
 	}
 
@@ -339,7 +324,7 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 	// read the temperature and not the name (nvidia-smi's answer cut short)
 	// should not put "GPU" back for five seconds and move nothing but the
 	// reader's attention.
-	out.CPUName = keepName(out.HasCPU, out.CPUName, c.reading.CPUName)
+	out.CPUName = keepName(out.HasCPU || out.HasCPULoad, out.CPUName, c.reading.CPUName)
 	out.GPUName = keepName(out.HasGPU, out.GPUName, c.reading.GPUName)
 	out.CoolerName = keepName(out.HasLiquid, out.CoolerName, c.reading.CoolerName)
 
@@ -360,7 +345,7 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 	out.GPUTrail = c.gpu.Mean()
 
 	c.reading = out
-	return out.HasCPU || out.HasGPU || out.HasLiquid
+	return out.HasCPU || out.HasCPULoad || out.HasGPU || out.HasLiquid
 }
 
 // keepName is a row's name, or the one it had when this poll brought none.

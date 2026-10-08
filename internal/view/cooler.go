@@ -86,11 +86,14 @@ func Cooler(r CoolerReading) Section {
 	// Each row is labelled with the part it reads (spec 031): a machine has
 	// one processor, but which one is a fact the panel knows, and the two
 	// desks it runs on differ.
-	if r.HasCPU {
-		s.Rows = append(s.Rows, named(processor("CPU", r.CPULoad, r.HasCPULoad, r.CPU, unit), "CPU", r.CPUName))
+	//
+	// The processor's row is drawn on its load alone where there is no
+	// temperature to read (spec 034).
+	if r.HasCPU || r.HasCPULoad {
+		s.Rows = append(s.Rows, named(processor("CPU", r.CPULoad, r.HasCPULoad, r.CPU, r.HasCPU, unit), "CPU", r.CPUName))
 	}
 	if r.HasGPU {
-		row := named(processor("GPU", r.GPULoad, r.HasGPULoad, r.GPU, unit), "GPU", r.GPUName)
+		row := named(processor("GPU", r.GPULoad, r.HasGPULoad, r.GPU, true, unit), "GPU", r.GPUName)
 		row.Stale = r.GPUStale
 		s.Rows = append(s.Rows, row)
 	}
@@ -135,11 +138,20 @@ The load is padded to LoadWidth and, before it has arrived, is that many
 spaces. The temperature stays where it is either way, in the column the
 coolant's is in, and the row is as wide on the first poll as on the second: a
 row that grew five seconds after the window opened would move the panel.
+
+A processor with a load and no temperature -- every Windows machine, which
+offers none without a kernel driver (spec 034) -- has its temperature and its
+unit as spaces of their own widths, so the load stays in the column the
+graphics card's is in. Not Blank: "--" says a value is on its way, and this
+one is not coming.
 */
-func processor(label string, load float64, hasLoad bool, v float64, unit int) Row {
+func processor(label string, load float64, hasLoad bool, v float64, hasTemp bool, unit int) Row {
 	l := strings.Repeat(" ", LoadWidth)
 	if hasLoad {
 		l = fmt.Sprintf("%3.0f %%", load)
+	}
+	if !hasTemp {
+		return Row{Label: label, Value: l + " " + strings.Repeat(" ", NumberWidth), Unit: PadUnit("", unit), Status: Info}
 	}
 	return Row{Label: label, Value: l + " " + Quantity(v), Unit: PadUnit("°C", unit), Status: Info}
 }
