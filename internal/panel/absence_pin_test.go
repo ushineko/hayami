@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ushineko/sanshoku"
 	"github.com/ushineko/sanshoku/battery"
-	"github.com/ushineko/sanshoku/logitech"
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
@@ -127,11 +126,11 @@ func reasonScenarios(t *testing.T) []scenario {
 		(&desk{devices: []*peripheral{{driver: "razer", name: "Razer Dock", path: "/dev/hidraw2", readErr: errors.New("io")}}}).section(nil))
 	add("peripherals: a dock answering nothing", (&desk{devices: []*peripheral{sleepingDock()}}).section(nil))
 	quiet := receiver()
-	quiet.presence = logitech.Presence{Nodes: 1, Quiet: 2}
+	quiet.presence = sanshoku.Presence{Nodes: 1, Quiet: 2}
 	add("peripherals: a receiver with nothing awake", (&desk{devices: []*peripheral{quiet}}).section(nil))
 	add("peripherals: a receiver with nothing paired", (&desk{devices: []*peripheral{receiver()}}).section(nil))
 	old := receiver()
-	old.presence = logitech.Presence{Nodes: 1, TooOld: []string{"Logitech K800"}}
+	old.presence = sanshoku.Presence{Nodes: 1, TooOld: []string{"Logitech K800"}, OldProtocol: "HID++ 1.0"}
 	add("peripherals: a device too old to read", (&desk{devices: []*peripheral{old}}).section(nil))
 
 	// Usage: the reasons a failed gather gives.

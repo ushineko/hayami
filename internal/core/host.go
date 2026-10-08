@@ -2,8 +2,6 @@ package core
 
 import (
 	"context"
-
-	"github.com/ushineko/sanshoku"
 )
 
 /*
@@ -18,8 +16,9 @@ anywhere else. The panel takes a Host through its Env and has no build tags;
 a test builds one of its own.
 */
 type Host struct {
-	// Platform names the table, for a test and a log line: "linux",
-	// "windows", or "other".
+	// Platform names the table, for a test and a log line, and is the system
+	// a device driver's description is asked about (spec 048: sanshoku's
+	// Description.On): "linux", "windows", or "other".
 	Platform string
 
 	// CPUTemperature is the processor's temperature, in degrees. CPUMissing
@@ -46,10 +45,6 @@ type Host struct {
 	// Permission is an Open refused for want of permission, as the absence a
 	// reader can act on, with this platform's advice.
 	Permission func(error) (*Absence, bool)
-
-	// Bluetooth are the drivers that read Bluetooth batteries here; none
-	// where the platform gives hayami no way to (spec 035).
-	Bluetooth []sanshoku.Driver
 }
 
 // HostConfig is what a Host is built with from the settings.

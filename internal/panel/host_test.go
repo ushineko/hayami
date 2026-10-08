@@ -9,8 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/ushineko/sanshoku"
-	"github.com/ushineko/sanshoku/apple"
 	"github.com/ushineko/sanshoku/bluez"
 
 	"github.com/ushineko/hayami/internal/core"
@@ -23,7 +21,7 @@ import (
 // accounts say which they are (spec 043).
 func fakeHost(cpu ...core.Provider[float64]) *core.Host {
 	return &core.Host{
-		Platform:       "test",
+		Platform:       "windows",
 		CPUTemperature: core.Chain[float64]{Providers: cpu},
 		CPUMissing: func(tried []string, err error) *core.Absence {
 			return &core.Absence{Code: core.AbsenceCPUSensor, Detail: "tried " + joinNames(tried), Err: err}
@@ -95,7 +93,7 @@ func TestNoBluezIsNoBluetoothAdapter(t *testing.T) {
 	// wrapping sanshoku.ErrUnavailable, which Scan does not drop.
 	noBluez := fmt.Errorf("bluez: %w", bluez.ErrNoBlueZ)
 	h := fakeHost()
-	h.Bluetooth = []sanshoku.Driver{apple.Driver{}, bluez.Driver{}}
+	h.Platform = "linux" // where the Bluetooth drivers say they read
 	k := &desk{failing: map[string]error{"bluez": noBluez, "apple": noBluez}}
 	p := panel.NewPeripheralsOn(h, k.scan, time.Now)
 
@@ -131,23 +129,24 @@ func TestADeviceThatMayNotBeOpenedIsToldTheHostsAdvice(t *testing.T) {
 }
 
 /*
-Spec 043. Which Bluetooth drivers the peripherals ask is the host's to say: a
-host with none asks none and has no Bluetooth line (Windows, spec 035); a host
-with some asks them as one vendor.
+Spec 048 (was spec 043's host field). Whether Bluetooth is asked is the
+drivers' to say, by the systems they read on, asked about the host's
+platform: Windows asks none and has no Bluetooth line (spec 035); Linux asks
+BlueZ and Apple's accessory protocol as one vendor.
 */
-func TestTheHostSaysWhetherBluetoothIsAsked(t *testing.T) {
+func TestThePlatformSaysWhetherBluetoothIsAsked(t *testing.T) {
 	noBluez := errors.New("bluez: the bus went away")
 	k := &desk{failing: map[string]error{"bluez": noBluez}}
 
 	without := panel.NewPeripheralsOn(fakeHost(), k.scan, time.Now)
 	_, err := without.Poll(t.Context())
-	require.NoError(t, err, "a host with no Bluetooth drivers asked one")
+	require.NoError(t, err, "a Windows host asked a Bluetooth driver")
 	for _, text := range reasonTexts(without.Section()) {
 		assert.NotContains(t, text, "Bluetooth")
 	}
 
 	h := fakeHost()
-	h.Bluetooth = []sanshoku.Driver{bluez.Driver{}}
+	h.Platform = "linux"
 	with := panel.NewPeripheralsOn(h, k.scan, time.Now)
 	_, err = with.Poll(t.Context())
 	require.ErrorIs(t, err, noBluez, "the host's Bluetooth driver was not asked")

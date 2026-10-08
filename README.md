@@ -397,6 +397,12 @@ MIT. See [LICENSE](LICENSE).
   the panel's table says how its accounts are found and fetched; the branches
   on Codex and Claude are gone. Nothing the section shows changes, held by a
   pinned file written before the change, and the cache's names are untouched.
+- **Change**: the peripherals' vendors come from sanshoku's drivers (spec 048,
+  sanshoku v0.1.9). Each driver describes itself -- its name, what it finds,
+  whether a silent device is listed, the systems it reads on -- and a
+  receiver's presence is a capability of its own, so hayami imports no driver
+  package and a device added to sanshoku needs no change here. On an empty
+  Linux card the Bluetooth line now comes before AULA's, in sanshoku's order.
 - **Change**: the cooler is a list of probes (spec 044). A reading is
   whatever parts the machine has -- a processor, a graphics card, a coolant,
   a fan and a pump -- each with an ID and its values present or not, and the

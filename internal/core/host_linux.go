@@ -1,16 +1,14 @@
 package core
 
 import (
-	"github.com/ushineko/sanshoku"
-	"github.com/ushineko/sanshoku/apple"
-	"github.com/ushineko/sanshoku/bluez"
 	"github.com/ushineko/sanshoku/hwmon"
 )
 
 // NewHost is Linux's table (spec 043): the kernel's sensors for the processor
 // and the card, nvidia-smi behind them, /proc for the load and the counters,
-// nl80211 for Wi-Fi, the udev rule as the advice for a device that would not
-// open, and BlueZ and Apple's accessory protocol for Bluetooth batteries.
+// nl80211 for Wi-Fi, and the udev rule as the advice for a device that would
+// not open. BlueZ and Apple's accessory protocol read Bluetooth batteries here
+// because their descriptions say they read on Linux (spec 048).
 func NewHost(HostConfig) Host {
 	return Host{
 		Platform:       "linux",
@@ -23,6 +21,5 @@ func NewHost(HostConfig) Host {
 		Counters:       ReadCounters,
 		Wireless:       ReadWireless,
 		Permission:     PermissionAbsence,
-		Bluetooth:      []sanshoku.Driver{apple.Driver{}, bluez.Driver{}},
 	}
 }
