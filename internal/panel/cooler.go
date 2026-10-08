@@ -86,7 +86,7 @@ func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}}
 // processor's temperature: the kernel's sensors on Linux, LibreHardwareMonitor
 // at lhm on Windows (spec 036; empty is its default address).
 func NewCooler(lhm string) *Cooler {
-	c := newCooler(DeviceScan, cpuTemperature(lhm))
+	c := newCooler(DeviceScan, core.HostCPUTemperature(lhm))
 	c.load = core.HostCPULoad().Load
 	c.graphics = core.NewGraphicsReader().Read
 	c.cpuName = core.HostCPUName
@@ -137,12 +137,12 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		// temperature is missing would be the card talking about itself.
 		// Where there is no row it is the only word about the processor, and
 		// is said on the card.
-		reasons = append(reasons, view.Reason{
+		reasons = append(reasons, reason(view.Reason{
 			Label: "CPU", Text: "no sensor", Status: view.Info, Aside: out.HasCPULoad,
 			// Every sensor looked for, not the last one tried -- or, where
 			// the source can say which way it is missing, that (spec 036).
-			Detail: sensorDetail(err),
-		})
+			Detail: core.CPUSensorDetail(),
+		}, err))
 	}
 	if out.HasCPU || out.HasCPULoad {
 		out.CPUName = c.processorName()
@@ -158,7 +158,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		// itself. Doctor and the hover note still say it.
 		reasons = append(reasons, view.Reason{
 			Text: "no GPU sensor", Status: view.Info, Aside: true,
-			Detail: gpuSensorDetail(),
+			Detail: core.GPUSensorDetail(),
 		})
 	}
 
@@ -197,9 +197,9 @@ func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, string, []view.Re
 		// section's own business, not only the log's. The error goes to the
 		// caller too, which logs it once.
 		errs = append(errs, err)
-		reasons = append(reasons, view.Reason{
-			Text: "the cooler would not answer", Status: view.Warn, Detail: err.Error(),
-		})
+		reasons = append(reasons, reason(view.Reason{
+			Text: "the cooler would not answer", Status: view.Warn,
+		}, err))
 	}
 
 	c.held.begin()
@@ -362,15 +362,4 @@ func (c *Cooler) Data() any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reading
-}
-
-// sensorDetail is what the reason for a missing processor temperature says:
-// the source's own account where it gives one -- LibreHardwareMonitor can say
-// which of four ways it is missing -- and every sensor looked for otherwise.
-func sensorDetail(err error) string {
-	var absent *core.SensorAbsence
-	if errors.As(err, &absent) {
-		return absent.Detail
-	}
-	return cpuSensorDetail()
 }

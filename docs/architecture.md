@@ -105,18 +105,20 @@ shells contain no build tags and no `runtime.GOOS` checks. They take what the
 platform offers from `core`.
 
 Not yet consistent: some `_other.go` files assume Linux (`counters_other.go`,
-`graphics_other.go`), and `panel` has two platform file pairs (`sensors_*`,
-`platform_*`). New code follows the rule. The existing files move in phase 2.
+`graphics_other.go`), and `panel` still has one platform file pair
+(`platform_*`, the Bluetooth vendor). New code follows the rule. The existing
+files move in phase 2.
 
 ### 6. Absence is a value, not a sentence
 
 A reading that is missing is normal: the hardware isn't there, a device is
 asleep, a driver isn't installed, permission was refused. The code that finds
-the gap returns a typed absence with a code, the text a person reads, its
-detail, and whether a person can act on it. One helper in `panel` turns any
+the gap returns a typed absence (`core.Absence`, `internal/core/absence.go`)
+with a code, the text a person reads, its detail, and whether a person can act
+on it. One helper, `panel.reason` (`internal/panel/reason.go`), turns any
 error into a `view.Reason`. Decisions, such as whether a reason stays on the
 card or what advice to give, are made on the code. Comparing reason text is
-not allowed (#128).
+not allowed.
 
 A reason that is the normal state of a platform, such as no processor
 temperature on Windows without LibreHardwareMonitor, is an aside: it shows
@@ -205,7 +207,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Drivers describe themselves; hayami derives its vendor list | 1 | Planned (phase 3) | |
 | Section registry | 3 | In progress | #126 |
 | Threshold bands | 7 | In place | #127 |
-| Typed absences, one reason helper | 6 | In progress | #128 |
+| Typed absences, one reason helper | 6 | In place | #128 |
 | One window-test harness, rows found by label | Testing | In progress | #129 |
 | `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | Planned (phase 2) | |
 | Cooler and link readings as lists of probes | 4 | Planned (phase 2) | |

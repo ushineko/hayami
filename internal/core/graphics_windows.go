@@ -311,3 +311,9 @@ func (e *engineLoad) values() map[string]float64 {
 	}
 	return nil
 }
+
+// GPUSensorDetail is every route GraphicsReader took to the card's
+// temperature on Windows, for the reason given when none answers.
+func GPUSensorDetail() string {
+	return "asked D3DKMT and the GPU Engine counters, and tried nvidia-smi"
+}

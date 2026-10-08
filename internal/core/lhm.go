@@ -238,18 +238,8 @@ func NewLHM(url string) *LHM {
 	return &LHM{URL: url, Client: &http.Client{Timeout: LHMTimeout}, Host: ProbeLHMHost}
 }
 
-// SensorAbsence is a temperature that is not there, and what a person would do
-// about it. Detail is the sentence the hover note and doctor show.
-type SensorAbsence struct {
-	Detail string
-	Err    error
-}
-
-func (a *SensorAbsence) Error() string { return a.Detail }
-func (a *SensorAbsence) Unwrap() error { return a.Err }
-
 /*
-CPUTemperature is the processor's temperature, or a SensorAbsence saying which
+CPUTemperature is the processor's temperature, or an Absence saying which
 of the ways it can be missing this is.
 
 A server that does not answer is told apart by what the machine has: a
@@ -262,7 +252,7 @@ func (l *LHM) CPUTemperature(ctx context.Context) (float64, error) {
 		if v, _, ok := LHMCPUTemperature(root); ok {
 			return v, nil
 		}
-		return 0, &SensorAbsence{Err: ErrLHMNoSensor,
+		return 0, &Absence{Code: AbsenceLHMNoSensor, Err: ErrLHMNoSensor,
 			Detail: "LibreHardwareMonitor has no CPU temperature: is PawnIO installed? LibreHardwareMonitor offers it on first start"}
 	}
 	if ctx.Err() != nil {
@@ -270,7 +260,7 @@ func (l *LHM) CPUTemperature(ctx context.Context) (float64, error) {
 	}
 	switch {
 	case errors.Is(err, ErrLHMAuth):
-		return 0, &SensorAbsence{Err: err,
+		return 0, &Absence{Code: AbsenceLHMAuth, Err: err,
 			Detail: "LibreHardwareMonitor's web server asks for a password, which hayami does not send: turn its authentication off"}
 	case errors.Is(err, ErrLHMUnreachable):
 		host := LHMHost{}
@@ -279,16 +269,16 @@ func (l *LHM) CPUTemperature(ctx context.Context) (float64, error) {
 		}
 		switch {
 		case host.Running:
-			return 0, &SensorAbsence{Err: err,
+			return 0, &Absence{Code: AbsenceLHMServerOff, Err: err,
 				Detail: "LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run"}
 		case host.PawnIO:
-			return 0, &SensorAbsence{Err: err,
+			return 0, &Absence{Code: AbsenceLHMNotRunning, Err: err,
 				Detail: "LibreHardwareMonitor is not running: start it as administrator (Options → Run On Windows Startup keeps it running)"}
 		default:
-			return 0, &SensorAbsence{Err: err,
+			return 0, &Absence{Code: AbsenceLHMNotInstalled, Err: err,
 				Detail: "Windows needs LibreHardwareMonitor and its PawnIO driver for a CPU temperature: see README, On Windows"}
 		}
 	default:
-		return 0, &SensorAbsence{Err: err, Detail: "LibreHardwareMonitor did not answer as expected: " + err.Error()}
+		return 0, &Absence{Code: AbsenceLHMUnexpected, Err: err, Detail: "LibreHardwareMonitor did not answer as expected: " + err.Error()}
 	}
 }
