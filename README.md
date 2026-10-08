@@ -384,6 +384,14 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: the panel starts from the Start menu, a desktop shortcut and the
+  `-Autostart` login shortcut on Windows. cobra took any program Explorer
+  starts for a console tool someone double-clicked: it printed a note, waited
+  five seconds and exited, and a windowed program has nowhere to show the note,
+  so a click gave an hourglass and then nothing (#159).
+
 ### 0.9.0 (2026-10-08)
 
 The desk on Windows: the processor, the graphics card, Wi-Fi and the
