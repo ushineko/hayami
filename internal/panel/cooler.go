@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/ushineko/sanshoku"
 	"github.com/ushineko/sanshoku/cooling"
-	"github.com/ushineko/sanshoku/hwmon"
 	"github.com/ushineko/sanshoku/nzxt"
 
 	"github.com/ushineko/hayami/internal/core"
@@ -63,7 +61,7 @@ type Cooler struct {
 	// sensor is the processor's temperature, and held the cooler open across
 	// polls with the scan that finds it. A test replaces both, so neither the
 	// real hwmon tree nor a real device is touched.
-	sensor func() (float64, error)
+	sensor func(context.Context) (float64, error)
 	held   *held
 
 	// load is the processor's utilisation since the previous poll, and
@@ -85,18 +83,19 @@ type Cooler struct {
 func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}} }
 
 // NewCooler builds the cooler source over sanshoku's NZXT driver and the
-// kernel's processor sensors.
-func NewCooler() *Cooler {
-	c := newCooler(sanshoku.Scan, cpuPackage)
-	c.load = core.NewCPULoad(core.ProcStatPath).Load
+// processor's temperature: the kernel's sensors on Linux, LibreHardwareMonitor
+// at lhm on Windows (spec 036; empty is its default address).
+func NewCooler(lhm string) *Cooler {
+	c := newCooler(sanshoku.Scan, cpuTemperature(lhm))
+	c.load = core.HostCPULoad().Load
 	c.graphics = core.NewGraphicsReader().Read
-	c.cpuName = func() string { return core.CPUName(core.CPUInfoPath) }
+	c.cpuName = core.HostCPUName
 	return c
 }
 
 // newCooler builds the source over a scan and a processor sensor, which is
 // the seam the tests use.
-func newCooler(scan Scan, sensor func() (float64, error)) *Cooler {
+func newCooler(scan Scan, sensor func(context.Context) (float64, error)) *Cooler {
 	return &Cooler{
 		trail:  view.NewSeries(CoolerTrail),
 		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
@@ -108,37 +107,6 @@ func newCooler(scan Scan, sensor func() (float64, error)) *Cooler {
 		graphics: func(context.Context) core.Graphics { return core.Graphics{} },
 		cpuName:  func() string { return "" },
 	}
-}
-
-// cpuPackage is the first processor sensor this machine has, in hwmon.CPU's
-// order.
-func cpuPackage() (float64, error) {
-	_, v, err := hwmon.First(hwmon.Root, hwmon.CPU)
-	if err != nil {
-		return 0, fmt.Errorf("reading the processor temperature: %w", err)
-	}
-	return v, nil
-}
-
-// cpuSensors names every sensor looked for, for the reason given when none
-// reads: "no coretemp/Package id 0" on an AMD machine sent somebody looking
-// for an Intel driver that was never going to be there.
-func cpuSensors() string {
-	names := make([]string, 0, len(hwmon.CPU))
-	for _, s := range hwmon.CPU {
-		names = append(names, s.String())
-	}
-	return strings.Join(names, ", ")
-}
-
-// gpuSensors is every route to the card's temperature, for the reason given
-// when none answers.
-func gpuSensors() string {
-	names := make([]string, 0, len(hwmon.GPU)+1)
-	for _, s := range hwmon.GPU {
-		names = append(names, s.String())
-	}
-	return strings.Join(append(names, "nvidia-smi"), ", ")
 }
 
 // Key names the section.
@@ -160,17 +128,25 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	var out view.CoolerReading
 	var reasons []view.Reason
 
-	if v, err := c.sensor(); err == nil {
+	out.CPULoad, out.HasCPULoad = c.load()
+	if v, err := c.sensor(ctx); err == nil {
 		out.CPU, out.HasCPU = v, true
-		out.CPUName = c.processorName()
 	} else {
+		// Aside where the row is drawn anyway, on its load (spec 034): on
+		// Windows that is every machine, and a line under the row saying the
+		// temperature is missing would be the card talking about itself.
+		// Where there is no row it is the only word about the processor, and
+		// is said on the card.
 		reasons = append(reasons, view.Reason{
-			Label: "CPU", Text: "no sensor", Status: view.Info,
-			// Every sensor looked for, not the last one tried.
-			Detail: fmt.Sprintf("looked under %s for %s", hwmon.Root, cpuSensors()),
+			Label: "CPU", Text: "no sensor", Status: view.Info, Aside: out.HasCPULoad,
+			// Every sensor looked for, not the last one tried -- or, where
+			// the source can say which way it is missing, that (spec 036).
+			Detail: sensorDetail(err),
 		})
 	}
-	out.CPULoad, out.HasCPULoad = c.load()
+	if out.HasCPU || out.HasCPULoad {
+		out.CPUName = c.processorName()
+	}
 
 	if g := c.graphics(ctx); g.HasTemperature {
 		out.GPU, out.HasGPU = g.Temperature, true
@@ -182,7 +158,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		// itself. Doctor and the hover note still say it.
 		reasons = append(reasons, view.Reason{
 			Text: "no GPU sensor", Status: view.Info, Aside: true,
-			Detail: fmt.Sprintf("looked under %s and tried %s", hwmon.Root, gpuSensors()),
+			Detail: gpuSensorDetail(),
 		})
 	}
 
@@ -339,7 +315,7 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 	// read the temperature and not the name (nvidia-smi's answer cut short)
 	// should not put "GPU" back for five seconds and move nothing but the
 	// reader's attention.
-	out.CPUName = keepName(out.HasCPU, out.CPUName, c.reading.CPUName)
+	out.CPUName = keepName(out.HasCPU || out.HasCPULoad, out.CPUName, c.reading.CPUName)
 	out.GPUName = keepName(out.HasGPU, out.GPUName, c.reading.GPUName)
 	out.CoolerName = keepName(out.HasLiquid, out.CoolerName, c.reading.CoolerName)
 
@@ -360,7 +336,7 @@ func (c *Cooler) record(out view.CoolerReading) bool {
 	out.GPUTrail = c.gpu.Mean()
 
 	c.reading = out
-	return out.HasCPU || out.HasGPU || out.HasLiquid
+	return out.HasCPU || out.HasCPULoad || out.HasGPU || out.HasLiquid
 }
 
 // keepName is a row's name, or the one it had when this poll brought none.
@@ -386,4 +362,15 @@ func (c *Cooler) Data() any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.reading
+}
+
+// sensorDetail is what the reason for a missing processor temperature says:
+// the source's own account where it gives one -- LibreHardwareMonitor can say
+// which of four ways it is missing -- and every sensor looked for otherwise.
+func sensorDetail(err error) string {
+	var absent *core.SensorAbsence
+	if errors.As(err, &absent) {
+		return absent.Detail
+	}
+	return cpuSensorDetail()
 }

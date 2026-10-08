@@ -125,10 +125,25 @@ func link(w core.Wireless) view.LinkReading {
 // Data is the last sample as plain values.
 func (b *Bandwidth) Data() any { return b.Readings() }
 
+// Option is a setting Sources passes to the source it belongs to.
+type Option func(*options)
+
+type options struct {
+	lhm string
+}
+
+// WithLHM is where LibreHardwareMonitor serves its sensor tree, for the
+// processor's temperature on Windows (spec 036). Empty is its default address.
+func WithLHM(url string) Option { return func(o *options) { o.lhm = url } }
+
 // Sources builds the sources a configuration asks for, in the order it asks
 // for them. A key that names no source is skipped: a settings file written by
 // a newer build should not stop an older one starting.
-func Sources(keys, interfaces []string, read func() (map[string]core.Counters, error)) []Source {
+func Sources(keys, interfaces []string, read func() (map[string]core.Counters, error), opts ...Option) []Source {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	var out []Source
 	for _, key := range keys {
 		switch key {
@@ -137,7 +152,7 @@ func Sources(keys, interfaces []string, read func() (map[string]core.Counters, e
 		case "usage":
 			out = append(out, NewUsage())
 		case "cooler":
-			out = append(out, NewCooler())
+			out = append(out, NewCooler(o.lhm))
 		case "peripherals":
 			out = append(out, NewPeripherals())
 		}

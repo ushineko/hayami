@@ -90,6 +90,14 @@ type Config struct {
 	X      int  `json:"x"`
 	Y      int  `json:"y"`
 	Placed bool `json:"placed"`
+
+	// LHM is where LibreHardwareMonitor serves its sensor tree, which is where
+	// the processor's temperature comes from on Windows (spec 036). Empty is
+	// its default address, http://127.0.0.1:8085/data.json, which is what a
+	// settings file written before this field existed carries. Settings file
+	// only: it is set once, to match a port changed in LibreHardwareMonitor,
+	// and a preferences page for one address would be a page for nobody.
+	LHM string `json:"lhm,omitempty"`
 }
 
 // Position is where the panel last was, and whether it has ever been told.

@@ -70,4 +70,53 @@ func TestTheWindowsInstallerDryRunWritesNothing(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "a dry run wrote something")
+	assert.NotContains(t, string(out), "LibreHardwareMonitor, for the processor",
+		"LibreHardwareMonitor is installed only when asked for")
+	assert.Contains(t, string(out), "-WithSensors", "the switch is offered")
+}
+
+/*
+Spec 036. -WithSensors is the one way the installer touches
+LibreHardwareMonitor, and a dry run of it says each step -- install, settings,
+an elevated start -- and the firewall point, and changes nothing: no winget
+run, no settings written, no process started. On a machine that already has
+it the steps say so instead; either way the output names it.
+*/
+func TestTheWindowsInstallerOffersLibreHardwareMonitorOnlyWhenAsked(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("install_windows.ps1 installs for Windows")
+	}
+	powershell, err := exec.LookPath("powershell.exe")
+	if err != nil {
+		t.Skip("no Windows PowerShell")
+	}
+	dir := t.TempDir()
+
+	cmd := exec.CommandContext(t.Context(), powershell, "-NoProfile", "-ExecutionPolicy", "Bypass",
+		"-File", filepath.Join(repoRoot(t), "scripts", "install_windows.ps1"),
+		"-DryRun", "-WithSensors", "-Destination", filepath.Join(dir, "prog"),
+		"-StartMenuDir", filepath.Join(dir, "menu"), "-StartupDir", filepath.Join(dir, "startup"))
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	text := string(out)
+
+	assert.Contains(t, text, "LibreHardwareMonitor, for the processor's temperature")
+	assert.Regexp(t, `would run: winget install --id LibreHardwareMonitor\.LibreHardwareMonitor --exact|already installed: `, text)
+	assert.Regexp(t, `would write, if it has no settings yet|its settings are left as they are`, text)
+	assert.Contains(t, text, "would start it as administrator")
+	assert.Contains(t, text, "Windows Firewall's default (block inbound) is what keeps port 8085 off your network")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "a dry run wrote something")
+}
+
+// Spec 036. Uninstalling hayami leaves LibreHardwareMonitor, which may have
+// uses of its own, and says how to remove it.
+func TestTheWindowsUninstallerLeavesLibreHardwareMonitor(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), "scripts", "uninstall_windows.ps1"))
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "LibreHardwareMonitor and PawnIO")
+	assert.NotContains(t, string(body), "winget uninstall --id LibreHardwareMonitor.LibreHardwareMonitor\r\n", "it is named, never run")
+	assert.NotRegexp(t, `(?m)^\s*&\s*winget`, string(body), "the uninstaller runs no winget")
 }

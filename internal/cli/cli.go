@@ -99,7 +99,7 @@ func known(key string) bool {
 
 // Sources builds the sources this run draws.
 func (o Options) Sources(read func() (map[string]core.Counters, error)) []panel.Source {
-	return panel.Sources(o.Config.Sections, o.Config.Interfaces, read)
+	return panel.Sources(o.Config.Sections, o.Config.Interfaces, read, panel.WithLHM(o.Config.LHM))
 }
 
 /*
