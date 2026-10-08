@@ -217,7 +217,7 @@ func doctorCmd(f *flags) *cobra.Command {
 				return err
 			}
 			warn(cmd, opts)
-			findings := Diagnose(cmd.Context(), opts.Config.Sections, opts.Config.Interfaces, nil, panel.WithLHM(opts.Config.LHM))
+			findings := Diagnose(cmd.Context(), opts.Config.Sections, opts.Env(nil))
 			return Report(cmd.OutOrStdout(), findings)
 		},
 	}

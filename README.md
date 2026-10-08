@@ -437,6 +437,13 @@ MIT. See [LICENSE](LICENSE).
 - **Fix**: the tests take the desk away on Windows too. They emptied the
   hidraw tree, which on Windows is not where devices are listed, so with
   sanshoku v0.1.8 the suite would have asked the real mouse and keyboard.
+- **Change (internal)**: one registry for the sections (spec 038). What a
+  section is called and drawn with is one list in `view`, and how its source
+  is built one table in `panel`; the settings' defaults, `--sections`, the
+  preferences, the window's icons and the parity test all read them, where a
+  section's key used to be written out in seven places. Sources are built
+  from one `panel.Env` rather than a growing argument list. The preferences
+  list the sections by their titles rather than their settings keys.
 
 ### 0.8.6 (2026-10-01)
 

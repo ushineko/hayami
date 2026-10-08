@@ -17,6 +17,9 @@ import (
 	"github.com/ushineko/hayami/internal/view"
 )
 
+// SectionIcon is sectionIcon, for a test in the black-box package.
+func SectionIcon(name view.IconName) fyne.Resource { return sectionIcon(name) }
+
 // ThemeWith is themeWith, for a test in the black-box package.
 //
 // The hook is the whole of how the panel and the preferences window share one

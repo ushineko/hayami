@@ -54,10 +54,7 @@ func NewUsage() *Usage {
 }
 
 // Key names the section.
-func (u *Usage) Key() string { return "usage" }
-
-// Title is what it is called on screen.
-func (u *Usage) Title() string { return "Usage" }
+func (u *Usage) Key() string { return view.UsageInfo.Key }
 
 // Interval is UsageInterval.
 func (u *Usage) Interval() time.Duration { return UsageInterval }

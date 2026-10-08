@@ -16,12 +16,6 @@ import (
 // tested through, so the suite opens no device.
 type Scan func(ctx context.Context, drivers ...sanshoku.Driver) ([]sanshoku.Candidate, error)
 
-// DeviceScan is the scan the real device sections are built over:
-// sanshoku.Scan. A variable so a test in another package can take the desk
-// away where the transport reads the system's own device list, which no
-// directory a test writes can stand in for (Windows, spec 035).
-var DeviceScan Scan = sanshoku.Scan
-
 /*
 held is the devices a section has open, kept across polls.
 

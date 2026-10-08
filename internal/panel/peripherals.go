@@ -112,9 +112,10 @@ type remembered struct {
 	since time.Time
 }
 
-// NewPeripherals builds the peripherals source over sanshoku's drivers.
-func NewPeripherals() *Peripherals {
-	p := newPeripherals(DeviceScan, time.Now)
+// NewPeripherals builds the peripherals source over sanshoku's drivers,
+// found by scan.
+func NewPeripherals(scan Scan) *Peripherals {
+	p := newPeripherals(scan, time.Now)
 	if path, err := readings.File(knownFile); err == nil {
 		p.remember(path)
 	}
@@ -136,10 +137,7 @@ func newPeripherals(scan Scan, now func() time.Time) *Peripherals {
 }
 
 // Key names the section.
-func (p *Peripherals) Key() string { return "peripherals" }
-
-// Title is what the section is called.
-func (p *Peripherals) Title() string { return "Peripherals" }
+func (p *Peripherals) Key() string { return view.PeripheralsInfo.Key }
 
 // Interval is PeripheralsInterval.
 func (p *Peripherals) Interval() time.Duration { return PeripheralsInterval }

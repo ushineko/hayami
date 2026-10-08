@@ -55,7 +55,7 @@ type LinkReading struct {
 // cumulative totals go in the detail line under each rate, which is where the
 // monitor puts them and why it can show four numbers per interface in 265 px.
 func Bandwidth(readings []BandwidthReading) Section {
-	s := Section{Key: "bandwidth", Title: "Bandwidth", Icon: IconBandwidth}
+	s := BandwidthInfo.section()
 	unit := UnitWidth("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s")
 
 	for _, r := range readings {

@@ -3,10 +3,7 @@ package window_test
 import (
 	"context"
 	"image"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
+	"image/color"
 	"testing"
 	"time"
 
@@ -17,57 +14,12 @@ import (
 	"github.com/ushineko/sanshoku/logitech"
 	"github.com/ushineko/sanshoku/razer"
 	"github.com/ushineko/sanshoku/steelseries"
-
-	"github.com/ushineko/hayami/internal/testenv"
 )
 
 // peripheralsSettle is how long the panel is given after its window appears
 // for the peripherals' first poll, which asks every device and may ask a
 // sleeping one twice.
 const peripheralsSettle = 6 * time.Second
-
-// launch builds and starts the desktop panel with only the given sections, in
-// directories the test owns -- a throwaway settings file, home and cache, so
-// nothing of the user's is read or written -- and returns its window.
-func launch(t *testing.T, sections string, settle time.Duration) uintptr {
-	t.Helper()
-	if os.Getenv("HAYAMI_WINDOW_TEST") != "1" {
-		t.Skip("drives a real window; set HAYAMI_WINDOW_TEST=1 to run it")
-	}
-	dir := t.TempDir()
-	bin := filepath.Join(dir, "hayami.exe")
-	_, file, _, _ := runtime.Caller(0)
-	repo := filepath.Join(filepath.Dir(file), "..", "..")
-
-	build := exec.CommandContext(t.Context(), "go", "build", "-tags", "migrated_fynedo", "-o", bin, "./cmd/hayami")
-	build.Dir = repo
-	build.Env = append(os.Environ(), "CGO_ENABLED=1")
-	out, err := build.CombinedOutput()
-	require.NoError(t, err, "building the panel: %s", out)
-
-	home := filepath.Join(dir, "home")
-	require.NoError(t, os.MkdirAll(home, 0o700))
-	testenv.Home(t, home)
-	testenv.Cache(t, filepath.Join(home, "cache"))
-	testenv.Config(t, filepath.Join(home, "config"))
-	settings := filepath.Join(dir, "settings.yaml")
-	require.NoError(t, os.WriteFile(settings, []byte("hayami:\n    sections: ["+sections+"]\n"), 0o600))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, bin, "--settings", settings)
-	require.NoError(t, cmd.Start())
-	t.Cleanup(func() {
-		cancel()
-		_ = cmd.Wait()
-	})
-
-	// The process's own window, by its id: another panel on the desktop is
-	// not this one.
-	hwnd, err := waitWindow(cmd.Process.Pid, "hayami", 20*time.Second)
-	require.NoError(t, err)
-	time.Sleep(settle)
-	return hwnd
-}
 
 // answering is the names of the devices on this desk that give a level now,
 // through the drivers hayami asks on Windows. It asks what the panel will ask,
@@ -123,7 +75,7 @@ name and level on it. Before spec 035 the section found no device on Windows,
 drew nothing, and the window held no line of text at all.
 */
 func TestThePeripheralsAreDrawnOnWindows(t *testing.T) {
-	if os.Getenv("HAYAMI_WINDOW_TEST") != "1" {
+	if !enabled() {
 		t.Skip("drives a real window; set HAYAMI_WINDOW_TEST=1 to run it")
 	}
 	live := answering(t)
@@ -132,52 +84,66 @@ func TestThePeripheralsAreDrawnOnWindows(t *testing.T) {
 	}
 	t.Logf("answering: %v", live)
 
-	hwnd := launch(t, "peripherals", peripheralsSettle)
+	hwnd := start(t, panelSettings{Sections: []string{"peripherals"}, Settle: peripheralsSettle})
 
 	// A keyboard idle on its receiver can miss a poll while its link wakes,
 	// and the section polls every fifteen seconds; so the picture is taken
 	// until it holds a device, for three polls at most.
-	var text []span
-	var shot string
+	var p *picture
 	for deadline := time.Now().Add(3 * 15 * time.Second); ; time.Sleep(3 * time.Second) {
-		img, err := capture(hwnd)
-		require.NoError(t, err)
-		shot = filepath.Join(t.ArtifactDir(), "peripherals.png")
-		require.NoError(t, save(img, shot))
-		text = textLines(img)
-		if drawsDevices(img, text) || time.Now().After(deadline) {
+		p = shoot(t, hwnd, "peripherals.png")
+		if drawsDevices(p.img, p.text) || time.Now().After(deadline) {
 			break
 		}
 	}
-	t.Logf("picture: %s", shot)
-	t.Logf("text lines: %v", text)
+	t.Logf("picture: %s", p.path)
+	t.Logf("text lines: %v", p.text)
 
-	// A card drawing a device says nothing about what is absent: the reasons
-	// are dropped. A heading, the cells' names and their levels is three
-	// lines at most; a card with no device is the heading, a reason per
-	// vendor and two placeholder cells.
-	require.NotEmpty(t, text, "no line of text at all")
-	require.LessOrEqual(t, len(text), 3,
+	// A device is drawn with its level in a battery colour (spec 018): green,
+	// amber or red. A card with no device is the heading, a reason per vendor
+	// and placeholder cells, all in the text colours, so it has no such line.
+	// Counting lines instead held only while one device was awake: devices
+	// stack, two lines each, and two awake read as a card of reasons.
+	require.NotEmpty(t, p.text, "no line of text at all")
+	levels := levelLines(p.img, p.text)
+	t.Logf("lines in a battery colour: %d", levels)
+	require.Positive(t, levels,
 		"the card is reasons and placeholders, not devices: the section drew none of %v", live)
 }
 
-// textLines are the picture's lines of text: bands of ink tall enough to be
-// letters rather than a rule.
-func textLines(img *image.NRGBA) []span {
-	var text []span
-	for _, l := range lines(img) {
-		if l.To-l.From >= 8 {
-			text = append(text, l)
+// drawsDevices is whether the card shows a device's level.
+func drawsDevices(img *image.NRGBA, text []span) bool { return levelLines(img, text) > 0 }
+
+// levelLines counts the text lines drawn in a battery colour: saturated, and
+// not the plot's blue-led colours. Text, reasons and placeholders are grey
+// or white, which a saturation floor leaves out.
+func levelLines(img *image.NRGBA, text []span) int {
+	n := 0
+	for _, line := range text {
+		coloured := 0
+		for y := line.From; y <= line.To; y++ {
+			for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
+				if batteryColour(img.At(x, y)) {
+					coloured++
+				}
+			}
+		}
+		if coloured >= levelInk {
+			n++
 		}
 	}
-	return text
+	return n
 }
 
-// drawsDevices is whether the card is a heading and cells only.
-func drawsDevices(img *image.NRGBA, text []span) bool {
-	if len(text) == 0 || len(text) > 3 {
-		return false
-	}
-	last := text[len(text)-1]
-	return len(words(img, last, (last.To-last.From+1)*3/4)) >= 1
+// levelInk is how many coloured pixels make a line a level: a two-digit
+// percentage at the panel's size is several hundred; anti-aliased edges of
+// grey text are a handful.
+const levelInk = 60
+
+// batteryColour is a pixel that is clearly coloured and not blue-led.
+func batteryColour(c color.Color) bool {
+	r, g, b, _ := c.RGBA()
+	r, g, b = r>>8, g>>8, b>>8
+	hi, lo := max(r, g, b), min(r, g, b)
+	return hi-lo > 80 && !plotted(c)
 }
