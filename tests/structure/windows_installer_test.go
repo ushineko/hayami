@@ -102,9 +102,13 @@ func TestTheWindowsInstallerOffersLibreHardwareMonitorOnlyWhenAsked(t *testing.T
 
 	assert.Contains(t, text, "LibreHardwareMonitor, for the processor's temperature")
 	assert.Regexp(t, `would run: winget install --id LibreHardwareMonitor\.LibreHardwareMonitor --exact|already installed: `, text)
-	assert.Regexp(t, `would write, if it has no settings yet|its settings are left as they are`, text)
-	assert.Contains(t, text, "would start it as administrator")
-	assert.Contains(t, text, "Windows Firewall's default (block inbound) is what keeps port 8085 off your network")
+	// Spec 042. Each step is said: done already, or what would be done. A
+	// machine without it gets every step; one set up says so.
+	assert.Regexp(t, `would set its settings|would set \w+=|settings: web server on port \d+`, text)
+	assert.Regexp(t, `would register the startup task 'LibreHardwareMonitor'|startup task 'LibreHardwareMonitor' at highest privileges`, text)
+	assert.Regexp(t, `would start it through the task|\[ok\]\s+running`, text)
+	assert.Regexp(t, `UAC|\[ok\]\s+running`, text, "an elevated step is said to ask once")
+	assert.Regexp(t, `Windows Firewall's default \(block inbound\) is what keeps port \d+ off your network`, text)
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
@@ -119,4 +123,8 @@ func TestTheWindowsUninstallerLeavesLibreHardwareMonitor(t *testing.T) {
 	assert.Contains(t, string(body), "LibreHardwareMonitor and PawnIO")
 	assert.NotContains(t, string(body), "winget uninstall --id LibreHardwareMonitor.LibreHardwareMonitor\r\n", "it is named, never run")
 	assert.NotRegexp(t, `(?m)^\s*&\s*winget`, string(body), "the uninstaller runs no winget")
+	// Spec 042. The startup task -WithSensors registers is named for removal,
+	// and the uninstaller does not remove it itself.
+	assert.Contains(t, string(body), "Unregister-ScheduledTask -TaskName LibreHardwareMonitor")
+	assert.NotRegexp(t, `(?m)^\s*Unregister-ScheduledTask`, string(body), "the uninstaller removes no task")
 }

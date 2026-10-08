@@ -179,15 +179,35 @@ func TestNothingAnsweringIsToldApartByWhatTheMachineHas(t *testing.T) {
 		want string
 	}{
 		{core.LHMHost{}, "Windows needs LibreHardwareMonitor and its PawnIO driver"},
-		{core.LHMHost{PawnIO: true, Running: true}, "its web server is off: Options → Remote Web Server → Run"},
+		{core.LHMHost{PawnIO: true, Running: true}, "its web server is off: Options > Remote Web Server > Run"},
 		{core.LHMHost{Running: true}, "its web server is off"},
-		{core.LHMHost{PawnIO: true}, "LibreHardwareMonitor is not running"},
+		{core.LHMHost{PawnIO: true}, "does not start with Windows: start it as administrator and turn on Options > Run On Windows Startup, or run install_windows.ps1 -WithSensors"},
+		// Spec 042. A registered startup task is a LibreHardwareMonitor
+		// that was closed, not one that was never set to start.
+		{core.LHMHost{PawnIO: true, Task: true}, "though its startup task is registered: start it as administrator, or log off and on"},
+		{core.LHMHost{Task: true}, "though its startup task is registered"},
+		{core.LHMHost{PawnIO: true, Running: true, Task: true}, "its web server is off"},
 	}
 	for _, c := range cases {
 		_, err := reader(url, c.host).CPUTemperature(t.Context())
 		require.ErrorIs(t, err, core.ErrLHMUnreachable)
 		assert.Contains(t, absence(t, err), c.want, "%+v", c.host)
 	}
+}
+
+// Spec 042. The two ways a set-up LibreHardwareMonitor can be stopped carry
+// codes of their own, so the panel and doctor can tell them apart without
+// reading the sentence.
+func TestAClosedLibreHardwareMonitorIsToldFromOneNeverSetToStart(t *testing.T) {
+	srv := serve(t, http.StatusOK, nil)
+	url := srv.URL + "/data.json"
+	srv.Close()
+
+	_, err := reader(url, core.LHMHost{PawnIO: true, Task: true}).CPUTemperature(t.Context())
+	require.ErrorIs(t, err, &core.Absence{Code: core.AbsenceLHMTaskStopped})
+
+	_, err = reader(url, core.LHMHost{PawnIO: true}).CPUTemperature(t.Context())
+	require.ErrorIs(t, err, &core.Absence{Code: core.AbsenceLHMNotRunning})
 }
 
 // R1. A server that does not answer in time is not waited on.

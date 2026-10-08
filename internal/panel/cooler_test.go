@@ -528,7 +528,7 @@ func TestAProcessorWithNothingIsNoRowAndAReasonOnTheCard(t *testing.T) {
 // LibreHardwareMonitor's four -- that sentence is the reason's detail, kept
 // off the card when the row is drawn on its load.
 func TestTheSourcesOwnAccountOfAMissingTemperatureIsTheReason(t *testing.T) {
-	const detail = "LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run"
+	const detail = "LibreHardwareMonitor is running but its web server is off: Options > Remote Web Server > Run"
 	r := &rig{cpuErr: &core.SensorAbsence{Detail: detail, Err: core.ErrLHMUnreachable}, load: 12, hasLoad: true}
 	c := r.section()
 

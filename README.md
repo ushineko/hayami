@@ -217,15 +217,31 @@ Windows keeps a processor's temperature behind a kernel driver, and hayami
 loads none. [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
 does, through its PawnIO driver, and serves what it reads from a web server of
 its own; the panel reads that, at `http://127.0.0.1:8085/data.json` (spec
-036). It is optional, and hayami never installs it unasked:
-`install_windows.ps1 -WithSensors` does the steps below for you, or by hand:
+036). It is optional, and hayami never installs it unasked.
+
+`install_windows.ps1 -WithSensors` does the steps below (spec 042). It does
+each one only if it is not done already, so it can be run again at any time,
+and it ends by checking that `data.json` has a processor temperature, saying
+which step is missing if not. The settings, the startup task and the start
+are one elevated step, so Windows asks once. `-DryRun` says what it would do.
+By hand:
 
 1. `winget install --id LibreHardwareMonitor.LibreHardwareMonitor -e`
 2. Run it as administrator. On its first start it offers to install PawnIO,
    the driver it reads the processor through: say yes.
 3. **Options → Remote Web Server → Run**, on port 8085, with authentication
    off: hayami sends no password.
-4. **Options → Run On Windows Startup**, so it is there after a restart.
+4. **Options → Minimize On Close**, **Start Minimized** and **Minimize To
+   Tray**. **Closing its window quits it** unless Minimize On Close is on, and
+   the processor's temperature goes with it; with these on it lives in the
+   notification area with no window.
+5. **Options → Run On Windows Startup**: a scheduled task that starts it at
+   logon with administrator rights, so there is no UAC prompt each time.
+
+The script sets these in LibreHardwareMonitor's settings file, beside its
+executable, while it is stopped (it rewrites the file when it exits), and
+keeps the file as it was at `LibreHardwareMonitor.config.bak-hayami`. It
+changes no other setting.
 
 **Its web server listens on every network interface.** Its address setting
 is not honoured for `127.0.0.1` (it checks the address against the machine's
@@ -237,8 +253,10 @@ network: add no rule that allows it. hayami only ever asks for `data.json`.
 Another port is a line in `settings.yaml`:
 `lhm: http://127.0.0.1:9000/data.json`. Where there is no temperature, the
 reason on hover and in `doctor` says which step is missing: nothing installed,
-LibreHardwareMonitor not running, its web server off, no PawnIO, or a password
-set. `uninstall_windows.ps1` leaves LibreHardwareMonitor alone.
+LibreHardwareMonitor closed with its startup task in place, not set to start
+with Windows, its web server off, no PawnIO, or a password set.
+`uninstall_windows.ps1` leaves LibreHardwareMonitor and its startup task
+alone, and prints the commands that remove them.
 
 ### The udev rule
 
@@ -378,6 +396,19 @@ MIT. See [LICENSE](LICENSE).
   of a card with no temperature now names AMD's busy file among the routes
   tried. A system that is neither Linux nor Windows reports its absences
   instead of reading Linux paths.
+- **Fix**: `install_windows.ps1` installs over a panel or terminal pane that is
+  running. Windows will not overwrite a running program but will rename it,
+  so the running copy moves aside to `<name>.old`, keeps running the old
+  version until restarted, and is removed by the next install. It failed
+  whenever either was open. `uninstall_windows.ps1` says which one is running.
+- **Change**: `install_windows.ps1 -WithSensors` sets LibreHardwareMonitor up
+  the same way on every machine (spec 042): its settings (web server, port,
+  no password, start minimized, closing the window hides it rather than
+  quitting it), its startup task at logon with administrator rights, and a
+  start through that task, each only if not done already, in one elevated
+  step; then it checks that a processor temperature arrives. Closing its
+  window used to quit it. `doctor` now tells a LibreHardwareMonitor closed
+  with its startup task in place from one that is not set to start.
 - **Docs**: `docs/architecture.md`, the layers and the rules a change is held
   to (device knowledge in sanshoku, tables over switches, one section registry,
   sensor providers in chains, platform files in core, typed absences, threshold
