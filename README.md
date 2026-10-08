@@ -386,6 +386,9 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: the panel snaps to the screen's edges when dragged on Windows
+  (fynedesygn 0.1.87, its spec 058).
+
 - **Fix**: one mouse on the peripherals card. The mouse slot shows a mouse that
   is answering before one that is remembered, and every other mouse is named
   in the note instead of taking the other slot: a mouse read through its
