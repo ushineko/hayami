@@ -13,16 +13,30 @@ const inkLevel = 170
 // span is a run of rows or columns, inclusive.
 type span struct{ From, To int }
 
-// ink says whether the pixel at x, y is text.
+// ink says whether the pixel at x, y is text that finds a line: neutral or a
+// status colour, and bright.
 //
-// Bright is not enough: the trend plot's light-blue line is as bright as
-// text where it is anti-aliased, and a plot that slopes across fifteen rows
-// read as a line of text, a line the card does not have (spec 041). The
-// plot's colours are blue-led -- purple, light blue, teal -- and text is
-// neutral or a status colour (green, amber, red), none of which is.
+// Bright is not enough to find a line: the trend plot's light-blue line is as
+// bright as text where it is anti-aliased, and a plot that slopes across
+// fifteen rows read as a line of text, a line the card does not have (spec
+// 041). The plot's colours are blue-led -- purple, light blue, teal -- and
+// every line of text holds some ink that is not: a label, an arrow.
 func ink(img *image.NRGBA, x, y int) bool {
 	c := img.At(x, y)
 	return luminance(c) > inkLevel && !plotted(c)
+}
+
+// glyph says whether the pixel at x, y is part of a word on a line already
+// found: bright, whatever its colour.
+//
+// Within a line the plot is not there to confuse, and a word may be in the
+// plot's own colours: a busy rate is drawn in the accent, (96, 205, 255),
+// which no colour rule tells from the plot's light blue, (96, 192, 240).
+// Counted with ink, a rate that crossed the notable threshold vanished from
+// its row and the Wi-Fi test failed whenever the desk's traffic was busy
+// (#149).
+func glyph(img *image.NRGBA, x, y int) bool {
+	return luminance(img.At(x, y)) > inkLevel
 }
 
 // plotted says whether c is one of the plot's blue-led colours: blue well
@@ -67,7 +81,7 @@ func words(img *image.NRGBA, line span, gap int) []span {
 	for x := b.Min.X; x < b.Max.X; x++ {
 		has := false
 		for y := line.From; y <= line.To && !has; y++ {
-			has = ink(img, x, y)
+			has = glyph(img, x, y)
 		}
 		if !has {
 			continue

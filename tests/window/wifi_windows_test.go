@@ -135,7 +135,7 @@ func isBars(img *image.NRGBA, line span, glyphs []span) bool {
 		inked, top, bottom := 0, line.To, line.From
 		for x := g.From; x <= g.To; x++ {
 			for y := line.From; y <= line.To; y++ {
-				if ink(img, x, y) {
+				if glyph(img, x, y) {
 					inked++
 					top, bottom = min(top, y), max(bottom, y)
 				}
