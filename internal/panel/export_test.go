@@ -24,8 +24,8 @@ func NewCoolerOver(scan Scan, sensor func() (float64, error)) *Cooler {
 	return newCooler(scan, sensor)
 }
 
-// UdevDetail is the detail a device that may not be opened is given.
-const UdevDetail = udevDetail
+// PermissionDetail is the detail a device that may not be opened is given.
+const PermissionDetail = permissionDetail
 
 // SetUsageRead replaces the gather, so a test can drive the usage section's
 // reasons without a cache directory or a credential store.

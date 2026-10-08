@@ -87,7 +87,7 @@ func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}}
 // NewCooler builds the cooler source over sanshoku's NZXT driver and the
 // kernel's processor sensors.
 func NewCooler() *Cooler {
-	c := newCooler(sanshoku.Scan, cpuPackage)
+	c := newCooler(DeviceScan, cpuPackage)
 	c.load = core.NewCPULoad(core.ProcStatPath).Load
 	c.graphics = core.NewGraphicsReader().Read
 	c.cpuName = func() string { return core.CPUName(core.CPUInfoPath) }
