@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.2
+**Version**: 0.9.3
 
 *a chart you read at a glance*
 
@@ -384,7 +384,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.3 (2026-10-08)
 
 - **Fix**: the panel no longer sticks to a screen edge when dragged on
   Windows: it snaps from inside, lets go as soon as the pointer is past the
