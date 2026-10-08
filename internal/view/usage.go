@@ -64,7 +64,7 @@ const UsageStale = 5 * time.Minute
 // rule gave three bars about three different windows — seven days, a monthly
 // spend, a Business limit — which is not a column anybody can compare.
 func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
-	s := Section{Key: "usage", Title: "Usage", Icon: IconUsage}
+	s := UsageInfo.section()
 
 	for _, group := range byAccount(windows) {
 		lead := leading(group)
@@ -272,16 +272,7 @@ func resets(now, at time.Time) string { return Resets(now, at) }
 // pane was set beside the widget it replaces (issue #75) and the same 60 %
 // was amber in one and green in the other; the widget is the program a reader
 // of these numbers has been looking at.
-func quota(fraction float64) Status {
-	switch {
-	case fraction > 0.80:
-		return Bad
-	case fraction >= 0.50:
-		return Warn
-	default:
-		return Good
-	}
-}
+func quota(fraction float64) Status { return QuotaBands.Of(fraction) }
 
 // verdict is a window's colour: the provider's own severity where it gave one,
 // which only a spend does, and the quota bands otherwise.

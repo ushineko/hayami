@@ -70,6 +70,15 @@ func known(key string) bool {
 	return false
 }
 
+// sectionTitle is what a section is called on its card, which is what the
+// list offers; the key is what the settings file and --sections say.
+func sectionTitle(key string) string {
+	if info, ok := view.SectionByKey(key); ok {
+		return info.Title
+	}
+	return key
+}
+
 // sectionRow is one section: a tick, its name, and the two buttons that move
 // it.
 func (w *Window) sectionRow(s *shell.Shell, key string, at, total int) fyne.CanvasObject {
@@ -80,7 +89,7 @@ func (w *Window) sectionRow(s *shell.Shell, key string, at, total int) fyne.Canv
 	// which sets the check again: the first version of this was an infinite
 	// recursion that crashed the program with a stack overflow, and it did it
 	// on the first frame rather than subtly.
-	shown := widget.NewCheck(key, nil)
+	shown := widget.NewCheck(sectionTitle(key), nil)
 	shown.SetChecked(c.Shows(key))
 	shown.OnChanged = func(on bool) { w.setShown(s, key, on) }
 

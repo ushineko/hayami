@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -74,13 +73,13 @@ configured names the sections the settings ask for; the rest are still polled,
 because a section being off is not a reason to be unable to say whether it
 would have worked.
 */
-func Diagnose(ctx context.Context, configured, interfaces []string, read func() (map[string]core.Counters, error), opts ...panel.Option) []Finding {
+func Diagnose(ctx context.Context, configured []string, env panel.Env) []Finding {
 	on := make(map[string]bool, len(configured))
 	for _, k := range configured {
 		on[k] = true
 	}
 
-	return diagnose(ctx, on, panel.Sources(panel.Keys(), interfaces, read, opts...))
+	return diagnose(ctx, on, panel.Sources(panel.Keys(), env))
 }
 
 // diagnose is Diagnose over sources already built, which is the seam a test

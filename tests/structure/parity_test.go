@@ -29,17 +29,34 @@ var allowList = map[string]string{}
 // Both shells hold the same sources, built by the same function from the same
 // settings. This is the whole of parity: neither shell constructs a section of
 // its own, so neither can have one the other lacks.
+//
+// Every section in the registry (spec 038) builds a source under its own key,
+// and the section that source draws carries the registry's title and icon:
+// the builder took them from the one list rather than spelling them again.
+// That every icon has a glyph in the window is internal/gui's
+// TestEverySectionHasAnIcon.
 func TestFeatureParity(t *testing.T) {
-	keys := panel.Keys()
-	require.NotEmpty(t, keys)
+	noMachine(t)
+	specs := panel.Specs()
+	require.NotEmpty(t, specs)
 
-	sources := panel.Sources(keys, []string{"eth0"}, fakeCounters)
+	env := panel.Env{Interfaces: []string{"eth0"}, Counters: fakeCounters}
+	for _, spec := range specs {
+		t.Run(spec.Key, func(t *testing.T) {
+			src := spec.New(env)
+			require.NotNil(t, src)
+			assert.Equal(t, spec.Key, src.Key(), "a section was not built under its own key")
+			sec := src.Section()
+			assert.Equal(t, spec.Title, sec.Title)
+			assert.Equal(t, spec.Icon, sec.Icon)
+		})
+	}
 
-	drawn := make([]string, 0, len(sources))
-	for _, s := range sources {
+	drawn := make([]string, 0, len(specs))
+	for _, s := range panel.Sources(panel.Keys(), env) {
 		drawn = append(drawn, s.Key())
 	}
-	assert.Equal(t, keys, drawn,
+	assert.Equal(t, panel.Keys(), drawn,
 		"a section this build knows was not built from its own key")
 	assert.Empty(t, allowList,
 		"a section is drawn by one shell and not the other; say why here or fix it")
@@ -50,7 +67,7 @@ func TestFeatureParity(t *testing.T) {
 // already lost.
 func TestTheTerminalPanelDrawsEverySection(t *testing.T) {
 	noMachine(t)
-	sources := panel.Sources(panel.Keys(), []string{"eth0"}, fakeCounters)
+	sources := panel.Sources(panel.Keys(), panel.Env{Interfaces: []string{"eth0"}, Counters: fakeCounters})
 	m := tui.New(tui.Options{Sources: sources, Arrangement: view.ArrangeStack})
 
 	for _, s := range sources {

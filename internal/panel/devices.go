@@ -7,6 +7,7 @@ import (
 
 	"github.com/ushineko/sanshoku"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -14,12 +15,6 @@ import (
 // test's stand-in that finds fakes. It is the seam the device sections are
 // tested through, so the suite opens no device.
 type Scan func(ctx context.Context, drivers ...sanshoku.Driver) ([]sanshoku.Candidate, error)
-
-// DeviceScan is the scan the real device sections are built over:
-// sanshoku.Scan. A variable so a test in another package can take the desk
-// away where the transport reads the system's own device list, which no
-// directory a test writes can stand in for (Windows, spec 035).
-var DeviceScan Scan = sanshoku.Scan
 
 /*
 held is the devices a section has open, kept across polls.
@@ -116,14 +111,14 @@ func (h *held) prune() {
 // found the device absent after all (a Kraken node that does not answer the
 // status probe, beside the one that does), and failed for anything else, which
 // the section reports in its own words and returns for logging.
-func openFailure(c sanshoku.Candidate, err error) (reason *view.Reason, failed bool) {
-	switch {
-	case permitted(err):
+func openFailure(c sanshoku.Candidate, err error) (said *view.Reason, failed bool) {
+	if refused, ok := core.PermissionAbsence(err); ok {
 		// Not a failure to log every poll: nothing will change until
 		// somebody does what the detail says.
-		return &view.Reason{
-			Text: c.Name + " is not permitted", Status: view.Warn, Detail: permissionDetail,
-		}, false
+		r := reason(view.Reason{Text: c.Name + " is not permitted", Status: view.Warn}, refused)
+		return &r, false
+	}
+	switch {
 	case errors.Is(err, sanshoku.ErrUnsupported):
 		// Detected and deliberately not spoken to (spec 017). The name is the
 		// label and the verdict one word, so the line is a row like any other

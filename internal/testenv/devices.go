@@ -32,9 +32,9 @@ func NoDevices(t testing.TB) {
 	if runtime.GOOS == "linux" {
 		return
 	}
-	scan := panel.DeviceScan
-	panel.DeviceScan = func(context.Context, ...sanshoku.Driver) ([]sanshoku.Candidate, error) {
+	scan := panel.DefaultScan
+	panel.DefaultScan = func(context.Context, ...sanshoku.Driver) ([]sanshoku.Candidate, error) {
 		return nil, nil
 	}
-	t.Cleanup(func() { panel.DeviceScan = scan })
+	t.Cleanup(func() { panel.DefaultScan = scan })
 }

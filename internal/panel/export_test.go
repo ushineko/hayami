@@ -26,10 +26,15 @@ func NewCoolerOver(scan Scan, sensor func() (float64, error)) *Cooler {
 
 // SensorDetail is what the reason for a missing processor temperature says
 // for err.
-func SensorDetail(err error) string { return sensorDetail(err) }
+func SensorDetail(err error) string {
+	return reason(view.Reason{Detail: core.CPUSensorDetail()}, err).Detail
+}
 
 // PermissionDetail is the detail a device that may not be opened is given.
-const PermissionDetail = permissionDetail
+const PermissionDetail = core.PermissionDetail
+
+// GPUSensorDetail is what the reason for a missing graphics card says.
+func GPUSensorDetail() string { return core.GPUSensorDetail() }
 
 // SetUsageRead replaces the gather, so a test can drive the usage section's
 // reasons without a cache directory or a credential store.

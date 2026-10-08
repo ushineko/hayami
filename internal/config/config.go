@@ -156,7 +156,7 @@ func (c Config) OpacityOrDefault() int {
 // deciding what is interesting about someone's network.
 func Default() Config {
 	return Config{
-		Sections:    []string{"bandwidth", "usage", "cooler", "peripherals"},
+		Sections:    view.DefaultSections(),
 		Arrangement: "stack",
 		Opacity:     desktop.DefaultOpacity,
 	}

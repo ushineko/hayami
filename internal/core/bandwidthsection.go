@@ -103,12 +103,6 @@ func (b *BandwidthSection) SetWirelessReader(read func(context.Context) (map[str
 	b.readWireless, b.probed = read, false
 }
 
-// Key names the section.
-func (b *BandwidthSection) Key() string { return "bandwidth" }
-
-// Title is what it is called on screen.
-func (b *BandwidthSection) Title() string { return "Bandwidth" }
-
 // Interval is BandwidthInterval.
 func (b *BandwidthSection) Interval() time.Duration { return BandwidthInterval }
 

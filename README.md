@@ -99,8 +99,10 @@ mode, which is why there is no separate widget for the terminal:
 Two binaries and one program. `cmd/hayami` is the desktop panel and
 `cmd/hayami-tui` is the terminal panel; `internal/core` produces readings with
 no toolkit in sight, `internal/view` describes a section as data, and each
-shell only arranges it. A parity test holds the two shells to the same
-capabilities.
+shell only arranges it. Devices are read through
+[sanshoku](https://github.com/ushineko/sanshoku) and nowhere else. The layers,
+the rules a change is held to, and where to add a device, a reading or a
+section are in [docs/architecture.md](docs/architecture.md).
 
 The window is a glance window from
 [fynedesygn](https://github.com/ushineko/fynedesygn) — frameless, fixed to its
@@ -365,6 +367,21 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Docs**: `docs/architecture.md`, the layers and the rules a change is held
+  to (device knowledge in sanshoku, tables over switches, one section registry,
+  sensor providers in chains, platform files in core, typed absences, threshold
+  bands), where each kind of addition goes, and which of those mechanisms are
+  in place and which are planned.
+- **Change**: every reading's colour thresholds are a table (spec 039):
+  `view.Bands`, one ascending list per reading, in place of six hand-written
+  ladders (rates, coolant, battery, a battery's band, quota, the Wi-Fi
+  bars). Nothing draws differently; a test pins each status at and around
+  every threshold.
+- **Change**: a reason for a missing reading is told by the source that knows
+  it (spec 040). Core returns a typed absence, one helper turns it into the
+  line the panel draws, and whether a line stays on a full card is decided by
+  a flag, not by its wording. What every reason says is unchanged, held by a
+  pinned file written before the change.
 - **Add**: a Wi-Fi interface's link (spec 037). Its row leads with the signal
   in the battery's four bars, by RSSI, and a line under its totals gives the
   strength, band, channel and link rate; the tip has the generation, Windows'
@@ -394,6 +411,13 @@ MIT. See [LICENSE](LICENSE).
 - **Fix**: the tests take the desk away on Windows too. They emptied the
   hidraw tree, which on Windows is not where devices are listed, so with
   sanshoku v0.1.8 the suite would have asked the real mouse and keyboard.
+- **Change (internal)**: one registry for the sections (spec 038). What a
+  section is called and drawn with is one list in `view`, and how its source
+  is built one table in `panel`; the settings' defaults, `--sections`, the
+  preferences, the window's icons and the parity test all read them, where a
+  section's key used to be written out in seven places. Sources are built
+  from one `panel.Env` rather than a growing argument list. The preferences
+  list the sections by their titles rather than their settings keys.
 
 ### 0.8.6 (2026-10-01)
 

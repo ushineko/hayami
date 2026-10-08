@@ -33,7 +33,7 @@ func TestEverySectionKeyBuildsASource(t *testing.T) {
 	keys := panel.Keys()
 	require.NotEmpty(t, keys)
 
-	sources := panel.Sources(keys, nil, nil)
+	sources := panel.Sources(keys, panel.Env{})
 
 	require.Len(t, sources, len(keys))
 	for i, s := range sources {

@@ -162,7 +162,7 @@ off not appearing is the same mistake in miniature.
 */
 func TestDoctorReportsEverySectionIncludingTheOnesThatAreOff(t *testing.T) {
 	bare(t)
-	findings := cli.Diagnose(t.Context(), []string{"bandwidth"}, []string{"eth0"}, counters)
+	findings := cli.Diagnose(t.Context(), []string{"bandwidth"}, panel.Env{Interfaces: []string{"eth0"}, Counters: counters})
 
 	assert.Equal(t, []string{"bandwidth", "cooler", "peripherals", "usage"}, cli.Keys(findings))
 
@@ -178,7 +178,7 @@ func TestDoctorReportsEverySectionIncludingTheOnesThatAreOff(t *testing.T) {
 // neither is the silence this command exists to make impossible.
 func TestNoSectionIsSilent(t *testing.T) {
 	bare(t)
-	findings := cli.Diagnose(t.Context(), panel.Keys(), nil, counters)
+	findings := cli.Diagnose(t.Context(), panel.Keys(), panel.Env{Counters: counters})
 
 	for _, f := range findings {
 		assert.NotEqual(t, cli.StateSilent, f.State,
@@ -231,7 +231,7 @@ func TestDoctorIsOnBothBinaries(t *testing.T) {
 // Nothing doctor prints could carry a credential.
 func TestDoctorPrintsNoCredential(t *testing.T) {
 	bare(t)
-	findings := cli.Diagnose(t.Context(), panel.Keys(), nil, counters)
+	findings := cli.Diagnose(t.Context(), panel.Keys(), panel.Env{Counters: counters})
 
 	var out bytes.Buffer
 	require.NoError(t, cli.Report(&out, findings))
@@ -267,7 +267,7 @@ func TestDoctorSaysInstallTheUdevRuleForADeviceThatMayNotBeOpened(t *testing.T) 
 	require.NoError(t, os.WriteFile(filepath.Join(node, "report_descriptor"), []byte{0x06, 0x00, 0xFF}, 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(hidraw.DevRoot, "hidraw4"), nil, 0o000))
 
-	findings := cli.Diagnose(t.Context(), panel.Keys(), nil, counters)
+	findings := cli.Diagnose(t.Context(), panel.Keys(), panel.Env{Counters: counters})
 	var out bytes.Buffer
 	require.NoError(t, cli.Report(&out, findings))
 
@@ -282,7 +282,7 @@ func TestDoctorSaysInstallTheUdevRuleForADeviceThatMayNotBeOpened(t *testing.T) 
 // placeholders as though something had been read.
 func TestDoctorDoesNotReportThePlaceholders(t *testing.T) {
 	bare(t)
-	findings := cli.Diagnose(t.Context(), panel.Keys(), nil, counters)
+	findings := cli.Diagnose(t.Context(), panel.Keys(), panel.Env{Counters: counters})
 
 	for _, f := range findings {
 		if f.Key != "peripherals" {

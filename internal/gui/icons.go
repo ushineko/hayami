@@ -26,19 +26,21 @@ word:
   - usage: a storage icon, a quota being filled.
 
 A name this does not know draws nothing, which is what IconNone asks for and
-what a settings file from a later version would arrive with.
+what a settings file from a later version would arrive with. A section whose
+icon is missing here is caught by TestEverySectionHasAnIcon.
 */
 func sectionIcon(name view.IconName) fyne.Resource {
-	switch name {
-	case view.IconPeripherals:
-		return fynetheme.ComputerIcon()
-	case view.IconBandwidth:
-		return fynetheme.DownloadIcon()
-	case view.IconCooler:
-		return fynetheme.MediaRecordIcon()
-	case view.IconUsage:
-		return fynetheme.StorageIcon()
-	default:
-		return nil
+	if icon, ok := sectionIcons[name]; ok {
+		return icon()
 	}
+	return nil
+}
+
+// sectionIcons are the glyphs by name. Functions rather than resources, so
+// each is asked of the theme when it is drawn.
+var sectionIcons = map[view.IconName]func() fyne.Resource{
+	view.IconPeripherals: fynetheme.ComputerIcon,
+	view.IconBandwidth:   fynetheme.DownloadIcon,
+	view.IconCooler:      fynetheme.MediaRecordIcon,
+	view.IconUsage:       fynetheme.StorageIcon,
 }

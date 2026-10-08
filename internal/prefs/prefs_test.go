@@ -13,9 +13,9 @@ import (
 
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/desktop"
-	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/prefs"
 	"github.com/ushineko/hayami/internal/testenv"
+	"github.com/ushineko/hayami/internal/view"
 )
 
 func store(t *testing.T, body string) *config.Store {
@@ -93,10 +93,10 @@ func TestAChangeReachesTheStoreWithoutASaveButton(t *testing.T) {
 	assert.Equal(t, 1, called)
 }
 
-// AC8. Every section this build knows is offered by name, including the one
-// added last.
+// AC8. Every section this build knows is offered by its title (spec 038; it
+// was the settings key), including the one added last.
 //
-// The list is built from panel.Keys(), so this passes for free — which is
+// The list is built from the section registry, so this passes for free — which is
 // exactly why it is asserted rather than assumed. A section wired into the
 // panel and not into the preferences would be one a reader could see and not
 // turn off, and nothing else in the suite would notice.
@@ -113,10 +113,10 @@ func TestEveryKnownSectionIsOfferedByName(t *testing.T) {
 		}
 	}
 
-	for _, key := range panel.Keys() {
-		assert.Contains(t, offered, key)
+	for _, s := range view.Sections() {
+		assert.Contains(t, offered, s.Title)
 	}
-	assert.Contains(t, offered, "peripherals")
+	assert.Contains(t, offered, "Peripherals")
 }
 
 // AC10. The Window section offers the rule and the opacity -- the rule only

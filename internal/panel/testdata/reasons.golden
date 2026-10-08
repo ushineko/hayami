@@ -1,0 +1,148 @@
+## cooler: nothing at all
+- label="CPU" text="no sensor" status=0 aside=false actionable=false
+  detail="<cpu-sensors>"
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="Coolant" text="no cooler" status=0 aside=false actionable=false
+  detail="no supported cooler detected"
+## cooler: a load and no temperature
+- label="CPU" text="no sensor" status=0 aside=true actionable=false
+  detail="<cpu-sensors>"
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="Coolant" text="no cooler" status=0 aside=false actionable=false
+  detail="no supported cooler detected"
+## cooler: an absence the source explains
+- label="CPU" text="no sensor" status=0 aside=true actionable=false
+  detail="LibreHardwareMonitor is running but its web server is off: Options → Remote Web Server → Run"
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="Coolant" text="no cooler" status=0 aside=false actionable=false
+  detail="no supported cooler detected"
+## cooler: an absence the source explains
+- label="CPU" text="no sensor" status=0 aside=true actionable=false
+  detail="Windows needs LibreHardwareMonitor and its PawnIO driver for a CPU temperature: see README, On Windows"
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="Coolant" text="no cooler" status=0 aside=false actionable=false
+  detail="no supported cooler detected"
+## cooler: a cooler not permitted
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="" text="NZXT Kraken Elite V2 is not permitted" status=2 aside=false actionable=true
+  detail="<permission>"
+## cooler: a cooler unsupported
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="NZXT Kraken Elite V2" text="unsupported" status=0 aside=false actionable=false
+  detail="found, and left alone: its battery protocol is not one this build knows"
+## cooler: a cooler that would not answer
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="" text="the cooler would not answer" status=2 aside=false actionable=false
+  detail="opening a nzxt device: timeout"
+## cooler: a scan that failed
+- label="" text="no GPU sensor" status=0 aside=true actionable=false
+  detail="<gpu-sensors>"
+- label="" text="the cooler would not answer" status=2 aside=false actionable=false
+  detail="scan broke"
+## bandwidth: nothing chosen
+- label="" text="no interfaces chosen" status=0 aside=false actionable=false
+  detail="pick one in the preferences, or pass --sections"
+## bandwidth: a name not listed
+- label="wlan9" text="not present" status=0 aside=false actionable=false
+  detail=""
+## bandwidth: Wi-Fi details withheld
+- label="Wi-Fi" text="details withheld" status=0 aside=true actionable=false
+  detail="Windows withholds Wi-Fi details from desktop apps without location access: Settings, Privacy & security, Location (ms-settings:privacy-location)"
+## peripherals: an empty desk
+- label="" text="no Logitech receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Razer device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+## peripherals: a device not permitted, alone
+- label="" text="no Logitech receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Razer device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="SteelSeries Apex is not permitted" status=2 aside=false actionable=true
+  detail="<permission>"
+## peripherals: a device not permitted, on a full card
+- label="" text="SteelSeries Apex is not permitted" status=2 aside=false actionable=true
+  detail="<permission>"
+- label="SteelSeries Arctis 7" text="unsupported" status=0 aside=true actionable=false
+  detail="found, and left alone: its battery protocol is not one this build knows"
+## peripherals: unsupported, alone
+- label="" text="no Logitech receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Razer device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="SteelSeries Arctis 7" text="unsupported" status=0 aside=false actionable=false
+  detail="found, and left alone: its battery protocol is not one this build knows"
+## peripherals: a vendor that would not list
+- label="" text="no Logitech receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="a Razer device would not answer" status=2 aside=false actionable=false
+  detail="enumeration failed"
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+## peripherals: a device that would not read
+- label="" text="no Logitech receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="a Razer device would not answer" status=2 aside=false actionable=false
+  detail="io"
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+## peripherals: a dock answering nothing
+- label="" text="no Logitech receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="a Razer device answered nothing" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+## peripherals: a receiver with nothing awake
+- label="" text="a Logitech receiver, with nothing awake on it" status=0 aside=false actionable=false
+  detail="2 indices asked and none answered; a sleeping device and an empty slot say the same thing"
+- label="" text="no Razer device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+## peripherals: a receiver with nothing paired
+- label="" text="a Logitech receiver, with nothing paired to it" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Razer device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+## peripherals: a device too old to read
+- label="" text="a Logitech receiver, with nothing paired to it" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Razer device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no SteelSeries device" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="Logitech K800" text="speaks HID++ 1.0" status=0 aside=false actionable=false
+  detail="found, and not read: its HID++ 1.0 battery register would not answer"
+## usage: a gather that failed
+- label="" text="the usage cache could not be read" status=2 aside=false actionable=false
+  detail="cache unreadable"

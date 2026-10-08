@@ -55,7 +55,7 @@ type LinkReading struct {
 // cumulative totals go in the detail line under each rate, which is where the
 // monitor puts them and why it can show four numbers per interface in 265 px.
 func Bandwidth(readings []BandwidthReading) Section {
-	s := Section{Key: "bandwidth", Title: "Bandwidth", Icon: IconBandwidth}
+	s := BandwidthInfo.section()
 	unit := UnitWidth("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s")
 
 	for _, r := range readings {
@@ -141,22 +141,10 @@ func SignalLevel(l LinkReading) int {
 	switch {
 	case !l.Connected:
 		return 0
-	case l.HasRSSI && l.RSSI >= SignalExcellent:
-		return 4
-	case l.HasRSSI && l.RSSI >= SignalGood:
-		return 3
-	case l.HasRSSI && l.RSSI >= SignalFair:
-		return 2
 	case l.HasRSSI:
-		return 1
-	case l.HasSignal && l.Signal >= 75:
-		return 4
-	case l.HasSignal && l.Signal >= 50:
-		return 3
-	case l.HasSignal && l.Signal >= 25:
-		return 2
+		return SignalRSSIBands.Of(float64(l.RSSI))
 	case l.HasSignal:
-		return 1
+		return SignalPercentBands.Of(float64(l.Signal))
 	default:
 		return 0
 	}
@@ -169,12 +157,7 @@ func SignalBars(l LinkReading) string { return segments(SignalLevel(l)) }
 // signalStatus is the bars' emphasis. One bar is the only verdict: a link that
 // weak is the likely reason the rates beside it are low. More than that is
 // drawn as the rates are, because a good signal is not news.
-func signalStatus(l LinkReading) Status {
-	if SignalLevel(l) == 1 {
-		return Warn
-	}
-	return Info
-}
+func signalStatus(l LinkReading) Status { return SignalEmphasis.Of(float64(SignalLevel(l))) }
 
 // linkLine is the link under the totals: strength, band and channel, and the
 // rate the radio negotiated, each padded to the widest it can be so the line
@@ -276,16 +259,10 @@ const (
 // amber and amber reads as "look here" without reading as "something broke";
 // the error colour would.
 func RateBand(bytesPerSecond float64, has bool) Status {
-	switch {
-	case !has || bytesPerSecond < RateNotable:
+	if !has {
 		return Info
-	case bytesPerSecond < RateBusy:
-		return Accent
-	case bytesPerSecond < RateFlatOut:
-		return Warn
-	default:
-		return Strong
 	}
+	return RateBands.Of(bytesPerSecond)
 }
 
 // rate is one direction's figure and unit, at a width that does not change.

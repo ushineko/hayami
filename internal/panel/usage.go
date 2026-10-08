@@ -54,10 +54,7 @@ func NewUsage() *Usage {
 }
 
 // Key names the section.
-func (u *Usage) Key() string { return "usage" }
-
-// Title is what it is called on screen.
-func (u *Usage) Title() string { return "Usage" }
+func (u *Usage) Key() string { return view.UsageInfo.Key }
 
 // Interval is UsageInterval.
 func (u *Usage) Interval() time.Duration { return UsageInterval }
@@ -73,10 +70,9 @@ func (u *Usage) Poll(ctx context.Context) (bool, error) {
 	windows, fetchedAt, reasons, err := u.read(ctx)
 	if err != nil {
 		u.mu.Lock()
-		u.reasons = []view.Reason{{
+		u.reasons = []view.Reason{reason(view.Reason{
 			Text: "the usage cache could not be read", Status: view.Warn,
-			Detail: err.Error(),
-		}}
+		}, err)}
 		u.mu.Unlock()
 		return false, err
 	}
@@ -142,10 +138,9 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 			// One account's payload not decoding is one account, not the
 			// section. The canary in internal/usage reports a format change;
 			// a pane should still draw the accounts that do decode.
-			reasons = append(reasons, view.Reason{
+			reasons = append(reasons, reason(view.Reason{
 				Label: a.Label(), Text: "unreadable reading", Status: view.Warn,
-				Detail: err.Error(),
-			})
+			}, err))
 			continue
 		}
 		if len(windows) == 0 {
@@ -190,10 +185,7 @@ what is happening instead.
 */
 func silence(now time.Time, a usage.Account, err error) view.Reason {
 	if err != nil {
-		return view.Reason{
-			Label: a.Label(), Text: "could not be read", Status: view.Warn,
-			Detail: err.Error(),
-		}
+		return reason(view.Reason{Label: a.Label(), Text: "could not be read", Status: view.Warn}, err)
 	}
 
 	entry, rerr := usage.Read(a.Name, a.Provider)
