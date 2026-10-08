@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.3
+**Version**: 0.9.4
 
 *a chart you read at a glance*
 
@@ -392,7 +392,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.4 (2026-10-08)
 
 - **Add**: the panel hides while a full-screen app is in front on its monitor,
   on Windows (spec 051, #167): a browser in full screen or a game in windowed
