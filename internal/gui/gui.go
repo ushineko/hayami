@@ -545,8 +545,8 @@ func flatten(rows []view.Row) []view.Row {
 		bare := r
 		bare.Detail = ""
 		out = append(out, bare)
-		if r.Detail != "" {
-			out = append(out, view.Row{Value: r.Detail, Status: view.Info})
+		for _, d := range r.DetailLines() {
+			out = append(out, view.Row{Value: d, Status: view.Info})
 		}
 	}
 	return out

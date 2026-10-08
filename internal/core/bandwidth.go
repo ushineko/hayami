@@ -28,6 +28,10 @@ type Rates struct {
 	// "nothing is happening", and a panel that conflated them would draw a
 	// confident nought where it has no answer.
 	HasRate bool `json:"has_rate"`
+
+	// Wireless is the link of a Wi-Fi interface (spec 037), and nil for
+	// every other. The sampler never sets it; the section does.
+	Wireless *Wireless `json:"wireless,omitempty"`
 }
 
 // Bandwidth turns counters into rates. It holds the previous sample, because a

@@ -118,8 +118,8 @@ func block(s Section, width int, p Painter) []string {
 			r.Status = Dim
 		}
 		out = append(out, line(r, width, p))
-		if r.Detail != "" {
-			out = append(out, p.paint(rightAlign(r.Detail, width), Dim))
+		for _, d := range r.DetailLines() {
+			out = append(out, p.paint(rightAlign(d, width), Dim))
 		}
 	}
 	out = append(out, cells(s.Cells, width, p)...)

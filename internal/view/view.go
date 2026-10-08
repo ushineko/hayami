@@ -230,7 +230,9 @@ type Row struct {
 	Status Status
 
 	// Detail is a second, quieter line under the row — the cumulative totals
-	// under a rate. Empty means there is none.
+	// under a rate. Empty means there is none. More than one line is
+	// separated by "\n", each drawn as the first is: a Wi-Fi interface's link
+	// goes under its totals (spec 037).
 	Detail string
 
 	// Stale marks a row whose source missed this poll: the last value is
@@ -255,6 +257,15 @@ type Row struct {
 	// processor's name that arrives a poll after "CPU". Zero for a label that
 	// is what it is.
 	LabelWidth int `json:",omitempty"`
+}
+
+// DetailLines are the row's detail lines, in order, and none for a row
+// without a detail.
+func (r Row) DetailLines() []string {
+	if r.Detail == "" {
+		return nil
+	}
+	return strings.Split(r.Detail, "\n")
 }
 
 // Section is a titled group of rows and meters, which is what a card is in the
