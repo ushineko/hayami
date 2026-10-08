@@ -384,6 +384,13 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: the panel no longer sticks to a screen edge when dragged on
+  Windows: it snaps from inside, lets go as soon as the pointer is past the
+  snap distance, and goes with the pointer when pushed past an edge
+  (fynedesygn 0.1.88).
+
 ### 0.9.2 (2026-10-08)
 
 - **Change**: the panel snaps to the screen's edges when dragged on Windows
