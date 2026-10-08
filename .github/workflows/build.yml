@@ -71,6 +71,12 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -tags migrated_fynedo ./...
 
+      # The icon and the version Explorer shows (spec 053): the same script the
+      # installer runs, so CI builds what a person installs.
+      - name: Windows resources
+        shell: pwsh
+        run: ./scripts/winres.ps1
+
       - name: Build
         shell: bash
         run: |

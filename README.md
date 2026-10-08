@@ -164,6 +164,11 @@ winget installed is found where winget put it.
 .\scripts\uninstall_windows.ps1             # remove exactly those, keeping your settings
 ```
 
+The build gives both programs hayami's icon and version (spec 053), which the
+Start menu, the shortcuts and a file's Properties show: `scripts/winres.ps1`
+draws the icon from the panel's own SVG and runs go-winres, pinned and run
+with `go run`, so nothing is installed for it.
+
 Everything is per-user, under `%LOCALAPPDATA%\Programs\hayami`: no
 administrator rights, no registry writes, no `PATH` changes. Settings live in
 `%APPDATA%\hayami\settings.yaml` and the last readings in
@@ -371,6 +376,10 @@ tools/shot-tui.sh out.png 150 6 ./hayami-tui --sections usage
                # photograph a pane in a real terminal (KDE/Wayland)
 ```
 
+A Windows build links `cmd/*/rsrc_windows_amd64.syso`, the icon and version
+resources: run `scripts\winres.ps1` before `go build` (the installer and CI
+do). The files are build output and not committed.
+
 ## Where it comes from
 
 `ag-scripts/peripheral-battery-monitor`, 6,913 lines of PyQt6, which has run
@@ -391,6 +400,14 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Fix**: on Windows the programs carry hayami's icon and version, so the
+  Start menu entry, the shortcuts and a file's Properties show them; they were
+  blank (spec 053, #163). `scripts/winres.ps1` draws the icon from the
+  panel's SVG and runs go-winres v0.3.3 with `go run` before the build; the
+  installer and CI run it, and the shortcuts point at the executable's icon.
 
 ### 0.9.4 (2026-10-08)
 

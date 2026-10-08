@@ -64,6 +64,8 @@ func TestTheWindowsInstallerDryRunWritesNothing(t *testing.T) {
 		filepath.Join(dest, "hayami-tui.exe"),
 		filepath.Join(menu, "hayami.lnk"),
 		filepath.Join(startup, "hayami.lnk"),
+		// The icon and version resources come before the build (spec 053).
+		"would write cmd/hayami/rsrc_windows_amd64.syso",
 	} {
 		assert.Contains(t, string(out), want)
 	}

@@ -13,6 +13,10 @@
 # to close. The pattern covers it and that is the point.
 /hayami-*
 
+# The Windows resources (icon, version) scripts/winres.ps1 makes before a
+# build: object files, regenerated every build (spec 053).
+/cmd/*/rsrc_windows_*.syso
+
 # Coverage
 coverage.out
 count.out
