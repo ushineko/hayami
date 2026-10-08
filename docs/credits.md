@@ -30,6 +30,7 @@ carry the detail. In short:
 | [Bubble Tea](https://github.com/charmbracelet/bubbletea) and Lip Gloss | MIT | The terminal panel. |
 | [sanshoku](https://github.com/ushineko/sanshoku) | MIT | Every device. |
 | [Cobra](https://github.com/spf13/cobra) | Apache-2.0 | The command line. |
+| [mdlayher/wifi](https://github.com/mdlayher/wifi) | MIT | A Wi-Fi interface's signal, frequency and link rates over nl80211 on Linux (spec 037). |
 
 ## Where it came from
 

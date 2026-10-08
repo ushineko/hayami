@@ -11,6 +11,7 @@ package panel
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ushineko/hayami/internal/core"
@@ -71,6 +72,7 @@ func (b *Bandwidth) Section() view.Section {
 			continue
 		}
 		trail := b.Trail(r.Name)
+		w, radio := b.Wireless(r.Name)
 		out = append(out, view.BandwidthReading{
 			Name:     r.Name,
 			RxRate:   r.RxRate,
@@ -81,6 +83,8 @@ func (b *Bandwidth) Section() view.Section {
 			HasTotal: r.Present,
 			RxTrail:  trail.Rx,
 			TxTrail:  trail.Tx,
+			Radio:    radio,
+			Link:     link(w),
 		})
 	}
 	sec := view.Bandwidth(out)
@@ -90,8 +94,32 @@ func (b *Bandwidth) Section() view.Section {
 			Detail: "pick one in the preferences, or pass --sections",
 		})
 	}
+	if errors.Is(b.WirelessErr(), core.ErrWirelessDenied) {
+		// Aside: the row already shows what it could read, blank where it
+		// could not, and a line on the card about a privacy setting would be
+		// there every day on every machine that keeps it. The pointer and
+		// doctor say it.
+		reasons = append(reasons, view.Reason{
+			Label: "Wi-Fi", Text: "details withheld", Status: view.Info, Aside: true,
+			Detail: "Windows withholds Wi-Fi details from desktop apps without location access: " +
+				"Settings, Privacy & security, Location (ms-settings:privacy-location)",
+		})
+	}
 	sec.Reasons = reasons
 	return sec
+}
+
+// link is a Wi-Fi description as the view takes it.
+func link(w core.Wireless) view.LinkReading {
+	return view.LinkReading{
+		Connected: w.Connected,
+		RSSI:      w.RSSI, HasRSSI: w.HasRSSI,
+		Signal: w.Signal, HasSignal: w.HasSignal,
+		Band:    w.Band(),
+		Channel: w.Channel, HasChannel: w.HasChannel,
+		Generation: w.Generation,
+		RxRate:     w.RxRate, TxRate: w.TxRate, HasRx: w.HasRx, HasTx: w.HasTx,
+	}
 }
 
 // Data is the last sample as plain values.

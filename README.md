@@ -69,7 +69,7 @@ and the choice holds in both shells.
 | Section | Reads |
 |---|---|
 | Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
-| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; on Windows, the interface table (`GetIfTable2`), named as Network Connections names them; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
+| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; on Windows, the interface table (`GetIfTable2`), named as Network Connections names them; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one. A Wi-Fi interface leads with its signal in four bars and carries its strength, band, channel and link rate on a line under its totals, from nl80211 on Linux and the WLAN service on Windows; the network's name is never read |
 | Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. A five-minute trend of the coolant, the processor and the graphics card |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
 
@@ -178,6 +178,12 @@ What differs from Linux:
 - **Bandwidth** offers the interfaces Network Connections shows; Windows'
   loopback, its `Local Area Connection*` adapters and its IPv6 transition
   tunnels are kept behind "Show every interface".
+- **Wi-Fi details can be withheld.** Since Windows 11 24H2 the WLAN service
+  describes the connection only to desktop apps allowed location access
+  (Settings, Privacy & security, Location, "Let desktop apps access your
+  location"), because the access point's address would locate the machine.
+  Where it declines, the Wi-Fi row shows what it could read, and `doctor` and
+  the card's tip say why the rest is blank.
 - **Peripherals and the cooler find nothing yet.** sanshoku reads devices
   through Linux interfaces; on Windows it builds and reports that there is
   nothing to read. Reading them there is its own piece of work.
@@ -306,6 +312,16 @@ programs import, with its measurements, its hardware bench and its udev rule.
 MIT. See [LICENSE](LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Add**: a Wi-Fi interface's link (spec 037). Its row leads with the signal
+  in the battery's four bars, by RSSI, and a line under its totals gives the
+  strength, band, channel and link rate; the tip has the generation, Windows'
+  percentage and both rates. Read from nl80211 on Linux (mdlayher/wifi, with
+  `/proc/net/wireless` behind it) and from the WLAN service on Windows. The
+  SSID and BSSID are never read. A desk of wired interfaces asks once and
+  never again.
 
 ### 0.8.6 (2026-10-01)
 
