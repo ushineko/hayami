@@ -55,8 +55,9 @@ so the window manager already does this.
 - [x] The Explorer-launch test still passes.
 - [ ] On the Linux desk: an active full-screen window covers the panel with
   nothing from this spec.
-- [ ] With the maintainer: Terraria in windowed full screen hides the
-  installed panel, and leaving it brings the panel back.
+- [x] With the maintainer: Terraria in windowed full screen hides the
+  installed panel, and leaving it brings the panel back. Also YouTube's
+  full-screen button in the maintainer's browser.
 
 ## Risks & Assumptions
 
@@ -82,3 +83,13 @@ so the window manager already does this.
   back in place each time, not focused. Setting off: still shown after
   2.5 s.
 - Falsified as above.
+
+2026-10-08, the installed 0.9.4, started from its Start menu shortcut:
+
+- A borderless window covering the panel's monitor (Terraria's shape), brought
+  to the front: the panel hidden after 566 ms; closed, it was back after 1.0 s
+  at the same place, (3462, 1448), and had not taken the focus.
+- A full-screen Edge window in a throwaway profile: the panel hidden after
+  1.9 s, Edge's start included; closed, back at the same place, not focused.
+- The maintainer: Terraria in windowed full screen hides the panel and
+  Alt-Tab brings it back; YouTube's full-screen button does the same.
