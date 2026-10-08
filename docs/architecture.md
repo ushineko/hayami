@@ -92,10 +92,16 @@ The chain merges what each provider gave and records what it tried, so the
 reason for a gap is written where the attempt is made, not retold by the
 panel.
 
-Today the graphics chain is an if-chain in `core.GraphicsReader.Read`, and the
-processor temperature is chosen by build tags in `panel`. Add a new source to
-the existing chain in `core`, not to `panel`. The `Provider`/`Chain` types
-are phase 2 of the architecture review.
+A provider is `core.Provider[T]` (a name a person reads, and a `Read`), and a
+chain is `core.Chain[T]` (`internal/core/chain.go`): providers in order, a
+`Merge` that fills what is missing and says when the reading is complete, and
+an `Outcome` recording every provider tried and the first account of absence
+one gave. Each platform declares its chains in `internal/core/host_tables.go`,
+which has no build tag so a test on any system checks every platform's order
+and wording. The processor's temperature and the graphics card are chains;
+`core.GraphicsReader.Chain` builds the card's from the routes whose fields are
+set, so a Windows host never looks under `/sys`. Adding a source is a provider
+and a row in its platform's chain; the reason for a gap names it by itself.
 
 ### 5. Platform code: one file per platform, in core
 
@@ -106,10 +112,17 @@ live in `core`, plus `desktop` for window management. `panel`, `view` and the
 shells contain no build tags and no `runtime.GOOS` checks. They take what the
 platform offers from `core`.
 
-Not yet consistent: some `_other.go` files assume Linux (`counters_other.go`,
-`graphics_other.go`), and `panel` still has one platform file pair
-(`platform_*`, the Bluetooth vendor). New code follows the rule. The existing
-files move in phase 2.
+What a platform offers is one value, `core.Host`, declared by `core.NewHost`
+in `host_linux.go`, `host_windows.go` and `host_other.go`: the processor and
+card chains and their accounts of absence, the load and name readers, the
+interface and Wi-Fi readers, the advice for a device that would not open, and
+the Bluetooth drivers it can use. `panel` takes it through `panel.Env.Host`
+(nil is this platform's own), and a test builds one of its own. A file that
+only one platform can have, such as `lhm_other.go` (LibreHardwareMonitor is a
+Windows program), uses `!windows` and returns absence.
+
+Outside `core` and `desktop`, `internal/usage/path.go` still chooses the cache
+directory by `runtime.GOOS`, and `internal/testenv` does for the device scan.
 
 ### 6. Absence is a value, not a sentence
 
@@ -177,12 +190,12 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | To add | Where | Also |
 |---|---|---|
 | Support for a device | A sanshoku driver and its support-table entry, with a bench reading from the device; a sanshoku release | In hayami: `go get` the release, plus a `vendors()` row while rule 1's aim is unbuilt |
-| A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
-| Another source for an existing quantity | The existing chain in `core` (rule 4), in priority order for each platform | The absence it can report, as a typed absence |
+| A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
+| Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | Today a `config.Config` field; settings by section are planned | The preferences window, if a person would change it more than once |
-| A platform | `_<os>.go` files in `core` (and `desktop`); every `_other` stays honest | CI builds and tests on it |
+| A platform | `_<os>.go` files in `core` (and `desktop`), including its `core.NewHost`; every `_other` stays honest | CI builds and tests on it |
 
 ## Testing
 
@@ -211,7 +224,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Threshold bands | 7 | In place | #127 |
 | Typed absences, one reason helper | 6 | In place | #128 |
 | One window-test harness, rows found by label | Testing | In place | #129 |
-| `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | Planned (phase 2) | |
+| `Provider`/`Chain` for sensors; one platform table in `core` | 4, 5 | In place | #137 |
 | Cooler and link readings as lists of probes | 4 | Planned (phase 2) | |
 | Settings by section | Adding things | Planned (phase 4) | |
 | Parity test that compares what the shells draw; `row` drawn by the window | 3 | Planned (phase 4) | |

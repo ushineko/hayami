@@ -15,7 +15,7 @@ import (
 // Spec 034. GetSystemTimes is a load on any Windows machine, without
 // privilege, and the first call has one.
 func TestOnWindowsTheProcessorsLoadIsRead(t *testing.T) {
-	load, ok := core.HostCPULoad().Load()
+	load, ok := core.NewHost(core.HostConfig{}).CPULoad().Load()
 
 	require.True(t, ok)
 	assert.GreaterOrEqual(t, load, 0.0)

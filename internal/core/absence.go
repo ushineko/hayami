@@ -11,6 +11,9 @@ type AbsenceCode string
 const (
 	// AbsenceCPUSensor is no processor temperature on this platform's route.
 	AbsenceCPUSensor AbsenceCode = "cpu-sensor"
+	// AbsenceGPUSensor is no graphics card temperature on any route this
+	// platform tried.
+	AbsenceGPUSensor AbsenceCode = "gpu-sensor"
 	// AbsenceLHMNoSensor is LibreHardwareMonitor answering with no processor
 	// temperature: PawnIO, most likely, is not installed.
 	AbsenceLHMNoSensor AbsenceCode = "lhm-no-sensor"
