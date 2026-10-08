@@ -343,6 +343,7 @@ func (p *Panel) Apply(c config.Config) {
 		}
 	}
 	p.win.Panel().SetArrangement(arr)
+	p.win.SetHideForFullscreen(c.HidesForFullscreen())
 
 	// And repaint in it. A card restyles its title and its rows; a meter and
 	// a sparkline go in as plain canvas objects and have to be told, and

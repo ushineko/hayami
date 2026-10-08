@@ -87,6 +87,10 @@ type panelSettings struct {
 	// Settle is how long the panel is given after its window appears, for
 	// its first polls.
 	Settle time.Duration
+	// HideForFullscreen turns on hiding while a full-screen app is in front
+	// (spec 051). Off unless a test asks: a panel that hid itself because
+	// someone has a game or a film in front could not be photographed.
+	HideForFullscreen bool
 
 	// x and y are where the window opens, set by start: away from the
 	// pointer, so the panel never opens under it and shows a row's tip over
@@ -113,6 +117,7 @@ func (s panelSettings) yaml() string {
 	if s.LHM != "" {
 		b.WriteString("        cooler:\n            lhm: " + s.LHM + "\n")
 	}
+	fmt.Fprintf(&b, "    hideForFullscreen: %t\n", s.HideForFullscreen)
 	// Placed says the position is one: zero is a legal coordinate.
 	fmt.Fprintf(&b, "    x: %d\n    y: %d\n    placed: true\n", s.x, s.y)
 	return b.String()

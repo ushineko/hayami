@@ -67,6 +67,10 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	slider.OnChanged = func(v float64) { value.SetText(fmt.Sprintf("%d %%", int(v))) }
 	slider.OnChangeEnded = func(v float64) { w.setOpacity(int(v)) }
 
+	fullscreen := widget.NewCheck("Hide while a full-screen app is in front", nil)
+	fullscreen.SetChecked(c.HidesForFullscreen())
+	fullscreen.OnChanged = func(on bool) { w.setHideForFullscreen(on) }
+
 	items := []fyne.CanvasObject{
 		widgets.DimWrapped("The panel's own faces and size. This window keeps the ones on its " +
 			"Appearance screen: the two are read at different distances."),
@@ -93,6 +97,13 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 		container.NewBorder(nil, nil, nil, value, slider),
 		widgets.DimWrapped("Drawn by the panel itself, so it works on any desktop."),
 	)
+	if desktop.HidesForFullscreen {
+		items = append(items,
+			widget.NewSeparator(),
+			fullscreen,
+			widgets.DimWrapped("A browser in full screen or a game in windowed full screen, on the "+
+				"panel's monitor. The panel comes back when you return to the desktop."))
+	}
 	return container.NewVBox(items...)
 }
 
@@ -126,6 +137,12 @@ func (w *Window) setOpacity(opacity int) {
 	c := w.opts.Store.Config()
 	c.Opacity = opacity
 	w.save(c)
+}
+
+// setHideForFullscreen saves whether the panel stands aside for a
+// full-screen app.
+func (w *Window) setHideForFullscreen(on bool) {
+	w.save(w.opts.Store.Config().WithHideForFullscreen(on))
 }
 
 // report says how a compositor call went.

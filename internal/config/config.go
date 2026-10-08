@@ -79,6 +79,14 @@ type Config struct {
 	// settings file written before this field existed carries.
 	Opacity int `json:"opacity"`
 
+	// HideForFullscreen is whether the desktop panel hides while a full-screen
+	// app is in front on its monitor (spec 051): a browser in full screen, a
+	// game in windowed or borderless full screen. Nil means on, which is what
+	// a settings file written before this field existed carries: a panel over
+	// a full-screen app is never wanted. Windows only; KWin already covers the
+	// panel with an active full-screen window.
+	HideForFullscreen *bool `json:"hideForFullscreen,omitempty"`
+
 	// X and Y are where the panel last was, in the compositor's coordinates.
 	//
 	// Kept because a Wayland client cannot place itself and cannot read
@@ -146,6 +154,17 @@ func (c Config) PanelAppearance(a fdtheme.Appearance) fdtheme.Appearance {
 	}
 	a.TextSize = c.FontSizeOr(a.TextSize)
 	return a
+}
+
+// HidesForFullscreen is HideForFullscreen with the unset nil resolved: on.
+func (c Config) HidesForFullscreen() bool {
+	return c.HideForFullscreen == nil || *c.HideForFullscreen
+}
+
+// WithHideForFullscreen is the config with the full-screen hiding set.
+func (c Config) WithHideForFullscreen(on bool) Config {
+	c.HideForFullscreen = &on
+	return c
 }
 
 // OpacityOrDefault is the opacity to use, resolving the unset zero.

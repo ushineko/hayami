@@ -76,6 +76,15 @@ var RulesApply = rulesApply(runtime.GOOS)
 
 func rulesApply(goos string) bool { return goos == "linux" }
 
+// HidesForFullscreen is whether the panel has to stand aside for a
+// full-screen app itself (spec 051). On Windows an always-on-top window stays
+// over a borderless full-screen one; on KWin an active full-screen window is in
+// a layer above keep-above windows, so the window manager covers the panel and
+// there is nothing to offer.
+var HidesForFullscreen = hidesForFullscreen(runtime.GOOS)
+
+func hidesForFullscreen(goos string) bool { return goos == "windows" }
+
 // NoRules is what to say instead, where RulesApply is false.
 const NoRules = "Window rules are KWin's, on Linux. Here the panel has no titlebar " +
 	"and stays on top by itself: drag it anywhere to move it, and it opens where it was left."
