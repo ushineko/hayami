@@ -15,10 +15,11 @@ import (
 // tested through, so the suite opens no device.
 type Scan func(ctx context.Context, drivers ...sanshoku.Driver) ([]sanshoku.Candidate, error)
 
-// udevDetail is what a device that may not be opened is told to do. The rule
-// used to arrive with liquidctl's and OpenRazer's packages; reading the devices
-// directly, nothing installs it but hayami's own installer.
-const udevDetail = "install the udev rule (60-sanshoku.rules) and replug; see the README"
+// DeviceScan is the scan the real device sections are built over:
+// sanshoku.Scan. A variable so a test in another package can take the desk
+// away where the transport reads the system's own device list, which no
+// directory a test writes can stand in for (Windows, spec 035).
+var DeviceScan Scan = sanshoku.Scan
 
 /*
 held is the devices a section has open, kept across polls.
@@ -117,11 +118,11 @@ func (h *held) prune() {
 // the section reports in its own words and returns for logging.
 func openFailure(c sanshoku.Candidate, err error) (reason *view.Reason, failed bool) {
 	switch {
-	case sanshoku.IsPermission(err):
+	case permitted(err):
 		// Not a failure to log every poll: nothing will change until
-		// somebody installs the rule, and the reason says so.
+		// somebody does what the detail says.
 		return &view.Reason{
-			Text: c.Name + " is not permitted", Status: view.Warn, Detail: udevDetail,
+			Text: c.Name + " is not permitted", Status: view.Warn, Detail: permissionDetail,
 		}, false
 	case errors.Is(err, sanshoku.ErrUnsupported):
 		// Detected and deliberately not spoken to (spec 017). The name is the

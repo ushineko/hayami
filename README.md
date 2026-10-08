@@ -68,7 +68,7 @@ and the choice holds in both shells.
 
 | Section | Reads |
 |---|---|
-| Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one |
+| Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one, the AULA F75's battery report through its 2.4 GHz receiver; on Windows the HID protocols through the HID class driver, and no Bluetooth (spec 035) |
 | Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; on Windows, the interface table (`GetIfTable2`), named as Network Connections names them; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one |
 | Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. On Windows, `GetSystemTimes` for the processor's load and D3DKMT and the `GPU Engine` counters for the card (spec 034). A five-minute trend of the coolant, the processor and the graphics card |
 | Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
@@ -189,9 +189,19 @@ What differs from Linux:
   vendor's card; `nvidia-smi` is asked only for what they left out. The load
   is the busiest engine, as Task Manager gives it, which reads lower than
   `nvidia-smi`'s figure for the same card.
-- **Peripherals and the liquid cooler find nothing yet.** sanshoku reads
-  devices through Linux interfaces; on Windows it builds and reports that
-  there is nothing to read. Reading them there is its own piece of work.
+- **Peripherals read through Windows' own HID driver** (spec 035), with no
+  vendor software, no driver to install and no administrator rights; there
+  is no udev rule to install. What reads: Logitech HID++ devices, including
+  those behind a receiver; Razer devices, the Basilisk Ultimate on its dongle
+  among them; the AULA F75 through its 2.4 GHz receiver. SteelSeries is
+  expected to and not yet confirmed on Windows, and so is a Logitech
+  Unifying keyboard such as the K800. What does not: Bluetooth devices and
+  AirPods, whose readers are BlueZ and an L2CAP socket, neither of which
+  Windows has, so the card has no Bluetooth line there; and anything behind
+  a USB Bluetooth audio transmitter such as the UGREEN BT701, which pairs
+  the headphones itself and tells the computer neither their battery nor
+  whether they are connected.
+- **The liquid cooler finds nothing yet**: the Kraken is read on Linux only.
 
 #### The processor's temperature: LibreHardwareMonitor
 
@@ -361,6 +371,16 @@ MIT. See [LICENSE](LICENSE).
   missing, the reason says which of the setup steps is. The address is the
   `lhm` setting. `install_windows.ps1 -WithSensors` installs and starts
   LibreHardwareMonitor, on request only.
+- **Add**: peripherals on Windows (spec 035), with sanshoku v0.1.8, which
+  reads HID devices there. Logitech, Razer and SteelSeries are asked; the
+  Bluetooth drivers are not, since they read Linux services. A device
+  Windows will not open says another program may hold it, not "install the
+  udev rule".
+- **Add**: the AULA F75's battery through its 2.4 GHz receiver, on both
+  platforms (sanshoku spec 013).
+- **Fix**: the tests take the desk away on Windows too. They emptied the
+  hidraw tree, which on Windows is not where devices are listed, so with
+  sanshoku v0.1.8 the suite would have asked the real mouse and keyboard.
 
 ### 0.8.6 (2026-10-01)
 

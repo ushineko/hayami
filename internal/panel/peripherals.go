@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/ushineko/sanshoku"
-	"github.com/ushineko/sanshoku/apple"
+	"github.com/ushineko/sanshoku/aula"
 	"github.com/ushineko/sanshoku/battery"
-	"github.com/ushineko/sanshoku/bluez"
 	"github.com/ushineko/sanshoku/hidraw"
 	"github.com/ushineko/sanshoku/logitech"
 	"github.com/ushineko/sanshoku/razer"
@@ -86,17 +86,19 @@ type vendor struct {
 }
 
 // vendors are the peripherals drivers, in the order they are asked and their
-// reasons are given: logitech, razer, steelseries, apple, bluez.
+// reasons are given: logitech, razer, steelseries, aula, then Bluetooth where
+// this system has one hayami can read (apple, bluez; not on Windows).
+//
+// AULA is quiet for the reason Razer is: its receiver is listed whether or
+// not the keyboard is switched to it, and a receiver with a keyboard on its
+// cable answers nothing (spec 035).
 func vendors() []vendor {
-	return []vendor{
+	return append([]vendor{
 		{name: "Logitech", absent: "no Logitech receiver", drivers: []sanshoku.Driver{logitech.Driver{}}},
 		{name: "Razer", absent: "no Razer device", drivers: []sanshoku.Driver{razer.Driver{}}, quiet: true},
 		{name: "SteelSeries", absent: "no SteelSeries device", drivers: []sanshoku.Driver{steelseries.Driver{}}, quiet: true},
-		{
-			name: "Bluetooth", absent: "no Bluetooth device with a battery",
-			drivers: []sanshoku.Driver{apple.Driver{}, bluez.Driver{}},
-		},
-	}
+		{name: "AULA", absent: "no AULA receiver", drivers: []sanshoku.Driver{aula.Driver{}}, quiet: true},
+	}, bluetooth()...)
 }
 
 // remembered is one device's last reading that had a level in it.
@@ -112,7 +114,7 @@ type remembered struct {
 
 // NewPeripherals builds the peripherals source over sanshoku's drivers.
 func NewPeripherals() *Peripherals {
-	p := newPeripherals(sanshoku.Scan, time.Now)
+	p := newPeripherals(DeviceScan, time.Now)
 	if path, err := readings.File(knownFile); err == nil {
 		p.remember(path)
 	}
@@ -212,7 +214,7 @@ func (p *Peripherals) Poll(ctx context.Context) (bool, error) {
 		for i := range present {
 			// A device that may not be opened is not a footnote: it is the
 			// one line here a reader can act on, and it stays drawn.
-			if present[i].Detail != udevDetail {
+			if present[i].Detail != permissionDetail {
 				present[i].Aside = true
 			}
 		}
@@ -238,7 +240,7 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 		out.said = true
 		errs = append(errs, err)
 		reasons = append(reasons, view.Reason{
-			Text: "a " + v.name + " device would not answer", Status: view.Warn, Detail: err.Error(),
+			Text: article(v.name) + " " + v.name + " device would not answer", Status: view.Warn, Detail: err.Error(),
 		})
 	}
 
@@ -303,9 +305,18 @@ func (p *Peripherals) pollVendor(ctx context.Context, v vendor) (vendorPoll, []v
 		// Listed, opened and asked, and nothing came back: a mouse asleep in
 		// its dock. Saying nothing made the vendor look absent; saying "no
 		// Razer device" about a dock on the desk was the old reader's lie.
-		reasons = append(reasons, view.Reason{Text: "a " + v.name + " device answered nothing", Status: view.Info})
+		reasons = append(reasons, view.Reason{Text: article(v.name) + " " + v.name + " device answered nothing", Status: view.Info})
 	}
 	return out, reasons, present, errors.Join(errs...)
+}
+
+// article is "an" before a vendor whose name starts with a vowel -- "an AULA
+// device" -- and "a" before the rest.
+func article(name string) string {
+	if name != "" && strings.ContainsRune("AEIOUaeiou", rune(name[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 // PresentAsideAt is how many devices a card has to be drawing before a device
