@@ -31,6 +31,9 @@ func SensorDetail(err error) string { return sensorDetail(err) }
 // PermissionDetail is the detail a device that may not be opened is given.
 const PermissionDetail = permissionDetail
 
+// GPUSensorDetail is what the reason for a missing graphics card says.
+func GPUSensorDetail() string { return gpuSensorDetail() }
+
 // SetUsageRead replaces the gather, so a test can drive the usage section's
 // reasons without a cache directory or a credential store.
 func SetUsageRead(u *Usage, read func(context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error)) {
