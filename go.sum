@@ -102,8 +102,8 @@ github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef h1:Ch6Q+AZUxDBCVqd
 github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef/go.mod h1:nXTWP6+gD5+LUJ8krVhhoeHjvHTutPxMYl5SvkcnJNE=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
-github.com/ushineko/fynedesygn v0.1.86 h1:fiY/STgenIcyAH+lmigsgPYEtcu2zXFonRGaivQJ7+0=
-github.com/ushineko/fynedesygn v0.1.86/go.mod h1:+z97tCeeW8DXgnl8sKcWIhT81GDovDaumzgfp7Bfo2I=
+github.com/ushineko/fynedesygn v0.1.87 h1:e+YwhRqMk1fu/OaZsuLszrnhoOG4gvCyi2EiztX0qnU=
+github.com/ushineko/fynedesygn v0.1.87/go.mod h1:+z97tCeeW8DXgnl8sKcWIhT81GDovDaumzgfp7Bfo2I=
 github.com/ushineko/sanshoku v0.1.10 h1:JWABNmaG/ew29NHZuDxt/3VT4WcvgANUktTg41IUBUc=
 github.com/ushineko/sanshoku v0.1.10/go.mod h1:fCmgH+mFCK66xoZEW7QST/5CLoXhezR6gNFGeT/1qWY=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
