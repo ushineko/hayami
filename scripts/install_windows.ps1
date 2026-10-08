@@ -9,8 +9,9 @@
     login.
 
     Everything is per-user: no administrator rights, no registry writes, no
-    PATH changes. Re-running is safe. uninstall_windows.ps1 removes exactly
-    what this writes and leaves your settings.
+    PATH changes -- except with -WithSensors, whose one elevated step sets up
+    LibreHardwareMonitor. Re-running is safe. uninstall_windows.ps1 removes
+    exactly what this writes for hayami and leaves your settings.
 
     The desktop panel links OpenGL through cgo, so the build needs an x86_64
     mingw gcc. One on PATH is used; otherwise the WinLibs package winget
@@ -20,14 +21,18 @@
     Also start the panel when you log in.
 
 .PARAMETER WithSensors
-    Also install LibreHardwareMonitor, which is where the panel reads the
-    processor's temperature on Windows (spec 036). Opt-in, because it is a
-    second program, it runs as administrator, and it loads a kernel driver
-    (PawnIO). With this switch: winget installs it (and passing the switch
-    accepts winget's source and package agreements for that one package);
-    its settings are written with the web server on, if it has none yet; and
-    it is started elevated, so Windows asks (UAC) and LibreHardwareMonitor
-    offers PawnIO itself. Nothing else is installed for you.
+    Also set up LibreHardwareMonitor, which is where the panel reads the
+    processor's temperature on Windows (specs 036, 042). Opt-in, because it is
+    a second program, it runs as administrator, and it loads a kernel driver
+    (PawnIO). With this switch, each step done only if it is not done already:
+    winget installs it (passing the switch accepts winget's source and package
+    agreements for that one package); its settings get the web server on, the
+    port hayami asks, no password, and start minimized with closing the window
+    hiding it rather than quitting it (a backup is kept); its startup task is
+    registered, the one its own Run On Windows Startup makes; and it is started
+    through that task. The settings, the task and the start are one elevated
+    step, so Windows asks (UAC) once. It ends by checking that data.json has a
+    processor temperature, and says which step is missing if not.
 
 .PARAMETER DryRun
     Say what would be done and change nothing. Needs neither Go nor gcc.
@@ -131,20 +136,74 @@ function Find-Sensors {
         Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 
-# The settings LibreHardwareMonitor reads at start, beside its executable:
-# the web server on, on its default port, with no password, which is what
-# hayami asks (spec 036).
-$SensorsConfig = @"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <appSettings>
-    <add key="runWebServerMenuItem" value="true" />
-    <add key="listenerIp" value="127.0.0.1" />
-    <add key="listenerPort" value="8085" />
-    <add key="authenticationEnabled" value="false" />
-  </appSettings>
-</configuration>
-"@
+# The startup task's name: the one LibreHardwareMonitor's own Options -> Run On
+# Windows Startup gives it, so that menu shows it as on.
+$SensorsTask = "LibreHardwareMonitor"
+
+# The processor temperatures hayami reads, in its order: core.LHMCPULabels,
+# which a test holds this list to.
+$SensorsCPULabels = @("Core (Tdie)", "Core (Tctl/Tdie)", "Core (Tctl)", "CPU Package")
+
+# The port hayami asks: its lhm setting's, or LibreHardwareMonitor's default.
+function Get-SensorsPort {
+    $settings = Join-Path $env:APPDATA "hayami\settings.yaml"
+    if (Test-Path $settings) {
+        $line = Select-String -Path $settings -Pattern '^\s*lhm:\s*(\S+)' | Select-Object -First 1
+        if ($line) {
+            $uri = $null
+            if ([Uri]::TryCreate($line.Matches[0].Groups[1].Value.Trim('"', "'"), [UriKind]::Absolute, [ref]$uri) -and $uri.Port -gt 0) {
+                return $uri.Port
+            }
+        }
+    }
+    return 8085
+}
+
+# Whether the startup task is registered for this executable, at highest
+# privileges. Reading a task needs no administrator rights.
+function Test-SensorsTask($exe) {
+    $task = Get-ScheduledTask -TaskName $SensorsTask -ErrorAction SilentlyContinue
+    if (-not $task) { return $false }
+    $runs = $task.Actions | Where-Object { $_.Execute -and ($_.Execute.Trim('"') -ieq $exe) }
+    return [bool]$runs -and $task.Principal.RunLevel -eq "Highest"
+}
+
+# The processor's temperature from LibreHardwareMonitor's data.json, by label
+# under its processor hardware, or $null. Read-only.
+function Find-SensorsTemperature($url) {
+    try { $root = Invoke-RestMethod -Uri $url -TimeoutSec 2 -UseBasicParsing } catch { return $null }
+    $found = @{}
+    $stack = New-Object System.Collections.Stack
+    $stack.Push($root)
+    while ($stack.Count -gt 0) {
+        $node = $stack.Pop()
+        if ($node.SensorId -and $node.Type -eq "Temperature" -and ($node.SensorId -like "/amdcpu/*" -or $node.SensorId -like "/intelcpu/*")) {
+            if (-not $found.ContainsKey($node.Text)) { $found[$node.Text] = $node.Value }
+        }
+        foreach ($child in @($node.Children)) { if ($child) { $stack.Push($child) } }
+    }
+    foreach ($label in $SensorsCPULabels) {
+        if ($found.ContainsKey($label)) { return "$label $($found[$label])" }
+    }
+    return ""
+}
+
+# Ask data.json for the processor's temperature for up to $seconds, and say
+# which step is missing when it does not come.
+function Confirm-Sensors($url, $seconds) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do {
+        $reading = Find-SensorsTemperature $url
+        if ($reading) { Write-Ok "hayami can read it: $reading, from $url"; return $true }
+        if ((Get-Date) -lt $deadline) { Start-Sleep -Seconds 2 }
+    } while ((Get-Date) -lt $deadline)
+    if ($null -eq $reading) {
+        Write-Note "no answer from ${url}: LibreHardwareMonitor is not running, or its web server is off or on another port."
+    } else {
+        Write-Note "$url answers but has no processor temperature: is PawnIO installed? LibreHardwareMonitor offers it on first start."
+    }
+    return $false
+}
 
 function Install-Sensors {
     Write-Step "LibreHardwareMonitor, for the processor's temperature"
@@ -166,29 +225,83 @@ function Install-Sensors {
         Write-Ok $exe
     }
 
-    $config = if ($exe) { [IO.Path]::ChangeExtension($exe, ".config") } else { "LibreHardwareMonitor.config, beside it" }
-    if ($exe -and (Test-Path $config)) {
-        Write-Ok "its settings are left as they are: $config"
-        Write-Note "hayami reads its web server, on port 8085: Options -> Remote Web Server -> Run."
-    } elseif ($DryRun) {
-        Write-Note "would write, if it has no settings yet: $config (web server on, port 8085)"
-    } else {
-        [IO.File]::WriteAllText($config, $SensorsConfig, (New-Object Text.UTF8Encoding $false))
-        Write-Ok "settings: web server on, port 8085: $config"
+    $port = Get-SensorsPort
+    $url = "http://127.0.0.1:$port/data.json"
+    $settingsScript = Join-Path $PSScriptRoot "lhm_settings.ps1"
+
+    if (-not $exe) {
+        # A dry run on a machine without it: say every step, check nothing.
+        Write-Note "would set its settings (stopped first): web server on, port $port, no password,"
+        Write-Note "start minimized, closing the window hides it in the notification area"
+        Write-Note "would register the startup task '$SensorsTask': at logon, highest privileges"
+        Write-Note "would start it through the task: one UAC prompt for all of this; it offers PawnIO itself"
+        return
     }
 
-    if ($DryRun) {
-        Write-Note "would start it as administrator: Windows asks (UAC), and it offers PawnIO itself"
-    } elseif (Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue) {
-        Write-Ok "already running"
+    $config = [IO.Path]::ChangeExtension($exe, ".config")
+    $pending = & $settingsScript -Path $config -Port $port -DryRun
+    $settingsChange = -not ($pending -contains "unchanged")
+    $taskReady = Test-SensorsTask $exe
+    $running = [bool](Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)
+
+    Write-Step "Its settings, its startup task, running"
+    if ($settingsChange) {
+        foreach ($line in $pending) { if ($line -like "would set *") { Write-Note "settings: $line" } }
     } else {
-        Write-Note "starting it as administrator: Windows asks (UAC), and on its first start it"
-        Write-Note "offers to install PawnIO, the driver it reads the processor through. Say yes."
-        try { Start-Process -FilePath $exe -Verb RunAs } catch { Write-Note "not started: $($_.Exception.Message)" }
+        Write-Ok "settings: web server on port $port, no password, starts minimized, closing hides it"
     }
-    Write-Note "In LibreHardwareMonitor: Options -> Run On Windows Startup keeps it running after a restart."
+    if ($taskReady) { Write-Ok "startup task '$SensorsTask' at highest privileges" } else { Write-Note "startup task '$SensorsTask': not registered for $exe" }
+    if ($running) { Write-Ok "running" } else { Write-Note "not running" }
+
+    if ($settingsChange -or -not $taskReady -or -not $running) {
+        $steps = @()
+        if ($settingsChange -and $running) { $steps += "stop it (it rewrites its settings when it exits)" }
+        if ($settingsChange) { $steps += "set its settings, keeping a backup ($config.bak-hayami)" }
+        if (-not $taskReady) { $steps += "register the startup task '$SensorsTask': at logon, highest privileges" }
+        $steps += "start it through the task"
+        if ($DryRun) {
+            foreach ($s in $steps) { Write-Note "would $s" }
+            Write-Note "all of that in one elevated step: Windows asks (UAC) once; on a first start it offers PawnIO"
+        } else {
+            Write-Note "as administrator, in one step (Windows asks once):"
+            foreach ($s in $steps) { Write-Note "  $s" }
+            $user = "$env:USERDOMAIN\$env:USERNAME"
+            $elevated = @"
+`$ErrorActionPreference = 'Stop'
+`$exe = '$($exe -replace "'", "''")'
+`$dir = Split-Path -Parent `$exe
+if (`$$settingsChange) {
+    Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+    & '$($settingsScript -replace "'", "''")' -Path '$($config -replace "'", "''")' -Port $port | Out-Null
+}
+if (-not `$$taskReady) {
+    `$a = New-ScheduledTaskAction -Execute `$exe -WorkingDirectory `$dir
+    `$t = New-ScheduledTaskTrigger -AtLogOn -User '$user'
+    `$p = New-ScheduledTaskPrincipal -UserId '$user' -LogonType Interactive -RunLevel Highest
+    `$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName '$SensorsTask' -Description 'Starts LibreHardwareMonitor on Windows startup.' -Action `$a -Trigger `$t -Principal `$p -Settings `$s -Force | Out-Null
+}
+if (-not (Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)) { Start-ScheduledTask -TaskName '$SensorsTask' }
+"@
+            $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($elevated))
+            try {
+                $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded
+                if ($p.ExitCode -ne 0) { Write-Note "the elevated step ended with code $($p.ExitCode)" }
+            } catch {
+                Write-Note "not done: $($_.Exception.Message)"
+            }
+        }
+    }
+
+    if ($DryRun -and -not $running) {
+        Write-Note "would then check $url for the processor's temperature"
+    } else {
+        Write-Step "Checking $url"
+        [void](Confirm-Sensors $url $(if ($DryRun) { 2 } else { 30 }))
+    }
     Write-Note "Its web server listens on every network interface whatever its address setting says;"
-    Write-Note "Windows Firewall's default (block inbound) is what keeps port 8085 off your network."
+    Write-Note "Windows Firewall's default (block inbound) is what keeps port $port off your network."
     Write-Note "Do not add an inbound rule for it: the same server can change fan settings."
 }
 
