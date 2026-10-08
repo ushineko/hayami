@@ -99,51 +99,71 @@ func TestThePeripheralsAreDrawnOnWindows(t *testing.T) {
 	t.Logf("picture: %s", p.path)
 	t.Logf("text lines: %v", p.text)
 
-	// A device is drawn with its level in a battery colour (spec 018): green,
-	// amber or red. A card with no device is the heading, a reason per vendor
-	// and placeholder cells, all in the text colours, so it has no such line.
-	// Counting lines instead held only while one device was awake: devices
-	// stack, two lines each, and two awake read as a card of reasons.
+	// A device cell has a bar under its level, whatever its state: coloured
+	// by its band on battery, the accent while charging, dim when remembered.
+	// A card with no device is the heading, a reason per vendor and
+	// placeholder cells, none of which has a bar. The colour of the level was
+	// the test before #161, and a charging device (a white level, a blue bar)
+	// failed it; the number of text lines before that failed with two devices.
 	require.NotEmpty(t, p.text, "no line of text at all")
-	levels := levelLines(p.img, p.text)
-	t.Logf("lines in a battery colour: %d", levels)
-	require.Positive(t, levels,
+	n := bars(p.img)
+	t.Logf("bars: %d", n)
+	require.Positive(t, n,
 		"the card is reasons and placeholders, not devices: the section drew none of %v", live)
 }
 
-// drawsDevices is whether the card shows a device's level.
-func drawsDevices(img *image.NRGBA, text []span) bool { return levelLines(img, text) > 0 }
+// drawsDevices is whether the card shows a device: a cell with a bar.
+func drawsDevices(img *image.NRGBA, _ []span) bool { return bars(img) > 0 }
 
-// levelLines counts the text lines drawn in a battery colour: saturated, and
-// not the plot's blue-led colours. Text, reasons and placeholders are grey
-// or white, which a saturation floor leaves out.
-func levelLines(img *image.NRGBA, text []span) int {
-	n := 0
-	for _, line := range text {
-		coloured := 0
-		for y := line.From; y <= line.To; y++ {
-			for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
-				if batteryColour(img.At(x, y)) {
-					coloured++
-				}
+// barRun is the shortest unbroken run of solid pixels that is a bar. A
+// letter is a few pixels wide and a word has gaps between its letters; the
+// narrowest bar, a device at a few percent, is still a bar's rounded ends.
+const barRun = 40
+
+// bars counts the bars in the picture: runs of rows, each holding barRun or
+// more pixels in a row that stand out from the card's background.
+func bars(img *image.NRGBA) int {
+	bg := background(img)
+	n, in := 0, false
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		run, longest := 0, 0
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if apart(img.NRGBAAt(x, y), bg) {
+				run++
+				longest = max(longest, run)
+			} else {
+				run = 0
 			}
 		}
-		if coloured >= levelInk {
+		bar := longest >= barRun
+		if bar && !in {
 			n++
 		}
+		in = bar
 	}
 	return n
 }
 
-// levelInk is how many coloured pixels make a line a level: a two-digit
-// percentage at the panel's size is several hundred; anti-aliased edges of
-// grey text are a handful.
-const levelInk = 60
+// background is the card's colour: the commonest pixel in the picture.
+func background(img *image.NRGBA) color.NRGBA {
+	count := map[color.NRGBA]int{}
+	var best color.NRGBA
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			c := img.NRGBAAt(x, y)
+			count[c]++
+			if count[c] > count[best] {
+				best = c
+			}
+		}
+	}
+	return best
+}
 
-// batteryColour is a pixel that is clearly coloured and not blue-led.
-func batteryColour(c color.Color) bool {
-	r, g, b, _ := c.RGBA()
-	r, g, b = r>>8, g>>8, b>>8
-	hi, lo := max(r, g, b), min(r, g, b)
-	return hi-lo > 80 && !plotted(c)
+// apart is a pixel clearly not the background: a dim bar still is.
+func apart(c, bg color.NRGBA) bool {
+	d := func(a, b uint8) int { return max(int(a)-int(b), int(b)-int(a)) }
+	return d(c.R, bg.R)+d(c.G, bg.G)+d(c.B, bg.B) > 45
 }

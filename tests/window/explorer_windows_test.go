@@ -96,7 +96,33 @@ func TestThePanelStaysUpWhenExplorerStartsIt(t *testing.T) {
 
 	_ = windows.TerminateProcess(proc, 0)
 	_, _ = windows.WaitForSingleObject(proc, 5000)
+	// A panel the person is running writes those folders itself every
+	// CacheInterval, so the check means something only when this test's panel
+	// is the only one.
+	if others := otherPanels(binary); others > 0 {
+		t.Logf("%d other hayami panel(s) running: the per-user folders are theirs to write, not checked", others)
+		return
+	}
 	require.Equal(t, before, snapshot(watched), "the panel started by Explorer changed a real per-user folder")
+}
+
+// otherPanels counts hayami.exe processes that are not the one at path.
+func otherPanels(path string) int {
+	n := 0
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = windows.CloseHandle(snap) }()
+	mine := running(path)
+	var e windows.ProcessEntry32
+	e.Size = uint32(unsafe.Sizeof(e))
+	for err = windows.Process32First(snap, &e); err == nil; err = windows.Process32Next(snap, &e) {
+		if strings.EqualFold(windows.UTF16ToString(e.ExeFile[:]), "hayami.exe") && !mine[e.ProcessID] {
+			n++
+		}
+	}
+	return n
 }
 
 // running is the processes whose image is the file at path.

@@ -311,6 +311,13 @@ mouse idle is not a mouse gone and moving the pointer brings it straight back
 flicker in a smaller place. Without a mouse the slots are filled from the rest,
 as they always were.
 
+**One mouse on the card** (spec 050). A desk has one mouse, but a reader can
+see it twice: read through its dongle, remembered dim after it went quiet
+(spec 032), and read again on its cable, live. Both are mice, and both used to
+be drawn, the second in the right slot as the device that changed last. The
+slot takes a live mouse when there is one, else the one heard most recently;
+every other mouse goes to the overflow and never into the right slot.
+
 **The right slot is the device whose state changed last**, whether that change
 was arriving or going quiet (spec 022). A headset switched off keeps the slot,
 dim, with its last level; a pair of earbuds connected after that takes it.
@@ -321,20 +328,41 @@ Everything beyond the two is returned as overflow, in the same order, for the
 caller to say somewhere that does not take space on the card.
 */
 func SelectPeripherals(devices []PeripheralReading) (shown, overflow []PeripheralReading) {
-	rest := slices.Clone(devices)
-
-	// The mouse is taken out first so the ordering below never has to make an
-	// exception for it.
-	var left []PeripheralReading
-	if i := slices.IndexFunc(rest, func(d PeripheralReading) bool { return d.Kind == KindMouse }); i >= 0 {
-		left = append(left, rest[i])
-		rest = slices.Delete(rest, i, i+1)
+	// The mice are taken out first so the ordering below never has to make an
+	// exception for them: one goes to the left slot, the others to the
+	// overflow.
+	var mice, rest []PeripheralReading
+	for _, d := range devices {
+		if d.Kind == KindMouse {
+			mice = append(mice, d)
+		} else {
+			rest = append(rest, d)
+		}
 	}
-
+	slices.SortStableFunc(mice, liveFirst)
 	slices.SortStableFunc(rest, byRecentChange)
 
+	var left, spare []PeripheralReading
+	if len(mice) > 0 {
+		left, spare = mice[:1], mice[1:]
+	}
 	take := min(PeripheralSlots-len(left), len(rest))
-	return append(left, rest[:take]...), rest[take:]
+	overflow = append(slices.Clone(spare), rest[take:]...)
+	slices.SortStableFunc(overflow, byRecentChange)
+	return append(slices.Clone(left), rest[:take]...), overflow
+}
+
+// liveFirst puts an answering device ahead of a remembered one, and otherwise
+// orders as byRecentChange: the mouse slot shows the mouse that is answering,
+// and among quiet ones the one heard last.
+func liveFirst(a, b PeripheralReading) int {
+	if a.Stale != b.Stale {
+		if a.Stale {
+			return 1
+		}
+		return -1
+	}
+	return byRecentChange(a, b)
 }
 
 /*
