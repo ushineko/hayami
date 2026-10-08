@@ -86,7 +86,7 @@ func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}}
 // processor's temperature: the kernel's sensors on Linux, LibreHardwareMonitor
 // at lhm on Windows (spec 036; empty is its default address).
 func NewCooler(lhm string) *Cooler {
-	c := newCooler(sanshoku.Scan, cpuTemperature(lhm))
+	c := newCooler(DeviceScan, cpuTemperature(lhm))
 	c.load = core.HostCPULoad().Load
 	c.graphics = core.NewGraphicsReader().Read
 	c.cpuName = core.HostCPUName

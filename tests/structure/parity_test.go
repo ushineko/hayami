@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/ushineko/sanshoku/hidraw"
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
@@ -72,9 +71,7 @@ func noMachine(t *testing.T) {
 	testenv.Cache(t, t.TempDir())
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
-	sys, dev := hidraw.SysRoot, hidraw.DevRoot
-	hidraw.SysRoot, hidraw.DevRoot = t.TempDir(), t.TempDir()
-	t.Cleanup(func() { hidraw.SysRoot, hidraw.DevRoot = sys, dev })
+	testenv.NoDevices(t)
 }
 
 // polledAll is every source reporting that it has something to say. The

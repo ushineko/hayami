@@ -53,7 +53,7 @@ removes the accounts, an empty PATH removes codex, and a bus address that does
 not resolve removes BlueZ. Without this the test fetches somebody's real usage
 over the network, which is not a unit test.
 
-And an empty hidraw tree, which the environment cannot take away. Without it
+And no devices (testenv.NoDevices), which the environment cannot take away. Without it
 these tests talked to the developer's actual mouse, headset and cooler: a unit
 suite should not be writing to somebody's hardware at all, and `go test ./...`
 runs packages as parallel processes, so the polls would race any other reader
@@ -73,7 +73,7 @@ func bare(t *testing.T) {
 	noDevices(t)
 }
 
-// noDevices takes the desk away: an empty hidraw tree, a system bus that
+// noDevices takes the desk away: no devices (testenv.NoDevices), a system bus that
 // does not resolve and a PATH with no nvidia-smi on it, so a poll of the real
 // sources opens no device, asks BlueZ nothing and runs no vendor tool. Any
 // test that can reach the device sections calls it, and that includes a
@@ -82,9 +82,7 @@ func noDevices(t *testing.T) {
 	t.Helper()
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path=/nonexistent/hayami-test")
-	sys, dev := hidraw.SysRoot, hidraw.DevRoot
-	hidraw.SysRoot, hidraw.DevRoot = t.TempDir(), t.TempDir()
-	t.Cleanup(func() { hidraw.SysRoot, hidraw.DevRoot = sys, dev })
+	testenv.NoDevices(t)
 }
 
 /*

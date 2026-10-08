@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ushineko/sanshoku"
 	"github.com/ushineko/sanshoku/battery"
-	"github.com/ushineko/sanshoku/bluez"
 	"github.com/ushineko/sanshoku/logitech"
 
 	"github.com/ushineko/hayami/internal/panel"
@@ -503,46 +502,44 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 	assert.False(t, poll(t, p), "there is nothing to draw")
 
 	sec := p.Section()
-	assert.Equal(t, []string{
+	// Bluetooth's line is the platform's: it has none on Windows (spec 035).
+	assert.Equal(t, append([]string{
 		"no Logitech receiver",
 		"no Razer device",
 		"no SteelSeries device",
-		"no Bluetooth device with a battery",
-	}, reasonTexts(sec))
+		"no AULA receiver",
+	}, bluetoothAbsent...), reasonTexts(sec))
 	for _, r := range sec.Reasons {
 		assert.Equal(t, view.Info, r.Status, "%q was marked as a failure", r.Text)
 	}
 }
 
-// R3.7. BlueZ not answering is a machine with no Bluetooth adapter: absence,
-// not failure.
-func TestNoBluezIsNoBluetoothAdapter(t *testing.T) {
-	// As sanshoku.Scan returns it: prefixed with the driver's name, and
-	// wrapping sanshoku.ErrUnavailable, which Scan does not drop.
-	noBluez := fmt.Errorf("bluez: %w", bluez.ErrNoBlueZ)
-	p := (&desk{failing: map[string]error{"bluez": noBluez, "apple": noBluez}}).section(nil)
+/*
+R4 (spec 035). An AULA receiver whose keyboard says nothing -- asleep, or on
+its cable -- is a receiver that answered nothing, as a Razer dock with its
+mouse asleep is: not an absent keyboard, and in a sentence that reads.
+*/
+func TestAnAULAReceiverWithNothingToSayAnsweredNothing(t *testing.T) {
+	rx := &peripheral{driver: "aula", name: "AULA F75", path: `hid-aula`}
+	p := (&desk{devices: []*peripheral{rx}}).section(nil)
 
-	poll(t, p)
+	assert.False(t, poll(t, p), "nothing to draw")
 
-	_, err := p.Poll(t.Context())
-	require.NoError(t, err, "no adapter is not a failure to log")
-	r := find(t, p.Section(), "no Bluetooth adapter")
-	assert.Equal(t, view.Info, r.Status)
-	assert.Len(t, p.Section().Reasons, 4, "one line for the adapter, not one per driver")
-	assert.NotContains(t, reasonTexts(p.Section()), "no Bluetooth device with a battery",
-		"no adapter and nothing connected are two different answers")
+	texts := reasonTexts(p.Section())
+	assert.Contains(t, texts, "an AULA device answered nothing")
+	assert.NotContains(t, texts, "no AULA receiver", "the receiver is there")
 }
 
 // R3.4. A driver that failed to list is a vendor that would not answer, and
 // the failure reaches the caller as well.
 func TestADriverThatFailsToListIsAVendorThatWouldNotAnswer(t *testing.T) {
-	boom := errors.New("listing /sys/class/hidraw: input/output error")
-	p := (&desk{failing: map[string]error{"bluez": boom}}).section(nil)
+	boom := errors.New("listing the HID devices: input/output error")
+	p := (&desk{failing: map[string]error{"razer": boom}}).section(nil)
 
 	_, err := p.Poll(t.Context())
 
 	require.ErrorIs(t, err, boom)
-	r := find(t, p.Section(), "a Bluetooth device would not answer")
+	r := find(t, p.Section(), "a Razer device would not answer")
 	assert.Equal(t, view.Warn, r.Status)
 	assert.Contains(t, r.Detail, "input/output error")
 }
@@ -584,9 +581,10 @@ R3.2. A device that may not be opened says so, and says what to do about it.
 liquidctl's and OpenRazer's packages used to install the udev rule that lets
 the logged-in user open these nodes; reading them directly, nothing does but
 hayami's installer, and a device found and not opened otherwise looks like no
-device at all.
+device at all. What the detail says is the platform's (spec 035): the udev rule
+on Linux, the program holding the device on Windows.
 */
-func TestADeviceThatMayNotBeOpenedNamesTheUdevRule(t *testing.T) {
+func TestADeviceThatMayNotBeOpenedSaysWhatToDo(t *testing.T) {
 	dock := &peripheral{driver: "razer", name: "Razer Mouse Dock Pro", path: "/dev/hidraw4",
 		openErr: &fsError{syscall.EACCES}}
 	mouse := receiver(battery.Battery{Name: "G502 X PLUS", Level: 86, HasLevel: true})
@@ -600,8 +598,10 @@ func TestADeviceThatMayNotBeOpenedNamesTheUdevRule(t *testing.T) {
 	require.True(t, drawn)
 	r := find(t, p.Section(), "Razer Mouse Dock Pro is not permitted")
 	assert.Equal(t, view.Warn, r.Status)
-	assert.Contains(t, r.Detail, "60-sanshoku.rules")
-	assert.Contains(t, r.Detail, "udev rule")
+	assert.Equal(t, panel.PermissionDetail, r.Detail)
+	for _, word := range permissionWords {
+		assert.Contains(t, r.Detail, word)
+	}
 	assert.False(t, r.Aside, "the one line a reader can act on stays on a full card")
 }
 

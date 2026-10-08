@@ -320,9 +320,10 @@ func TestACoolerDriverThatFailsToListWouldNotAnswer(t *testing.T) {
 	assert.Equal(t, view.Warn, find(t, c.Section(), "the cooler would not answer").Status)
 }
 
-// R3.2. A cooler that may not be opened names the udev rule, which liquidctl's
-// package used to install for us.
-func TestACoolerThatMayNotBeOpenedNamesTheUdevRule(t *testing.T) {
+// R3.2. A cooler that may not be opened says what to do: on Linux the udev
+// rule, which liquidctl's package used to install for us; on Windows the
+// program holding it (spec 035).
+func TestACoolerThatMayNotBeOpenedSaysWhatToDo(t *testing.T) {
 	k := &kraken{path: "/dev/hidraw6", openErr: &fsError{syscall.EPERM}}
 	c := (&rig{cpu: 38, coolers: []*kraken{k}}).section()
 
@@ -332,8 +333,7 @@ func TestACoolerThatMayNotBeOpenedNamesTheUdevRule(t *testing.T) {
 	assert.True(t, drawn)
 	r := find(t, c.Section(), "NZXT Kraken Elite V2 is not permitted")
 	assert.Equal(t, view.Warn, r.Status)
-	assert.Equal(t, panel.UdevDetail, r.Detail)
-	assert.Contains(t, r.Detail, "60-sanshoku.rules")
+	assert.Equal(t, panel.PermissionDetail, r.Detail)
 	assert.NotContains(t, reasonTexts(c.Section()), "no cooler",
 		"a cooler that is there and may not be opened is not an absent cooler")
 }
