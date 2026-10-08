@@ -174,6 +174,13 @@ type Reason struct {
 	// headset this build cannot read is a footnote, and a line the width of
 	// its name and a sentence set the width of the whole panel.
 	Aside bool
+
+	// Actionable marks the one kind of line a reader can do something about
+	// now -- a device the system would not let this program open -- which a
+	// full card keeps drawn where it would put another reason aside. It is
+	// set from the source's own account of the absence (spec 040), never
+	// inferred from the words.
+	Actionable bool
 }
 
 // Status is a verdict on a reading. It is the same vocabulary the design

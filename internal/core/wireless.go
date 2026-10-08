@@ -57,7 +57,16 @@ type Wireless struct {
 // a program without location access. Since Windows 11 24H2 the connection's
 // details are behind the location consent, because the access point's address
 // would say where the machine is.
-var ErrWirelessDenied = errors.New("the WLAN service withholds Wi-Fi details without location access")
+//
+// It is an Absence, so the reason it gives travels with it (spec 040): the
+// verdict, and the setting that would change it.
+var ErrWirelessDenied error = &Absence{
+	Code: AbsenceWirelessDenied,
+	Text: "details withheld",
+	Detail: "Windows withholds Wi-Fi details from desktop apps without location access: " +
+		"Settings, Privacy & security, Location (ms-settings:privacy-location)",
+	Err: errors.New("the WLAN service withholds Wi-Fi details without location access"),
+}
 
 // Band is the band the link is on, "5 GHz", from the frequency where there is
 // one and from the channel where there is only that. Empty when neither says.

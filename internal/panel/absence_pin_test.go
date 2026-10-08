@@ -143,5 +143,7 @@ func reasonScenarios(t *testing.T) []scenario {
 	return out
 }
 
-// actionable is whether a reason is the one line a reader can act on.
-func actionable(r view.Reason) bool { return r.Detail == panel.PermissionDetail }
+// actionable is whether a reason is the one line a reader can act on. The
+// pin was written when that was told by the detail's words; since spec 040 it
+// is the source's flag, and the file has not changed.
+func actionable(r view.Reason) bool { return r.Actionable }
