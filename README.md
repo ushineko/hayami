@@ -367,6 +367,17 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Change**: the cooler's sources are chains, and a platform is one table
+  (spec 043). `core.Chain` asks providers in order and records what it
+  tried; the processor's temperature and the graphics card are chains, and
+  the reason for a gap names every route from that record. `core.Host`,
+  declared per platform, carries the chains, the load, name, network and Wi-Fi
+  readers, the advice for a device that would not open and the Bluetooth
+  drivers; the panel takes it through `Env` and has no platform files left. On
+  Windows the card is no longer looked for under `/sys`; on Linux the account
+  of a card with no temperature now names AMD's busy file among the routes
+  tried. A system that is neither Linux nor Windows reports its absences
+  instead of reading Linux paths.
 - **Docs**: `docs/architecture.md`, the layers and the rules a change is held
   to (device knowledge in sanshoku, tables over switches, one section registry,
   sensor providers in chains, platform files in core, typed absences, threshold

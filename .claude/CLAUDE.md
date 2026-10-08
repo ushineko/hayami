@@ -151,7 +151,9 @@ place updates the guide's Status table in the same PR.
   Windows it is only a fallback (spec 034): D3DKMT in gdi32 and the
   `GPU Engine` performance counters give any vendor's card its temperature,
   load and name without a process, and nvidia-smi is run only for what they
-  left out.
+  left out. On both it is the last provider in the platform's graphics chain
+  (`core/host_tables.go`, spec 043), so it is never asked once the card is
+  complete.
 - **The processor's temperature on Windows is LibreHardwareMonitor's**
   (spec 036). Windows keeps it behind a kernel driver and hayami loads none;
   LibreHardwareMonitor does (PawnIO) and serves what it reads as `data.json`

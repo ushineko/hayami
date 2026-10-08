@@ -11,9 +11,32 @@ import (
 
 var procGetSystemTimes = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetSystemTimes")
 
-// HostCPULoad is this machine's processor load: GetSystemTimes, which is
+// NewHost is Windows' table (spec 043): LibreHardwareMonitor for the
+// processor's temperature (spec 036), D3DKMT and the GPU Engine counters for
+// the card with nvidia-smi behind them (spec 034), GetSystemTimes and the
+// registry for the load and the name, the interface table and the WLAN
+// service for the network (specs 033, 037), Windows' own refusal as the advice
+// for a device that would not open, and no Bluetooth batteries: sanshoku's
+// readers are BlueZ and an L2CAP socket, neither of which Windows gives a
+// program (spec 035).
+func NewHost(cfg HostConfig) Host {
+	return Host{
+		Platform:       "windows",
+		CPUTemperature: windowsCPUTemperature(NewLHM(cfg.LHM).CPUTemperature),
+		CPUMissing:     windowsCPUMissing,
+		Graphics:       windowsGraphics(nativeGraphics(), NvidiaSMI),
+		GPUMissing:     windowsGPUMissing,
+		CPULoad:        systemTimesLoad,
+		CPUName:        registryCPUName,
+		Counters:       ReadCounters,
+		Wireless:       ReadWireless,
+		Permission:     PermissionAbsence,
+	}
+}
+
+// systemTimesLoad is this machine's processor load: GetSystemTimes, which is
 // Windows' /proc/stat. It needs no privilege.
-func HostCPULoad() *CPULoad { return newCPULoad(systemTimes) }
+func systemTimesLoad() *CPULoad { return newCPULoad(systemTimes) }
 
 /*
 systemTimes is the busy and idle time of every processor since boot, in
@@ -45,10 +68,10 @@ func systemTimes() (busy, idle float64, err error) {
 // desktop part carries the same name, as /proc/cpuinfo's do.
 const cpuKey = `HARDWARE\DESCRIPTION\System\CentralProcessor\0`
 
-// HostCPUName is the processor's model as Windows gives it, "AMD Ryzen 5
+// registryCPUName is the processor's model as Windows gives it, "AMD Ryzen 5
 // 2600X Six-Core Processor", or empty where the key cannot be read. Windows
 // pads the value with trailing spaces on some parts, which are not the name.
-func HostCPUName() string {
+func registryCPUName() string {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, cpuKey, registry.QUERY_VALUE)
 	if err != nil {
 		return ""

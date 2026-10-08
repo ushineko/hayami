@@ -69,7 +69,7 @@ type Cooler struct {
 	// them, so a test that does not ask for them reads neither /proc/stat nor
 	// the card -- and never runs nvidia-smi.
 	load     func() (float64, bool)
-	graphics func(context.Context) core.Graphics
+	graphics func(context.Context) (core.Graphics, error)
 
 	// cpuName is the processor's model, read on the first poll that asks and
 	// kept: it does not change while the machine is up. Empty unless
@@ -77,35 +77,49 @@ type Cooler struct {
 	cpuName  func() string
 	cpuNamed bool
 	cpuModel string
+
+	// cpuDetail and gpuDetail are the platform's account of a missing
+	// temperature, for an error that gives none of its own: every route the
+	// host's chain has (spec 043).
+	cpuDetail func() string
+	gpuDetail func() string
 }
 
 // coolerDrivers are the drivers the cooler section asks.
 func coolerDrivers() []sanshoku.Driver { return []sanshoku.Driver{nzxt.Driver{}} }
 
 // NewCooler builds the cooler source over sanshoku's NZXT driver and the
-// processor's temperature: the kernel's sensors on Linux, LibreHardwareMonitor
-// at lhm on Windows (spec 036; empty is its default address), over scan.
-func NewCooler(lhm string, scan Scan) *Cooler {
-	c := newCooler(scan, core.HostCPUTemperature(lhm))
-	c.load = core.HostCPULoad().Load
-	c.graphics = core.NewGraphicsReader().Read
-	c.cpuName = core.HostCPUName
+// host's chains: the processor's temperature, its load and name, and the
+// graphics card (spec 043), over scan.
+func NewCooler(h *core.Host, scan Scan) *Cooler {
+	c := newCoolerOn(h, scan, h.ReadCPUTemperature)
+	c.load = h.CPULoad().Load
+	c.graphics = h.ReadGraphics
+	c.cpuName = h.CPUName
 	return c
 }
 
 // newCooler builds the source over a scan and a processor sensor, which is
-// the seam the tests use.
+// the seam the tests use: nothing else is read, and a missing reading is
+// accounted for in this platform's words.
 func newCooler(scan Scan, sensor func(context.Context) (float64, error)) *Cooler {
+	return newCoolerOn(platform(), scan, sensor)
+}
+
+// newCoolerOn is newCooler with the host whose words a missing reading gets.
+func newCoolerOn(h *core.Host, scan Scan, sensor func(context.Context) (float64, error)) *Cooler {
 	return &Cooler{
 		trail:  view.NewSeries(CoolerTrail),
 		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
 		gpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
 		sensor: sensor,
-		held:   newHeld(scan),
+		held:   newHeld(scan, h.Permission),
 
-		load:     func() (float64, bool) { return 0, false },
-		graphics: func(context.Context) core.Graphics { return core.Graphics{} },
-		cpuName:  func() string { return "" },
+		load:      func() (float64, bool) { return 0, false },
+		graphics:  func(context.Context) (core.Graphics, error) { return core.Graphics{}, nil },
+		cpuName:   func() string { return "" },
+		cpuDetail: h.CPUSensorDetail,
+		gpuDetail: h.GPUSensorDetail,
 	}
 }
 
@@ -141,25 +155,26 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 			Label: "CPU", Text: "no sensor", Status: view.Info, Aside: out.HasCPULoad,
 			// Every sensor looked for, not the last one tried -- or, where
 			// the source can say which way it is missing, that (spec 036).
-			Detail: core.CPUSensorDetail(),
+			Detail: c.cpuDetail(),
 		}, err))
 	}
 	if out.HasCPU || out.HasCPULoad {
 		out.CPUName = c.processorName()
 	}
 
-	if g := c.graphics(ctx); g.HasTemperature {
+	if g, err := c.graphics(ctx); g.HasTemperature {
 		out.GPU, out.HasGPU = g.Temperature, true
 		out.GPULoad, out.HasGPULoad = g.Load, g.HasLoad
 		out.GPUName = g.Name
 	} else {
 		// Aside: most machines have no card this build can read, and a line
 		// saying so on every one of them would be the card talking about
-		// itself. Doctor and the hover note still say it.
-		reasons = append(reasons, view.Reason{
+		// itself. Doctor and the hover note still say it, naming every route
+		// the chain tried.
+		reasons = append(reasons, reason(view.Reason{
 			Text: "no GPU sensor", Status: view.Info, Aside: true,
-			Detail: core.GPUSensorDetail(),
-		})
+			Detail: c.gpuDetail(),
+		}, err))
 	}
 
 	status, name, why, err := c.liquid(ctx)
@@ -221,7 +236,7 @@ func (c *Cooler) liquid(ctx context.Context) (*cooling.Status, string, []view.Re
 		}
 		dev, err := c.held.device(ctx, cand)
 		if err != nil {
-			r, bad := openFailure(cand, err)
+			r, bad := c.held.openFailure(cand, err)
 			switch {
 			case bad:
 				failed(err)

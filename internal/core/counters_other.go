@@ -1,18 +1,14 @@
-//go:build !windows
+//go:build !linux && !windows
 
 package core
 
 import (
+	"errors"
 	"fmt"
-	"os"
 )
 
-// ReadCounters reads the kernel's interface table from the usual place.
+// ReadCounters has no interface table to read on this system: the section
+// says so rather than looking for /proc/net/dev, which only Linux has.
 func ReadCounters() (map[string]Counters, error) {
-	f, err := os.Open(NetDevPath)
-	if err != nil {
-		return nil, fmt.Errorf("opening the interface table: %w", err)
-	}
-	defer func() { _ = f.Close() }() // read-only; a failed close says nothing useful
-	return ParseNetDev(f)
+	return nil, fmt.Errorf("reading the interface table: %w", errors.ErrUnsupported)
 }

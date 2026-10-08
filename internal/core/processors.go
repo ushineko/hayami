@@ -162,9 +162,11 @@ type Graphics struct {
 }
 
 /*
-GraphicsReader reads the card by whichever route the machine has: D3DKMT and
-the GPU Engine counters on Windows, hwmon and the AMD busy file where the Linux
-kernel has a driver, nvidia-smi where neither answers.
+GraphicsReader reads the card by whichever routes the platform declares, as one
+chain (spec 043): D3DKMT and the GPU Engine counters on Windows, hwmon and the
+AMD busy file where the Linux kernel has a driver, nvidia-smi for what those
+left out. Each route is a provider only where its field is set, so a Windows
+host never looks under /sys and a test that sets none runs nothing.
 
 **nvidia-smi is the one subprocess the direct-access rule allows here.**
 Devices are read directly, through sanshoku, and no subprocess reads one; but
@@ -179,13 +181,16 @@ Each field is replaceable, so a test reads a tree it built and runs no tool.
 */
 type GraphicsReader struct {
 	// Native is the platform's own report of the card: D3DKMT and PDH on
-	// Windows (spec 034), nil elsewhere. What it gives is not asked again.
-	Native func(context.Context) Graphics
-	// Root is the hwmon tree: hwmon.Root, or a test's.
+	// Windows (spec 034), nil elsewhere. NativeName is what a person is told
+	// it was.
+	Native     func(context.Context) Graphics
+	NativeName string
+	// Root is the hwmon tree: hwmon.Root, or a test's. Empty asks no hwmon.
 	Root string
-	// Busy is the pattern the AMD busy file is looked for under.
+	// Busy is the pattern the AMD busy file is looked for under. Empty asks
+	// none.
 	Busy string
-	// SMI runs nvidia-smi and returns what it printed.
+	// SMI runs nvidia-smi and returns what it printed. Nil runs nothing.
 	SMI func(context.Context) (string, error)
 	// PCIIDs is the PCI ID database a card the kernel reads is named from:
 	// PCIIDsPath, or a test's. Empty names no card that way.
@@ -199,58 +204,108 @@ type GraphicsReader struct {
 	named bool
 }
 
-// NewGraphicsReader reads this machine's card.
-func NewGraphicsReader() *GraphicsReader {
-	return &GraphicsReader{Native: nativeGraphics(), Root: hwmon.Root, Busy: BusyGlob, SMI: NvidiaSMI, PCIIDs: PCIIDsPath}
+// The names the graphics providers are tried under, for the reason given when
+// none answers.
+const (
+	busyName = "gpu_busy_percent"
+	smiName  = "nvidia-smi"
+)
+
+// Chain is the card's providers in the order they are asked: the platform's
+// own report, each of hwmon's GPU sensors, the AMD busy file, nvidia-smi --
+// each where its field is set. What one gives is not asked of the next; the
+// chain stops once it has both a temperature and a load.
+func (g *GraphicsReader) Chain() Chain[Graphics] {
+	var ps []Provider[Graphics]
+	if g.Native != nil {
+		ps = append(ps, ProviderFunc[Graphics]{N: g.NativeName, F: g.native})
+	}
+	if g.Root != "" {
+		for _, s := range hwmon.GPU {
+			ps = append(ps, ProviderFunc[Graphics]{N: s.String(), F: g.hwmonSensor(s)})
+		}
+	}
+	if g.Busy != "" {
+		ps = append(ps, ProviderFunc[Graphics]{N: busyName, F: g.busy})
+	}
+	if g.SMI != nil {
+		ps = append(ps, ProviderFunc[Graphics]{N: smiName, F: g.smi})
+	}
+	return Chain[Graphics]{Providers: ps, Merge: mergeGraphics}
 }
 
-// Read is the card's temperature and load. The platform's own report first
-// (D3DKMT and PDH on Windows), the kernel next, and nvidia-smi only for what
-// neither said, once for both numbers. Nothing here is an error: a card that
-// cannot be read is absent, and absence is the answer.
-func (g *GraphicsReader) Read(ctx context.Context) Graphics {
-	var out Graphics
-	if g.Native != nil {
-		out = g.Native(ctx)
-	}
-	device := ""
-	if !out.HasTemperature {
-		if sensor, t, err := hwmon.First(g.Root, hwmon.GPU); err == nil {
-			out.Temperature, out.HasTemperature = t, true
-			device = chipDevice(g.Root, sensor.Chip)
-		}
-	}
-	if !out.HasLoad {
-		if load, path, ok := busyIn(g.Busy); ok {
-			out.Load, out.HasLoad = load, true
-			if device == "" {
-				// The busy file sits in the card's own device directory.
-				device = filepath.Dir(path)
-			}
-		}
-	}
-	if out.Name == "" && device != "" {
-		out.Name = g.kernelName(device)
-	}
-	if (out.HasTemperature && out.HasLoad) || g.SMI == nil {
-		return out
-	}
+// Read is the card's temperature, load and name. Nothing here is an error: a
+// card that cannot be read is absent, and absence is the answer.
+func (g *GraphicsReader) Read(ctx context.Context) Graphics { return g.Chain().Read(ctx).Value }
 
+// ReadOutcome is Read with the chain's record of what it asked.
+func (g *GraphicsReader) ReadOutcome(ctx context.Context) Outcome[Graphics] {
+	return g.Chain().Read(ctx)
+}
+
+// mergeGraphics keeps what the card already said and takes from got only what
+// is missing: a temperature, a load, a name. Complete is both numbers.
+func mergeGraphics(have, got Graphics) (Graphics, bool) {
+	if !have.HasTemperature && got.HasTemperature {
+		have.Temperature, have.HasTemperature = got.Temperature, true
+	}
+	if !have.HasLoad && got.HasLoad {
+		have.Load, have.HasLoad = got.Load, true
+	}
+	if have.Name == "" {
+		have.Name = got.Name
+	}
+	return have, have.HasTemperature && have.HasLoad
+}
+
+// native is the platform's report, or nothing when it found no card.
+func (g *GraphicsReader) native(ctx context.Context) (Graphics, error) {
+	out := g.Native(ctx)
+	if !out.HasTemperature && !out.HasLoad && out.Name == "" {
+		return Graphics{}, errNothing
+	}
+	return out, nil
+}
+
+// hwmonSensor reads one of the kernel's GPU temperatures, naming the card from
+// the PCI ID database by the chip's device.
+func (g *GraphicsReader) hwmonSensor(s hwmon.Sensor) func(context.Context) (Graphics, error) {
+	return func(context.Context) (Graphics, error) {
+		t, err := s.Read(g.Root)
+		if err != nil {
+			return Graphics{}, fmt.Errorf("reading %s: %w", s, err)
+		}
+		out := Graphics{Temperature: t, HasTemperature: true}
+		if device := chipDevice(g.Root, s.Chip); device != "" {
+			out.Name = g.kernelName(device)
+		}
+		return out, nil
+	}
+}
+
+// busy is the AMD driver's utilisation, naming the card by the busy file's own
+// device directory.
+func (g *GraphicsReader) busy(context.Context) (Graphics, error) {
+	load, path, ok := busyIn(g.Busy)
+	if !ok {
+		return Graphics{}, errNothing
+	}
+	return Graphics{Load: load, HasLoad: true, Name: g.kernelName(filepath.Dir(path))}, nil
+}
+
+// smi is nvidia-smi's line, once for both numbers and the name.
+func (g *GraphicsReader) smi(ctx context.Context) (Graphics, error) {
 	text, err := g.SMI(ctx)
 	if err != nil {
-		return out
+		return Graphics{}, err
 	}
-	if out.Name == "" {
-		out.Name = SMIName(text)
+	var out Graphics
+	out.Name = SMIName(text)
+	out.Temperature, out.Load, out.HasTemperature, out.HasLoad = ParseSMI(text)
+	if !out.HasTemperature && !out.HasLoad && out.Name == "" {
+		return Graphics{}, errNothing
 	}
-	t, load, gotTemp, gotLoad := ParseSMI(text)
-	if !out.HasTemperature && gotTemp {
-		out.Temperature, out.HasTemperature = t, true
-	}
-	if !out.HasLoad && gotLoad {
-		out.Load, out.HasLoad = load, true
-	}
-	return out
+	return out, nil
 }
 
 // NvidiaSMI asks nvidia-smi for the temperature and the utilisation, within
