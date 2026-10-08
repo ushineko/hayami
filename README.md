@@ -385,6 +385,11 @@ MIT. See [LICENSE](LICENSE).
 
 ### Unreleased
 
+- **Fix**: `install_windows.ps1` installs over a panel or terminal pane that is
+  running. Windows will not overwrite a running program but will rename it,
+  so the running copy moves aside to `<name>.old`, keeps running the old
+  version until restarted, and is removed by the next install. It failed
+  whenever either was open. `uninstall_windows.ps1` says which one is running.
 - **Change**: `install_windows.ps1 -WithSensors` sets LibreHardwareMonitor up
   the same way on every machine (spec 042): its settings (web server, port,
   no password, start minimized, closing the window hides it rather than

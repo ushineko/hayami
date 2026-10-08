@@ -2,7 +2,7 @@
 
 **Issue**: #135
 
-## Status: IMPLEMENTED — the real elevated step is for a person to run (it asks UAC)
+## Status: IMPLEMENTED — the elevated step is unrun: this desk needed none of it
 
 ## Context
 
@@ -102,8 +102,15 @@ already says the setting is not honoured; the key is not one hayami needs.
 - [x] Falsified: R1 always rewriting, a wrong value, the backup overwritten;
   the label list reordered; a dry-run step's wording; the task case removed
   from `core` — each fails its test, and passes restored.
-- [ ] The real elevated step on a machine that needs it. Not run here: it asks
-  UAC, and this desk was already set up by hand.
+- [x] The real install on this desk, already set up by hand: every sensors
+  step reported in place, nothing was changed and no UAC prompt was raised,
+  and it ended with a processor temperature read from `data.json`.
+- [x] The install replaces a program that is running: the running copy moves
+  aside to `<name>.old` and the next install removes it once nothing holds
+  it (`scripts/install_binary.ps1`, tested against a running program).
+  The uninstaller names which of the two is running and stops.
+- [ ] The real elevated step on a machine that needs it. Not run: this desk
+  needed nothing, so no elevated step was taken.
 
 ## Risks & Assumptions
 
@@ -141,3 +148,5 @@ already says the setting is not honoured; the key is not one hayami needs.
   http://127.0.0.1:8085/data.json"; nothing written.
 - The host probe, unelevated: PawnIO true, running true, startup task true.
 - Structure tests and core tests pass; the falsifications above each failed.
+
+2026-10-07, the real `install_windows.ps1 -WithSensors` under Windows PowerShell 5.1, with four terminal panes open from the installed copy: the build installed both programs, `hayami-tui.exe` by moving the running copy aside; the sensors steps were all in place (settings, startup task at highest privileges, running) and nothing was changed, so no UAC prompt; the check read `Core (Tctl/Tdie) 50.3 °C`. Before the move-aside the same run failed on copying `hayami-tui.exe`.

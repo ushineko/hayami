@@ -313,9 +313,7 @@ if ($DryRun) {
     Build
 }
 
-# A running panel holds its file open, and Windows will not replace it.
-$running = Get-Process hayami -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Panel }
-if ($running -and -not $DryRun) { Fail "hayami is running from $Destination. Quit it (right-click the panel, Quit) and run this again." }
+. (Join-Path $PSScriptRoot "install_binary.ps1")
 
 Write-Step "Installing to $Destination"
 foreach ($name in "hayami.exe", "hayami-tui.exe") {
@@ -324,8 +322,7 @@ foreach ($name in "hayami.exe", "hayami-tui.exe") {
     if ($DryRun) { Write-Note "would copy: $from -> $to"; continue }
     if (-not (Test-Path $from)) { Fail "$from is not built. Run without -SkipBuild." }
     New-Item -ItemType Directory -Force $Destination | Out-Null
-    Copy-Item -Force $from $to
-    Write-Ok $to
+    Write-Ok (Install-Binary $from $to)
 }
 
 Write-Step "Start menu"

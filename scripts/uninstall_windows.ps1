@@ -28,8 +28,14 @@ function Fail($message) { Write-Host "[FAIL] $message" -ForegroundColor Red; exi
 if ($env:OS -ne "Windows_NT") { Fail "This removes the Windows install; on Linux run ./uninstall.sh." }
 
 $Panel = Join-Path $Destination "hayami.exe"
-$running = Get-Process hayami -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Panel }
-if ($running -and -not $DryRun) { Fail "hayami is running from $Destination. Quit it (right-click the panel, Quit) and run this again." }
+$Pane = Join-Path $Destination "hayami-tui.exe"
+# A running program's file cannot be deleted, and unlike an install there is
+# no new copy to put in its place: say which is running and stop.
+$running = Get-Process hayami, hayami-tui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $Panel -or $_.Path -eq $Pane }
+if ($running -and -not $DryRun) {
+    $names = ($running | Select-Object -ExpandProperty ProcessName -Unique) -join " and "
+    Fail "$names is running from $Destination. Quit it (the panel: right-click, Quit; the terminal pane: q) and run this again."
+}
 
 Write-Host "Removing hayami ..."
 $removed = 0
