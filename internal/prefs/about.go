@@ -1,6 +1,7 @@
 package prefs
 
 import (
+	"net/url"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -17,6 +18,10 @@ import (
 // reader outside itself.
 const projectURL = "https://github.com/ushineko/hayami"
 
+// openURL opens a link the README's reader taps: nil is the app's own, which
+// hands it to the browser. A test replaces it to see the tap arrive.
+var openURL func(*url.URL) error
+
 /*
 buildAbout is what hayami is, in the library's About shape, with the README
 itself below the facts.
@@ -30,7 +35,9 @@ func (w *Window) buildAbout(s *shell.Shell) fyne.CanvasObject {
 	a := w.about()
 	a.Extra = func(s *shell.Shell) fyne.CanvasObject {
 		w.readme = markdown.New(hayami.README(), markdown.Options{
+			FS:           hayami.Images(),
 			SettleResize: 120 * time.Millisecond,
+			OpenURL:      openURL,
 		})
 		w.readme.Follow(s.Scroller())
 		return w.readme
@@ -53,9 +60,9 @@ func (w *Window) about() shell.About {
 		Icon:    appIcon(),
 		Name:    "hayami",
 		Version: w.opts.Version,
-		Blurb: "A panel of readings for Linux: peripheral batteries, network bandwidth, " +
-			"liquid-cooler thermals and Claude Code usage, on the desktop and in a " +
-			"terminal. Read at a glance, without being touched.",
+		Blurb: "A panel for Linux and Windows: peripheral batteries, network traffic, " +
+			"processor, graphics and cooler temperatures, and Claude Code and Codex " +
+			"usage, on the desktop and in a terminal. Read at a glance.",
 		URL:     projectURL,
 		URLText: "Project documentation",
 		Notes: []shell.Note{

@@ -1,6 +1,8 @@
 package hayami_test
 
 import (
+	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -9,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ushineko/fynedesygn/markdown"
 
 	hayami "github.com/ushineko/hayami"
 )
@@ -69,5 +73,50 @@ func TestEveryImageTheReadmeShowsExists(t *testing.T) {
 	for path := range readmeImages(t) {
 		_, err := os.Stat(path)
 		assert.NoError(t, err, "the README displays %s, which is not there", path)
+	}
+}
+
+/*
+Every link in the README works in About as well as on GitHub (spec 055).
+
+The About page scrolls to a #heading and opens an absolute web address; it
+draws any other link as plain text, because it has nothing to resolve a path
+against. So a link to another document is written as its full address, and an
+anchor names a heading that is there: a renamed heading otherwise leaves a
+Contents entry that does nothing, on both.
+*/
+func TestEveryReadmeLinkIsAnAnchorOrAWebAddress(t *testing.T) {
+	doc := hayami.README()
+	anchors := markdown.Anchors(markdown.Blocks(doc))
+	links := regexp.MustCompile(`(!?)\[[^\]]*\]\(([^)\s]+)\)`).FindAllStringSubmatch(doc, -1)
+	require.NotEmpty(t, links)
+	for _, m := range links {
+		image, dest := m[1] == "!", m[2]
+		if image {
+			continue // TestEveryImageTheReadmeShowsExists
+		}
+		u, err := url.Parse(dest)
+		if !assert.NoError(t, err, dest) {
+			continue
+		}
+		switch {
+		case markdown.IsAnchor(u):
+			_, ok := anchors[u.Fragment]
+			assert.True(t, ok, "%s names no heading in the README", dest)
+		case markdown.IsWebURL(u):
+		default:
+			assert.Fail(t, "a link About cannot follow",
+				"%s is neither a #heading nor an absolute http(s) address; write it as "+
+					"https://github.com/ushineko/hayami/blob/main/%s", dest, dest)
+		}
+	}
+}
+
+// The images About shows are the ones embedded: an image the README displays
+// and the embed lacks is alt text in About and a picture on GitHub.
+func TestEveryReadmeImageIsEmbedded(t *testing.T) {
+	for path := range readmeImages(t) {
+		_, err := fs.Stat(hayami.Images(), path)
+		assert.NoError(t, err, "%s is shown by the README and not embedded", path)
 	}
 }
