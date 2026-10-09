@@ -8,9 +8,13 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
+	"fyne.io/fyne/v2"
+	fynetheme "fyne.io/fyne/v2/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/image/font/sfnt"
 
 	"github.com/ushineko/fynedesygn/markdown"
 
@@ -118,5 +122,59 @@ func TestEveryReadmeImageIsEmbedded(t *testing.T) {
 	for path := range readmeImages(t) {
 		_, err := fs.Stat(hayami.Images(), path)
 		assert.NoError(t, err, "%s is shown by the README and not embedded", path)
+	}
+}
+
+/*
+Every character the README shows is one the window can draw in the face it is
+drawn in (fynedesygn's docs/fyne-quirks.md, 19).
+
+A character outside Fyne's bundled fonts is drawn from a system face, and Fyne
+marks the end of that run as a missing glyph: "Options → Remote Web Server"
+read "Options →� Remote Web Server" in About. Code is drawn in the monospace
+face and prose in the text faces, and the two do not have the same characters
+(the monospace one has the arrow), so each is checked against its own. The CJK
+of the name is the exception, and deliberate: it is what the program is
+called, and it has no ASCII spelling.
+*/
+func TestEveryReadmeCharacterIsInItsBundledFont(t *testing.T) {
+	prose := bundled(t, fynetheme.DefaultTextFont(), fynetheme.DefaultTextBoldFont(),
+		fynetheme.DefaultTextItalicFont(), fynetheme.DefaultTextBoldItalicFont())
+	mono := bundled(t, fynetheme.DefaultTextMonospaceFont())
+
+	code := regexp.MustCompile("(?s)```.*?```|`[^`\\n]*`")
+	doc := hayami.README()
+	check := func(text, where string, has func(rune) bool) {
+		seen := map[rune]bool{}
+		for _, r := range text {
+			if r < 0x80 || seen[r] || unicode.Is(unicode.Han, r) {
+				continue
+			}
+			seen[r] = true
+			assert.True(t, has(r), "the README's %s uses %q (U+%04X), which its bundled font lacks; "+
+				"About draws it with a missing-glyph mark beside it", where, r, r)
+		}
+	}
+	check(code.ReplaceAllString(doc, ""), "prose", prose)
+	check(strings.Join(code.FindAllString(doc, -1), ""), "code", mono)
+}
+
+// bundled reports whether any of some font resources has a glyph for a rune.
+func bundled(t *testing.T, fonts ...fyne.Resource) func(rune) bool {
+	t.Helper()
+	faces := make([]*sfnt.Font, 0, len(fonts))
+	for _, res := range fonts {
+		face, err := sfnt.Parse(res.Content())
+		require.NoError(t, err, res.Name())
+		faces = append(faces, face)
+	}
+	var buf sfnt.Buffer
+	return func(r rune) bool {
+		for _, face := range faces {
+			if i, err := face.GlyphIndex(&buf, r); err == nil && i != 0 {
+				return true
+			}
+		}
+		return false
 	}
 }
