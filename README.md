@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.5
+**Version**: 0.9.6
 
 *a chart you read at a glance*
 
@@ -401,7 +401,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.6 (2026-10-08)
 
 - **Fix**: a usage reading older than five minutes no longer adds a "read …
   ago" line above the meters, which moved the panel each time it came and
