@@ -30,7 +30,21 @@ type Options struct {
 	// Once draws one frame and exits, for a prompt or a status line. The
 	// widget this replaces calls it --line.
 	Once bool
+
+	// Shown are the sections to draw, by key, in order (spec 052). Sources
+	// may hold more: one not shown is not polled. Nil shows every source, in
+	// the sources' order.
+	Shown []string
+
+	// Watch is asked every WatchInterval for the shown sections and the
+	// arrangement the settings now give, changed false when they are as they
+	// were. It is how a change made in the window's preferences reaches a
+	// pane. Nil watches nothing.
+	Watch func() (shown []string, arrangement view.Arrangement, changed bool)
 }
+
+// WatchInterval is how often the terminal panel looks at its settings.
+const WatchInterval = 2 * time.Second
 
 // Model is the panel's state.
 type Model struct {
@@ -51,16 +65,51 @@ type Model struct {
 	// that answers "nothing" has still answered. Only --once reads it, and it
 	// is what that flag waits for.
 	reported map[string]bool
+
+	// shown is the sections drawn, and order the order of every source
+	// (spec 052): the shown ones first, as the settings give them.
+	shown map[string]bool
+	order []string
 }
 
 // New builds the model.
 func New(o Options) Model {
-	return Model{
+	m := Model{
 		opts:     o,
 		width:    80,
 		drawn:    map[string]bool{},
 		reported: map[string]bool{},
 		paint:    Painter(),
+	}
+	shown := o.Shown
+	if shown == nil {
+		for _, s := range o.Sources {
+			shown = append(shown, s.Key())
+		}
+	}
+	m.show(shown)
+	return m
+}
+
+// show sets the sections drawn and their order: the shown ones first, in the
+// order given, then every other source (spec 052).
+func (m *Model) show(keys []string) {
+	m.shown = make(map[string]bool, len(keys))
+	for _, k := range keys {
+		m.shown[k] = true
+	}
+	m.order = make([]string, 0, len(m.opts.Sources))
+	seen := map[string]bool{}
+	for _, k := range keys {
+		if m.source(k) != nil && !seen[k] {
+			m.order = append(m.order, k)
+			seen[k] = true
+		}
+	}
+	for _, s := range m.opts.Sources {
+		if !seen[s.Key()] {
+			m.order = append(m.order, s.Key())
+		}
 	}
 }
 
@@ -91,12 +140,16 @@ type polled struct {
 // Init polls every source at once, so the first frame is the real one rather
 // than an empty panel that fills in.
 func (m Model) Init() tea.Cmd {
-	cmds := make([]tea.Cmd, 0, len(m.opts.Sources)+1)
+	cmds := make([]tea.Cmd, 0, len(m.opts.Sources)+2)
 	for _, s := range m.opts.Sources {
-		cmds = append(cmds, poll(s))
+		if m.shown[s.Key()] {
+			cmds = append(cmds, poll(s))
+		}
 	}
 	if m.opts.Once {
 		cmds = append(cmds, tea.Tick(OnceDeadline, func(time.Time) tea.Msg { return giveUp{} }))
+	} else if m.opts.Watch != nil {
+		cmds = append(cmds, watchAfter())
 	}
 	return tea.Batch(cmds...)
 }
@@ -148,7 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// which with the default sections is bandwidth answering "nothing
 			// yet" and a frame with no sections in it at all.
 			m.reported[msg.key] = true
-			if len(m.reported) >= len(m.opts.Sources) {
+			if len(m.reported) >= len(m.shown) {
 				return m, tea.Quit
 			}
 			return m, nil
@@ -168,10 +221,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tick:
-		if s := m.source(msg.key); s != nil {
+		// A section no longer shown stops here; showing it again polls it.
+		if s := m.source(msg.key); s != nil && m.shown[msg.key] {
 			return m, poll(s)
 		}
 		return m, nil
+
+	case watch:
+		shown, arr, changed := m.opts.Watch()
+		if !changed {
+			return m, watchAfter()
+		}
+		was := m.shown
+		m.show(shown)
+		m.opts.Arrangement = arr
+		cmds := []tea.Cmd{watchAfter()}
+		for _, k := range m.order {
+			if m.shown[k] && !was[k] {
+				cmds = append(cmds, poll(m.source(k)))
+			}
+		}
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }
@@ -189,12 +259,12 @@ func (m Model) source(key string) panel.Source {
 // Sections are what the model would draw, which is what a test asks for
 // rather than parsing the rendered string.
 func (m Model) Sections() []view.Section {
-	out := make([]view.Section, 0, len(m.opts.Sources))
-	for _, s := range m.opts.Sources {
-		if !m.drawn[s.Key()] {
+	out := make([]view.Section, 0, len(m.order))
+	for _, k := range m.order {
+		if !m.shown[k] || !m.drawn[k] {
 			continue
 		}
-		out = append(out, s.Section())
+		out = append(out, m.source(k).Section())
 	}
 	return out
 }
@@ -238,3 +308,15 @@ func Drawn(sources []panel.Source) tea.Msg {
 
 // drawnAll marks every source drawn at once.
 type drawnAll struct{ sources []panel.Source }
+
+// watch asks Options.Watch whether the settings changed.
+type watch struct{}
+
+// watchAfter schedules the next look at the settings.
+func watchAfter() tea.Cmd {
+	return tea.Tick(WatchInterval, func(time.Time) tea.Msg { return watch{} })
+}
+
+// Watched is the message the panel acts on when it looks at its settings,
+// exported so a test can drive a change without waiting for the interval.
+func Watched() tea.Msg { return watch{} }

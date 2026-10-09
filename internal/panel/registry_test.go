@@ -67,3 +67,18 @@ func TestKeysDefaultsAndSourcesFollowTheOneList(t *testing.T) {
 	assert.Equal(t, "cooler", got[0].Key())
 	assert.Equal(t, "bandwidth", got[1].Key())
 }
+
+// Spec 052. Every section, the shown ones first in the order given and the
+// rest after in the registry's order; an unknown or repeated key is dropped.
+func TestOrderedPutsTheShownSectionsFirst(t *testing.T) {
+	all := panel.Keys()
+	require.GreaterOrEqual(t, len(all), 3)
+	got := panel.Ordered([]string{all[2], "nope", all[0], all[2]})
+	want := []string{all[2], all[0]}
+	for _, k := range all {
+		if k != all[2] && k != all[0] {
+			want = append(want, k)
+		}
+	}
+	assert.Equal(t, want, got)
+}

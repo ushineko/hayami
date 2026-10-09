@@ -91,6 +91,8 @@ type panelSettings struct {
 	// (spec 051). Off unless a test asks: a panel that hid itself because
 	// someone has a game or a film in front could not be photographed.
 	HideForFullscreen bool
+	// Preferences opens the preferences window as well, on this page.
+	Preferences string
 
 	// x and y are where the window opens, set by start: away from the
 	// pointer, so the panel never opens under it and shows a row's tip over
@@ -142,7 +144,11 @@ func start(t *testing.T, s panelSettings) uintptr {
 	require.NoError(t, os.WriteFile(path, []byte(s.yaml()), 0o600))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, binary, "--settings", path)
+	args := []string{"--settings", path}
+	if s.Preferences != "" {
+		args = append(args, "--preferences="+s.Preferences)
+	}
+	cmd := exec.CommandContext(ctx, binary, args...)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
 		cancel()
