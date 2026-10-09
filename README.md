@@ -4,39 +4,59 @@
 
 *a chart you read at a glance*
 
-A panel for Linux showing peripheral battery, network bandwidth,
-liquid-cooler thermals and Claude Code and Codex usage — on the desktop as a
-frameless always-on-top window, and in a terminal as a pane. It also runs on
-Windows, where usage and bandwidth read and the device sections do not yet
-(see [On Windows](#on-windows)).
+hayami is a small panel that shows, at a glance, four things about your desk:
+the battery of your mouse, keyboard and headset, your network traffic, your
+processor's, graphics card's and liquid cooler's temperatures, and how much of
+your Claude Code and Codex allowance you have used. It runs as a frameless
+window that stays on top of the desktop, and as a pane in a terminal. It runs
+on Linux and on Windows; what differs between them is in
+[Platform notes](#platform-notes).
 
-> **Status**: in use, and it installs. Four sections draw in both panels from
-> settings both read: the peripherals, bandwidth, the cooler, and usage —
-> fetched by hayami itself through the cache it shares with the tools it
-> replaces. AirPods and the rest of Bluetooth read through BlueZ and Apple's
-> accessory protocol. `ag-scripts/peripheral-battery-monitor` remains the
-> behavioural reference, and where this file says "the monitor does X" that is
-> a claim about its source rather than a memory.
+The name means "quick look": a 早見表 is a chart read at a glance. hayami
+replaces two Python programs, `peripheral-battery-monitor` and
+`claude-usage-widget-windows`, and shares the usage cache with them while
+they are still installed.
 
 ## Contents
 
+- [The four sections](#the-four-sections)
 - [Screenshots](#screenshots)
-- [What it does](#what-it-does)
-- [Arrangements](#arrangements)
-- [Architecture](#architecture)
-- [Installing it](#installing-it)
+- [Installing](#installing)
 - [Running it](#running-it)
-- [Credits](#credits)
+- [Preferences and settings](#preferences-and-settings)
+- [Platform notes](#platform-notes)
+- [Architecture](#architecture)
 - [Development](#development)
-- [Where it comes from](#where-it-comes-from)
+- [Credits](#credits)
 - [Licence](#licence)
 - [Changelog](#changelog)
 
+## The four sections
+
+Each reading is a **section**. A section is drawn only when it has something
+to show, and you choose which sections appear and in what order. A hidden
+section is not polled at all.
+
+| Section | What it shows | Where it reads from |
+|---|---|---|
+| Peripherals | Battery level and charging state of mice, keyboards and headsets | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, AirPods and other Bluetooth devices through BlueZ (Linux only) |
+| Bandwidth | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
+| Cooler | Processor and graphics card load and temperature, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
+| Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
+
+The sections can be laid out three ways, in either panel:
+
+- **stack**: one card above another.
+- **grid**: columns that reflow to the width, as in `btop`.
+- **row**: one full-width line per reading, its bar stretching across. In the
+  window, row has no card headings and no trend plots.
+
+A usage reading that is more than five minutes old stays on screen and is
+marked stale: dim in the terminal, with its age in the window's hover note.
+
 ## Screenshots
 
-Taken on the author's desk from its live readings by `make screenshots`,
-which starts a fresh panel on a throwaway copy of the settings, photographs
-it, and stops it.
+Taken by `make screenshots` from live readings on a Linux desk.
 
 The desktop panel, in the Breeze Dark scheme:
 
@@ -46,11 +66,11 @@ The terminal panel in a 100-column pane, where the grid makes two columns:
 
 ![The terminal panel at 100 columns in its grid: Peripherals and Bandwidth in the left column, Cooler and Usage in the right, the batteries' bars and the usage meters drawn in line characters and each trend as a small block chart](docs/img/gallery-pane-column.png)
 
-The same readings at 160 columns in the row arrangement, one line per reading:
+The same readings at 160 columns in the row arrangement:
 
 ![The terminal panel at 160 columns in rows: a line for each device with its level and bar at the right, a line for each interface's rates, a block-chart trend line for each interface and direction, lines for the processor, graphics card, coolant and speeds, and one full-width meter per usage account with its figures and reset time](docs/img/gallery-pane-row.png)
 
-The preferences window, one page at a time:
+The preferences window:
 
 ![Preferences, Sections page: a checkbox for each of the four sections with up and down buttons to reorder them, a choice of stack, grid or row, and a checkbox for each network interface the bandwidth section can watch, with a switch to show every interface](docs/img/gallery-prefs-sections.png)
 
@@ -60,68 +80,12 @@ The preferences window, one page at a time:
 
 ![Preferences, About page: the program's icon, name, version and summary, notes on its origin and what it writes, the facts table naming the settings file and the sections shown, and the start of this README below them](docs/img/gallery-prefs-about.png)
 
-## What it does
+## Installing
 
-Each reading is a **section**, and a section is drawn only when its source has
-something to say. The user chooses which sections appear and in what order,
-and the choice holds in both shells.
+### On Linux
 
-| Section | Reads |
-|---|---|
-| Peripherals | [sanshoku](https://github.com/ushineko/sanshoku): HID++ 1.0 and 2.0 over `hidraw` for Logitech, feature reports for Razer, SteelSeries reports for the Apex and the Arctis Nova Pro Wireless, Apple's accessory protocol over L2CAP for AirPods, BlueZ `org.bluez.Battery1` for every other Bluetooth device that reports one, the AULA F75's battery report through its 2.4 GHz receiver; on Windows the HID protocols through the HID class driver, and no Bluetooth (spec 035) |
-| Bandwidth | `/proc/net/dev`, with the exit node for a `tailscale` interface; on Windows, the interface table (`GetIfTable2`), named as Network Connections names them; a two-minute trend of each interface's down and up rates, every line on one scale so a quiet interface is the flatter one. A Wi-Fi interface leads with its signal in four bars and carries its strength, band, channel and link rate on a line under its totals, from nl80211 on Linux and the WLAN service on Windows; the network's name is never read |
-| Cooler | [sanshoku](https://github.com/ushineko/sanshoku): hwmon by label for the processor and the graphics card, `/proc/stat` for the processor's load and `gpu_busy_percent` for an AMD card's; `nvidia-smi` for a card on NVIDIA's own driver, which registers no hwmon; the NZXT Kraken's status report over `hidraw` for the coolant, pump and fan. On Windows, `GetSystemTimes` for the processor's load and D3DKMT and the `GPU Engine` counters for the card (spec 034). A five-minute trend of the coolant, the processor and the graphics card |
-| Usage | the Anthropic OAuth API and the Codex app-server, through a cache shared with the tools this replaces; each account's line leads with its provider, `CC` for Claude Code and `CX` for Codex (`CC max`, `CC work`, `CX`) |
-
-## Arrangements
-
-The same sections, laid out three ways. The arrangement is a setting, not a
-mode, which is why there is no separate widget for the terminal:
-
-- **stack** — one card above another. A narrow panel of either kind.
-- **grid** — columns that reflow to the width, in the manner of `btop`. Both
-  shells: a desktop panel wide enough for two columns draws two.
-- **row** — one full-width line per reading, its bar stretching to the pane.
-  Both shells: the window draws it with the design system's `glance.Lines`,
-  with no card headings, no plots and no second line under a reading (spec
-  049); the terminal pane also draws each trend as a named line.
-  This is what a `herdr` pane wants, and it replaces
-  `claude-usage-widget-windows`'s `--tui` and `--line`:
-
-  ```
-  hayami-tui --sections usage
-  ```
-
-  `--sections` and `--arrangement` override the settings file for that run and
-  never write back to it, so a pane's arguments are the pane's own.
-
-## Architecture
-
-Two binaries and one program. `cmd/hayami` is the desktop panel and
-`cmd/hayami-tui` is the terminal panel; `internal/core` produces readings with
-no toolkit in sight, `internal/view` describes a section as data, and each
-shell only arranges it. Devices are read through
-[sanshoku](https://github.com/ushineko/sanshoku) and nowhere else. The layers,
-the rules a change is held to, and where to add a device, a reading or a
-section are in [docs/architecture.md](docs/architecture.md).
-
-The window is a glance window from
-[fynedesygn](https://github.com/ushineko/fynedesygn) — frameless, fixed to its
-content, always on top, read without being touched. Its rules are that
-repository's `docs/glance.md`.
-
-It draws its own translucency: the space between the cards is not painted at
-all — the desktop shows through it — and the cards themselves are faded to a
-percentage you set, on any desktop. The titlebar is the one
-thing only the compositor can remove, so on Plasma that comes from a KWin rule
-hayami installs when asked — from the preferences window, or with
-`hayami window install`. Without it the panel is translucent and has a
-titlebar.
-
-## Installing it
-
-From a [release](https://github.com/ushineko/hayami/releases), which carries
-both programs already built for linux-amd64:
+From a [release](https://github.com/ushineko/hayami/releases), which has both
+programs built for linux-amd64:
 
 ```
 tar xzf hayami-<version>-linux-amd64.tar.gz
@@ -129,277 +93,295 @@ cd hayami-<version>-linux-amd64
 ./install.sh
 ```
 
-That needs no Go, no C toolchain and no OpenGL headers. The desktop panel is
-linked against the system's OpenGL and X11 or Wayland libraries, so it wants a
-glibc at least as new as the one it was built against; where it will not
-start, build from the checkout instead.
+This needs no Go or C toolchain. The desktop panel links the system's OpenGL
+and X11 or Wayland libraries, so it needs a glibc at least as new as the one
+it was built against. If it does not start, build from a checkout instead.
 
 From a checkout, which builds first:
 
 ```
-./install.sh                # the two programs, a launcher entry and an icon
+./install.sh                # both programs, a launcher entry and an icon
 ./install.sh --autostart    # and start the panel when you log in
-./install.sh --dry-run      # show what that would do, change nothing
-./uninstall.sh              # remove exactly those, keeping your settings
+./install.sh --dry-run      # show what it would do, change nothing
+./uninstall.sh              # remove those, keeping your settings
 ```
 
-Everything goes under `~/.local` and re-running is safe. The one file that
-needs root is the udev rule below, and the installer does not become root to
-write it. The titlebar is not part of it either: that is a KWin rule the
-program offers from its preferences window or with `hayami window install`,
-because it writes into the same `kwinrulesrc` as every other rule you have.
+Everything goes under `~/.local`, and running it again is safe. Two things
+are not installed automatically: the [udev rule](#the-udev-rule), which needs
+root, and the [KWin rule](#kwin-and-the-window) that removes the titlebar.
+
+The installer leaves `peripheral-battery-monitor` alone; the two can run side
+by side. To switch over:
+
+```
+rm ~/.config/autostart/peripheral-battery-monitor.desktop   # stop it at login
+pkill -f peripheral-battery.py                              # stop it now
+./install.sh --autostart                                    # start hayami at login
+```
 
 ### On Windows
 
-From a checkout, in PowerShell. The desktop panel links OpenGL through cgo, so
-the build needs Go and an x86_64 mingw gcc (`winget install --id
-BrechtSanders.WinLibs.POSIX.UCRT -e`); one on `PATH` is used, or the one
-winget installed is found where winget put it.
+From a checkout, in PowerShell. The build needs Go and an x86_64 mingw gcc
+(`winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e`); the script uses a
+gcc on `PATH`, or finds the one winget installed.
 
 ```
-.\scripts\install_windows.ps1               # both programs, and a Start menu shortcut
+.\scripts\install_windows.ps1               # both programs and a Start menu shortcut
 .\scripts\install_windows.ps1 -Autostart    # and start the panel when you log in
 .\scripts\install_windows.ps1 -WithSensors  # and LibreHardwareMonitor, for the CPU temperature
-.\scripts\install_windows.ps1 -DryRun       # show what that would do, change nothing
-.\scripts\uninstall_windows.ps1             # remove exactly those, keeping your settings
+.\scripts\install_windows.ps1 -DryRun       # show what it would do, change nothing
+.\scripts\uninstall_windows.ps1             # remove those, keeping your settings
 ```
 
-The build gives both programs hayami's icon and version (spec 053), which the
-Start menu, the shortcuts and a file's Properties show: `scripts/winres.ps1`
-draws the icon from the panel's own SVG and runs go-winres, pinned and run
-with `go run`, so nothing is installed for it.
+Everything is per user, under `%LOCALAPPDATA%\Programs\hayami`: no
+administrator rights, no registry writes, no `PATH` changes. The programs
+carry hayami's icon and version, which the Start menu and a file's Properties
+show. Installing over a running panel works: Windows renames the running copy
+to `<name>.old`, it keeps running until restarted, and the next install
+removes it.
 
-Everything is per-user, under `%LOCALAPPDATA%\Programs\hayami`: no
-administrator rights, no registry writes, no `PATH` changes. Settings live in
-`%APPDATA%\hayami\settings.yaml` and the last readings in
-`%LOCALAPPDATA%\hayami\sections.json`.
+## Running it
 
-What differs from Linux:
+```
+hayami                                    # the desktop panel
+hayami --preferences                      # its preferences window
+hayami --preferences=about                # opened on one page
+hayami-tui                                # the terminal panel
+hayami-tui --sections usage --arrangement row
+hayami-tui --once                         # one frame, for a prompt or status line
+hayami-tui readings                       # the readings as JSON, no display needed
+hayami-tui doctor                         # what each section found, and why not
+hayami-tui arrangements                   # the values --arrangement takes
+```
+
+`--sections` and `--arrangement` apply to that run only and never write to the
+settings file, so a terminal pane can show one section in a row while the
+desktop panel shows all four. `hayami-tui --sections usage --arrangement row`
+is what replaces `claude-usage-widget-windows`'s `--tui` and `--line` panes.
+The desktop panel takes neither flag; it follows its settings.
+
+On Linux, move the panel as any frameless window (Alt-drag on KDE). On
+Windows, drag it from anywhere on it, and it opens where you left it.
+Right-click it for Preferences, Opacity and Quit.
+
+## Preferences and settings
+
+The preferences window has four pages:
+
+- **Sections**: which sections show, their order (the panel follows at once),
+  the arrangement, and which network interfaces the bandwidth section watches.
+- **Window**: the panel's fonts and text size, how opaque its cards are, the
+  KWin rule on Linux, and on Windows whether it hides for a full-screen app.
+- **Appearance**: the preferences window's own colour scheme, fonts and scale.
+- **About**: the version, where files live, and this README.
+
+The terminal panel reads the same settings and picks up a change within two
+seconds.
+
+Settings live in `~/.config/hayami/settings.yaml` on Linux and
+`%APPDATA%\hayami\settings.yaml` on Windows. A setting that belongs to one
+section is kept under that section's name:
+
+```yaml
+hayami:
+    sections:
+        - peripherals
+        - bandwidth
+        - cooler
+        - usage
+    arrangement: stack
+    sectionSettings:
+        bandwidth:
+            interfaces:
+                - eno2
+        cooler:
+            lhm: http://127.0.0.1:8085/data.json
+```
+
+Files from before 0.9.0, with `interfaces` and `lhm` directly under `hayami:`,
+are still read, and both shapes are written.
+
+No interface is watched until you choose one. The preferences list the real
+interfaces first and keep virtual ones (container bridges, loopback, tunnels)
+behind "Show every interface".
+
+The last reading of each section is kept in `sections.json`, under
+`~/.cache/hayami` on Linux and `%LOCALAPPDATA%\hayami` on Windows, so a panel
+that has just started shows what it last knew, dimmed, until a live reading
+arrives. Readings older than a day are ignored, and deleting the file is safe.
+
+The usage cache is shared with the Python tools: `~/.cache/claude-usage-widget`
+on Linux, `%LOCALAPPDATA%\claude-usage-widget\cache` on Windows.
+
+## Platform notes
+
+### Windows
 
 - **The window needs no rule.** It has no titlebar, stays on top and is
-  translucent by itself. There is no Alt-drag on Windows, so the panel is
-  dragged from anywhere on it, and it opens where it was left -- unless no
-  monitor covers that place any more, in which case it opens where Windows
-  puts it.
-- **It stands aside for a full-screen app.** While the window in front covers
-  the whole of the panel's monitor -- a browser in full screen (F11, or a web
-  player's full-screen button), a game in windowed or borderless full screen --
-  the panel hides, and it comes back, without taking the focus, when you
-  return to the desktop. A maximised window does not count, nor does a
-  full-screen app on another monitor. On by default; Preferences, Window,
-  "Hide while a full-screen app is in front" turns it off. On Plasma, KWin
-  already covers the panel with an active full-screen window.
-- **Usage shares the Windows widget's cache**, in
-  `%LOCALAPPDATA%\claude-usage-widget\cache`, exactly as it shares the
-  Python tools' on Linux.
-- **Bandwidth** offers the interfaces Network Connections shows; Windows'
-  loopback, its `Local Area Connection*` adapters and its IPv6 transition
-  tunnels are kept behind "Show every interface".
-- **Wi-Fi details can be withheld.** Since Windows 11 24H2 the WLAN service
-  describes the connection only to desktop apps allowed location access
-  (Settings, Privacy & security, Location, "Let desktop apps access your
-  location"), because the access point's address would locate the machine.
-  Where it declines, the Wi-Fi row shows what it could read, and `doctor` and
-  the card's tip say why the rest is blank.
-- **The cooler card shows the processor and the graphics card** (spec 034).
-  The processor's load is GetSystemTimes and its name the registry's. Windows
-  offers no processor temperature without a kernel driver, so the temperature
-  comes from LibreHardwareMonitor where it is running (below), and otherwise
-  the row is the load alone, with the reason on hover and in `doctor`. The
-  card's temperature, load and name come from D3DKMT and the
-  `GPU Engine` performance counters, which are Task Manager's sources, for any
-  vendor's card; `nvidia-smi` is asked only for what they left out. The load
-  is the busiest engine, as Task Manager gives it, which reads lower than
-  `nvidia-smi`'s figure for the same card.
-- **Peripherals read through Windows' own HID driver** (spec 035), with no
-  vendor software, no driver to install and no administrator rights; there
-  is no udev rule to install. What reads: Logitech HID++ devices, including
-  those behind a receiver; Razer devices, the Basilisk Ultimate on its dongle
-  among them; the AULA F75 through its 2.4 GHz receiver. SteelSeries is
-  expected to and not yet confirmed on Windows, and so is a Logitech
-  Unifying keyboard such as the K800. What does not: Bluetooth devices and
-  AirPods, whose readers are BlueZ and an L2CAP socket, neither of which
-  Windows has, so the card has no Bluetooth line there; and anything behind
-  a USB Bluetooth audio transmitter such as the UGREEN BT701, which pairs
-  the headphones itself and tells the computer neither their battery nor
-  whether they are connected.
-- **The liquid cooler finds nothing yet**: the Kraken is read on Linux only.
+  translucent on its own. It snaps to screen edges when dragged. If no monitor
+  covers the place it was left, it opens where Windows puts it.
+- **It hides for a full-screen app.** While the window in front covers the
+  whole of the panel's monitor (a browser in full screen, a game in borderless
+  full screen) the panel hides, and it comes back without taking the focus. A
+  maximised window does not count, nor does a full-screen app on another
+  monitor. Turn it off in Preferences, Window.
+- **Peripherals** read through Windows' own HID driver, with no vendor
+  software and no administrator rights. Confirmed on Windows: Logitech HID++
+  devices, the Razer Basilisk Ultimate on its dongle and its cable, and the
+  AULA F75 through its receiver. SteelSeries devices and a Logitech Unifying
+  keyboard such as the K800 are expected to work and are not yet confirmed.
+  Bluetooth devices and AirPods do not read on Windows, and nor does a
+  headset paired through a USB Bluetooth transmitter such as the UGREEN BT701,
+  which reports neither battery nor connection.
+- **Cooler**: the processor's load and name come from the system, and the
+  graphics card's temperature, load and name from D3DKMT and the `GPU Engine`
+  counters, Task Manager's sources, for any vendor. The load is the busiest
+  engine, as Task Manager shows it, so it reads lower than `nvidia-smi`. The
+  NZXT Kraken is read on Linux only.
+- **Bandwidth** offers the interfaces Network Connections shows; loopback,
+  the `Local Area Connection*` adapters and IPv6 transition tunnels are behind
+  "Show every interface".
 
 #### The processor's temperature: LibreHardwareMonitor
 
-Windows keeps a processor's temperature behind a kernel driver, and hayami
-loads none. [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-does, through its PawnIO driver, and serves what it reads from a web server of
-its own; the panel reads that, at `http://127.0.0.1:8085/data.json` (spec
-036). It is optional, and hayami never installs it unasked.
+Windows gives a processor's temperature only to a kernel driver, and hayami
+loads none.
+[LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
+does, through its PawnIO driver, and serves its readings from a small web
+server; hayami reads `http://127.0.0.1:8085/data.json`. It is optional.
+Without it the processor's row shows the load only, and the hover note and
+`doctor` say why.
 
-`install_windows.ps1 -WithSensors` does the steps below (spec 042). It does
-each one only if it is not done already, so it can be run again at any time,
-and it ends by checking that `data.json` has a processor temperature, saying
-which step is missing if not. The settings, the startup task and the start
-are one elevated step, so Windows asks once. `-DryRun` says what it would do.
-By hand:
+`install_windows.ps1 -WithSensors` installs and configures it, skipping any
+step already done, and then checks that a temperature is served. Windows asks
+for administrator rights once. To do the same by hand:
 
 1. `winget install --id LibreHardwareMonitor.LibreHardwareMonitor -e`
-2. Run it as administrator. On its first start it offers to install PawnIO,
-   the driver it reads the processor through: say yes.
-3. **Options → Remote Web Server → Run**, on port 8085, with authentication
-   off: hayami sends no password.
+2. Run it as administrator and accept the PawnIO driver it offers on first
+   start.
+3. **Options → Remote Web Server → Run**, port 8085, no authentication
+   (hayami sends no password).
 4. **Options → Minimize On Close**, **Start Minimized** and **Minimize To
-   Tray**. **Closing its window quits it** unless Minimize On Close is on, and
-   the processor's temperature goes with it; with these on it lives in the
-   notification area with no window.
-5. **Options → Run On Windows Startup**: a scheduled task that starts it at
-   logon with administrator rights, so there is no UAC prompt each time.
+   Tray**. Without Minimize On Close, closing its window quits it and the
+   temperature goes with it.
+5. **Options → Run On Windows Startup**, which starts it at logon with
+   administrator rights and no UAC prompt.
 
-The script sets these in LibreHardwareMonitor's settings file, beside its
-executable, while it is stopped (it rewrites the file when it exits), and
-keeps the file as it was at `LibreHardwareMonitor.config.bak-hayami`. It
-changes no other setting.
+The script changes only these settings, and keeps the original file as
+`LibreHardwareMonitor.config.bak-hayami`. `uninstall_windows.ps1` leaves
+LibreHardwareMonitor in place and prints the commands that remove it. For
+another port, set `sectionSettings.cooler.lhm` in the settings file.
 
-**Its web server listens on every network interface.** Its address setting
-is not honoured for `127.0.0.1` (it checks the address against the machine's
-DNS names, which never include loopback, and falls back to all of them), and
-the same server accepts requests that change fan settings. Windows Firewall's
-default, blocking inbound connections, is what keeps port 8085 off your
-network: add no rule that allows it. hayami only ever asks for `data.json`.
+**Keep port 8085 blocked in Windows Firewall.** LibreHardwareMonitor's web
+server listens on every network interface, whatever address it is given, and
+the same server accepts requests that change fan settings. Windows Firewall
+blocks inbound connections by default; add no rule that allows this port.
+hayami only reads `data.json`.
 
-Another port is a line in `settings.yaml`:
-`lhm: http://127.0.0.1:9000/data.json`. Where there is no temperature, the
-reason on hover and in `doctor` says which step is missing: nothing installed,
-LibreHardwareMonitor closed with its startup task in place, not set to start
-with Windows, its web server off, no PawnIO, or a password set.
-`uninstall_windows.ps1` leaves LibreHardwareMonitor and its startup task
-alone, and prints the commands that remove them.
+#### Wi-Fi details and location access
 
-### The udev rule
+Since Windows 11 24H2 the WLAN service describes the connection only to
+desktop apps allowed location access, because the access point's address can
+locate the machine. To see signal, band, channel and link rate, turn on
+Settings, Privacy & security, Location, "Let desktop apps access your
+location". Without it the Wi-Fi row shows what it can, and the hover note and
+`doctor` say why the rest is blank.
 
-hayami opens the receivers, docks, headset base stations and cooler on your
-desk itself, as you. A device node is yours to open only when a udev rule tags
-it for the logged-in user; without one, the device is found and the card says
-it is *not permitted*. `packaging/60-sanshoku.rules` is that rule, for
-Logitech, Razer, SteelSeries and NZXT, matched by vendor. Bluetooth needs
-none.
+### Linux
 
-The installer puts it in `/etc/udev/rules.d` when it is allowed to, and
-otherwise prints the two commands that do, and carries on:
+#### The udev rule
+
+hayami opens the receivers, headset base stations and cooler on your desk
+itself, as you. A device node is yours to open only when a udev rule grants
+it to the logged-in user; without one, the card says the device is *not
+permitted*. `packaging/60-sanshoku.rules` is that rule, matched by vendor:
+Logitech, SteelSeries, Razer and NZXT. Bluetooth needs no rule. The AULA
+F75's receiver is not in this copy of the rule yet.
+
+The installer copies it to `/etc/udev/rules.d` when it can, and otherwise
+prints the commands:
 
 ```
 sudo install -m644 packaging/60-sanshoku.rules /etc/udev/rules.d/60-sanshoku.rules
 sudo udevadm control --reload
 ```
 
-Then replug the device, or reboot. It says nothing when the rule is already
-there. A machine that once had liquidctl or OpenRazer may have a rule that
-covers some of these devices already; `hayami-tui doctor` names any device it
-may not open. `uninstall.sh` removes the copy `install.sh` wrote, or prints
-the commands that do.
+Then replug the device, or reboot. `hayami-tui doctor` names any device it may
+not open. `uninstall.sh` removes the rule it installed, or prints the commands
+to.
 
-### Replacing peripheral-battery-monitor
+#### KWin and the window
 
-The installer does not touch it. It is another program you chose to run, and
-disabling it is your move, not an installer's -- the two sit side by side
-quite happily while you decide. When you are ready:
+hayami draws its own translucency: the gaps between cards are not painted,
+and the cards fade to the opacity you set. Only the compositor can remove the
+titlebar, so on KDE Plasma hayami installs a KWin rule when you ask, from
+Preferences, Window, or with `hayami window install` (`hayami window status`
+and `hayami window remove` check and undo it). Without the rule the panel has
+a titlebar. KWin already places an active full-screen window over the panel,
+so the Windows hide-for-full-screen option is not needed there.
 
-```
-rm ~/.config/autostart/peripheral-battery-monitor.desktop   # stop it at login
-pkill -f peripheral-battery.py                              # stop it now
-./install.sh --autostart                                    # and hayami takes over
-```
+#### Not yet confirmed on Linux
 
-The monitor's own `uninstall.sh` removes the rest of it. Your Claude usage
-cache is shared between the two and is not touched by either.
+Recent work was tested on Windows. On Linux, these have not yet been checked
+on hardware: the AULA F75, the Wi-Fi row through nl80211, and KWin covering
+the panel for a full-screen app.
 
-## Running it
+## Architecture
 
-```
-hayami                                    # the desktop panel
-hayami --preferences                      # …and its preferences window
-hayami --preferences=about                # …open on one of its pages
-hayami-tui                                # the terminal panel
-hayami-tui --sections bandwidth --arrangement row
-hayami-tui readings                       # the numbers as JSON, no display needed
-hayami-tui arrangements                   # what --arrangement takes
-hayami-tui --once                         # one frame, for a prompt or a status line
-```
-
-`--sections` and `--arrangement` override the settings file for that run and
-never write back to it. The window takes neither: a desktop panel is
-configured from its own settings, and a flag that changed what it drew for one
-run would be a setting nobody could find again.
-
-Settings live in `~/.config/hayami/settings.yaml`:
-
-```yaml
-hayami:
-    sections:
-        - bandwidth
-    arrangement: stack
-    interfaces:
-        - eno2
-```
-
-No interface is watched until one is named. Guessing would be this program
-deciding what is interesting about somebody's network — and on a machine
-running containers there are a great many names to guess among: the
-preferences window lists the real interfaces first and keeps the rest behind
-a switch, because seventy-seven checkboxes to find two is not a choice.
-
-The last reading of every section is cached in
-`~/.cache/hayami/sections.json`, so a panel that has just started shows what
-it knew rather than a blank. It is drawn dim until a live reading replaces it
-and ignored after a day. Deleting it costs one blank first frame.
-
-## Credits
-
-The protocols were learned from other people's open-source work first, and
-the program is built on other people's libraries; [docs/credits.md](docs/credits.md)
-says whose, with their licences.
+Two programs share one core. `cmd/hayami` is the desktop panel (Fyne) and
+`cmd/hayami-tui` the terminal panel (Bubble Tea, built without cgo).
+`internal/core` produces each reading as plain data with no toolkit,
+`internal/view` describes a section, and each panel only arranges it. Devices
+are read through [sanshoku](https://github.com/ushineko/sanshoku). The window
+is a glance window from [fynedesygn](https://github.com/ushineko/fynedesygn).
+The layers, the rules a change is held to, and where to add a device, reading
+or section are in
+[docs/architecture.md](https://github.com/ushineko/hayami/blob/main/docs/architecture.md).
 
 ## Development
 
 ```
-make setup     # install the pinned linter
-make test      # race detector
+make setup          # install the pinned linter
+make test           # tests with the race detector
 make lint
-make build     # both panels
-make vuln      # govulncheck, before every tagged release
+make build          # both panels
+make vuln           # govulncheck, before every tagged release
+make screenshots    # the gallery above, from live readings
+                    # (KDE/Wayland, kdotool, spectacle, alacritty, python3 with Pillow)
 
-make screenshots
-               # photograph the gallery above into docs/img from this desk's
-               # live readings; needs KDE/Wayland, kdotool, spectacle and
-               # alacritty, and python3 with Pillow, and leaves a running
-               # panel alone
-
-tools/screenshot.sh --what prefs:about   # one of them
+tools/screenshot.sh --what prefs:about        # one screenshot
 tools/shot-tui.sh out.png 150 6 ./hayami-tui --sections usage
-               # photograph a pane in a real terminal (KDE/Wayland)
+                                              # a terminal pane (KDE/Wayland)
 ```
 
-A Windows build links `cmd/*/rsrc_windows_amd64.syso`, the icon and version
-resources: run `scripts\winres.ps1` before `go build` (the installer and CI
-do). The files are build output and not committed.
+On Windows, run `scripts\winres.ps1` before `go build`: it generates the icon
+and version resources (`cmd/*/rsrc_windows_amd64.syso`), which are not
+committed. The installer and CI run it.
 
-## Where it comes from
+This README is also the About page in the preferences window, so links to
+other documents are full URLs.
 
-`ag-scripts/peripheral-battery-monitor`, 6,913 lines of PyQt6, which has run
-this shape through its 1.x releases. Two things change in the port: the
-context menu shrinks to almost nothing and its settings move to a preferences
-window, and every section gains a terminal equivalent.
+## Credits
 
-`ag-scripts/claude-usage-widget-windows` is replaced too. Its terminal panes
-are this program in its `row` arrangement with one section selected.
-
-The device code -- HID++, Razer and SteelSeries reports, Apple's accessory
-protocol, BlueZ, the Kraken and hwmon -- was written here and in hotaru, and
-now lives in [sanshoku](https://github.com/ushineko/sanshoku), one module both
-programs import, with its measurements, its hardware bench and its udev rule.
+The device protocols were learned first from other open-source projects, and
+the program is built on other people's libraries;
+[docs/credits.md](https://github.com/ushineko/hayami/blob/main/docs/credits.md)
+lists them with their licences.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+MIT. See
+[LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Docs**: the README is checked against the code and rewritten for a first
+  reader (#174): Windows is described as reading every section but the
+  Kraken, the settings example shows the per-section shape, a Bandwidth claim
+  with no code behind it is gone, and links to other documents are full URLs
+  so they open from the About page.
 
 ### 0.9.6 (2026-10-08)
 
