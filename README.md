@@ -295,8 +295,8 @@ hayami opens the receivers, headset base stations and cooler on your desk
 itself, as you. A device node is yours to open only when a udev rule grants
 it to the logged-in user; without one, the card says the device is *not
 permitted*. `packaging/60-sanshoku.rules` is that rule, matched by vendor:
-Logitech, SteelSeries, Razer and NZXT. Bluetooth needs no rule. The AULA
-F75's receiver is not in this copy of the rule yet.
+Logitech, SteelSeries, Razer, NZXT and the AULA F75's receiver. Bluetooth
+needs no rule.
 
 The installer copies it to `/etc/udev/rules.d` when it can, and otherwise
 prints the commands:
@@ -376,6 +376,11 @@ MIT. See
 ## Changelog
 
 ### Unreleased
+
+- **Fix**: the udev rule (`packaging/60-sanshoku.rules`) lets the logged-in user
+  open the AULA F75's receiver on Linux. hayami's copy of sanshoku's rule had
+  fallen behind, so the keyboard would have read as not permitted; a test now
+  holds the copy to the rule in the sanshoku version hayami requires.
 
 - **Docs**: the README is checked against the code and rewritten for a first
   reader (#174): Windows is described as reading every section but the
