@@ -83,11 +83,16 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 		})
 	}
 
+	// An old reading is drawn dim with its age as an aside, never as a line:
+	// a line that appeared once the cache was five minutes old, above the
+	// meters, and went when it was refreshed moved the panel each time, and
+	// in a pane one line tall it was all there was to see (#172).
 	if age := now.Sub(fetchedAt); !fetchedAt.IsZero() && age > UsageStale {
-		s.Rows = append(s.Rows, Row{
-			Label:  "read",
-			Value:  ago(age),
-			Status: Info,
+		s.Stale = true
+		// The age is the detail, which is what the hover note and doctor show.
+		s.Reasons = append(s.Reasons, Reason{
+			Label: "Usage", Text: "stale", Status: Info, Aside: true,
+			Detail: "read " + strings.TrimSpace(ago(age)),
 		})
 	}
 	return s

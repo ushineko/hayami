@@ -80,11 +80,14 @@ func paritySections(t *testing.T) []view.Section {
 	require.Equal(t, "F75", peripherals.Cells[1].Label, "the remembered mouse took the right slot")
 	require.Contains(t, peripherals.Note, "Basilisk Ultimate Dongle")
 
+	// Read twelve minutes ago: stale (spec 054). Neither shell may draw the
+	// age as a line of its own; both draw the same meters, dim.
 	usage := view.Usage(now, []view.UsageWindow{
 		{Account: "CC max", Name: "5h", Fraction: 0.10, ResetsAt: now.Add(2 * time.Hour)},
 		{Account: "CC max", Name: "7d", Fraction: 0.85, ResetsAt: now.Add(72 * time.Hour)},
 		{Account: "CX", Name: "5h", Fraction: 0.20, ResetsAt: now.Add(2 * time.Hour)},
-	}, now)
+	}, now.Add(-12*time.Minute))
+	require.True(t, usage.Stale, "the usage fixture is meant to be stale")
 
 	out := []view.Section{bandwidth, cooler, peripherals, usage}
 	keys := map[string]bool{}

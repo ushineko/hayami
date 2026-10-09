@@ -227,15 +227,23 @@ func TestAShortWindowCountsDownAndALongOneNamesItsDate(t *testing.T) {
 }
 
 // A reading older than any pane's poll should say so. A stale panel that looks
-// live is worse than one that admits it.
+// live is worse than one that admits it -- and it says so without a line of
+// its own (#172): dim, with its age where a hover or doctor finds it. A line
+// that came and went with the age moved the panel, and in a pane one line tall
+// it was all there was.
 func TestAStaleReadingSaysItsAge(t *testing.T) {
 	now := at(12, 0)
 	s := view.Usage(now, []view.UsageWindow{
 		{Account: "CC max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
 	}, now.Add(-3*time.Hour))
 
-	require.Len(t, s.Rows, 1)
-	assert.Contains(t, s.Rows[0].Value, "3h ago")
+	assert.Empty(t, s.Rows, "an old reading added a line")
+	assert.True(t, s.Stale, "an old reading is not marked stale")
+	assert.True(t, s.Dimmed(), "a stale section is drawn dim")
+	require.Len(t, s.Reasons, 1)
+	assert.True(t, s.Reasons[0].Aside, "the age is on the card, not a hover away")
+	assert.Equal(t, "read 3h ago", s.Reasons[0].Detail)
+	assert.Contains(t, s.Hover(), "Usage: read 3h ago", "the age is not in the hover note")
 }
 
 func TestAFreshReadingSaysNothingAboutItsAge(t *testing.T) {
@@ -245,6 +253,28 @@ func TestAFreshReadingSaysNothingAboutItsAge(t *testing.T) {
 	}, now.Add(-time.Minute))
 
 	assert.Empty(t, s.Rows)
+	assert.False(t, s.Stale)
+	assert.Empty(t, s.Reasons)
+}
+
+// A stale reading is drawn in as many lines as a fresh one, in every
+// arrangement the pane has: nothing moves when the cache ages (#172).
+func TestAStaleReadingTakesNoMoreLines(t *testing.T) {
+	now := at(12, 0)
+	windows := []view.UsageWindow{
+		{Account: "CC max", Name: "5h", Fraction: 0.1, ResetsAt: at(13, 0)},
+		{Account: "CC max", Name: "7d", Fraction: 0.08, ResetsAt: now.Add(6 * 24 * time.Hour)},
+	}
+	fresh := view.Usage(now, windows, now.Add(-time.Minute))
+	stale := view.Usage(now, windows, now.Add(-12*time.Minute))
+	for _, a := range []view.Arrangement{view.ArrangeStack, view.ArrangeGrid, view.ArrangeRow} {
+		f := view.Render([]view.Section{fresh}, a, 80)
+		s := view.Render([]view.Section{stale}, a, 80)
+		assert.Len(t, s, len(f), "%v: a stale reading added a line", a)
+		for _, line := range s {
+			assert.NotContains(t, line, "read", "%v: the age is on the card", a)
+		}
+	}
 }
 
 // A limit's own numbers are still drawn: the bar says "most of it" and the

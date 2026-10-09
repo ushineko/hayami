@@ -349,3 +349,18 @@ func TestDoctorPrintsTheFullNames(t *testing.T) {
 	assert.Contains(t, out.String(), "CPU: Intel(R) Core(TM) i9-14900K")
 	assert.Contains(t, out.String(), "GPU: Navi 31 [Radeon RX 7900 XT/7900 XTX/7900 GRE/7900M]")
 }
+
+// Spec 054. doctor says how old a stale usage reading is: the age is an aside,
+// off the card, and doctor is where an aside is read (#172).
+func TestDoctorSaysHowOldAStaleUsageReadingIs(t *testing.T) {
+	now := time.Now()
+	sec := view.Usage(now, []view.UsageWindow{
+		{Account: "CC max", Name: "5h", Fraction: 0.1, ResetsAt: now.Add(2 * time.Hour)},
+	}, now.Add(-12*time.Minute))
+	findings := cli.DiagnoseSources(t.Context(), []panel.Source{stub{key: "usage", drawn: true, section: sec}})
+
+	var out bytes.Buffer
+	require.NoError(t, cli.Report(&out, findings))
+	assert.Contains(t, out.String(), "Usage: stale")
+	assert.Contains(t, out.String(), "read 12m ago")
+}

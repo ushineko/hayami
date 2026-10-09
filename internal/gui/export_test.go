@@ -125,6 +125,16 @@ func CardDrawn(p *Panel, key string) bool {
 	return c.card.Drawn()
 }
 
+// CardDim reports whether a card's rows are drawn dim: last known, restored,
+// stale or gone.
+func CardDim(p *Panel, key string) bool {
+	c, ok := p.cards[key]
+	if !ok {
+		return false
+	}
+	return c.card.Stale()
+}
+
 // CardTip is a card's hover text.
 func CardTip(p *Panel, key string) string {
 	c, ok := p.cards[key]

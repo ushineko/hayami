@@ -88,7 +88,8 @@ func (u *Usage) Section() view.Section {
 	windows, fetchedAt, reasons := u.windows, u.fetchedAt, u.reasons
 	u.mu.Unlock()
 	sec := view.Usage(u.now(), windows, fetchedAt)
-	sec.Reasons = reasons
+	// The view's own reasons (an old reading's age) come after the source's.
+	sec.Reasons = append(append([]view.Reason(nil), reasons...), sec.Reasons...)
 	return sec
 }
 
