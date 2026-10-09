@@ -12,7 +12,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.12.1
-	github.com/ushineko/fynedesygn v0.1.93
+	github.com/ushineko/fynedesygn v0.1.96
 	github.com/ushineko/sanshoku v0.1.10
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.48.0
