@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.6
+**Version**: 0.9.7
 
 *a chart you read at a glance*
 
@@ -375,7 +375,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.9.7 (2026-10-08)
 
 - **Fix**: the udev rule (`packaging/60-sanshoku.rules`) lets the logged-in user
   open the AULA F75's receiver on Linux. hayami's copy of sanshoku's rule had
