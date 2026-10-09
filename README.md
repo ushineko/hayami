@@ -387,6 +387,11 @@ MIT. See
   Kraken, the settings example shows the per-section shape, a Bandwidth claim
   with no code behind it is gone, and links to other documents are full URLs
   so they open from the About page.
+- **Fix**: the About page's links and screenshots work (spec 055, #177). A
+  Contents entry scrolls the page to its heading, wherever on the entry it is
+  clicked; a web link opens in the browser; the gallery is embedded and shown
+  instead of its alt text. The summary says Linux and Windows. Needs
+  fynedesygn 0.1.93.
 
 ### 0.9.6 (2026-10-08)
 
