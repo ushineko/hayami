@@ -381,6 +381,9 @@ MIT. See
   The arrow they used is not in the window's bundled font and drew with a
   missing-glyph mark in About; a test now fails on any README character the
   font it is drawn in lacks.
+- **Fix**: the sections table in About no longer breaks its labels ("Sectio
+  n"): fynedesygn 0.1.96 keeps a table column at least as wide as its
+  longest word.
 
 ### 0.9.7 (2026-10-08)
 
