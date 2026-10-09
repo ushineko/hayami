@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.4
+**Version**: 0.9.5
 
 *a chart you read at a glance*
 
@@ -401,7 +401,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-### Unreleased
+### 0.9.5 (2026-10-08)
 
 - **Fix**: on Windows the programs carry hayami's icon and version, so the
   Start menu entry, the shortcuts and a file's Properties show them; they were
