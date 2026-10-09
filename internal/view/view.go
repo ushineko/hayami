@@ -341,6 +341,15 @@ type Section struct {
 	// being dim as soon as a live poll lands.
 	Restored bool
 
+	// Stale marks a live reading that is older than its source considers
+	// current: the usage figures when the cache has not been refreshed for
+	// UsageStale (#172). Both shells draw it dim, as they draw Restored, and
+	// add no line for it: the age goes in an aside reason, the hover note and
+	// doctor. A line that came and went with the age moved the whole panel.
+	// Unlike Restored it is a reading of this run, so the window still
+	// counts the source as heard and caches what it says.
+	Stale bool `json:"stale,omitempty"`
+
 	// Gone marks a section whose source was answering and has stopped. Its
 	// rows keep their last values and are drawn dim, because the reader's
 	// question is whether they are still true.
@@ -446,7 +455,7 @@ func (s Section) Quiet() bool {
 // restored from the cache before this run has heard anything.
 //
 // Both shells draw it the same way, because it means the same thing.
-func (s Section) Dimmed() bool { return s.Gone || s.Restored }
+func (s Section) Dimmed() bool { return s.Gone || s.Restored || s.Stale }
 
 /*
 IconName is the glyph a section asks for.

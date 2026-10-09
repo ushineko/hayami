@@ -438,7 +438,9 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	if sec.Gone {
 		c.card.SetStale(true)
 	} else {
-		c.card.SetLastKnown(sec.Restored)
+		// A stale reading (#172) is dim like a restored one, and only that:
+		// it was heard this run, above.
+		c.card.SetLastKnown(sec.Restored || sec.Stale)
 	}
 
 	// What the section could not fit is a hover away rather than on the card.

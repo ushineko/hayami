@@ -93,6 +93,9 @@ type panelSettings struct {
 	HideForFullscreen bool
 	// Preferences opens the preferences window as well, on this page.
 	Preferences string
+	// Cache, when set, is called with the panel's cache directory before it
+	// starts, for a test that needs files there (an invented usage cache).
+	Cache func(dir string)
 
 	// x and y are where the window opens, set by start: away from the
 	// pointer, so the panel never opens under it and shows a row's tip over
@@ -139,6 +142,9 @@ func start(t *testing.T, s panelSettings) uintptr {
 	testenv.Home(t, home)
 	testenv.Cache(t, filepath.Join(home, "cache"))
 	testenv.Config(t, filepath.Join(home, "config"))
+	if s.Cache != nil {
+		s.Cache(filepath.Join(home, "cache"))
+	}
 	s.x, s.y = awayFromPointer()
 	path := filepath.Join(dir, "settings.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(s.yaml()), 0o600))

@@ -401,6 +401,14 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: a usage reading older than five minutes no longer adds a "read …
+  ago" line above the meters, which moved the panel each time it came and
+  went and in a one-line pane was all there was to see (spec 054, #172). The
+  section is marked stale instead: the terminal draws it dim, and the age is
+  in the window's hover note and in `doctor`.
+
 ### 0.9.5 (2026-10-08)
 
 - **Fix**: on Windows the programs carry hayami's icon and version, so the
