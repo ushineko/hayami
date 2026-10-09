@@ -259,12 +259,12 @@ for administrator rights once. To do the same by hand:
 1. `winget install --id LibreHardwareMonitor.LibreHardwareMonitor -e`
 2. Run it as administrator and accept the PawnIO driver it offers on first
    start.
-3. **Options → Remote Web Server → Run**, port 8085, no authentication
+3. **Options > Remote Web Server > Run**, port 8085, no authentication
    (hayami sends no password).
-4. **Options → Minimize On Close**, **Start Minimized** and **Minimize To
+4. **Options > Minimize On Close**, **Start Minimized** and **Minimize To
    Tray**. Without Minimize On Close, closing its window quits it and the
    temperature goes with it.
-5. **Options → Run On Windows Startup**, which starts it at logon with
+5. **Options > Run On Windows Startup**, which starts it at logon with
    administrator rights and no UAC prompt.
 
 The script changes only these settings, and keeps the original file as
@@ -374,6 +374,16 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Docs**: the LibreHardwareMonitor steps write their menu paths with `>`.
+  The arrow they used is not in the window's bundled font and drew with a
+  missing-glyph mark in About; a test now fails on any README character the
+  font it is drawn in lacks.
+- **Fix**: the sections table in About no longer breaks its labels ("Sectio
+  n"): fynedesygn 0.1.96 keeps a table column at least as wide as its
+  longest word.
 
 ### 0.9.7 (2026-10-08)
 
