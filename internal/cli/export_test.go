@@ -14,3 +14,6 @@ func DiagnoseSources(ctx context.Context, sources []panel.Source) []Finding {
 	}
 	return diagnose(ctx, on, sources)
 }
+
+// WatchSettings is the terminal panel's look at its settings file.
+var WatchSettings = watchSettings

@@ -96,6 +96,18 @@ type Panel struct {
 	// per reading, so a row's detail lines are left out, as the terminal
 	// leaves them out.
 	row bool
+
+	// shown is the sections the settings show (spec 052). Every section has a
+	// card and a source; a section not shown is not polled, and wake starts
+	// its poll at once when it is shown, rather than at its next interval.
+	shownMu sync.Mutex
+	shown   map[string]bool
+	wake    map[string]chan struct{}
+
+	// do hands a poll's result to the UI thread. It is fyne.Do; a test with
+	// more than one poller replaces it, because the test driver runs fyne.Do
+	// on the caller's goroutine and two pollers would then draw at once.
+	do func(func())
 }
 
 // card is one section's card and the pieces in it, kept so a poll repaints
@@ -229,10 +241,17 @@ func New(a fyne.App, o Options) *Panel {
 		}),
 		cards: map[string]*card{},
 		cache: readings.Cache{},
+		shown: map[string]bool{},
+		wake:  map[string]chan struct{}{},
+		do:    fyne.Do,
 		opts:  o,
 		app:   a,
 	}
 
+	for _, s := range o.Sources {
+		p.wake[s.Key()] = make(chan struct{}, 1)
+		p.shown[s.Key()] = true
+	}
 	nameColumn := nameColumnWidth(a, o)
 	for _, s := range o.Sources {
 		// The section the card is built from decides its shape for the life
@@ -321,14 +340,14 @@ func (p *Panel) Window() *glance.Window { return p.win }
 Apply brings the window into line with a changed configuration.
 
 Hiding and showing a section is live: a card is drawn when the user allows it
-*and* its source has something to say, and this is the first of those. The
-card's own callback stops the poll, so a cooler section switched off stops
-asking the cooler every five seconds for nobody.
+*and* its source has something to say, and this is the first of those. A
+section the settings hide is not polled (spec 052), so a cooler section
+switched off stops asking the cooler every five seconds for nobody.
 
-**Reordering is not live.** The design system's panel adds cards and never
-removes or moves one, so the stack's order is fixed when the window is built.
-A reorder therefore takes effect at the next start, which the preferences
-window says. It is in this spec's gaps.
+**Reordering is live too** (spec 052). Every section has a card, shown or not,
+so a section moved or newly shown is a card put in its place
+(glance.Panel.SetOrder) rather than one built: nothing is rebuilt, and the
+window resizes once. A section newly shown is woken so it polls at once.
 */
 func (p *Panel) Apply(c config.Config) {
 	p.applyTheme(c)
@@ -350,9 +369,11 @@ func (p *Panel) Apply(c config.Config) {
 	// without this a panel given a size of its own drew its meters' labels in
 	// the size the application had when they were built.
 	p.restyle()
+	p.setShown(c.Sections)
 	for key, card := range p.cards {
 		card.card.SetAllowed(c.Shows(key))
 	}
+	p.order(c.Sections)
 	for _, s := range p.opts.Sources {
 		if b, ok := s.(*panel.Bandwidth); ok {
 			b.SetInterfaces(config.Bandwidth.Get(c).Interfaces)
@@ -1031,7 +1052,18 @@ func (p *Panel) keepCache(ctx context.Context) {
 func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 	t := time.NewTicker(s.Interval())
 	defer t.Stop()
+	key := s.Key()
 	for {
+		// A section the settings do not show is not asked (spec 052): it
+		// waits for its wake, which Apply sends when it is shown.
+		if !p.isShown(key) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-p.wake[key]:
+				continue
+			}
+		}
 		// The error is not what decides whether anything is drawn. A source
 		// that failed says so in its section's reasons, and Draw knows that a
 		// section with a reason is a section to draw -- discarding the error
@@ -1041,12 +1073,13 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 		if drawn {
 			p.remember(s.Key(), sec)
 		}
-		fyne.Do(func() { p.Draw(s.Key(), sec, drawn) })
+		p.do(func() { p.Draw(s.Key(), sec, drawn) })
 
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case <-p.wake[key]:
 		}
 	}
 }
@@ -1056,9 +1089,13 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 // It runs before the window exists, so it blocks: there is nothing to keep
 // responsive yet, and a panel that opened before its first reading would
 // resize in front of the person who opened it.
-func first(ctx context.Context, sources []panel.Source) map[string]bool {
+func first(ctx context.Context, sources []panel.Source, shows func(string) bool) map[string]bool {
 	out := make(map[string]bool, len(sources))
 	for _, s := range sources {
+		// A section the settings do not show is not asked (spec 052).
+		if !shows(s.Key()) {
+			continue
+		}
 		drawn, _ := s.Poll(ctx)
 		out[s.Key()] = drawn || len(s.Section().Reasons) > 0
 	}
@@ -1118,7 +1155,11 @@ func Start(o Options) error {
 	// The first reading before the first frame: a card is built with the
 	// pieces its section has, so a section polled after the window is built
 	// would have nowhere to put them.
-	drawn := first(ctx, o.Sources)
+	shows := func(string) bool { return true }
+	if o.Store != nil {
+		shows = o.Store.Config().Shows
+	}
+	drawn := first(ctx, o.Sources, shows)
 
 	sections := restore(o.Sources, drawn, cached)
 
@@ -1254,4 +1295,45 @@ func (p *Panel) restyle() {
 	// The panel last, so it measures the cards after they have been resized
 	// by whatever the new face and size are.
 	p.win.Panel().Restyle()
+}
+
+// isShown is whether the settings show a section, for its poll.
+func (p *Panel) isShown(key string) bool {
+	p.shownMu.Lock()
+	defer p.shownMu.Unlock()
+	return p.shown[key]
+}
+
+// setShown records which sections the settings show, and wakes the poll of
+// each one newly shown so it reads at once (spec 052).
+func (p *Panel) setShown(keys []string) {
+	now := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		now[k] = true
+	}
+	p.shownMu.Lock()
+	was := p.shown
+	p.shown = now
+	p.shownMu.Unlock()
+	for k := range now {
+		if was[k] {
+			continue
+		}
+		select {
+		case p.wake[k] <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// order puts the cards in the settings' order: the shown sections first, in
+// the order given, then the rest (spec 052).
+func (p *Panel) order(keys []string) {
+	var cards []*glance.Card
+	for _, k := range panel.Ordered(keys) {
+		if c, ok := p.cards[k]; ok {
+			cards = append(cards, c.card)
+		}
+	}
+	_ = p.win.Panel().SetOrder(cards...)
 }

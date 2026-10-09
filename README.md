@@ -408,6 +408,12 @@ MIT. See [LICENSE](LICENSE).
   blank (spec 053, #163). `scripts/winres.ps1` draws the icon from the
   panel's SVG and runs go-winres v0.3.3 with `go run` before the build; the
   installer and CI run it, and the shortcuts point at the executable's icon.
+- **Fix**: a section moved in the preferences moves on the panel at once
+  (spec 052, #158), with nothing rebuilt and one resize at most (fynedesygn
+  0.1.90). The terminal panel follows the settings too: the sections, their
+  order and the arrangement, looked at every two seconds, except a value given
+  on its command line. A section the settings hide is no longer polled in
+  either panel, and one ticked on is polled at once.
 
 ### 0.9.4 (2026-10-08)
 

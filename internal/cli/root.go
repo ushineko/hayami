@@ -73,15 +73,21 @@ func TUI(version string) *cobra.Command {
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			opts, _, err := f.resolve()
+			opts, store, err := f.resolve()
 			if err != nil {
 				return err
 			}
 			warn(cmd, opts)
+			var watch func() ([]string, view.Arrangement, bool)
+			if !once && store != nil {
+				watch = watchSettings(store.Settings().Path(), opts, f.sections != "", f.arrangement != "")
+			}
 			return tui.Start(tui.Options{
-				Sources:     opts.Sources(nil),
+				Sources:     opts.AllSources(nil),
+				Shown:       opts.Config.Sections,
 				Arrangement: opts.Arrangement,
 				Once:        once,
+				Watch:       watch,
 			})
 		},
 	}

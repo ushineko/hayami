@@ -2,6 +2,7 @@ package gui
 
 import (
 	"image/color"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -309,3 +310,48 @@ func visibleTexts(o fyne.CanvasObject) []string {
 	}
 	return out
 }
+
+// CardOrder is the sections in the order the window lays their cards out.
+func CardOrder(p *Panel) []string {
+	byCard := map[*glance.Card]string{}
+	for k, c := range p.cards {
+		byCard[c.card] = k
+	}
+	var out []string
+	for _, c := range p.win.Panel().Cards() {
+		out = append(out, byCard[c])
+	}
+	return out
+}
+
+// RowOf is a card's row by ID, for a test that a row is the same object
+// across a change.
+func RowOf(p *Panel, key, id string) *glance.Row { return p.cards[key].card.RowByID(id) }
+
+// SerialDraws makes the pollers draw one at a time, as the UI thread does in
+// the program. Call it before Poll. The function it returns waits for a draw
+// in flight and drops every later one, so a test's pollers do not draw into
+// the next test.
+func SerialDraws(p *Panel) (stop func()) {
+	var mu sync.Mutex
+	stopped := false
+	p.do = func(f func()) {
+		mu.Lock()
+		defer mu.Unlock()
+		if !stopped {
+			f()
+		}
+	}
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		stopped = true
+	}
+}
+
+// Show sets which sections are polled, as Apply does, without touching the
+// window: a test that runs the pollers must not lay out the panel beside them.
+func Show(p *Panel, keys []string) { p.setShown(keys) }
+
+// Shown reports whether a section is polled.
+func Shown(p *Panel, key string) bool { return p.isShown(key) }

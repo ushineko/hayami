@@ -150,3 +150,34 @@ func Keys() []string {
 // system's own device list (Windows, spec 035). Everything else passes a Scan
 // in the Env.
 var DefaultScan Scan = sanshoku.Scan
+
+/*
+Ordered is every section this build has, in the order a shell lays them out:
+the shown ones first, in the order given (the settings' order), then the rest
+in the registry's order (spec 052). A key this build does not know is left
+out, as Sources leaves it out.
+
+A shell builds a source for each, shown or not, so showing a section or moving
+it is a change it can follow while running; a section that is not shown is
+never polled, so building it costs nothing.
+*/
+func Ordered(shown []string) []string {
+	known := map[string]bool{}
+	for _, k := range Keys() {
+		known[k] = true
+	}
+	out := make([]string, 0, len(known))
+	seen := map[string]bool{}
+	for _, k := range shown {
+		if known[k] && !seen[k] {
+			out = append(out, k)
+			seen[k] = true
+		}
+	}
+	for _, k := range Keys() {
+		if !seen[k] {
+			out = append(out, k)
+		}
+	}
+	return out
+}

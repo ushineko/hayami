@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 	"github.com/stretchr/testify/assert"
@@ -315,4 +317,53 @@ func TestTheWindowSectionOffersHidingForAFullScreenApp(t *testing.T) {
 			assert.False(t, s.Config().HidesForFullscreen(), "unticking it was not saved")
 		})
 	}
+}
+
+// Spec 052. Moving a section up saves the new order and tells the panel, as
+// it is moved: the panel follows a reorder live, so the preferences must say
+// so when it happens, not on close.
+func TestMovingASectionUpAppliesTheNewOrder(t *testing.T) {
+	testenv.Config(t, t.TempDir())
+	a := test.NewApp()
+	t.Cleanup(a.Quit)
+	s := store(t, "hayami:\n    sections:\n        - bandwidth\n        - cooler\n        - usage\n")
+	var applied [][]string
+	w := prefs.New(a, prefs.Options{Store: s, OnChange: func() {
+		applied = append(applied, slices.Clone(s.Config().Sections))
+	}})
+	w.Shell().Select("Sections")
+
+	info, ok := view.SectionByKey("cooler")
+	require.True(t, ok)
+	var up *widget.Button
+	for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
+		row, ok := o.(*fyne.Container)
+		if !ok || !holdsCheck(row, info.Title) {
+			continue
+		}
+		for _, b := range test.LaidOutObjects(row) {
+			if btn, ok := b.(*widget.Button); ok {
+				up = btn // the first button in the row is "up"
+				break
+			}
+		}
+	}
+	require.NotNil(t, up, "the cooler's row has no up button")
+	test.Tap(up)
+
+	want := []string{"cooler", "bandwidth", "usage"}
+	assert.Equal(t, want, s.Config().Sections, "the move was not saved")
+	require.Len(t, applied, 1, "the panel was not told, or told twice")
+	assert.Equal(t, want, applied[0], "the panel was told before the store had the new order")
+}
+
+// holdsCheck reports whether a container's own children include a check with
+// the given text: a section's row, not a screen that contains one.
+func holdsCheck(c *fyne.Container, text string) bool {
+	for _, o := range c.Objects {
+		if ch, ok := o.(*widget.Check); ok && ch.Text == text {
+			return true
+		}
+	}
+	return false
 }

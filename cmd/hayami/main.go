@@ -34,7 +34,7 @@ func main() {
 
 	root := cli.GUI(buildinfo.Version(), prefs.Pages(), func(o cli.Options) error {
 		return gui.Start(gui.Options{
-			Sources:     o.Sources(nil),
+			Sources:     o.AllSources(nil),
 			Title:       "hayami",
 			Version:     buildinfo.Version(),
 			Store:       o.Store,
