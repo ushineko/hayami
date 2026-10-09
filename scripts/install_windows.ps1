@@ -98,6 +98,12 @@ function Build {
     $savedCgo = $env:CGO_ENABLED
     try {
         $env:PATH = (Split-Path -Parent $gcc) + ";" + $env:PATH
+        # The icon and the version Explorer shows, as resources `go build`
+        # links in (spec 053). An executable without them is the blank Start
+        # menu entry this fixes, so a failure stops the build.
+        & (Join-Path $PSScriptRoot "winres.ps1") -Version $Version
+        if (-not $?) { Fail "Making the icon and version resources failed." }
+        Write-Ok "icon and version resources"
         Push-Location $Root
         # migrated_fynedo: see the Makefile. -H windowsgui: the panel is a
         # window, and a console would open beside it.
@@ -122,6 +128,9 @@ function New-Shortcut($path, $target) {
     $link = $shell.CreateShortcut($path)
     $link.TargetPath = $target
     $link.WorkingDirectory = Split-Path -Parent $target
+    # The executable's own icon (spec 053); without a location set, Explorer
+    # draws a blank entry for a shortcut whose target it has not read yet.
+    $link.IconLocation = "$target,0"
     $link.Description = "Peripheral batteries, bandwidth, cooler and usage, read at a glance"
     $link.Save()
     Write-Ok $path
@@ -316,7 +325,10 @@ if (-not (Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)) { Sta
 Write-Host "Installing hayami $Version from $Root"
 
 if ($DryRun) {
-    if (-not $SkipBuild) { Write-Note "would build hayami.exe and hayami-tui.exe" }
+    if (-not $SkipBuild) {
+        & (Join-Path $PSScriptRoot "winres.ps1") -Version $Version -DryRun
+        Write-Note "would build hayami.exe and hayami-tui.exe"
+    }
 } elseif (-not $SkipBuild) {
     Build
 }
