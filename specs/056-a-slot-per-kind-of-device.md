@@ -2,7 +2,7 @@
 
 **Issue**: #180
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 ## Context
 
@@ -39,23 +39,35 @@ controller" cells there.
 - R5 **One device per slot.** Among the devices of one kind, the slot shows a
   live one before a quiet one, and among those the one whose state changed
   last (spec 050's rule for mice, applied to every kind). The others, and
-  every device of a kind with no slot, go to the hover note.
+  every device of a kind with no slot, go to the hover note. This changes
+  spec 022, which let a device that went quiet recently hold the shared slot
+  over a live one: with a slot for the headphones, the pair that is connected
+  is the one worth showing.
+- R5a **A device of no known kind** (`KindOther`: a Bluetooth device with no
+  icon, a receiver that could not say) is not one device seen twice, as two
+  mice are. Beyond the first, which has the "other" slot like any kind, such
+  devices take the cells the card would otherwise pad with a placeholder, and
+  only those, so they never make the card bigger.
 - R6 Never wider. Both shells already lay cells out as many across as the
   width fits, with a minimum width of one cell; four cells in the panel's
   width are two lines of two.
 
 ## Acceptance Criteria
 
-- [ ] View tests: four kinds give four slots in rank order; three kinds give
+- [x] View tests: four kinds give four slots in rank order; three kinds give
   four cells with a padding placeholder; one kind gives two; two devices of a
   kind put the live one in the slot and the other in the note; a fifth kind
-  goes to the note; a quiet device keeps its kind's slot.
-- [ ] The gamepad kind crosses from sanshoku to the view.
-- [ ] On the real window on the Windows desk, with a mouse, keyboard,
+  goes to the note; a quiet device keeps its kind's slot; devices of no known
+  kind fill spare cells only (falsified: without the fill, three tests fail).
+- [x] The gamepad kind crosses from sanshoku to the view.
+- [x] On the real window on the Windows desk, with a mouse, keyboard,
   headphones and controller answering: the card's cells are two lines of two,
-  read off a screenshot, and the window is no wider than with two cells.
-- [ ] The terminal pane draws the same four cells.
-- [ ] `go test ./...` passes; the window tests pass with
+  read off a screenshot by the bars under the levels, and the window is as
+  wide as with the cooler card alone (`TestAKindOfDeviceIsACellTwoAcross`).
+  Falsified: with the slots capped at two it fails, one line of two.
+- [x] The terminal pane draws the same four cells.
+- [x] `go test ./...` passes, except `internal/usage`'s cross-check against the
+  Python, which needs `structlog` on this machine; the window tests pass with
   `HAYAMI_WINDOW_TEST=1`.
 
 ## Risks & Assumptions
@@ -67,4 +79,14 @@ controller" cells there.
   switched on.
 - A device of a kind with no slot (a fifth kind) is only in the hover note,
   which the terminal does not draw.
+- Long names are cut at the cell's width ("Basilisk Ultimate…", "DualSense
+  Wireles…"), as they were in two cells; nothing new.
 - Rollback: revert; no settings or cache format changes.
+
+## Verification
+
+2026-10-09, Windows 11, the Basilisk Ultimate, AULA F75, Bose QC35 and a
+DualSense answering. The window drew "Basilisk Ultimate… 93 %, qc35 80 %" on
+the first line and "F75 88 %, DualSense Wirel… 75 %" on the second, under a
+cooler card of the same width; `hayami-tui --once --sections peripherals` drew
+the same four cells, four across at its width.

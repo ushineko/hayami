@@ -39,7 +39,7 @@ section is not polled at all.
 
 | Section | What it shows | Where it reads from |
 |---|---|---|
-| Peripherals | Battery level and charging state of mice, keyboards and headsets | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
+| Peripherals | Battery level and charging state of mice, keyboards, headsets and game controllers, a cell per kind of device | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, the DualSense over USB or Bluetooth, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
 | Bandwidth | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
 | Cooler | Processor and graphics card load and temperature, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
 | Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
@@ -378,6 +378,20 @@ MIT. See
 ## Changelog
 
 ### Unreleased
+
+- **Change**: the peripherals card has a cell per kind of device, up to four,
+  two across: the mouse, the headphones, the keyboard and a game controller,
+  always in that order (spec 056, #180). It used to have two, and gave the
+  second to whichever device had changed last, so on a desk with four devices
+  a different one was there from one glance to the next. A kind keeps its
+  cell while the panel remembers a device of it, which is a week (spec 032),
+  so a controller switched off stays on the card, dim. A second device of a
+  kind is in the card's hover note.
+- **New**: the DualSense's battery, over USB or Bluetooth, through sanshoku
+  0.1.12's Sony driver (sanshoku spec 017). Over Bluetooth it reads the
+  report Steam reads, and asks the controller for it the way Steam does;
+  until the controller reconnects, a game that reads it as a generic
+  DirectInput gamepad without Steam may not see its input.
 
 - **New**: Bluetooth headsets are read on Windows, at the battery level
   Windows itself shows: sanshoku 0.1.11 reads it from the Bluetooth stack's
