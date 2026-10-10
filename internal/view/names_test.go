@@ -3,6 +3,7 @@ package view_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,4 +128,58 @@ func TestANameArrivingMovesNoValue(t *testing.T) {
 		}
 		assert.Contains(t, strings.Join(after, "\n"), "i9-14900K")
 	}
+}
+
+// Spec 057. A peripheral's label drops the words every device on the card
+// shares, from the end of its name: each rule against a real name.
+func TestAPeripheralsLabelDropsTheWordsEveryDeviceShares(t *testing.T) {
+	for full, want := range map[string]string{
+		"DualSense Wireless Controller":      "DualSense",
+		"DualSense Edge Wireless Controller": "DualSense Edge",
+		"Arctis Nova Pro Wireless":           "Arctis Nova Pro",
+		"Basilisk Ultimate Dongle":           "Basilisk Ultimate",
+		"Lightspeed Receiver":                "Lightspeed",
+		// Untouched: nothing to take, or the word is not at the end.
+		"Basilisk Ultimate":      "Basilisk Ultimate",
+		"G502 X PLUS":            "G502 X PLUS",
+		"F75":                    "F75",
+		"qc35":                   "qc35",
+		"Wireless Mouse M185":    "Wireless Mouse M185",
+		"  DualSense Controller": "DualSense",
+	} {
+		assert.Equal(t, want, view.PeripheralLabel(full), "%q", full)
+	}
+}
+
+// Spec 057. A name that is nothing but those words is kept whole: a long name
+// is better than "Wireless", and far better than none.
+func TestAPeripheralNamedOnlyForWhatItIsKeepsItsName(t *testing.T) {
+	for _, full := range []string{"Wireless Controller", "Controller", "Dongle"} {
+		assert.Equal(t, full, view.PeripheralLabel(full))
+	}
+}
+
+// Spec 057. The cell draws the short name; the full one is kept on the cell,
+// for the hover note, only where the two differ. The note that names a device
+// with no slot still says it in full.
+func TestACellDrawsTheShortNameAndTheHoverSaysTheFullOne(t *testing.T) {
+	t0 := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	live := detected("Basilisk Ultimate", 61, view.KindMouse, t0)
+	dongle := detected("Basilisk Ultimate Dongle", 18, view.KindMouse, t0)
+	dongle.Stale = true
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			live, dongle,
+			detected("DualSense Wireless Controller", 75, view.KindGamepad, t0),
+		})})
+
+	require.Len(t, s.Cells, view.MinPeripheralSlots)
+	assert.Equal(t, "Basilisk Ultimate", s.Cells[0].Label)
+	assert.Empty(t, s.Cells[0].Name, "a name that was not shortened is said twice on hover")
+	assert.Equal(t, "DualSense", s.Cells[1].Label)
+	assert.Equal(t, "DualSense Wireless Controller", s.Cells[1].Name)
+
+	hover := s.Hover()
+	assert.Contains(t, hover, "DualSense Wireless Controller")
+	assert.Contains(t, hover, "Basilisk Ultimate Dongle", "the device with no slot lost its full name")
 }

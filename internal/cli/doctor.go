@@ -144,7 +144,12 @@ func summarise(s view.Section) string {
 			// An empty slot is the card keeping its shape, not a reading.
 			continue
 		}
-		parts = append(parts, tidy(c.Label+" "+c.Value+c.Unit))
+		// The name in full: doctor has the room a cell does not (spec 057).
+		name := c.Label
+		if c.Name != "" {
+			name = c.Name
+		}
+		parts = append(parts, tidy(name+" "+c.Value+c.Unit))
 	}
 	for _, m := range s.Meters {
 		// The caption already carries the window, so the label and the

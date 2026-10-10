@@ -30,8 +30,14 @@ a submenu each. That was an artefact of a panel 260 pixels wide and is not
 something a reader ever asked for.
 */
 type Cell struct {
-	// Label is the device's own name, over the reading.
+	// Label is the device's name, over the reading: the short form, with the
+	// words every device on the card shares taken off (spec 057).
 	Label string
+
+	// Name is the device's name in full, where Label shortened it, and empty
+	// where the two are the same. It is what the hover note and doctor say:
+	// the label is cut to fit a cell and these have the room.
+	Name string `json:"name,omitempty"`
 
 	// Value and Unit are the reading, kept apart for the reason a Row keeps
 	// them apart: they are aligned separately.
@@ -419,12 +425,18 @@ func (s Section) Lines() []Row {
 //
 // The rows' tips come first, one per line: the full names of the parts the
 // labels shortened (spec 031). The design system's card takes one tip for the
-// whole card, so a row's tip is a line of the card's.
+// whole card, so a row's tip is a line of the card's. A cell whose label was
+// shortened says its full name the same way (spec 057).
 func (s Section) Hover() string {
 	var parts []string
 	for _, r := range s.Rows {
 		if r.Tip != "" {
 			parts = append(parts, r.Tip)
+		}
+	}
+	for _, c := range s.Cells {
+		if c.Name != "" {
+			parts = append(parts, c.Name)
 		}
 	}
 	if s.Note != "" {

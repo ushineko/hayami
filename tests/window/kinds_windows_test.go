@@ -142,3 +142,47 @@ func sum(lines []int) int {
 	}
 	return n
 }
+
+// wholeNameShare is the most of a cell's width a name drawn whole takes when
+// the name is as short as "DualSense". A name cut with an ellipsis runs to the
+// cell's budget: "DualSense Wirel…" took four fifths of the cell.
+const wholeNameShare = 0.65
+
+/*
+Spec 057. The controller's cell says "DualSense", whole, and not "DualSense
+Wirel…".
+
+Read off the picture by how wide the name is. With all four kinds answering
+the controller's is the last cell, so its name is the last run of ink on the
+second line of names: the fifth line of text, after the heading and the first
+line's names, levels and states. A name cut to fit fills its cell; "DualSense"
+does not come near it.
+*/
+func TestTheControllersNameIsDrawnWhole(t *testing.T) {
+	if !enabled() {
+		t.Skip("drives a real window; set HAYAMI_WINDOW_TEST=1 to run it")
+	}
+	kinds := kindsAnswering(t)
+	if len(kinds) < 4 || !kinds[battery.KindGamepad] {
+		t.Skip("needs a mouse, headphones, a keyboard and a controller giving a level now")
+	}
+
+	hwnd := start(t, panelSettings{Sections: []string{"peripherals"}, Settle: peripheralsSettle})
+	var p *picture
+	for deadline := time.Now().Add(3 * 15 * time.Second); ; time.Sleep(3 * time.Second) {
+		p = shoot(t, hwnd, "names.png")
+		if sum(firstLines(barLines(p.img), 2)) >= 4 || time.Now().After(deadline) {
+			break
+		}
+	}
+	t.Logf("picture: %s", p.path)
+	require.GreaterOrEqual(t, len(p.text), 5, "the card has no second line of names")
+
+	names := p.words(p.text[4])
+	require.NotEmpty(t, names)
+	name := names[len(names)-1]
+	cell := float64(p.img.Bounds().Dx()) / 2
+	share := float64(name.To-name.From) / cell
+	t.Logf("the controller's name: %d px of a %.0f px cell (%.2f)", name.To-name.From, cell, share)
+	assert.Less(t, share, wholeNameShare, "the controller's name fills its cell: it is cut, not whole")
+}

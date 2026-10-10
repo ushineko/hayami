@@ -453,7 +453,7 @@ func peripheral(d PeripheralReading) Cell {
 	}
 
 	cell := Cell{
-		Label: d.Name, Unit: "%", Note: note(d),
+		Label: PeripheralLabel(d.Name), Name: fullName(d.Name), Unit: "%", Note: note(d),
 		Value: strings.TrimSpace(Count(d.Level)), Stale: d.Stale,
 		Bar: float64(d.Level) / 100, HasBar: true,
 	}
@@ -504,7 +504,7 @@ the segments already carry the band.
 */
 func bandCell(d PeripheralReading) Cell {
 	cell := Cell{
-		Label: d.Name,
+		Label: PeripheralLabel(d.Name), Name: fullName(d.Name),
 		Value: segments(d.Segments),
 		Note:  d.Band,
 		Stale: d.Stale,
@@ -590,4 +590,13 @@ func cellNote(cells []PeripheralCell) string {
 		parts = append(parts, c.Name+" "+strconv.Itoa(c.Level))
 	}
 	return strings.Join(parts, "  ")
+}
+
+// fullName is a device's name for Cell.Name: the name where its label
+// shortened it, and nothing where the label already says it all.
+func fullName(name string) string {
+	if PeripheralLabel(name) == strings.TrimSpace(name) {
+		return ""
+	}
+	return name
 }
