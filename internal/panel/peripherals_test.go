@@ -501,7 +501,8 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 	assert.False(t, poll(t, p), "there is nothing to draw")
 
 	sec := p.Section()
-	// Bluetooth's line is the platform's: it has none on Windows (spec 035).
+	// Bluetooth's line is the platform's: there is one where a Bluetooth
+	// driver reads (spec 035, spec 048).
 	// Every vendor is named; their order is sanshoku's driver order (spec
 	// 048), which vendors_test.go pins for each platform, so it is not
 	// repeated here -- it was, and it broke on Linux when the order moved.
