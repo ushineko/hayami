@@ -98,7 +98,8 @@ name a person knows them by, in the module's order (spec 048).
 Each driver describes itself: its name, what it finds, whether a device that
 is listed and reads nothing is worth a line, and the systems it reads on. So a
 device added to sanshoku is a vendor here with no change to this file, and
-Bluetooth is asked where its drivers say they read (Linux) and nowhere else.
+Bluetooth is asked where its drivers say they read (Linux, and Windows since
+sanshoku 0.1.11) and nowhere else.
 Two drivers with one name are one vendor: to a reader "no Bluetooth device
 with a battery" is one fact whichever protocol would have read it.
 

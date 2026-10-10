@@ -39,7 +39,7 @@ section is not polled at all.
 
 | Section | What it shows | Where it reads from |
 |---|---|---|
-| Peripherals | Battery level and charging state of mice, keyboards and headsets | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, AirPods and other Bluetooth devices through BlueZ (Linux only) |
+| Peripherals | Battery level and charging state of mice, keyboards and headsets | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
 | Bandwidth | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
 | Cooler | Processor and graphics card load and temperature, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
 | Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
@@ -230,9 +230,11 @@ on Linux, `%LOCALAPPDATA%\claude-usage-widget\cache` on Windows.
   devices, the Razer Basilisk Ultimate on its dongle and its cable, and the
   AULA F75 through its receiver. SteelSeries devices and a Logitech Unifying
   keyboard such as the K800 are expected to work and are not yet confirmed.
-  Bluetooth devices and AirPods do not read on Windows, and nor does a
-  headset paired through a USB Bluetooth transmitter such as the UGREEN BT701,
-  which reports neither battery nor connection.
+  A Bluetooth headset paired to Windows is read at the battery level Windows
+  shows for it (confirmed: a Bose QC35); it is listed while it is connected.
+  AirPods' per-ear levels are read on Linux only, and a headset paired
+  through a USB Bluetooth transmitter such as the UGREEN BT701 reports
+  neither battery nor connection.
 - **Cooler**: the processor's load and name come from the system, and the
   graphics card's temperature, load and name from D3DKMT and the `GPU Engine`
   counters, Task Manager's sources, for any vendor. The load is the busiest
@@ -377,6 +379,9 @@ MIT. See
 
 ### Unreleased
 
+- **New**: Bluetooth headsets are read on Windows, at the battery level
+  Windows itself shows: sanshoku 0.1.11 reads it from the Bluetooth stack's
+  device properties (sanshoku spec 016). Confirmed on a Bose QC35.
 - **Docs**: the LibreHardwareMonitor steps write their menu paths with `>`.
   The arrow they used is not in the window's bundled font and drew with a
   missing-glyph mark in About; a test now fails on any README character the

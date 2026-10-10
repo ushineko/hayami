@@ -41,8 +41,8 @@ func TestEveryReasonIsPinned(t *testing.T) {
 		fmt.Fprintf(&b, "## %s\n", sc.name)
 		for _, r := range sc.reasons {
 			if strings.Contains(r.Text, "Bluetooth") {
-				// The Bluetooth vendor is asked off Windows only (spec 035);
-				// platform_other_test.go holds its lines.
+				// The Bluetooth vendor's lines differ by platform (its
+				// drivers do), so vendors_test.go and host_test.go hold them.
 				continue
 			}
 			fmt.Fprintf(&b, "- label=%q text=%q status=%v aside=%v actionable=%v\n  detail=%q\n",

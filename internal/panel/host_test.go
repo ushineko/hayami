@@ -131,24 +131,31 @@ func TestADeviceThatMayNotBeOpenedIsToldTheHostsAdvice(t *testing.T) {
 /*
 Spec 048 (was spec 043's host field). Whether Bluetooth is asked is the
 drivers' to say, by the systems they read on, asked about the host's
-platform: Windows asks none and has no Bluetooth line (spec 035); Linux asks
-BlueZ and Apple's accessory protocol as one vendor.
+platform. Linux asks BlueZ and Apple's accessory protocol as one vendor;
+Windows asks the bluez driver, which reads the Bluetooth stack's device
+properties there since sanshoku 0.1.11 (sanshoku spec 016). Windows asked
+none before that (spec 035). A system no Bluetooth driver reads on asks none
+and has no Bluetooth line.
 */
 func TestThePlatformSaysWhetherBluetoothIsAsked(t *testing.T) {
 	noBluez := errors.New("bluez: the bus went away")
 	k := &desk{failing: map[string]error{"bluez": noBluez}}
 
-	without := panel.NewPeripheralsOn(fakeHost(), k.scan, time.Now)
+	h := fakeHost()
+	h.Platform = "darwin"
+	without := panel.NewPeripheralsOn(h, k.scan, time.Now)
 	_, err := without.Poll(t.Context())
-	require.NoError(t, err, "a Windows host asked a Bluetooth driver")
+	require.NoError(t, err, "a host no Bluetooth driver reads on asked one")
 	for _, text := range reasonTexts(without.Section()) {
 		assert.NotContains(t, text, "Bluetooth")
 	}
 
-	h := fakeHost()
-	h.Platform = "linux"
-	with := panel.NewPeripheralsOn(h, k.scan, time.Now)
-	_, err = with.Poll(t.Context())
-	require.ErrorIs(t, err, noBluez, "the host's Bluetooth driver was not asked")
-	assert.Equal(t, view.Warn, find(t, with.Section(), "a Bluetooth device would not answer").Status)
+	for _, platform := range []string{"linux", "windows"} {
+		h := fakeHost()
+		h.Platform = platform
+		with := panel.NewPeripheralsOn(h, k.scan, time.Now)
+		_, err = with.Poll(t.Context())
+		require.ErrorIs(t, err, noBluez, "%s: the host's Bluetooth driver was not asked", platform)
+		assert.Equal(t, view.Warn, find(t, with.Section(), "a Bluetooth device would not answer").Status, platform)
+	}
 }
