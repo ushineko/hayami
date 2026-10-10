@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.7
+**Version**: 0.9.8
 
 *a chart you read at a glance*
 
@@ -377,7 +377,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.9.8 (2026-10-09)
 
 - **Change**: the peripherals card has a cell per kind of device, up to four,
   two across: the mouse, the headphones, the keyboard and a game controller,
