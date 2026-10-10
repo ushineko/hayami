@@ -102,7 +102,7 @@ func TestNoBluezIsNoBluetoothAdapter(t *testing.T) {
 	require.NoError(t, err, "no adapter is not a failure to log")
 	r := find(t, p.Section(), "no Bluetooth adapter")
 	assert.Equal(t, view.Info, r.Status)
-	assert.Len(t, p.Section().Reasons, 5, "one line for the adapter, not one per driver")
+	assert.Len(t, p.Section().Reasons, 6, "one line for the adapter, not one per driver")
 	assert.NotContains(t, reasonTexts(p.Section()), "no Bluetooth device with a battery")
 }
 

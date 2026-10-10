@@ -64,12 +64,16 @@
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
   detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
+  detail=""
 ## peripherals: a device not permitted, alone
 - label="" text="no Logitech receiver" status=0 aside=false actionable=false
   detail=""
 - label="" text="no Razer device" status=0 aside=false actionable=false
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
   detail=""
 - label="" text="SteelSeries Apex is not permitted" status=2 aside=false actionable=true
   detail="<permission>"
@@ -85,6 +89,8 @@
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
   detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
+  detail=""
 - label="SteelSeries Arctis 7" text="unsupported" status=0 aside=false actionable=false
   detail="found, and left alone: its battery protocol is not one this build knows"
 ## peripherals: a vendor that would not list
@@ -96,6 +102,8 @@
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
   detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
+  detail=""
 ## peripherals: a device that would not read
 - label="" text="no Logitech receiver" status=0 aside=false actionable=false
   detail=""
@@ -104,6 +112,8 @@
 - label="" text="no SteelSeries device" status=0 aside=false actionable=false
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
   detail=""
 ## peripherals: a dock answering nothing
 - label="" text="no Logitech receiver" status=0 aside=false actionable=false
@@ -114,6 +124,8 @@
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
   detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
+  detail=""
 ## peripherals: a receiver with nothing awake
 - label="" text="a Logitech receiver, with nothing awake on it" status=0 aside=false actionable=false
   detail="2 indices asked and none answered; a sleeping device and an empty slot say the same thing"
@@ -122,6 +134,8 @@
 - label="" text="no SteelSeries device" status=0 aside=false actionable=false
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
   detail=""
 ## peripherals: a receiver with nothing paired
 - label="" text="a Logitech receiver, with nothing paired to it" status=0 aside=false actionable=false
@@ -132,6 +146,8 @@
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
   detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
+  detail=""
 ## peripherals: a device too old to read
 - label="" text="a Logitech receiver, with nothing paired to it" status=0 aside=false actionable=false
   detail=""
@@ -140,6 +156,8 @@
 - label="" text="no SteelSeries device" status=0 aside=false actionable=false
   detail=""
 - label="" text="no AULA receiver" status=0 aside=false actionable=false
+  detail=""
+- label="" text="no Sony controller" status=0 aside=false actionable=false
   detail=""
 - label="Logitech K800" text="speaks HID++ 1.0" status=0 aside=false actionable=false
   detail="found, and not read: its HID++ 1.0 battery register would not answer"

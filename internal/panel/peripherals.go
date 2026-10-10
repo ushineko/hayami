@@ -487,6 +487,8 @@ func kind(k battery.Kind) view.Kind {
 		return view.KindKeyboard
 	case battery.KindHeadset:
 		return view.KindHeadset
+	case battery.KindGamepad:
+		return view.KindGamepad
 	default:
 		return view.KindOther
 	}
