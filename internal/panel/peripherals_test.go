@@ -204,7 +204,7 @@ func TestADeviceThatStopsAnsweringKeepsItsLevelAndGoesDim(t *testing.T) {
 
 	// The verdict survives the dimming, which is the shells' to apply.
 	cells := p.Section().Cells
-	require.Len(t, cells, view.PeripheralSlots)
+	require.Len(t, cells, view.MinPeripheralSlots)
 	assert.True(t, cells[0].Stale)
 	assert.Equal(t, "Offline", cells[0].Note)
 	assert.Contains(t, cells[0].Value, "86")
@@ -511,6 +511,7 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 		"no Razer device",
 		"no SteelSeries device",
 		"no AULA receiver",
+		"no Sony controller",
 	}, panel.BluetoothAbsent()...), reasonTexts(sec))
 	for _, r := range sec.Reasons {
 		assert.Equal(t, view.Info, r.Status, "%q was marked as a failure", r.Text)

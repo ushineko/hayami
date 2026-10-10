@@ -27,13 +27,14 @@ func TestTheVendorListComesFromTheDrivers(t *testing.T) {
 		{Name: "SteelSeries", Absent: "no SteelSeries device", Quiet: true, Drivers: []string{"steelseries"}},
 	}
 	aula := panel.Vendor{Name: "AULA", Absent: "no AULA receiver", Quiet: true, Drivers: []string{"aula"}}
+	sony := panel.Vendor{Name: "Sony", Absent: "no Sony controller", Drivers: []string{"sony"}}
 	bluetooth := panel.Vendor{Name: "Bluetooth", Absent: "no Bluetooth device with a battery", Drivers: []string{"bluez", "apple"}}
 	// Apple's accessory protocol is L2CAP, read on Linux only.
 	windowsBluetooth := panel.Vendor{Name: "Bluetooth", Absent: "no Bluetooth device with a battery", Drivers: []string{"bluez"}}
 
-	assert.Equal(t, append(append([]panel.Vendor{}, hid...), windowsBluetooth, aula), panel.Vendors("windows"),
+	assert.Equal(t, append(append([]panel.Vendor{}, hid...), windowsBluetooth, aula, sony), panel.Vendors("windows"),
 		"Windows: the HID vendors and Bluetooth, through bluez alone")
-	assert.Equal(t, append(append([]panel.Vendor{}, hid...), bluetooth, aula), panel.Vendors("linux"),
+	assert.Equal(t, append(append([]panel.Vendor{}, hid...), bluetooth, aula, sony), panel.Vendors("linux"),
 		"Linux: the HID vendors and Bluetooth")
 	assert.Empty(t, panel.Vendors("other"), "a system no driver reads on asks none")
 }

@@ -52,7 +52,7 @@ func TestACardBuiltEmptyStillDrawsACellLater(t *testing.T) {
 	}}
 	p.Draw("peripherals", src.Section(), true)
 
-	assert.Equal(t, view.PeripheralSlots, gui.ShownCells(p, "peripherals"),
+	assert.Equal(t, view.MinPeripheralSlots, gui.ShownCells(p, "peripherals"),
 		"a card built with no cells never got a grid to put one in")
 }
 
@@ -114,7 +114,7 @@ func TestASilentSourceIsRestoredFromTheCache(t *testing.T) {
 	require.Contains(t, got, "peripherals")
 	assert.True(t, drawn["peripherals"], "a restored section is a section to draw")
 	assert.True(t, got["peripherals"].Restored)
-	require.Len(t, got["peripherals"].Cells, view.PeripheralSlots)
+	require.Len(t, got["peripherals"].Cells, view.MinPeripheralSlots)
 	assert.Equal(t, "G502 X PLUS", got["peripherals"].Cells[0].Label)
 }
 
@@ -130,7 +130,7 @@ func TestALiveReadingBeatsTheCache(t *testing.T) {
 
 	got := gui.Restore([]panel.Source{src}, map[string]bool{"peripherals": true}, cached)
 
-	require.Len(t, got["peripherals"].Cells, view.PeripheralSlots)
+	require.Len(t, got["peripherals"].Cells, view.MinPeripheralSlots)
 	assert.Equal(t, "Live Mouse", got["peripherals"].Cells[0].Label)
 	assert.False(t, got["peripherals"].Restored, "a live reading was marked restored")
 }
@@ -190,7 +190,7 @@ func TestASectionThatNeverReportsKeepsItsCachedReading(t *testing.T) {
 	held := gui.Cached(p)
 	require.Contains(t, held, "peripherals",
 		"the silent section's cached reading was dropped, so the next start has nothing")
-	require.Len(t, held["peripherals"].Section.Cells, view.PeripheralSlots)
+	require.Len(t, held["peripherals"].Section.Cells, view.MinPeripheralSlots)
 	assert.Equal(t, "G502 X PLUS", held["peripherals"].Section.Cells[0].Label)
 }
 

@@ -65,10 +65,12 @@ const (
 	KindKeyboard
 	// KindHeadset is a headset, headphones or earbuds.
 	KindHeadset
+	// KindGamepad is a game controller.
+	KindGamepad
 )
 
 /*
-Rank is where a kind's cells go, lowest first.
+Rank is where a kind's slot goes, lowest first.
 
 **The mouse is first.** A desk has one, it is there whenever the machine is,
 and its battery is the one a glance at this panel is usually after; the things
@@ -76,20 +78,24 @@ that come and go should come and go around it rather than in front of it.
 Ordering by name alone put "Arctis Nova Pro Wireless" in the first cell on the
 machine this was written on, which is the device its owner thinks about least.
 
-Then the keyboard, for the same reason and one step weaker, then the headset,
-then everything else. Within a kind it is still by name, so a cell moves only
-when the hardware does.
+Then the headphones, then the keyboard, then a game controller, then
+everything else (spec 056). Headphones come before the keyboard because they
+are the battery that runs out during the day, and two across they sit beside
+the mouse on the first line. Within a kind it is still by name, so a cell
+moves only when the hardware does.
 */
 func (k Kind) Rank() int {
 	switch k {
 	case KindMouse:
 		return 0
-	case KindKeyboard:
-		return 1
 	case KindHeadset:
+		return 1
+	case KindKeyboard:
 		return 2
-	default:
+	case KindGamepad:
 		return 3
+	default:
+		return 4
 	}
 }
 
@@ -204,7 +210,7 @@ func Peripherals(r PeripheralsReading) Section {
 	// The card keeps its shape with nothing behind a slot (spec 022). A card
 	// that collapsed to one centred cell when the headset was forgotten, and
 	// widened again when it came back, reflowed the panel over a battery.
-	for i := len(s.Cells); i < PeripheralSlots; i++ {
+	for i := len(s.Cells); i < cellCount(len(shown)); i++ {
 		s.Cells = append(s.Cells, placeholder(i))
 	}
 	s.Note = overflowNote(overflow)
@@ -224,9 +230,10 @@ Drawn dim, like a device that has gone quiet, and with no reading, so the card
 is the same shape with one device as with two and says which slot is empty.
 It is not a reason: nothing is wrong, and doctor does not report it.
 
-Only the right slot is empty on a desk with a mouse. The left one says "no
-mouse" only when there is nothing at all, because without a mouse the left
-slot goes to the next device rather than staying empty (see SelectPeripherals).
+A slot is empty only to pad the card to its two or four cells (spec 056):
+every kind that has a slot has a device in it. The first says "no mouse" only
+when there is nothing at all, because without a mouse the first slot goes to
+the next kind rather than staying empty (see SelectPeripherals).
 */
 func placeholder(slot int) Cell {
 	label := NoDevice
@@ -289,72 +296,111 @@ func OrderPeripherals(devices []PeripheralReading) []PeripheralReading {
 	return out
 }
 
-// PeripheralSlots is how many devices the section draws.
-//
-// **Two, always the same two places.** A cell per device was honest and it
-// made the card breathe: plug a second pair of headphones in and the card grew
-// a third of its width, everything beside it moved, and the panel the eye had
-// learned was a different panel. A battery reading is glanced at, and a glance
-// wants the number to be where it was last time more than it wants every
-// number at once.
-const PeripheralSlots = 2
+/*
+The section's size, in cells (spec 056).
+
+**At least two**, the card's shape since spec 022: a card that collapsed to
+one centred cell when the headset was forgotten, and widened again when it
+came back, reflowed the panel over a battery.
+
+**At most four**, a slot per kind of device a desk has -- a mouse, headphones,
+a keyboard, a controller -- which is two lines of two in the panel's width. A
+cell per device made the card breathe: plug a second pair of headphones in and
+the card grew, everything below it moved, and the panel the eye had learned
+was a different panel. A battery reading is glanced at, and a glance wants the
+number to be where it was last time more than it wants every number at once.
+*/
+const (
+	MinPeripheralSlots = 2
+	MaxPeripheralSlots = 4
+)
+
+// cellCount is how many cells a card with a slot for slots kinds draws: at
+// least two, and three made four, so two across the grid stays rectangular.
+func cellCount(slots int) int {
+	n := max(slots, MinPeripheralSlots)
+	if n%2 == 1 {
+		n++
+	}
+	return min(n, MaxPeripheralSlots)
+}
 
 /*
-SelectPeripherals cuts the devices down to the two the section draws, and
-returns the rest.
+SelectPeripherals cuts the devices down to one per kind, a slot each for the
+first four kinds by Kind.Rank, and returns the rest.
 
-**The mouse holds the left slot**, for the reason Kind.Rank gives: a desk has
-one, it is there whenever the machine is, and it is what the panel is usually
-being asked about. It holds the slot even when it has gone quiet, because a
-mouse idle is not a mouse gone and moving the pointer brings it straight back
--- a slot that emptied every time the hand left the desk would be the same
-flicker in a smaller place. Without a mouse the slots are filled from the rest,
-as they always were.
+**A slot per kind** (spec 056). The mouse is always where the mouse was and the
+headphones where the headphones were. The card used to give its second slot to
+whichever device changed last, and on a desk with four devices that put a
+different one there from one glance to the next.
 
-**One mouse on the card** (spec 050). A desk has one mouse, but a reader can
-see it twice: read through its dongle, remembered dim after it went quiet
-(spec 032), and read again on its cable, live. Both are mice, and both used to
-be drawn, the second in the right slot as the device that changed last. The
-slot takes a live mouse when there is one, else the one heard most recently;
-every other mouse goes to the overflow and never into the right slot.
+**A kind keeps its slot while a device of it is remembered.** The devices
+given here include the ones that have gone quiet, which the panel keeps for a
+week (spec 032), so a controller switched off keeps its slot, dim, with its
+last level -- a mouse idle is not a mouse gone, and a slot that emptied every
+time the hand left the desk would be a flicker. The card grows when a kind
+turns up that nothing remembers, and shrinks when a kind has been away a week.
 
-**The right slot is the device whose state changed last**, whether that change
-was arriving or going quiet (spec 022). A headset switched off keeps the slot,
-dim, with its last level; a pair of earbuds connected after that takes it.
-Live and quiet are not ranked against each other: the reader's most recent
-change is what the slot shows.
+**One device per slot** (spec 050, which did this for mice). A desk can show
+one mouse twice -- remembered dim from its dongle, live on its cable -- and has
+two pairs of headphones as often as not. The slot takes a live device when
+there is one, else the one heard most recently.
 
-Everything beyond the two is returned as overflow, in the same order, for the
+Everything not in a slot -- the second device of a kind, and every device of a
+fifth kind -- is returned as overflow, the most recent change first, for the
 caller to say somewhere that does not take space on the card.
 */
 func SelectPeripherals(devices []PeripheralReading) (shown, overflow []PeripheralReading) {
-	// The mice are taken out first so the ordering below never has to make an
-	// exception for them: one goes to the left slot, the others to the
-	// overflow.
-	var mice, rest []PeripheralReading
+	byKind := map[Kind][]PeripheralReading{}
+	var kinds []Kind
 	for _, d := range devices {
-		if d.Kind == KindMouse {
-			mice = append(mice, d)
-		} else {
-			rest = append(rest, d)
+		if _, ok := byKind[d.Kind]; !ok {
+			kinds = append(kinds, d.Kind)
 		}
+		byKind[d.Kind] = append(byKind[d.Kind], d)
 	}
-	slices.SortStableFunc(mice, liveFirst)
-	slices.SortStableFunc(rest, byRecentChange)
+	slices.SortFunc(kinds, func(a, b Kind) int { return cmp.Compare(a.Rank(), b.Rank()) })
 
-	var left, spare []PeripheralReading
-	if len(mice) > 0 {
-		left, spare = mice[:1], mice[1:]
+	for i, k := range kinds {
+		group := byKind[k]
+		slices.SortStableFunc(group, liveFirst)
+		if i >= MaxPeripheralSlots {
+			overflow = append(overflow, group...)
+			continue
+		}
+		shown = append(shown, group[0])
+		overflow = append(overflow, group[1:]...)
 	}
-	take := min(PeripheralSlots-len(left), len(rest))
-	overflow = append(slices.Clone(spare), rest[take:]...)
 	slices.SortStableFunc(overflow, byRecentChange)
-	return append(slices.Clone(left), rest[:take]...), overflow
+	return fillWithOthers(shown, overflow)
+}
+
+/*
+fillWithOthers puts devices of no known kind into the cells the card would
+otherwise pad with a placeholder, the most recent change first.
+
+KindOther is not a kind of device but the absence of one -- a Bluetooth device
+with no icon, a receiver that could not say -- so two of them are not one
+device seen twice, as two mice are, and giving them one slot between them hid
+one on a card with a cell to spare. They take only spare cells, so the card is
+the size its kinds make it either way.
+*/
+func fillWithOthers(shown, overflow []PeripheralReading) ([]PeripheralReading, []PeripheralReading) {
+	target := cellCount(len(shown))
+	rest := overflow[:0:0]
+	for _, d := range overflow {
+		if d.Kind == KindOther && len(shown) < target {
+			shown = append(shown, d)
+			continue
+		}
+		rest = append(rest, d)
+	}
+	return shown, rest
 }
 
 // liveFirst puts an answering device ahead of a remembered one, and otherwise
-// orders as byRecentChange: the mouse slot shows the mouse that is answering,
-// and among quiet ones the one heard last.
+// orders as byRecentChange: a slot shows the device of its kind that is
+// answering, and among quiet ones the one heard last.
 func liveFirst(a, b PeripheralReading) int {
 	if a.Stale != b.Stale {
 		if a.Stale {
