@@ -2,7 +2,7 @@
 
 **Issue**: #183
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 ## Context
 
@@ -40,9 +40,10 @@ The cooler card already shortens its part names by a table of rules (spec
   M185"); "Wireless Controller" alone is kept.
 - [x] The cell carries the full name only where it was shortened, and the
   hover says it; doctor's line names the device in full.
-- [ ] On the real window, with all four kinds answering, the controller's
-  name is drawn whole: its ink is well short of its cell's width
-  (`TestTheControllersNameIsDrawnWhole`), falsified by removing the rule.
+- [x] On the real window, with the controller answering, its name is drawn
+  whole: its ink is well short of its cell's width
+  (`TestTheControllersNameIsDrawnWhole`). Falsified: with the rules removed
+  the name runs to 88 px of the 126 px cell and the test fails.
 - [x] `go test ./...` passes, except `internal/usage`'s cross-check against the
   Python, which needs `structlog` on this machine.
 
@@ -57,3 +58,11 @@ The cooler card already shortens its part names by a table of rules (spec
   before. A per-device alias was considered and left out: it is a setting for
   a problem four rules solve on the desks this runs on.
 - Rollback: revert.
+
+## Verification
+
+2026-10-10, Windows 11, a Basilisk Ultimate through its dongle, a QC35 and a
+DualSense answering. The window, one cell across with only this card in it,
+drew "Basilisk Ultimate", "qc35" and "DualSense", each whole; the controller's
+name was 57 px of a 124 px cell. With the rules removed it was "DualSense
+Wir…", 88 px.

@@ -377,6 +377,14 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Change**: a peripheral's cell draws its name without the words every
+  device on the card shares: "DualSense Wireless Controller" is "DualSense",
+  "Basilisk Ultimate Dongle" is "Basilisk Ultimate" (spec 057, #183). With
+  four cells two across, those names were cut with an ellipsis. The full name
+  is in the card's hover note and in `doctor`.
+
 ### 0.9.8 (2026-10-09)
 
 - **Change**: the peripherals card has a cell per kind of device, up to four,
