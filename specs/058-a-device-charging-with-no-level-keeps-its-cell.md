@@ -2,7 +2,7 @@
 
 **Issue**: #184
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 ## Context
 
@@ -50,10 +50,11 @@ published captures say, and lingers a moment after the cable comes out.
 - [x] View tests: the cell's dash, empty unit, state, no bar, not a
   placeholder; the note's dash.
 - [x] Doctor's line.
-- [ ] On the real window, with the F75 charging on its cable through its
+- [x] On the real window, with the F75 charging on its cable through its
   receiver: the card holds a cell with its three lines of text and no bar
-  (`TestADeviceChargingWithNoLevelKeepsItsCell`), falsified by disabling the
-  new case.
+  (`TestADeviceChargingWithNoLevelKeepsItsCell`). Falsified: with the new
+  case disabled the card is the mouse, the headphones, the controller and a
+  placeholder, and the test fails.
 - [x] `go test ./...` passes, except `internal/usage`'s cross-check against the
   Python, which needs `structlog` on this machine.
 
@@ -72,3 +73,11 @@ published captures say, and lingers a moment after the cable comes out.
 - `NoLevel` is an additive, optional field of the remembered devices' file
   and of nothing else on disk.
 - Rollback: revert.
+
+## Verification
+
+2026-10-10, Windows 11, the F75 on its cable and switched to 2.4 GHz, with a
+Basilisk Ultimate, a QC35 and a DualSense answering. The window, one cell
+across with only this card in it, drew "Basilisk Ultimat… 48 %", "qc35 80 %",
+"F75 -- Charging" with no bar, and "DualSense Wir… 95 %": bands
+`TTTTBTTTBTTTTTTB`. With the new case disabled: `TTTTBTTTBTTTBTT`, no F75.
