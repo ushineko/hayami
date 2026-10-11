@@ -405,13 +405,27 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 		// guards its own carry-over on the same two conditions.
 		if !b.HasLevel && !b.HasBand {
 			was, ok := p.seen[b.Name]
-			if !ok || was.reading.Charge != reading.Charge {
+			changed := !ok || was.reading.Charge != reading.Charge
+			if reading.Charge != view.Draining && (changed || was.reading.NoLevel) {
+				// On its cable and not saying how full it is (spec 058): an
+				// AULA F75 charging through its receiver, whose level reads a
+				// pinned 100 that sanshoku withholds. The level from before
+				// the cable is still wrong and is still forgotten, but the
+				// device has said something true -- it is charging -- and
+				// that is a cell: no number, and the state under it. Without
+				// one, plugging the keyboard in took it off the card and its
+				// kind's slot with it.
+				reading.Level, reading.NoLevel = 0, true
+				p.heard(now, reading, fresh)
+				continue
+			}
+			if changed {
 				// Nothing to carry, or nothing worth carrying. A level from
 				// before the cable is not stale, it is wrong, so it is
 				// forgotten outright rather than left to be drawn dim — which
 				// is what the monitor does too, clearing its cached reading on
-				// the same transition. The device is present and has no level,
-				// so it has no cell.
+				// the same transition. The device is present, has no level
+				// and is not charging, so it has no cell.
 				delete(p.seen, b.Name)
 				continue
 			}
@@ -432,16 +446,7 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 			continue
 		}
 
-		// A device that was quiet on the last poll has just come back, which
-		// is a change of state and a claim on the right-hand slot.
-		since := now
-		if was, ok := p.seen[b.Name]; ok && !was.reading.Stale {
-			since = was.since
-		}
-		reading.Since, reading.Seen = since, now
-
-		fresh[b.Name] = true
-		p.seen[b.Name] = remembered{reading: reading, since: since}
+		p.heard(now, reading, fresh)
 	}
 
 	var out []view.PeripheralReading
@@ -460,6 +465,21 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 		out = append(out, was.reading)
 	}
 	return view.PeripheralsReading{Devices: view.OrderPeripherals(out)}
+}
+
+// heard keeps a device that answered this poll: marked fresh, seen now, and
+// arrived now unless it was already answering.
+//
+// A device that was quiet on the last poll has just come back, which is a
+// change of state and a claim on its kind's slot.
+func (p *Peripherals) heard(now time.Time, reading view.PeripheralReading, fresh map[string]bool) {
+	since := now
+	if was, ok := p.seen[reading.Name]; ok && !was.reading.Stale {
+		since = was.since
+	}
+	reading.Since, reading.Seen = since, now
+	fresh[reading.Name] = true
+	p.seen[reading.Name] = remembered{reading: reading, since: since}
 }
 
 // cells translates a device's separate batteries into the view's.

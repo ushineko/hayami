@@ -688,3 +688,47 @@ func TestAnOverflowOfOnlyOfflineDevicesSaysSo(t *testing.T) {
 	assert.Equal(t, "Offline, at the level last heard:\n  AirPods Pro  71 %", s.Note)
 	assert.NotContains(t, s.Note, "connected")
 }
+
+/*
+Spec 058. A device charging without a level has a cell with no number: the
+dash a placeholder draws where the number goes, no bar, no verdict, and the
+state under it. It is not a placeholder -- there is a device there -- and it
+keeps its kind's slot.
+*/
+func TestADeviceChargingWithoutALevelHasACellWithNoNumber(t *testing.T) {
+	t0 := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	keyboard := detected("F75", 0, view.KindKeyboard, t0)
+	keyboard.NoLevel, keyboard.Charge = true, view.Filling
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+			keyboard,
+		})})
+
+	require.Len(t, s.Cells, view.MinPeripheralSlots)
+	c := s.Cells[1]
+	assert.Equal(t, "F75", c.Label)
+	assert.Equal(t, view.NoQuantity(), c.Value)
+	assert.Empty(t, c.Unit, "a percent sign with no percentage")
+	assert.Equal(t, "Charging", c.Note)
+	assert.False(t, c.HasBar)
+	assert.False(t, c.Placeholder, "a device was drawn as an empty slot")
+	assert.False(t, c.Stale)
+	assert.Equal(t, view.Info, c.Status)
+}
+
+// Spec 058. In the note for devices with no slot, such a device has a dash for
+// its level, not "0 %".
+func TestADeviceChargingWithoutALevelInTheNoteHasNoPercentage(t *testing.T) {
+	t0 := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	second := detected("K800", 0, view.KindKeyboard, t0)
+	second.NoLevel, second.Charge = true, view.Filling
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("F75", 88, view.KindKeyboard, t0.Add(time.Minute)),
+			second,
+		})})
+
+	assert.Contains(t, s.Note, "K800  "+view.NoQuantity()+"  Charging")
+	assert.NotContains(t, s.Note, "0 %")
+}
