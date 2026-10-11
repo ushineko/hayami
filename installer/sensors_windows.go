@@ -172,10 +172,14 @@ var ours = []string{"hayami.exe", "hayami-tui.exe"}
 const stopWait = 5 * time.Second
 
 /*
-stopPrograms ends every hayami.exe and hayami-tui.exe that runs from root,
-and returns the names of those it stopped. A program of the same name from
-somewhere else, such as a build in a checkout, is not this install's and is
-left alone.
+stopPrograms ends every hayami.exe and hayami-tui.exe whose file is inside
+root, wherever in it, and returns the names of those it stopped. A program
+of the same name from somewhere else, such as a build in a checkout, is not
+this install's and is left alone.
+
+Inside root and not at a fixed place in it: the first version of this looked
+for the programs beside the uninstaller, they are in bin, and an uninstall
+with the panel running left hayami.exe behind.
 */
 func stopPrograms(root string) []string {
 	if root == "" {
@@ -194,7 +198,7 @@ func stopPrograms(root string) []string {
 		if !isOurs(name) || entry.ProcessID == uint32(os.Getpid()) { //nolint:gosec // a process ID
 			continue
 		}
-		if stop(entry.ProcessID, filepath.Join(root, name)) {
+		if stop(entry.ProcessID, root) {
 			stopped = append(stopped, name)
 		}
 	}
@@ -210,9 +214,9 @@ func isOurs(name string) bool {
 	return false
 }
 
-// stop ends the process pid when its program is the file at path, and
+// stop ends the process pid when its program's file is inside root, and
 // reports whether it did.
-func stop(pid uint32, path string) bool {
+func stop(pid uint32, root string) bool {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, pid)
 	if err != nil {
 		return false
@@ -223,7 +227,7 @@ func stop(pid uint32, path string) bool {
 	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &n); err != nil {
 		return false
 	}
-	if !strings.EqualFold(filepath.Clean(windows.UTF16ToString(buf[:n])), filepath.Clean(path)) {
+	if !inside(root, windows.UTF16ToString(buf[:n])) {
 		return false
 	}
 	if err := windows.TerminateProcess(h, 0); err != nil {
@@ -231,4 +235,11 @@ func stop(pid uint32, path string) bool {
 	}
 	_, _ = windows.WaitForSingleObject(h, uint32(stopWait/time.Millisecond)) //nolint:gosec // five seconds
 	return true
+}
+
+// inside reports whether the file at path is in the directory root or
+// below it, as Windows compares paths: without regard to case.
+func inside(root, path string) bool {
+	rel, err := filepath.Rel(strings.ToLower(filepath.Clean(root)), strings.ToLower(filepath.Clean(path)))
+	return err == nil && rel != "." && filepath.IsLocal(rel)
 }
