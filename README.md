@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.8
+**Version**: 0.9.9
 
 *a chart you read at a glance*
 
@@ -377,7 +377,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.9.9 (2026-10-10)
 
 - **Change**: a peripheral's cell draws its name without the words every
   device on the card shares: "DualSense Wireless Controller" is "DualSense",
