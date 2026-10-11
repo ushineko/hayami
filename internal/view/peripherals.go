@@ -111,6 +111,12 @@ type PeripheralReading struct {
 	// band instead.
 	Level int
 
+	// NoLevel marks a device that is charging and has not said how full it is
+	// (spec 058): a keyboard on its cable whose receiver reports a level that
+	// is not one. Its cell has no number, no bar and no verdict, and says the
+	// state. Level is zero and is never drawn.
+	NoLevel bool `json:",omitempty"`
+
 	// Band is how full a device without a fuel gauge says it is, in the four
 	// steps such a device knows, and Segments is how many of four that fills.
 	// Zero means this cell has a percentage.
@@ -259,6 +265,11 @@ func overflowNote(overflow []PeripheralReading) string {
 	var live, quiet []string
 	for _, d := range overflow {
 		level := strings.TrimSpace(Count(d.Level)) + " %"
+		if d.NoLevel {
+			// A device charging without a level has no number to give here
+			// either (spec 058).
+			level = NoQuantity()
+		}
 		if d.Stale {
 			quiet = append(quiet, "  "+d.Name+"  "+level)
 			continue
@@ -450,6 +461,15 @@ func changed(d PeripheralReading) time.Time {
 func peripheral(d PeripheralReading) Cell {
 	if d.Segments > 0 {
 		return bandCell(d)
+	}
+	if d.NoLevel {
+		// No number where the number goes, as a placeholder has none, and the
+		// state on the quiet line. Not a placeholder: there is a device here
+		// and it has said what it is doing.
+		return Cell{
+			Label: PeripheralLabel(d.Name), Name: fullName(d.Name),
+			Value: NoQuantity(), Note: chargeNote(d), Stale: d.Stale, Status: Info,
+		}
 	}
 
 	cell := Cell{

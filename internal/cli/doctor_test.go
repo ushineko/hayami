@@ -374,3 +374,13 @@ func TestDoctorNamesADeviceInFull(t *testing.T) {
 	}}
 	assert.Equal(t, "DualSense Wireless Controller 75%, F75 88%", cli.Summarise(s))
 }
+
+// Spec 058. A device with no number says what it is doing: doctor's line reads
+// "F75 charging", not "F75 --".
+func TestDoctorSaysWhatADeviceWithNoLevelIsDoing(t *testing.T) {
+	s := view.Section{Cells: []view.Cell{
+		{Label: "G502 X PLUS", Value: "78", Unit: "%"},
+		{Label: "F75", Value: view.NoQuantity(), Note: "Charging"},
+	}}
+	assert.Equal(t, "G502 X PLUS 78%, F75 charging", cli.Summarise(s))
+}

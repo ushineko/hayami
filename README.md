@@ -384,6 +384,10 @@ MIT. See
   "Basilisk Ultimate Dongle" is "Basilisk Ultimate" (spec 057, #183). With
   four cells two across, those names were cut with an ellipsis. The full name
   is in the card's hover note and in `doctor`.
+- **Fix**: a device that is charging and gives no level keeps its cell on the
+  peripherals card, with a dash where the number goes and "Charging" under it
+  (spec 058, #184). An AULA F75 on its receiver gives no level while its cable
+  is in, and plugging it in took the keyboard off the card.
 
 ### 0.9.8 (2026-10-09)
 

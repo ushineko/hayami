@@ -149,6 +149,12 @@ func summarise(s view.Section) string {
 		if c.Name != "" {
 			name = c.Name
 		}
+		if c.Value == view.NoQuantity() {
+			// A device with no number says what it is doing instead: "F75
+			// charging" (spec 058).
+			parts = append(parts, tidy(name+" "+strings.ToLower(c.Note)))
+			continue
+		}
 		parts = append(parts, tidy(name+" "+c.Value+c.Unit))
 	}
 	for _, m := range s.Meters {
