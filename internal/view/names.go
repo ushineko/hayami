@@ -85,6 +85,61 @@ func ShortName(full string) string {
 	return s
 }
 
+/*
+peripheralRules shorten a peripheral's name to what tells it from the device in
+the next cell (spec 057).
+
+A cell is narrow -- two across the panel -- and a device's name ends in words
+that every device on the card shares: it is wireless, or it would have no
+battery to show; a controller's cell does not need to say it is a controller;
+and a dongle or a receiver is how the device is reached, not what it is. They
+are taken from the end only, one at a time, so "Wireless" inside a name stays
+and "DualSense Edge Wireless Controller" loses both.
+
+Each is tested against a real name in names_test.go.
+*/
+var peripheralRules = []nameRule{
+	// "DualSense Wireless Controller", "Xbox Wireless Controller".
+	{regexp.MustCompile(`(?i)\s+Controller$`), ""},
+	// "Arctis Nova Pro Wireless", and what the rule above leaves.
+	{regexp.MustCompile(`(?i)\s+Wireless$`), ""},
+	// "Basilisk Ultimate Dongle": the mouse, read through its dongle.
+	{regexp.MustCompile(`(?i)\s+Dongle$`), ""},
+	// "Lightspeed Receiver": the same, in another vendor's word.
+	{regexp.MustCompile(`(?i)\s+Receiver$`), ""},
+}
+
+/*
+PeripheralLabel is a peripheral's name as its cell draws it: "DualSense
+Wireless Controller" is "DualSense", "Basilisk Ultimate Dongle" is "Basilisk
+Ultimate". A name the rules would empty -- a device called only "Wireless
+Controller" -- is returned whole, trimmed: a long name is better than no name.
+
+It is for drawing only. A device is known across polls by its full name, and
+two links to one mouse ("Basilisk Ultimate", "Basilisk Ultimate Dongle") are
+two names there however alike their cells read.
+*/
+func PeripheralLabel(full string) string {
+	s := strings.TrimSpace(full)
+	for {
+		before := s
+		for _, r := range peripheralRules {
+			s = strings.TrimSpace(r.pattern.ReplaceAllString(s, r.with))
+		}
+		if s == before {
+			break
+		}
+	}
+	if s == "" || peripheralWord.MatchString(s) {
+		return strings.TrimSpace(full)
+	}
+	return s
+}
+
+// peripheralWord is a name that is nothing but one of the words the rules
+// take off, which is what is left of "Wireless Controller" after the first.
+var peripheralWord = regexp.MustCompile(`(?i)^(Wireless|Controller|Dongle|Receiver)$`)
+
 // NameLabel is the label a row named for its hardware draws: the short name,
 // cut with an ellipsis at LabelWidth. An unread name keeps the role's own
 // label -- "CPU", "GPU", "Coolant" (R2.6).

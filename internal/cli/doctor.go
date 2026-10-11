@@ -144,13 +144,18 @@ func summarise(s view.Section) string {
 			// An empty slot is the card keeping its shape, not a reading.
 			continue
 		}
+		// The name in full: doctor has the room a cell does not (spec 057).
+		name := c.Label
+		if c.Name != "" {
+			name = c.Name
+		}
 		if c.Value == view.NoQuantity() {
 			// A device with no number says what it is doing instead: "F75
 			// charging" (spec 058).
-			parts = append(parts, tidy(c.Label+" "+strings.ToLower(c.Note)))
+			parts = append(parts, tidy(name+" "+strings.ToLower(c.Note)))
 			continue
 		}
-		parts = append(parts, tidy(c.Label+" "+c.Value+c.Unit))
+		parts = append(parts, tidy(name+" "+c.Value+c.Unit))
 	}
 	for _, m := range s.Meters {
 		// The caption already carries the window, so the label and the

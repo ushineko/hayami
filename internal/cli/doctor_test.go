@@ -365,6 +365,16 @@ func TestDoctorSaysHowOldAStaleUsageReadingIs(t *testing.T) {
 	assert.Contains(t, out.String(), "read 12m ago")
 }
 
+// Spec 057. Doctor names a device in full: a cell's label is cut to fit a
+// cell, and a line of doctor's has the room.
+func TestDoctorNamesADeviceInFull(t *testing.T) {
+	s := view.Section{Cells: []view.Cell{
+		{Label: "DualSense", Name: "DualSense Wireless Controller", Value: "75", Unit: "%"},
+		{Label: "F75", Value: "88", Unit: "%"},
+	}}
+	assert.Equal(t, "DualSense Wireless Controller 75%, F75 88%", cli.Summarise(s))
+}
+
 // Spec 058. A device with no number says what it is doing: doctor's line reads
 // "F75 charging", not "F75 --".
 func TestDoctorSaysWhatADeviceWithNoLevelIsDoing(t *testing.T) {

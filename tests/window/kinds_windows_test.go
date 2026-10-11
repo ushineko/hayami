@@ -142,3 +142,105 @@ func sum(lines []int) int {
 	}
 	return n
 }
+
+// wholeNameShare is the most of the cell's width a name drawn whole takes when
+// the name is as short as "DualSense". A name cut with an ellipsis runs to the
+// cell's budget: "DualSense Wir…" took four fifths of the cell.
+const wholeNameShare = 0.65
+
+// inkBand is one band of rows holding anything apart from the background: a
+// line of text or a bar, and how far across its ink runs.
+type inkBand struct {
+	bar      bool
+	from, to int
+}
+
+// inkBandsOf reads the picture top to bottom as bands of text and bars,
+// leaving out its edges, where the panel's rounded border is apart from the
+// card on every row. Quiet text counts: a cell's state, a dim name.
+func inkBandsOf(img *image.NRGBA) []inkBand {
+	const edge = 8
+	bg := background(img)
+	b := img.Bounds()
+	var out []inkBand
+	in := false
+	for y := b.Min.Y + edge; y < b.Max.Y-edge; y++ {
+		first, last, run, longest := -1, -1, 0, 0
+		for x := b.Min.X + edge; x < b.Max.X-edge; x++ {
+			if apart(img.NRGBAAt(x, y), bg) {
+				if first < 0 {
+					first = x
+				}
+				last = x
+				run++
+				longest = max(longest, run)
+			} else {
+				run = 0
+			}
+		}
+		if first < 0 {
+			in = false
+			continue
+		}
+		if !in {
+			out = append(out, inkBand{from: first, to: last})
+			in = true
+		}
+		cur := &out[len(out)-1]
+		cur.bar = cur.bar || longest >= barRun
+		cur.from, cur.to = min(cur.from, first), max(cur.to, last)
+	}
+	return out
+}
+
+/*
+Spec 057. The controller's cell says "DualSense", whole, and not "DualSense
+Wir…".
+
+Read off the picture by how wide the name is. With only this card in it the
+window is one cell across, and the controller's is the last device with a
+level: a name, a level and a state, then its bar. So the name is the third
+band of text above the last bar; a placeholder under it has no bar. A name cut to fit runs to the cell's edge; "DualSense" does not
+come near it.
+*/
+func TestTheControllersNameIsDrawnWhole(t *testing.T) {
+	if !enabled() {
+		t.Skip("drives a real window; set HAYAMI_WINDOW_TEST=1 to run it")
+	}
+	if kinds := kindsAnswering(t); !kinds[battery.KindGamepad] {
+		t.Skip("needs a controller giving a level now: wake the DualSense and run again")
+	}
+
+	hwnd := start(t, panelSettings{Sections: []string{"peripherals"}, Settle: peripheralsSettle})
+	var p *picture
+	var bands []inkBand
+	for deadline := time.Now().Add(3 * 15 * time.Second); ; time.Sleep(3 * time.Second) {
+		p = shoot(t, hwnd, "names.png")
+		bands = inkBandsOf(p.img)
+		if lastBar(bands) >= 3 || time.Now().After(deadline) {
+			break
+		}
+	}
+	t.Logf("picture: %s", p.path)
+	bar := lastBar(bands)
+	require.GreaterOrEqual(t, bar, 3, "the card has no cell with a bar")
+	for _, b := range bands[bar-3 : bar] {
+		require.False(t, b.bar, "the last device's cell is not a name, a level and a state over a bar")
+	}
+
+	name := bands[bar-3]
+	width := float64(p.img.Bounds().Dx())
+	share := float64(name.to-name.from) / width
+	t.Logf("the controller's name: %d px of a %.0f px cell (%.2f)", name.to-name.from, width, share)
+	assert.Less(t, share, wholeNameShare, "the controller's name runs to the cell's edge: it is cut, not whole")
+}
+
+// lastBar is the index of the last bar among the bands, or -1.
+func lastBar(bands []inkBand) int {
+	for i := len(bands) - 1; i >= 0; i-- {
+		if bands[i].bar {
+			return i
+		}
+	}
+	return -1
+}

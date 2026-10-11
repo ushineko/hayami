@@ -128,7 +128,7 @@ func TestTheMouseComesFirst(t *testing.T) {
 	// A slot per kind (spec 056): the mouse, the headset, the keyboard, and the
 	// device of no known kind last.
 	require.Len(t, s.Cells, view.MaxPeripheralSlots)
-	assert.Equal(t, []string{"G502 X PLUS", "Arctis Nova Pro Wireless", "Keychron K4 HE", "A Gamepad"},
+	assert.Equal(t, []string{"G502 X PLUS", "Arctis Nova Pro", "Keychron K4 HE", "A Gamepad"},
 		labels(s))
 	assert.Empty(t, s.Note)
 }
@@ -366,7 +366,7 @@ func TestFourKindsAreFourSlots(t *testing.T) {
 			detected("Basilisk Ultimate", 61, view.KindMouse, t0),
 		})})
 
-	assert.Equal(t, []string{"Basilisk Ultimate", "qc35", "F75", "DualSense Wireless Controller"}, labels(s))
+	assert.Equal(t, []string{"Basilisk Ultimate", "qc35", "F75", "DualSense"}, labels(s))
 	assert.Empty(t, s.Note)
 }
 
@@ -417,7 +417,7 @@ func TestAQuietDeviceKeepsItsKindsSlot(t *testing.T) {
 		})})
 
 	require.Len(t, s.Cells, view.MaxPeripheralSlots)
-	assert.Equal(t, "DualSense Wireless Controller", s.Cells[2].Label)
+	assert.Equal(t, "DualSense", s.Cells[2].Label)
 	assert.True(t, s.Cells[2].Stale)
 }
 
@@ -471,7 +471,7 @@ func TestAMouseAndAHeadset(t *testing.T) {
 		})})
 
 	require.Len(t, s.Cells, view.MinPeripheralSlots)
-	assert.Equal(t, []string{"G502 X PLUS", "Arctis Nova Pro Wireless"},
+	assert.Equal(t, []string{"G502 X PLUS", "Arctis Nova Pro"},
 		[]string{s.Cells[0].Label, s.Cells[1].Label})
 	assert.Empty(t, s.Note)
 }

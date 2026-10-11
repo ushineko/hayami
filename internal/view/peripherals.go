@@ -466,11 +466,14 @@ func peripheral(d PeripheralReading) Cell {
 		// No number where the number goes, as a placeholder has none, and the
 		// state on the quiet line. Not a placeholder: there is a device here
 		// and it has said what it is doing.
-		return Cell{Label: d.Name, Value: NoQuantity(), Note: chargeNote(d), Stale: d.Stale, Status: Info}
+		return Cell{
+			Label: PeripheralLabel(d.Name), Name: fullName(d.Name),
+			Value: NoQuantity(), Note: chargeNote(d), Stale: d.Stale, Status: Info,
+		}
 	}
 
 	cell := Cell{
-		Label: d.Name, Unit: "%", Note: note(d),
+		Label: PeripheralLabel(d.Name), Name: fullName(d.Name), Unit: "%", Note: note(d),
 		Value: strings.TrimSpace(Count(d.Level)), Stale: d.Stale,
 		Bar: float64(d.Level) / 100, HasBar: true,
 	}
@@ -521,7 +524,7 @@ the segments already carry the band.
 */
 func bandCell(d PeripheralReading) Cell {
 	cell := Cell{
-		Label: d.Name,
+		Label: PeripheralLabel(d.Name), Name: fullName(d.Name),
 		Value: segments(d.Segments),
 		Note:  d.Band,
 		Stale: d.Stale,
@@ -607,4 +610,13 @@ func cellNote(cells []PeripheralCell) string {
 		parts = append(parts, c.Name+" "+strconv.Itoa(c.Level))
 	}
 	return strings.Join(parts, "  ")
+}
+
+// fullName is a device's name for Cell.Name: the name where its label
+// shortened it, and nothing where the label already says it all.
+func fullName(name string) string {
+	if PeripheralLabel(name) == strings.TrimSpace(name) {
+		return ""
+	}
+	return name
 }
