@@ -266,7 +266,8 @@ func TestTheCarriedLevelIsDroppedWhenTheChargeStateChanges(t *testing.T) {
 	poll(t, p)
 
 	// On the cable now, and not saying how full it is. The old level belongs
-	// to before the cable, so there is nothing to draw and no cell.
+	// to before the cable, so it is not drawn; the cell says it is charging,
+	// with no number (spec 058).
 	headset.says = []battery.Battery{{Name: "Arctis Nova Pro Wireless", State: battery.Charging}}
 	c.tick(time.Minute)
 	poll(t, p)
@@ -413,7 +414,10 @@ func TestADeviceForgottenOnAStateFlipIsRememberedWhenItAnswers(t *testing.T) {
 	headset.says = []battery.Battery{{Name: "Arctis Nova Pro Wireless", State: battery.Charging}}
 	c.tick(time.Minute)
 	poll(t, p)
-	require.Empty(t, devices(p), "a level from before the cable was kept")
+	onCable := devices(p)
+	require.Len(t, onCable, 1, "charging is a cell, with no number (spec 058)")
+	assert.True(t, onCable[0].NoLevel)
+	assert.Zero(t, onCable[0].Level, "a level from before the cable was kept")
 
 	headset.says = []battery.Battery{{Name: "Arctis Nova Pro Wireless", Level: 74, HasLevel: true, State: battery.Charging}}
 	c.tick(time.Minute)
@@ -822,4 +826,56 @@ func TestAChildNodesQuietIsNotCountedTwice(t *testing.T) {
 
 	r := find(t, p.Section(), "a Logitech receiver, with nothing awake on it")
 	assert.True(t, strings.HasPrefix(r.Detail, "2 indices"), r.Detail)
+}
+
+/*
+Spec 058. A keyboard on its receiver, put on its cable: the receiver says it
+is charging and gives no level. It keeps its cell, live, with no number, for
+as long as it charges; the level from before the cable is gone; and the level
+it gives when the cable comes out is drawn again.
+
+Measured on an AULA F75: plugging it in took it off the card, and with a slot
+per kind took the keyboard's slot with it.
+*/
+func TestADeviceChargingWithoutALevelKeepsItsCell(t *testing.T) {
+	keyboard := receiver(battery.Battery{Name: "F75", Level: 88, HasLevel: true, Kind: battery.KindKeyboard})
+	k := &desk{devices: []*peripheral{keyboard}}
+	c := &clock{at: time.Now()}
+	p := k.section(c)
+	poll(t, p)
+	arrived := devices(p)[0].Since
+
+	keyboard.says = []battery.Battery{{Name: "F75", State: battery.Charging, Kind: battery.KindKeyboard}}
+	for range 2 {
+		c.tick(time.Minute)
+		assert.True(t, poll(t, p), "the card stopped drawing")
+		found := devices(p)
+		require.Len(t, found, 1)
+		assert.True(t, found[0].NoLevel)
+		assert.Zero(t, found[0].Level)
+		assert.False(t, found[0].Stale, "a device that is answering was drawn as gone")
+		assert.Equal(t, view.Filling, found[0].Charge)
+		assert.Equal(t, view.KindKeyboard, found[0].Kind, "the keyboard lost its kind, and so its slot")
+		assert.Equal(t, arrived, found[0].Since, "charging was taken for the device arriving again")
+	}
+
+	keyboard.says = []battery.Battery{{Name: "F75", Level: 100, HasLevel: true, Kind: battery.KindKeyboard}}
+	c.tick(time.Minute)
+	poll(t, p)
+	found := devices(p)
+	require.Len(t, found, 1)
+	assert.False(t, found[0].NoLevel)
+	assert.Equal(t, 100, found[0].Level)
+}
+
+// Spec 058. A device first seen already on its cable is a cell too: the panel
+// started with the keyboard charging.
+func TestADeviceFirstSeenChargingWithoutALevelIsACell(t *testing.T) {
+	keyboard := receiver(battery.Battery{Name: "F75", State: battery.Charging, Kind: battery.KindKeyboard})
+	p := (&desk{devices: []*peripheral{keyboard}}).section(&clock{at: time.Now()})
+
+	assert.True(t, poll(t, p))
+	found := devices(p)
+	require.Len(t, found, 1)
+	assert.True(t, found[0].NoLevel)
 }

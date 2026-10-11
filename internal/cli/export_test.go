@@ -17,3 +17,6 @@ func DiagnoseSources(ctx context.Context, sources []panel.Source) []Finding {
 
 // WatchSettings is the terminal panel's look at its settings file.
 var WatchSettings = watchSettings
+
+// Summarise is what doctor says a section found, in one line.
+var Summarise = summarise

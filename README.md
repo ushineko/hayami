@@ -377,6 +377,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: a device that is charging and gives no level keeps its cell on the
+  peripherals card, with a dash where the number goes and "Charging" under it
+  (spec 058, #184). An AULA F75 on its receiver gives no level while its cable
+  is in, and plugging it in took the keyboard off the card.
+
 ### 0.9.8 (2026-10-09)
 
 - **Change**: the peripherals card has a cell per kind of device, up to four,
