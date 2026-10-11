@@ -2,7 +2,7 @@
 
 **Issue**: #187
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 ## Context
 
@@ -89,12 +89,12 @@ It did not, in two places, and both were added to fynstall for this:
   "hayami reads the processor's temperature from it", nothing offered.
 - [x] The set-up, live on the same desk, through the hook's own code: every
   step already done, the temperature read back, no prompt.
-- [ ] Desk check: the wizard, from Explorer, on the real profile, after the
+- [x] Desk check: the wizard, from Explorer, on the real profile, after the
   script install was removed: the pages, the install, the panel started from
   the finish page, the Start menu, Settings > Apps, and the panel there
   after a new login.
-- [ ] Desk check: the offer taken on a machine without LibreHardwareMonitor.
-- [ ] Desk check: the uninstaller from Settings > Apps, with the panel
+- [x] Desk check: the offer taken on a machine without LibreHardwareMonitor.
+- [x] Desk check: the uninstaller from Settings > Apps, with the panel
   running: the panel is stopped and its files are gone; the settings stay.
 
 ## Out of scope
@@ -123,6 +123,10 @@ It did not, in two places, and both were added to fynstall for this:
 - **A set-up from a hidden window.** The hook runs PowerShell with no
   console, and Windows' administrator prompt is the only thing a person
   sees until the log shows the script's lines.
+- **A fresh machine is asked twice, not once.** The set-up's elevated step
+  is one prompt; the PawnIO driver, which LibreHardwareMonitor offers on its
+  first start, raises a second. The scripts' "Windows asks once" counts only
+  hayami's own.
 - Rollback: delete `fynstall.yaml`, `installer/` and
   `scripts/installer_windows.ps1`; the two switches of
   `install_windows.ps1` change nothing unless given.
@@ -142,3 +146,27 @@ It did not, in two places, and both were added to fynstall for this:
   processor's temperature from it (Core (Tctl/Tdie) 53.4 °C)".
 - The set-up through the hook's code on this desk: installed, settings,
   startup task and running each "[ok]", and "hayami can read it".
+
+2026-10-11, the wizard from Explorer on the real profile, with neither
+hayami nor LibreHardwareMonitor installed:
+
+- The Sensors page made the offer and it was taken. Windows asked twice:
+  once for LibreHardwareMonitor and once for the PawnIO driver.
+- Read off the machine afterwards: the receipt has `sensors: yes`; the two
+  programs, the uninstaller and the icon are in the install directory and
+  both programs say 0.9.9; one panel runs from the installed copy; the Start
+  menu and Startup shortcuts point at it; Settings > Apps has hayami 0.9.9
+  with `uninstall.exe --gui`; the user `Path` has `bin`; the settings file
+  is the one from before the install.
+- LibreHardwareMonitor runs, its startup task is registered, `data.json`
+  answers, and the installed `hayami-tui doctor` reads the processor at
+  54.1 °C.
+- After signing out and in again, the panel was there.
+- The uninstaller from Settings > Apps, with the panel running: no
+  `hayami.exe` is left running; the install directory, both shortcuts, the
+  Settings > Apps key, the `Path` entry and fynstall's index entry are gone;
+  the settings file is still there, unchanged. LibreHardwareMonitor and its
+  startup task stay, as the uninstall does not own them.
+- Left behind in `%TEMP%`: `fynstall-removed-<n>.exe`, the uninstaller's
+  moved-aside copy of itself, 26 MB, one per uninstall. fynstall's, not this
+  spec's.
