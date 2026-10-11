@@ -140,6 +140,25 @@ show. Installing over a running panel works: Windows renames the running copy
 to `<name>.old`, it keeps running until restarted, and the next install
 removes it.
 
+**An installer, built with fynstall.** `scripts\installer_windows.ps1`
+builds one program that holds both panels and needs no toolchain to run
+([fynstall](https://github.com/ushineko/fynstall), spec 059):
+
+```
+.\scripts\installer_windows.ps1 -Fynstall <fynstall.exe> -RuntimePath <fynstall checkout>
+dist\hayami-<version>-windows-amd64-installer.exe             # the wizard, from Explorer too
+dist\hayami-<version>-windows-amd64-installer.exe --dry-run   # list every change, make none
+```
+
+It installs to the same directory, adds the Start menu shortcut and an entry
+in Settings > Apps, starts the panel at login, and puts both programs on
+`PATH`. Its Sensors page checks for LibreHardwareMonitor, says what it found,
+and offers to install and configure it; the offer is never taken for you.
+The uninstaller, in the install directory and in Settings > Apps, stops the
+panel, removes what the install added, and keeps your settings. It is not in
+a release yet. Remove a copy the script installed first
+(`.\scripts\uninstall_windows.ps1`): the two do not know of each other.
+
 ## Running it
 
 ```
@@ -376,6 +395,16 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **New**: an installer for Windows, built with
+  [fynstall](https://github.com/ushineko/fynstall) (spec 059, #187): one
+  program that holds both panels, with a wizard, a command line, an entry in
+  Settings > Apps and an uninstaller. Its Sensors page checks for
+  LibreHardwareMonitor and offers to set it up. `scripts\installer_windows.ps1`
+  builds it; no release carries it yet. `install_windows.ps1` takes
+  `-SensorsOnly` and `-BuildOnly` for it.
 
 ### 0.9.9 (2026-10-10)
 
