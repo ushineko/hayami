@@ -170,3 +170,4 @@ hayami nor LibreHardwareMonitor installed:
 - Left behind in `%TEMP%`: `fynstall-removed-<n>.exe`, the uninstaller's
   moved-aside copy of itself, 26 MB, one per uninstall. fynstall's, not this
   spec's.
+- Installed again after that uninstall: it works.
