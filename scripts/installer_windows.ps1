@@ -28,6 +28,16 @@
 .PARAMETER WithCliOnly
     Also build the command-line-only installer, which has no wizard.
 
+.PARAMETER Windowed
+    Build the installer with the wizard, and its uninstaller, as programs with
+    a window (fynstall's --windowed). They show no console on any Windows; on
+    a terminal they print but ask nothing, and the command-line-only installer
+    is the one for a terminal. A release is built this way, with -WithCliOnly.
+
+.EXAMPLE
+    go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.0
+    .\scripts\installer_windows.ps1 -Windowed -WithCliOnly
+
 .EXAMPLE
     .\scripts\installer_windows.ps1 -Fynstall ..\fynstall\bin\fynstall.exe -RuntimePath ..\fynstall
 #>
@@ -36,7 +46,8 @@ param(
     [string] $Fynstall = "fynstall",
     [string] $RuntimePath,
     [switch] $SkipBuild,
-    [switch] $WithCliOnly
+    [switch] $WithCliOnly,
+    [switch] $Windowed
 )
 
 $ErrorActionPreference = "Stop"
@@ -59,7 +70,7 @@ function Find-Gcc {
 }
 
 if (-not (Get-Command $Fynstall -ErrorAction SilentlyContinue)) {
-    Fail "No fynstall at '$Fynstall'. Build it in a fynstall checkout (make build), and pass -Fynstall."
+    Fail "No fynstall at '$Fynstall'. Install the version go.mod requires (go install github.com/ushineko/fynstall/cmd/fynstall@<version>), or pass -Fynstall."
 }
 
 if (-not $SkipBuild) {
@@ -88,6 +99,7 @@ try {
     $arguments = @("build", "-c", (Join-Path $Root "fynstall.yaml"))
     if ($RuntimePath) { $arguments += @("--runtime-path", (Resolve-Path $RuntimePath).Path) }
     if ($WithCliOnly) { $arguments += "--with-cli-only" }
+    if ($Windowed) { $arguments += "--windowed" }
     & $Fynstall @arguments
     if ($LASTEXITCODE -ne 0) { Fail "fynstall build failed." }
 } finally {
@@ -97,4 +109,9 @@ try {
 
 Write-Host ""
 Write-Host "Done. Run the installer in dist\ : from Explorer it opens its wizard,"
-Write-Host "from a terminal it asks there, and --dry-run lists what it would change."
+if ($Windowed) {
+    Write-Host "and --dry-run lists what it would change. It asks nothing on a terminal:"
+    Write-Host "the cli-installer, built with -WithCliOnly, is the one that does."
+} else {
+    Write-Host "from a terminal it asks there, and --dry-run lists what it would change."
+}

@@ -83,17 +83,51 @@ jobs:
           CGO_ENABLED=1 go build -tags migrated_fynedo -ldflags "-H windowsgui" -o hayami.exe ./cmd/hayami
           CGO_ENABLED=0 go build -o hayami-tui.exe ./cmd/hayami-tui
 
+      # Spec 059. The installer is built by fynstall, and against the fynstall
+      # go.mod requires, so the builder is installed at that version and the
+      # two cannot drift.
+      - name: Install fynstall, at the version go.mod requires
+        shell: bash
+        run: go install "github.com/ushineko/fynstall/cmd/fynstall@$(go list -m -f '{{.Version}}' github.com/ushineko/fynstall)"
+
+      # What a release carries: the installer with the wizard, a program with
+      # a window so that no console shows before it, and the command-line-only
+      # one for a terminal. The script builds both panels again, with the
+      # version stamped in, as it does on a desk.
+      - name: Build the installers
+        shell: pwsh
+        run: ./scripts/installer_windows.ps1 -Fynstall (Join-Path (go env GOPATH) "bin\fynstall.exe") -Windowed -WithCliOnly
+
+      # Run, not only built: each says its version, and the command-line one
+      # lists the whole plan and changes nothing.
+      - name: The installers run
+        shell: bash
+        run: |
+          v="$(tr -d '[:space:]' < VERSION)"
+          "dist/hayami-$v-windows-amd64-cli-installer.exe" --version | grep -F "hayami $v installer"
+          "dist/hayami-$v-windows-amd64-cli-installer.exe" --dry-run --yes
+          "dist/hayami-$v-windows-amd64-installer.exe" --version | grep -F "hayami $v installer"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hayami-windows-installers
+          path: |
+            dist/*-windows-amd64-installer.exe
+            dist/*-windows-amd64-cli-installer.exe
+          if-no-files-found: error
+
   # The Release is published here and never by hand. Pushing a v* tag is the
   # whole of the ceremony: the job checks the tag against VERSION, builds the
-  # tarball and attaches it.
+  # tarball, takes the Windows installers the job above built, and attaches
+  # them all.
   #
-  # Linux amd64 only, for now. The desktop panel links against the system's
-  # OpenGL and X11 or Wayland libraries, so another target means a cross
-  # toolchain for each, and hayami is still experimental enough that the AUR
-  # and the other architectures are a later problem.
+  # Linux amd64 and Windows amd64, for now. The desktop panel links against
+  # the system's OpenGL and X11 or Wayland libraries, so another target means
+  # a cross toolchain for each, and hayami is still experimental enough that
+  # the AUR and the other architectures are a later problem.
   release:
     name: Release
-    needs: [test]
+    needs: [test, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -121,6 +155,20 @@ jobs:
       - name: Build the release tarball
         run: make release
 
+      # After the tarball, because `make release` empties dist/. The sums are
+      # written again so the one file covers everything attached.
+      - uses: actions/download-artifact@v4
+        with:
+          name: hayami-windows-installers
+          path: dist
+
+      - name: Add the installers to SHA256SUMS
+        run: |
+          cd dist
+          ls -l
+          sha256sum *.tar.gz *.exe > SHA256SUMS
+          cat SHA256SUMS
+
       # The notes are this version's changelog entry, not a list of commit
       # subjects: the entry is written for somebody deciding whether to
       # upgrade, the commit list for somebody who already has the diff.
@@ -142,6 +190,7 @@ jobs:
         with:
           files: |
             dist/*.tar.gz
+            dist/*.exe
             dist/SHA256SUMS
           body_path: dist/NOTES.md
           generate_release_notes: true

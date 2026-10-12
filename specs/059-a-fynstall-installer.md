@@ -106,14 +106,15 @@ It did not, in two places, and both were added to fynstall for this:
 - **Choosing start at login.** fynstall's key is in the config, so every
   install starts at login. The scripts' `-Autostart` is a choice; Windows'
   own Startup settings turn it off.
-- **Releases.** CI does not build the installer, and no release carries it,
-  until fynstall has a release with the two additions.
+- **Signing.** The installer is not signed, so Windows asks before running
+  one that was downloaded.
 
 ## Risks & Assumptions
 
-- **fynstall is not released with these changes.** go.mod requires a commit
-  of its `feat/extensions` branch, and the installer is built with
-  `-RuntimePath`. Both become a version when fynstall releases.
+- **The builder and go.mod name one fynstall.** go.mod requires fynstall
+  0.2.0, the first release with extensions, entries that start at login and
+  `--windowed`. CI installs the builder at the version go.mod names, so the
+  two cannot drift; `-RuntimePath` is for a fynstall that is not released.
 - **The module gains a dependency.** `installer/` imports fynstall, so
   hayami's go.mod requires it. Neither panel imports the package, and the
   terminal panel still builds without cgo.
