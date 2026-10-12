@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.9
+**Version**: 0.9.10
 
 *a chart you read at a glance*
 
@@ -403,7 +403,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.9.10 (2026-10-11)
 
 - **New**: an installer for Windows, built with
   [fynstall](https://github.com/ushineko/fynstall) (spec 059, #187): one
