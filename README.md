@@ -405,11 +405,11 @@ MIT. See
 
 ### Unreleased
 
-- **Security**: built with Go 1.27.2. go.mod names it as the toolchain, so
-  CI, a release and a build on a desk all use it. Releases up to 0.9.10 were
-  built with Go 1.26.0, whose standard library has known vulnerabilities in
-  `net/http`, `crypto/tls` and `crypto/x509` that hayami's code reaches;
-  `govulncheck` finds none with 1.27.2.
+- **Security**: CI and a release are built with the newest patch release of
+  Go 1.27, looked up on each run. Releases up to 0.9.10 were built with Go
+  1.26.0, whose standard library has known vulnerabilities in `net/http`,
+  `crypto/tls` and `crypto/x509` that hayami's code reaches; `govulncheck`
+  finds none with 1.27.2. A build on a desk uses the desk's Go.
 
 ### 0.9.10 (2026-10-11)
 

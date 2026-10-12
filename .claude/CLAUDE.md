@@ -220,10 +220,13 @@ tree contains, which is a different question.
 
 ## Environment
 
-- Go from `go.mod`: `go 1.26.0` is the minimum, which fynedesygn requires,
-  and the `toolchain` line is the Go that CI and a release are built with.
-  Keep the `toolchain` line at a patched release: `make vuln` reads the
-  standard library of the Go that runs it.
+- `go.mod`'s `go 1.26.0` is the minimum, which fynedesygn requires. CI and a
+  release are built with the newest patch release of the line named by
+  `GO_VERSION` in `.github/workflows/build.yml`, not with the minimum: a
+  release built with an unpatched Go ships its standard library's
+  vulnerabilities. go.mod carries no `toolchain` line, because the linter
+  refuses a newer Go than its own (the Makefile's `LINT_GO_TOOLCHAIN`).
+  `make vuln` reads the standard library of the Go that runs it.
 - Fyne needs CGO, OpenGL and X11/Wayland headers. `cmd/hayami-tui` builds
   with `CGO_ENABLED=0` and must keep doing so: the terminal panel has no
   business needing a display library.
