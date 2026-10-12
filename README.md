@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.10
+**Version**: 0.9.11
 
 *a chart you read at a glance*
 
@@ -151,7 +151,7 @@ and keeps them as the `hayami-windows-installers` artifact. To build them
 here:
 
 ```
-go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.0   # the version go.mod requires
+go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.1   # the version go.mod requires
 .\scripts\installer_windows.ps1 -Windowed -WithCliOnly
 dist\hayami-<version>-windows-amd64-installer.exe                  # the wizard
 dist\hayami-<version>-windows-amd64-cli-installer.exe --dry-run    # list every change, make none
@@ -403,7 +403,12 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.9.11 (2026-10-12)
+
+- **Fixed**: the installer run as an administrator opens its wizard. Started
+  with "Run as administrator" it showed nothing and exited. It now opens,
+  and starts the panel from its last page as you, not as an administrator
+  (fynstall 0.2.1).
 
 - **Security**: CI and a release are built with the newest patch release of
   Go 1.27, looked up on each run. Releases up to 0.9.10 were built with Go

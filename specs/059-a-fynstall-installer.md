@@ -112,8 +112,9 @@ It did not, in two places, and both were added to fynstall for this:
 ## Risks & Assumptions
 
 - **The builder and go.mod name one fynstall.** go.mod requires fynstall
-  0.2.0, the first release with extensions, entries that start at login and
-  `--windowed`. CI installs the builder at the version go.mod names, so the
+  0.2.1: 0.2.0 was the first release with extensions, entries that start at
+  login and `--windowed`, and 0.2.1 opens the wizard for an installer run
+  as an administrator. CI installs the builder at the version go.mod names, so the
   two cannot drift; `-RuntimePath` is for a fynstall that is not released.
 - **The module gains a dependency.** `installer/` imports fynstall, so
   hayami's go.mod requires it. Neither panel imports the package, and the
