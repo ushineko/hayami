@@ -13,7 +13,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.12.1
 	github.com/ushineko/fynedesygn v0.1.96
-	github.com/ushineko/fynstall v0.1.1-0.20261011214330-0dc30852a77e
+	github.com/ushineko/fynstall v0.1.2-0.20261011224913-996a797b1467
 	github.com/ushineko/sanshoku v0.1.12
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.48.0
