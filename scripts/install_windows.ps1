@@ -40,6 +40,17 @@
 .PARAMETER SkipBuild
     Install the hayami.exe and hayami-tui.exe already in the checkout.
 
+.PARAMETER BuildOnly
+    Build hayami.exe and hayami-tui.exe into the checkout and install nothing.
+    scripts/installer_windows.ps1 uses it to build what the fynstall installer
+    carries (spec 059).
+
+.PARAMETER SensorsOnly
+    Do only what -WithSensors does, and build and install nothing. The
+    installer fynstall builds runs the script this way, from a copy it
+    carries, when its sensors page is told to set LibreHardwareMonitor up
+    (spec 059).
+
 .PARAMETER Destination
     Where the programs go. Defaults to %LOCALAPPDATA%\Programs\hayami.
 
@@ -52,6 +63,8 @@ param(
     [switch] $WithSensors,
     [switch] $DryRun,
     [switch] $SkipBuild,
+    [switch] $BuildOnly,
+    [switch] $SensorsOnly,
     [string] $Destination = (Join-Path $env:LOCALAPPDATA "Programs\hayami"),
     [string] $StartMenuDir = [Environment]::GetFolderPath("Programs"),
     [string] $StartupDir = [Environment]::GetFolderPath("Startup")
@@ -67,7 +80,9 @@ function Fail($message) { Write-Host "[FAIL] $message" -ForegroundColor Red; exi
 if ($env:OS -ne "Windows_NT") { Fail "This installs for Windows; on Linux run ./install.sh." }
 
 $Root = Split-Path -Parent $PSScriptRoot
-$Version = (Get-Content (Join-Path $Root "VERSION") -Raw).Trim()
+# -SensorsOnly runs from a copy with no checkout around it, and builds nothing
+# a version would go into.
+$Version = if ($SensorsOnly) { "" } else { (Get-Content (Join-Path $Root "VERSION") -Raw).Trim() }
 $Panel = Join-Path $Destination "hayami.exe"
 $Pane = Join-Path $Destination "hayami-tui.exe"
 $Shortcut = Join-Path $StartMenuDir "hayami.lnk"
@@ -320,6 +335,16 @@ if (-not (Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)) { Sta
         [void](Confirm-Sensors $url $(if ($DryRun) { 2 } else { 30 }))
     }
     Write-FirewallNote $port
+}
+
+if ($SensorsOnly) {
+    Install-Sensors
+    exit 0
+}
+
+if ($BuildOnly) {
+    Build
+    exit 0
 }
 
 Write-Host "Installing hayami $Version from $Root"

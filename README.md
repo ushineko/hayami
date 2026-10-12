@@ -140,6 +140,32 @@ show. Installing over a running panel works: Windows renames the running copy
 to `<name>.old`, it keeps running until restarted, and the next install
 removes it.
 
+**An installer.** A release carries
+`hayami-<version>-windows-amd64-installer.exe`: one program that holds both
+panels and needs no toolchain to run, built with
+[fynstall](https://github.com/ushineko/fynstall) (spec 059). Double-click it
+for the wizard. It is a program with a window, so it shows no console, and on
+a terminal it prints but asks nothing; `…-cli-installer.exe` beside it is the
+same installer for a terminal, with no wizard. CI builds both on every run
+and keeps them as the `hayami-windows-installers` artifact. To build them
+here:
+
+```
+go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.0   # the version go.mod requires
+.\scripts\installer_windows.ps1 -Windowed -WithCliOnly
+dist\hayami-<version>-windows-amd64-installer.exe                  # the wizard
+dist\hayami-<version>-windows-amd64-cli-installer.exe --dry-run    # list every change, make none
+```
+
+It installs to the same directory, adds the Start menu shortcut and an entry
+in Settings > Apps, starts the panel at login, and puts both programs on
+`PATH`. Its Sensors page checks for LibreHardwareMonitor, says what it found,
+and offers to install and configure it; the offer is never taken for you.
+The uninstaller, in the install directory and in Settings > Apps, stops the
+panel, removes what the install added, and keeps your settings. Remove a
+copy the script installed first
+(`.\scripts\uninstall_windows.ps1`): the two do not know of each other.
+
 ## Running it
 
 ```
@@ -376,6 +402,18 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **New**: an installer for Windows, built with
+  [fynstall](https://github.com/ushineko/fynstall) (spec 059, #187): one
+  program that holds both panels, with a wizard, a command line, an entry in
+  Settings > Apps and an uninstaller. Its Sensors page checks for
+  LibreHardwareMonitor and offers to set it up. `scripts\installer_windows.ps1`
+  builds it, CI builds it on every run, and a release carries it and its
+  command-line-only twin. The one with the wizard is a program with a
+  window, so no console shows before it. `install_windows.ps1` takes
+  `-SensorsOnly` and `-BuildOnly` for it.
 
 ### 0.9.9 (2026-10-10)
 

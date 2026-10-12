@@ -2,7 +2,7 @@
 
 **Issue**: #135
 
-## Status: IMPLEMENTED — the elevated step is unrun: this desk needed none of it
+## Status: IMPLEMENTED
 
 ## Context
 
@@ -109,8 +109,8 @@ already says the setting is not honoured; the key is not one hayami needs.
   aside to `<name>.old` and the next install removes it once nothing holds
   it (`scripts/install_binary.ps1`, tested against a running program).
   The uninstaller names which of the two is running and stops.
-- [ ] The real elevated step on a machine that needs it. Not run: this desk
-  needed nothing, so no elevated step was taken.
+- [x] The real elevated step on a machine that needs it: run from the
+  installer of spec 059, on a desk with LibreHardwareMonitor removed.
 
 ## Risks & Assumptions
 
@@ -150,3 +150,5 @@ already says the setting is not honoured; the key is not one hayami needs.
 - Structure tests and core tests pass; the falsifications above each failed.
 
 2026-10-07, the real `install_windows.ps1 -WithSensors` under Windows PowerShell 5.1, with four terminal panes open from the installed copy: the build installed both programs, `hayami-tui.exe` by moving the running copy aside; the sensors steps were all in place (settings, startup task at highest privileges, running) and nothing was changed, so no UAC prompt; the check read `Core (Tctl/Tdie) 50.3 °C`. Before the move-aside the same run failed on copying `hayami-tui.exe`.
+
+2026-10-11, the elevated step for real, through the installer's hook (spec 059) on a desk with LibreHardwareMonitor removed: Windows asked twice, once for the step and once for the PawnIO driver LibreHardwareMonitor offers on its first start; afterwards the task is registered and running, `data.json` answers and `hayami-tui doctor` reads the processor at 54.1 °C.
