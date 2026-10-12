@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.10
+**Version**: 0.9.11
 
 *a chart you read at a glance*
 
@@ -403,7 +403,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.9.11 (2026-10-12)
 
 - **Fixed**: the installer run as an administrator opens its wizard. Started
   with "Run as administrator" it showed nothing and exited. It now opens,
