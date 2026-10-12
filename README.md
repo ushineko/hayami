@@ -403,6 +403,14 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Security**: built with Go 1.27.2. go.mod names it as the toolchain, so
+  CI, a release and a build on a desk all use it. Releases up to 0.9.10 were
+  built with Go 1.26.0, whose standard library has known vulnerabilities in
+  `net/http`, `crypto/tls` and `crypto/x509` that hayami's code reaches;
+  `govulncheck` finds none with 1.27.2.
+
 ### 0.9.10 (2026-10-11)
 
 - **New**: an installer for Windows, built with

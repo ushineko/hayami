@@ -220,8 +220,10 @@ tree contains, which is a different question.
 
 ## Environment
 
-- Go from `go.mod` (`go 1.26.0` minimum, which fynedesygn requires). Local
-  toolchain may be newer.
+- Go from `go.mod`: `go 1.26.0` is the minimum, which fynedesygn requires,
+  and the `toolchain` line is the Go that CI and a release are built with.
+  Keep the `toolchain` line at a patched release: `make vuln` reads the
+  standard library of the Go that runs it.
 - Fyne needs CGO, OpenGL and X11/Wayland headers. `cmd/hayami-tui` builds
   with `CGO_ENABLED=0` and must keep doing so: the terminal panel has no
   business needing a display library.
