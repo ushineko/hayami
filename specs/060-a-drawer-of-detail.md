@@ -5,10 +5,9 @@
 ## Status: INCOMPLETE
 
 Built and tested on Windows 11, with every reader read for real on both
-desks. Two things remain: the drawer has not been clicked on a Plasma
-desktop (the Linux desk was in use), and it needs a fynedesygn release after
-0.1.97 for two faults this spec's checks on the real window found there
-(Gaps found).
+desks. One thing remains: the drawer has not been clicked on a Plasma
+desktop. Two faults this spec's checks on the real window found in
+fynedesygn are fixed in its 0.1.98, which `go.mod` names (Gaps found).
 
 ## Context
 
@@ -264,9 +263,8 @@ In fynedesygn, for its own issues and specs:
   cards, for up to two seconds. Found on the installed panel, which has that
   card; this spec's test panels did not, and the cooler now shares the
   real-window tests with a usage card but still not with cells.
-- Both are fixed on fynedesygn's branch `fix/drawer-width-drift`, which the
-  local build of this spec uses. **They need a release** before this spec's
-  branch can be merged, and `go.mod` here still names 0.1.97.
+- Both are fixed in fynedesygn 0.1.98 (its issue #201), which `go.mod` here
+  names.
 - A drawer cannot have its filter taken away: `Drawer.SetFilter(nil)` leaves
   the canvas's key handlers calling a nil filter. The breakdown has no
   filter, so its key is set to one nobody can type while it shows.
