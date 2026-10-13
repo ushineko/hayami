@@ -87,6 +87,12 @@ type Config struct {
 	// panel with an active full-screen window.
 	HideForFullscreen *bool `json:"hideForFullscreen,omitempty"`
 
+	// DrawerSide is the side the detail drawer opens on (spec 060): "right",
+	// "left", or "auto" for whichever side of the panel the screen has room
+	// on. Empty is auto, which is what a settings file written before this
+	// field existed carries.
+	DrawerSide string `json:"drawerSide,omitempty"`
+
 	// X and Y are where the panel last was, in the compositor's coordinates.
 	//
 	// Kept because a Wayland client cannot place itself and cannot read
@@ -154,6 +160,26 @@ func (c Config) PanelAppearance(a fdtheme.Appearance) fdtheme.Appearance {
 	}
 	a.TextSize = c.FontSizeOr(a.TextSize)
 	return a
+}
+
+// The sides a drawer can be told to open on.
+const (
+	DrawerAuto  = "auto"
+	DrawerRight = "right"
+	DrawerLeft  = "left"
+)
+
+// DrawerSides are the sides in the order a chooser lists them.
+func DrawerSides() []string { return []string{DrawerAuto, DrawerRight, DrawerLeft} }
+
+// DrawerSideOrDefault is DrawerSide with the unset and the unknown resolved:
+// auto.
+func (c Config) DrawerSideOrDefault() string {
+	switch c.DrawerSide {
+	case DrawerRight, DrawerLeft:
+		return c.DrawerSide
+	}
+	return DrawerAuto
 }
 
 // HidesForFullscreen is HideForFullscreen with the unset nil resolved: on.

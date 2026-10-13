@@ -95,6 +95,15 @@ since what row leaves out (headings, detail lines, stats) is the
 arrangement's shape. A difference needs a reason in the test's allow-list.
 A new section adds a fixture there.
 
+A section may have **details**: what is behind its readings, for a shell
+that can show more when asked (spec 060). A source that has them implements
+`panel.Detailer`, and a detail is data, `view.Detail`, built in `view` like a
+section. A row, a meter or the section names the detail a click on it opens
+(`Opens`). A detail is read only while a shell shows it, never on the
+section's own poll. The window draws one in the design system's drawer; the
+terminal prints one from `hayami-tui detail`. A process in a detail is its
+name and nothing else: no command line, path or owner is read.
+
 ### 4. A sensor source is a provider in a chain
 
 Where a quantity has more than one possible source, the sources are providers
@@ -218,6 +227,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
+| A detail behind a reading | `Details`, `PollDetail`, `DetailInterval` and `CloseDetail` on the section's source (`panel.Detailer`), a builder in `view` that returns a `view.Detail`, and `Opens` on the row, meter or section that asks for it | It appears in the window's drawer, `hayami-tui detail`, `readings` and `doctor`. It is not polled until shown |
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | A `config.Setting` in `internal/config/sections.go`, read by the section's builder from `Env.Settings` | A `sectionPrefs` widget in `internal/prefs/sections.go`, if a person would change it more than once |
@@ -258,6 +268,8 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Settings by section | Adding things | In place | #143 |
 | Parity test that compares what the shells draw | 3 | In place | #144 |
 | `row` drawn by the window | 3 | In place | #153 |
+| Details behind a reading, drawn in the window's drawer | 3 | In place | #191 |
+| A detail view in the terminal pane | 3 | Planned | |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a

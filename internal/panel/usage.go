@@ -2,6 +2,7 @@ package panel
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"sort"
 	"sync"
@@ -41,11 +42,16 @@ type Usage struct {
 	// read gathers the accounts, replaced by a test so neither the real cache
 	// nor a real credential store is touched.
 	read func(ctx context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error)
+
+	// breakdown reads one account's breakdown by its label, replaced by a
+	// test for the reason read is.
+	breakdown func(label string) (view.UsageBreakdown, error)
 }
 
 // NewUsage builds the usage source.
 func NewUsage() *Usage {
 	u := &Usage{now: time.Now}
+	u.breakdown = cachedBreakdown(func() time.Time { return u.now() })
 	u.read = func(ctx context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error) {
 		return gather(ctx, u.now())
 	}
@@ -358,3 +364,88 @@ var codexInstalled = sync.OnceValue(func() bool {
 	_, err := exec.LookPath("codex")
 	return err == nil
 })
+
+// Details are the accounts' breakdowns, one per meter, by the label the
+// meter carries.
+func (u *Usage) Details() []view.DetailInfo {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var out []view.DetailInfo
+	seen := map[string]bool{}
+	for _, w := range u.windows {
+		if !seen[w.Account] {
+			seen[w.Account] = true
+			out = append(out, view.DetailInfo{ID: w.Account, Title: w.Account})
+		}
+	}
+	return out
+}
+
+// DetailInterval is UsageInterval: a breakdown is the same cache entry the
+// meters are read from.
+func (u *Usage) DetailInterval(string) time.Duration { return UsageInterval }
+
+// CloseDetail has nothing to let go of.
+func (u *Usage) CloseDetail(string) {}
+
+/*
+PollDetail reads one account's breakdown out of the cache.
+
+**It reads and never fetches.** The meters' poll is what goes upstream, behind
+the cache's gate; this decodes more of the entry that poll left, so opening a
+drawer costs no request and writes nothing (spec 060 R14).
+*/
+func (u *Usage) PollDetail(_ context.Context, id string) (view.Detail, error) {
+	b, err := u.breakdown(id)
+	if err != nil {
+		return unread(u.Key(), id, id, err), err
+	}
+	return view.UsageDetail(u.now(), b), nil
+}
+
+// cachedBreakdown is the breakdown of the account labelled label, from its
+// cache entry.
+func cachedBreakdown(now func() time.Time) func(label string) (view.UsageBreakdown, error) {
+	return func(label string) (view.UsageBreakdown, error) {
+		accounts, err := usage.Accounts()
+		if err != nil {
+			return view.UsageBreakdown{}, err
+		}
+		for _, a := range accounts {
+			if a.Label() != label {
+				continue
+			}
+			entry, err := usage.Read(a.Name, a.Provider)
+			if err != nil {
+				return view.UsageBreakdown{}, err
+			}
+			if entry == nil {
+				break
+			}
+			b, err := usage.Lookup(a.Provider).Breakdown(now(), usage.Served(*entry).Data)
+			if err != nil {
+				return view.UsageBreakdown{}, err
+			}
+			return breakdownView(label, b), nil
+		}
+		return view.UsageBreakdown{}, fmt.Errorf("nothing in the usage cache for %s", label)
+	}
+}
+
+// breakdownView is a breakdown as the view takes it: the same parts, in the
+// plain values of the view.
+func breakdownView(label string, b usage.Breakdown) view.UsageBreakdown {
+	out := view.UsageBreakdown{Account: label, Plan: b.Plan, SharesTitle: b.SharesTitle}
+	for _, l := range b.Limits {
+		out.Limits = append(out.Limits, view.UsageLimit{
+			Name: l.Name, Fraction: l.Fraction, ResetsAt: l.ResetsAt, Severity: l.Severity, Amount: l.Amount,
+		})
+	}
+	for _, s := range b.Shares {
+		out.Shares = append(out.Shares, view.UsageShare{Name: s.Name, Fraction: s.Fraction})
+	}
+	for _, f := range b.Facts {
+		out.Facts = append(out.Facts, view.UsageFact{Name: f.Name, Value: f.Value})
+	}
+	return out
+}

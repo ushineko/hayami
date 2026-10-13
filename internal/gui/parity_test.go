@@ -30,6 +30,13 @@ parityAllowed names a fact one shell draws and the other does not, keyed by
 the shell that lacks it and the fact, with the reason. Small on purpose: an
 entry is a decision, not a difference that crept in.
 */
+//
+// A section's details (spec 060) are not among the facts compared. The window
+// draws one in its drawer when a card is clicked; the pane has no detail view
+// and no keys to ask for one with, and prints the same view.Detail from
+// `hayami-tui detail`. That is a difference of what each shell can be asked,
+// not of what a section says, so it is stated here and has no entry: an entry
+// excuses a fact one shell draws, and neither draws a detail on a card.
 var parityAllowed = map[string]string{
 	// In row the terminal draws a usage meter as the usage widget's --tui line
 	// (spec 019): "10%" and "resets Oct 7", where the window's line keeps the
@@ -63,6 +70,7 @@ func paritySections(t *testing.T) []view.Section {
 	cooler := view.Cooler(view.CoolerReading{Probes: []view.Probe{
 		{ID: "cpu", Role: view.RoleCPU, Name: "AMD Ryzen 5 2600X", Load: view.Some(12.0), Temp: view.Some(51.5)},
 		{ID: "gpu", Role: view.RoleGPU, Name: "NVIDIA GeForce RTX 3060 Ti", Load: view.Some(4.0), Temp: view.Some(43.0)},
+		{ID: "memory", Role: view.RoleMemory, Load: view.Some(46.0), Bytes: view.Some(18.2 * (1 << 30)), Of: view.Some(39.9 * (1 << 30))},
 		{ID: "coolant", Role: view.RoleCoolant, Name: "NZXT Kraken Elite V2", Temp: view.Some(31.4)},
 		{ID: "pump", Role: view.RolePump, RPM: view.Some(2100)},
 		{ID: "fan", Role: view.RoleFan, RPM: view.Some(900)},

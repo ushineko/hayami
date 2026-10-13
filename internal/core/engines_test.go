@@ -20,7 +20,7 @@ const card3060 = "0x00000000_0x0000e985"
 func TestAGPUEngineInstanceNamesItsAdapterAndEngine(t *testing.T) {
 	in, ok := core.ParseEngineInstance("pid_4120_luid_0x00000000_0x0000E985_phys_0_eng_3_engtype_3D")
 	require.True(t, ok)
-	assert.Equal(t, core.EngineInstance{LUID: card3060, Engine: "phys_0_eng_3", Type: "3D"}, in)
+	assert.Equal(t, core.EngineInstance{PID: 4120, LUID: card3060, Engine: "phys_0_eng_3", Type: "3D"}, in)
 
 	_, ok = core.ParseEngineInstance("_Total")
 	assert.False(t, ok, "a name that is not an instance is not read as one")
@@ -105,5 +105,5 @@ func TestWhatThePlatformLeftOutIsAskedOfNvidiaSMI(t *testing.T) {
 	got := g.Read(t.Context())
 
 	assert.True(t, *asked)
-	assert.Equal(t, core.Graphics{Temperature: 40, HasTemperature: true, Load: 24, HasLoad: true, Name: "NVIDIA GeForce RTX 3060 Ti"}, got)
+	assert.Equal(t, core.Graphics{Temperature: 40, HasTemperature: true, Load: 24, HasLoad: true, Name: "NVIDIA GeForce RTX 3060 Ti", Via: "nvidia-smi"}, got)
 }

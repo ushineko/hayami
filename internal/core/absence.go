@@ -38,6 +38,19 @@ const (
 	// AbsenceWirelessDenied is Windows withholding the Wi-Fi details from a
 	// desktop app without location access.
 	AbsenceWirelessDenied AbsenceCode = "wireless-denied"
+	// AbsenceMemory is no reading of the memory in use.
+	AbsenceMemory AbsenceCode = "memory"
+	// AbsenceProcesses is no list of processes on this system.
+	AbsenceProcesses AbsenceCode = "processes"
+	// AbsenceGPUProcesses is no list of the graphics card by process on any
+	// route this platform tried.
+	AbsenceGPUProcesses AbsenceCode = "gpu-processes"
+	// AbsenceNetProcesses is no list of the network by process on this
+	// system.
+	AbsenceNetProcesses AbsenceCode = "net-processes"
+	// AbsenceNetProcessesDenied is Windows refusing the trace session the
+	// network by process is read from, to a user who is not an administrator.
+	AbsenceNetProcessesDenied AbsenceCode = "net-processes-denied"
 	// AbsencePermission is a device the system would not let this program
 	// open.
 	AbsencePermission AbsenceCode = "permission"

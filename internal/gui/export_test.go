@@ -2,6 +2,7 @@ package gui
 
 import (
 	"image/color"
+	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
@@ -365,3 +366,103 @@ func Show(p *Panel, keys []string) { p.setShown(keys) }
 
 // Shown reports whether a section is polled.
 func Shown(p *Panel, key string) bool { return p.isShown(key) }
+
+// QueueDraws makes every draw wait for the test to run it, on the test's own
+// goroutine, as the UI thread runs them in the program. The function it
+// returns runs what is waiting and reports how many it ran.
+func QueueDraws(p *Panel) (drain func() int) {
+	var mu sync.Mutex
+	var waiting []func()
+	p.do = func(f func()) {
+		mu.Lock()
+		waiting = append(waiting, f)
+		mu.Unlock()
+	}
+	return func() int {
+		mu.Lock()
+		run := waiting
+		waiting = nil
+		mu.Unlock()
+		for _, f := range run {
+			f()
+		}
+		return len(run)
+	}
+}
+
+// Tap clicks a card: on the row with the ID given, on the meter numbered
+// from nought, or with an empty ID and a negative number on the card itself.
+func Tap(p *Panel, key, rowID string, meter int) {
+	c := p.cards[key]
+	tap := glance.Tap{Card: c.card}
+	if rowID != "" {
+		tap.Row = c.card.RowByID(rowID)
+	}
+	if meter >= 0 {
+		tap.Meter = c.meters[meter]
+	}
+	p.win.Panel().OnTapped(tap)
+}
+
+// DrawerOpen reports whether the drawer is out, and DrawerTitle its heading.
+func DrawerOpen(p *Panel) bool    { return p.win.Panel().Drawer().Open() }
+func DrawerTitle(p *Panel) string { return p.win.Panel().Drawer().Title() }
+
+// DrawerSubject is the section and the detail the drawer is open on.
+func DrawerSubject(p *Panel) (section, id string) { return p.drawer.section, p.drawer.id }
+
+// DrawerLines are the lines the drawer shows, top to bottom, each its texts
+// joined; DrawerNotes the lines under them; DrawerMeters the labels of the
+// meters above them.
+func DrawerLines(p *Panel) []string     { return shownRows(p.drawer.rows) }
+func DrawerNoteLines(p *Panel) []string { return shownRows(p.drawer.notes) }
+
+func shownRows(rows []*glance.Row) []string {
+	var out []string
+	for _, r := range rows {
+		if r.Shown() {
+			out = append(out, strings.Join(visibleTexts(r.Object()), "|"))
+		}
+	}
+	return out
+}
+
+// DrawerMeterCount is how many meters the content of the drawer holds.
+func DrawerMeterCount(p *Panel) int { return p.drawer.shownMeters }
+
+// DrawerFit is how many lines the drawer has room for under its filter.
+func DrawerFit(p *Panel) int {
+	return p.win.Panel().Drawer().Fit(p.drawer.rows[0], p.drawer.filter)
+}
+
+// FilterType types into the panel as a person would, and FilterKey presses a
+// key. FilterText is what the filter holds.
+func FilterType(p *Panel, text string) {
+	for _, r := range text {
+		p.drawer.filter.TypedRune(r)
+	}
+}
+func FilterKey(p *Panel, name fyne.KeyName) { p.drawer.filter.TypedKey(&fyne.KeyEvent{Name: name}) }
+func FilterText(p *Panel) string            { return p.drawer.filter.Text() }
+
+// DrawerSide is the side the drawer is set to and whether it chooses by
+// room.
+func DrawerSide(p *Panel) (side glance.Side, auto bool) {
+	dr := p.win.Panel().Drawer()
+	return dr.Side(), dr.Auto()
+}
+
+// CloseDrawer closes the drawer as a click on its subject does.
+func CloseDrawer(p *Panel) { p.closeDrawer() }
+
+// AsksNothing reports whether the panel's drawer has no compositor to ask,
+// which is what a panel built without a Desk must be.
+func AsksNothing(p *Panel) bool {
+	_, none := p.drawer.desk.(noDesk)
+	return none
+}
+
+// DrawerOnSide is the side the drawer is on now: a left drawer whose
+// window cannot grow leftwards opens on the right, so this is where it
+// ended up and not only where it was asked to be.
+func DrawerOnSide(p *Panel) glance.Side { return p.win.Panel().Drawer().Side() }

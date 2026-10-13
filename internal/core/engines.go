@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -17,6 +18,9 @@ engine index; the type ("3D", "Copy", "VideoDecode") is what Task Manager
 labels the engine with.
 */
 type EngineInstance struct {
+	// PID is the process the instance counts, which a list of the card by
+	// process is built from (spec 060). Zero where the name carries none.
+	PID    int
 	LUID   string
 	Engine string
 	Type   string
@@ -25,10 +29,11 @@ type EngineInstance struct {
 // ParseEngineInstance reads an instance name, and whether it is one. The LUID
 // is lower-cased, so it compares equal to LUIDString's.
 func ParseEngineInstance(name string) (EngineInstance, bool) {
-	_, rest, ok := strings.Cut(name, "_luid_")
+	head, rest, ok := strings.Cut(name, "_luid_")
 	if !ok {
 		return EngineInstance{}, false
 	}
+	pid, _ := strconv.Atoi(strings.TrimPrefix(head, "pid_"))
 	luid, rest, ok := strings.Cut(rest, "_phys_")
 	if !ok {
 		return EngineInstance{}, false
@@ -37,7 +42,7 @@ func ParseEngineInstance(name string) (EngineInstance, bool) {
 	if !ok {
 		return EngineInstance{}, false
 	}
-	return EngineInstance{LUID: strings.ToLower(luid), Engine: "phys_" + engine, Type: kind}, true
+	return EngineInstance{PID: pid, LUID: strings.ToLower(luid), Engine: "phys_" + engine, Type: kind}, true
 }
 
 // LUIDString is an adapter's LUID in the form the counter names carry it,
@@ -78,4 +83,26 @@ func BusiestEngine(values map[string]float64, luid string) (float64, bool) {
 		busiest = max(busiest, min(v, 100))
 	}
 	return busiest, true
+}
+
+/*
+BusiestByProcess is each process's use of an adapter: its busiest engine, as
+the adapter's own figure is the busiest engine (BusiestEngine), so a process
+that is all of the card's load reads the same as the card does.
+
+An instance with no process ID in its name is passed over. A process with
+every engine idle is listed at nought: it holds the card open, which is a
+fact a person looking for it wants.
+*/
+func BusiestByProcess(values map[string]float64, luid string) map[int]float64 {
+	luid = strings.ToLower(luid)
+	out := map[int]float64{}
+	for name, v := range values {
+		in, ok := ParseEngineInstance(name)
+		if !ok || in.LUID != luid || in.PID == 0 {
+			continue
+		}
+		out[in.PID] = max(out[in.PID], min(v, 100))
+	}
+	return out
 }

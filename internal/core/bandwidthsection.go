@@ -103,6 +103,10 @@ func (b *BandwidthSection) SetWirelessReader(read func(context.Context) (map[str
 	b.readWireless, b.probed = read, false
 }
 
+// SetClock replaces a section's clock, for a test that polls faster than the
+// wall clock is guaranteed to move.
+func (b *BandwidthSection) SetClock(now func() time.Time) { b.now = now }
+
 // Interval is BandwidthInterval.
 func (b *BandwidthSection) Interval() time.Duration { return BandwidthInterval }
 

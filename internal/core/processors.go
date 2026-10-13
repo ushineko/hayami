@@ -159,6 +159,12 @@ type Graphics struct {
 	// Name is the card's model, "NVIDIA GeForce RTX 4090", from nvidia-smi
 	// or from the PCI ID database, and empty where neither had one.
 	Name string `json:"name,omitempty"`
+
+	// Via is the provider the temperature came from, where that decides
+	// which card a list of its processes is about (spec 060): the name
+	// nvidia-smi goes by for a card on the driver NVIDIA ships, empty
+	// otherwise.
+	Via string `json:"-"`
 }
 
 /*
@@ -248,6 +254,7 @@ func (g *GraphicsReader) ReadOutcome(ctx context.Context) Outcome[Graphics] {
 func mergeGraphics(have, got Graphics) (Graphics, bool) {
 	if !have.HasTemperature && got.HasTemperature {
 		have.Temperature, have.HasTemperature = got.Temperature, true
+		have.Via = got.Via
 	}
 	if !have.HasLoad && got.HasLoad {
 		have.Load, have.HasLoad = got.Load, true
@@ -301,6 +308,7 @@ func (g *GraphicsReader) smi(ctx context.Context) (Graphics, error) {
 	}
 	var out Graphics
 	out.Name = SMIName(text)
+	out.Via = smiName
 	out.Temperature, out.Load, out.HasTemperature, out.HasLoad = ParseSMI(text)
 	if !out.HasTemperature && !out.HasLoad && out.Name == "" {
 		return Graphics{}, errNothing

@@ -41,7 +41,7 @@ section is not polled at all.
 |---|---|---|
 | Peripherals | Battery level and charging state of mice, keyboards, headsets and game controllers, a cell per kind of device | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, the DualSense over USB or Bluetooth, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
 | Bandwidth | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
-| Cooler | Processor and graphics card load and temperature, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
+| Cooler | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
 | Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
 
 The sections can be laid out three ways, in either panel:
@@ -53,6 +53,44 @@ The sections can be laid out three ways, in either panel:
 
 A usage reading that is more than five minutes old stays on screen and is
 marked stale: dim in the terminal, with its age in the window's hover note.
+
+### What is behind a reading
+
+In the window, a click on a card opens a drawer beside the panel, as tall as
+the cards, with what the card has no room for. A second click on the same
+thing closes it, and a click on something else changes what it shows.
+
+| Click on | The drawer shows | Where it reads from |
+|---|---|---|
+| The processor's row | Programs by processor time, as a share of the whole machine | `/proc/<pid>/stat` on Linux; the system's process table on Windows |
+| The memory's row | Programs by the memory they hold | `/proc/<pid>/statm` on Linux; the private working set on Windows |
+| The graphics card's row | Programs by their busiest engine on that card | The `GPU Engine` counters on Windows; DRM fdinfo on Linux, and `nvidia-smi pmon` for a card on NVIDIA's own driver |
+| The bandwidth card | Programs by download and upload rate | TCP socket counters on Linux; event tracing on Windows, where Windows allows it |
+| A usage meter | That account's limits, what the week went on, extra usage and credits | The same cache entry the meter is read from; opening the drawer makes no request |
+
+A list is as long as the drawer is tall and does not scroll, greatest first.
+Press `f` to filter it by name, with a regular expression if you like; Return
+keeps the filter and Escape clears it. Programs with one name are one line.
+A program is shown by its name and never by its command line, its path or
+its owner.
+
+Nothing here is read until the drawer is open, and it stops when the drawer
+closes. The drawer opens on whichever side of the panel the screen has room
+on; Preferences, Window can name a side.
+
+The network list is partial and says so under the list:
+
+- **Linux** counts TCP only. UDP and QUIC have no per-socket counters without
+  privileges hayami does not ask for, so video calls and much of a browser's
+  traffic are missing. A socket whose program your user cannot see is counted
+  under "other".
+- **Windows** gives the network by program only through event tracing, which
+  it allows an administrator or a member of the Performance Log Users group.
+  hayami asks for neither, so on most desks the drawer says "needs an
+  administrator". Where it is allowed, the list counts TCP and UDP.
+
+The terminal panel has no drawer. `hayami-tui detail` prints the same detail
+once.
 
 ## Screenshots
 
@@ -177,6 +215,8 @@ hayami-tui --sections usage --arrangement row
 hayami-tui --once                         # one frame, for a prompt or status line
 hayami-tui readings                       # the readings as JSON, no display needed
 hayami-tui doctor                         # what each section found, and why not
+hayami-tui detail cooler/cpu              # what is behind a reading: programs by processor
+hayami-tui detail bandwidth --json        # ... by network use, as JSON
 hayami-tui arrangements                   # the values --arrangement takes
 ```
 
@@ -197,7 +237,8 @@ The preferences window has four pages:
 - **Sections**: which sections show, their order (the panel follows at once),
   the arrangement, and which network interfaces the bandwidth section watches.
 - **Window**: the panel's fonts and text size, how opaque its cards are, the
-  KWin rule on Linux, and on Windows whether it hides for a full-screen app.
+  KWin rule on Linux, the side the detail drawer opens on, and on Windows
+  whether it hides for a full-screen app.
 - **Appearance**: the preferences window's own colour scheme, fonts and scale.
 - **About**: the version, where files live, and this README.
 
@@ -348,11 +389,19 @@ and `hayami window remove` check and undo it). Without the rule the panel has
 a titlebar. KWin already places an active full-screen window over the panel,
 so the Windows hide-for-full-screen option is not needed there.
 
+The detail drawer needs KWin for three things a Wayland program cannot do
+itself: learn how much room is beside the panel, grow leftwards, and give the
+keyboard back to the window you were in. hayami loads small KWin scripts for
+these while it runs and unloads them when it stops. Without KWin the drawer
+opens on the right and the panel keeps the keyboard after a click.
+
 #### Not yet confirmed on Linux
 
 Recent work was tested on Windows. On Linux, these have not yet been checked
 on hardware: the AULA F75, the Wi-Fi row through nl80211, and KWin covering
-the panel for a full-screen app.
+the panel for a full-screen app. The detail drawer's lists were read on
+Linux from the command line; the drawer itself has not been clicked on a
+Plasma desktop.
 
 ## Architecture
 
@@ -402,6 +451,20 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **New**: a drawer of detail beside the panel (spec 060, #191). A click on a
+  card opens it: programs by processor time, by memory, by use of the
+  graphics card and by network rate, and an account's limits behind its usage
+  meter. Press `f` in a list to filter it. Nothing is read until the drawer
+  is open. Preferences, Window chooses the side.
+- **New**: the cooler card has a memory row, the share and the amount in use.
+- **New**: `hayami-tui detail <section>[/<id>]` prints a detail once, as text
+  or with `--json`. `readings` and `doctor` list each section's details.
+- The network list is partial: TCP only on Linux, and on Windows only where
+  event tracing is allowed, which is an administrator's. The drawer says
+  which.
 
 ### 0.9.11 (2026-10-12)
 

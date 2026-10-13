@@ -106,3 +106,65 @@ func hwmonSensors(root string, sensors []hwmon.Sensor) []Provider[float64] {
 	}
 	return out
 }
+
+// memoryChain is one provider of the memory in use, under the name a person
+// is told was tried.
+func memoryChain(name string, read func(context.Context) (Memory, error)) Chain[Memory] {
+	return Chain[Memory]{Providers: []Provider[Memory]{ProviderFunc[Memory]{N: name, F: read}}}
+}
+
+// linuxMemory is the account the kernel gives, MemTotal less MemAvailable.
+func linuxMemory(path string) Chain[Memory] {
+	return memoryChain(path, func(context.Context) (Memory, error) { return ProcMemory(path) })
+}
+
+// windowsMemory is GlobalMemoryStatusEx, read through read.
+func windowsMemory(read func(context.Context) (Memory, error)) Chain[Memory] {
+	return memoryChain("GlobalMemoryStatusEx", read)
+}
+
+// memoryMissing is the account of no memory reading: what was asked, or that
+// this build asks nothing here.
+func memoryMissing(tried []string, err error) *Absence {
+	detail := "this build reads no memory on this system"
+	if len(tried) > 0 {
+		detail = "asked " + strings.Join(tried, ", ")
+	}
+	return &Absence{Code: AbsenceMemory, Detail: detail, Err: err}
+}
+
+/*
+linuxGPUProcesses is the card by process, for the card whose reading came by
+via (spec 060 R10).
+
+DRM fdinfo first, for the drivers that publish it, and nvidia-smi last: it is
+a subprocess, and is run only when the kernel had nothing. A card whose own
+reading came from nvidia-smi is on the driver that publishes no fdinfo, and
+another card in the machine may publish plenty, so for that card nvidia-smi
+is the only provider: the list has to be of the card the row is about.
+*/
+func linuxGPUProcesses(fdinfo, pmon func(context.Context) ([]GPUProcess, error)) func(via string) Chain[[]GPUProcess] {
+	kernel := ProviderFunc[[]GPUProcess]{N: fdinfoName, F: fdinfo}
+	tool := ProviderFunc[[]GPUProcess]{N: pmonName, F: pmon}
+	return func(via string) Chain[[]GPUProcess] {
+		if via == smiName {
+			return Chain[[]GPUProcess]{Providers: []Provider[[]GPUProcess]{tool}}
+		}
+		return Chain[[]GPUProcess]{Providers: []Provider[[]GPUProcess]{kernel, tool}}
+	}
+}
+
+// engineName is what the GPU Engine counters are called in a reason.
+const engineName = "the GPU Engine counters"
+
+// windowsGPUProcesses is the card by process from the GPU Engine counters,
+// whichever provider the reading of the card came from: they count every
+// vendor.
+func windowsGPUProcesses(engines func(context.Context) ([]GPUProcess, error)) func(string) Chain[[]GPUProcess] {
+	return func(string) Chain[[]GPUProcess] {
+		return Chain[[]GPUProcess]{Providers: []Provider[[]GPUProcess]{ProviderFunc[[]GPUProcess]{N: engineName, F: engines}}}
+	}
+}
+
+// noGPUProcesses is a platform with no route to the card by process.
+func noGPUProcesses(string) Chain[[]GPUProcess] { return Chain[[]GPUProcess]{} }

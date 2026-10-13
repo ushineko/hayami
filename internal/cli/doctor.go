@@ -61,6 +61,10 @@ type Finding struct {
 	// hover; a report has no hover, so it prints them under the summary.
 	Names []string
 
+	// Details are what each detail the section offers found, read once: a
+	// line each, and the reasons of one that could not be read (spec 060).
+	Details []view.Detail
+
 	// Err is a poll that failed outright, as distinct from a section that
 	// reported what it could not read.
 	Err error
@@ -102,6 +106,17 @@ func diagnose(ctx context.Context, on map[string]bool, sources []panel.Source) [
 			f.State = StateAbsent
 		default:
 			f.State = StateSilent
+		}
+		if on[s.Key()] {
+			read := details(ctx, s)
+			ids := make([]string, 0, len(read))
+			for id := range read {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				f.Details = append(f.Details, read[id])
+			}
 		}
 		out = append(out, f)
 	}
@@ -218,6 +233,18 @@ func Report(w io.Writer, findings []Finding) error {
 				}
 			}
 		}
+		for _, d := range f.Details {
+			if err := line(w, "", "", detailText(d)); err != nil {
+				return err
+			}
+			for _, r := range d.Reasons {
+				if r.Detail != "" {
+					if err := line(w, "", "", "  "+r.Detail); err != nil {
+						return err
+					}
+				}
+			}
+		}
 		if f.Err != nil {
 			if err := line(w, "", "", "! "+f.Err.Error()); err != nil {
 				return err
@@ -225,6 +252,32 @@ func Report(w io.Writer, findings []Finding) error {
 		}
 	}
 	return nil
+}
+
+// detailText is one detail as a line of the report: its ID and heading, and
+// how much it holds or why it holds nothing.
+func detailText(d view.Detail) string {
+	lead := "detail " + d.ID + ": "
+	if d.Title != "" && d.Title != d.ID {
+		lead += d.Title + ", "
+	}
+	if len(d.Reasons) > 0 {
+		return lead + d.Reasons[0].Text
+	}
+	parts := []string{}
+	if n := len(d.Meters); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d limits", n))
+	}
+	if n := len(d.Lines); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d lines", n))
+	}
+	if d.Note != "" {
+		parts = append(parts, d.Note)
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "nothing yet")
+	}
+	return lead + strings.Join(parts, ", ")
 }
 
 // reasonText is a reason as one line of the report, marked when it is a

@@ -9,6 +9,7 @@ is already open.
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,6 +123,10 @@ type Reading struct {
 	Data    any          `json:"data"`
 	Reasons []JSONReason `json:"reasons,omitempty"`
 	Error   string       `json:"error,omitempty"`
+
+	// Details are what is behind the section's readings, each read once, by
+	// its ID (spec 060): the processes, an account's limits.
+	Details map[string]view.Detail `json:"details,omitempty"`
 }
 
 // JSONReason is a view.Reason with its status spelled out. The view's Status
@@ -199,6 +204,7 @@ func Readings(w io.Writer, sources []panel.Source, poll func(panel.Source) error
 		}
 		r.Data = s.Data()
 		r.Reasons = reasons(s.Section().Reasons)
+		r.Details = details(context.Background(), s)
 		out[s.Key()] = r
 	}
 

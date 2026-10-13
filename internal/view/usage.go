@@ -80,7 +80,11 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 			Strip:      strip(now, group, lead),
 			Fraction:   lead.Fraction,
 			Status:     verdict(lead),
+			Opens:      group[0].Account,
 		})
+	}
+	if len(s.Meters) > 0 {
+		s.Opens = s.Meters[0].Opens
 	}
 
 	// An old reading is drawn dim with its age as an aside, never as a line:
@@ -438,4 +442,83 @@ func itoa(v int) string {
 		v /= 10
 	}
 	return string(b[i:])
+}
+
+/*
+UsageBreakdown is everything a provider said about one account, measured and
+not yet formatted: what a meter on the card has no room for (spec 060 R13).
+
+Every part is optional. The providers' payloads differ, change, and leave keys
+null, so a part that is absent is a line left out and never an error.
+*/
+type UsageBreakdown struct {
+	// Account is what the card calls the account, and the detail's ID.
+	Account string
+	// Plan is the plan's name where the provider gives one.
+	Plan string
+
+	// Limits are the quotas, each drawn as a meter.
+	Limits []UsageLimit
+
+	// SharesTitle heads Shares: what the week went on.
+	SharesTitle string
+	Shares      []UsageShare
+
+	// Facts are what is neither a quota nor a share: extra usage, a spend,
+	// credits.
+	Facts []UsageFact
+}
+
+// UsageLimit is one quota of a breakdown.
+type UsageLimit struct {
+	Name     string
+	Fraction float64
+	ResetsAt time.Time
+	// Severity is the provider's own verdict, where it gives one.
+	Severity string
+	// Amount is the used and limit values of a limit that reports them.
+	Amount string
+}
+
+// UsageShare is one part of a whole: a product's share of the week.
+type UsageShare struct {
+	Name     string
+	Fraction float64
+}
+
+// UsageFact is a named value with no bar: "Extra usage", "off".
+type UsageFact struct {
+	Name  string
+	Value string
+}
+
+// UsageDetail turns a breakdown into a detail: a meter per limit, the shares
+// as a list under their heading, then the facts (spec 060 R15).
+func UsageDetail(now time.Time, b UsageBreakdown) Detail {
+	d := Detail{Section: UsageInfo.Key, ID: b.Account, Title: b.Account}
+	for _, l := range b.Limits {
+		d.Meters = append(d.Meters, Meter{
+			Label:      l.Name,
+			Caption:    Percent(l.Fraction),
+			StatsRight: l.Amount,
+			Reset:      resets(now, l.ResetsAt),
+			Fraction:   l.Fraction,
+			Status:     verdict(UsageWindow{Fraction: l.Fraction, Severity: l.Severity}),
+		})
+	}
+	if b.Plan != "" {
+		d.Lines = append(d.Lines, DetailLine{Name: "Plan", Value: b.Plan})
+	}
+	for _, f := range b.Facts {
+		d.Lines = append(d.Lines, DetailLine{Name: f.Name, Value: f.Value})
+	}
+	if len(b.Shares) > 0 {
+		d.Lines = append(d.Lines, DetailLine{Name: b.SharesTitle, Heading: true})
+		for _, s := range b.Shares {
+			d.Lines = append(d.Lines, DetailLine{
+				Name: truncate(s.Name, DetailNameWidth), Value: Percent(s.Fraction),
+			})
+		}
+	}
+	return d
 }

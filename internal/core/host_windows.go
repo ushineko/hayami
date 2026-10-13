@@ -30,6 +30,11 @@ func NewHost(cfg HostConfig) Host {
 		CPUName:        registryCPUName,
 		Counters:       ReadCounters,
 		Wireless:       ReadWireless,
+		Memory:         windowsMemory(globalMemory),
+		MemoryMissing:  memoryMissing,
+		Processes:      func() *ProcessList { return NewProcessList(systemProcesses) },
+		GPUProcesses:   &gpuProcesses{chain: windowsGPUProcesses(engineProcesses()), samples: systemProcesses},
+		NetProcesses:   func() NetReader { return newNetReader(systemProcesses) },
 		Permission:     PermissionAbsence,
 	}
 }

@@ -105,7 +105,7 @@ func TestAnNvidiaCardIsNamedByNvidiaSMI(t *testing.T) {
 	}
 
 	assert.Equal(t, core.Graphics{Temperature: 40, HasTemperature: true, Load: 31, HasLoad: true,
-		Name: "NVIDIA GeForce RTX 4090"}, g.Read(t.Context()))
+		Name: "NVIDIA GeForce RTX 4090", Via: "nvidia-smi"}, g.Read(t.Context()))
 }
 
 // An answer without the third column, or one that does not know, is no name.

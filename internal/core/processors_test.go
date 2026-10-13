@@ -133,7 +133,7 @@ func TestACardTheKernelCannotReadIsAskedOfNvidiaSMI(t *testing.T) {
 		SMI: func(context.Context) (string, error) { return "40, 31\n", nil },
 	}
 
-	assert.Equal(t, core.Graphics{Temperature: 40, HasTemperature: true, Load: 31, HasLoad: true}, g.Read(t.Context()))
+	assert.Equal(t, core.Graphics{Temperature: 40, HasTemperature: true, Load: 31, HasLoad: true, Via: "nvidia-smi"}, g.Read(t.Context()))
 }
 
 // No sensor and no nvidia-smi is no GPU, and not an error: most machines

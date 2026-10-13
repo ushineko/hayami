@@ -13,6 +13,10 @@ import (
 // no Linux path is assumed. Its device drivers are the HID ones sanshoku finds
 // nothing with here.
 func NewHost(HostConfig) Host {
+	none := func(context.Context) ([]ProcessSample, error) {
+		return nil, &Absence{Code: AbsenceProcesses, Text: "not available",
+			Detail: "this build reads no processes on this system", Err: errors.ErrUnsupported}
+	}
 	return Host{
 		Platform:   "other",
 		CPUMissing: otherCPUMissing,
@@ -23,9 +27,16 @@ func NewHost(HostConfig) Host {
 				return 0, 0, fmt.Errorf("processor load: %w", errors.ErrUnsupported)
 			})
 		},
-		CPUName:    func() string { return "" },
-		Counters:   ReadCounters,
-		Wireless:   func(context.Context) (map[string]Wireless, error) { return nil, nil },
+		CPUName:       func() string { return "" },
+		Counters:      ReadCounters,
+		Wireless:      func(context.Context) (map[string]Wireless, error) { return nil, nil },
+		MemoryMissing: memoryMissing,
+		Processes:     func() *ProcessList { return NewProcessList(none) },
+		GPUProcesses:  &gpuProcesses{chain: noGPUProcesses, samples: none},
+		NetProcesses: func() NetReader {
+			return noNet{&Absence{Code: AbsenceNetProcesses, Text: "not available",
+				Detail: "this build reads no network by process on this system", Err: errors.ErrUnsupported}}
+		},
 		Permission: PermissionAbsence,
 	}
 }

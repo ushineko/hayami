@@ -74,6 +74,9 @@ func (e Env) bandwidth() Source {
 	}
 	b := NewBandwidth(names, e.Host.Counters)
 	b.SetWirelessReader(e.Host.Wireless)
+	if e.Host.NetProcesses != nil {
+		b.SetNetProcesses(e.Host.NetProcesses)
+	}
 	return b
 }
 

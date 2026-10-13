@@ -26,6 +26,7 @@ type Role string
 const (
 	RoleCPU     Role = "cpu"
 	RoleGPU     Role = "gpu"
+	RoleMemory  Role = "memory"
 	RoleCoolant Role = "coolant"
 	RoleFan     Role = "fan"
 	RolePump    Role = "pump"
@@ -63,6 +64,12 @@ type Probe struct {
 	Temp Opt[float64] `json:"temp"`
 	RPM  Opt[int]     `json:"rpm"`
 
+	// Bytes is an amount in use and Of the whole it is part of, both in
+	// bytes: the memory's (spec 060). Its Load is the one as a percentage of
+	// the other.
+	Bytes Opt[float64] `json:"bytes,omitzero"`
+	Of    Opt[float64] `json:"of,omitzero"`
+
 	// Trail is the probe's recent samples for the plot, oldest first: the
 	// coolant raw, a processor's already averaged (the monitor's sixty-second
 	// mean -- a processor swings thirty-five degrees on a compile and the raw
@@ -89,6 +96,9 @@ const (
 	kindProcessor rowKind = iota
 	// kindTemperature is a temperature, coloured by the role's bands.
 	kindTemperature
+	// kindAmount is a share and the amount it is, uncoloured: the memory in
+	// use, in the columns a processor's load and temperature take.
+	kindAmount
 	// kindSpeed is a speed, drawn with every other speed on the one Speeds
 	// row: a fan and a pump are two numbers of the same kind and a panel
 	// 260 px wide has better uses for a second row.
@@ -109,6 +119,9 @@ type roleSpec struct {
 	series bool
 	// word names a speed on the Speeds row.
 	word string
+	// opens is the ID of the detail a click on the role's row asks for
+	// (spec 060); empty for a role with none.
+	opens string
 }
 
 /*
@@ -122,8 +135,9 @@ and colouring the processor would make every compilation look like a fault.
 The coolant is: its bands are the pump's own alarm.
 */
 var coolerRoles = []roleSpec{
-	{role: RoleCPU, label: "CPU", kind: kindProcessor, series: true},
-	{role: RoleGPU, label: "GPU", kind: kindProcessor, series: true},
+	{role: RoleCPU, label: "CPU", kind: kindProcessor, series: true, opens: DetailCPU},
+	{role: RoleGPU, label: "GPU", kind: kindProcessor, series: true, opens: DetailGPU},
+	{role: RoleMemory, label: "Memory", kind: kindAmount, opens: DetailMemory},
 	{role: RoleCoolant, label: "Coolant", kind: kindTemperature, bands: &CoolantBands},
 	{role: RoleFan, label: "Fan", kind: kindSpeed, word: "fan"},
 	{role: RolePump, label: "Pump", kind: kindSpeed, word: "pump"},
@@ -166,7 +180,8 @@ func instances(r CoolerReading) []instance {
 // order, the speeds together on one, and a trace per probe with samples.
 func Cooler(r CoolerReading) Section {
 	s := CoolerInfo.section()
-	unit := UnitWidth("°C", "rpm")
+	s.Opens = DetailCPU
+	unit := UnitWidth(append([]string{"°C", "rpm"}, byteUnits...)...)
 	all := instances(r)
 
 	// Each row is labelled with the part it reads (spec 031): a machine has
@@ -188,6 +203,11 @@ func Cooler(r CoolerReading) Section {
 				continue
 			}
 			row = named(temperature(in.label, in.Temp.V, in.spec.verdict(in.Temp.V), unit), in.label, in.Name)
+		case kindAmount:
+			if !in.Bytes.OK {
+				continue
+			}
+			row = amount(in.label, in.Load.V, in.Load.OK, in.Bytes.V, unit)
 		case kindSpeed:
 			if in.RPM.OK {
 				speeds = append(speeds, in.spec.word+" "+strings.TrimSpace(Count(in.RPM.V)))
@@ -195,6 +215,7 @@ func Cooler(r CoolerReading) Section {
 			continue
 		}
 		row.ID = in.ID
+		row.Opens = in.spec.opens
 		row.Stale = in.Stale
 		s.Rows = append(s.Rows, row)
 	}
@@ -261,6 +282,18 @@ func processor(label string, load float64, hasLoad bool, v float64, hasTemp bool
 		return Row{Label: label, Value: l + " " + strings.Repeat(" ", NumberWidth), Unit: PadUnit("", unit), Status: Info}
 	}
 	return Row{Label: label, Value: l + " " + Quantity(v), Unit: PadUnit("°C", unit), Status: Info}
+}
+
+// amount is a share and the amount it is on one line, in a processor's
+// columns: " 43 %  13.6 GiB". The share is spaces of its own width where the
+// whole is not known.
+func amount(label string, share float64, hasShare bool, bytes float64, unit int) Row {
+	l := strings.Repeat(" ", LoadWidth)
+	if hasShare {
+		l = fmt.Sprintf("%3.0f %%", share)
+	}
+	n, u := Size(bytes)
+	return Row{Label: label, Value: l + " " + n, Unit: PadUnit(u, unit), Status: Info}
 }
 
 // temperature is one degree reading, at the fixed width every one shares.

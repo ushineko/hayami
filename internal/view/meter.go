@@ -58,6 +58,10 @@ type Meter struct {
 
 	Fraction float64
 	Status   Status
+
+	// Opens is the ID of the detail a click on this meter asks for, within
+	// its section (spec 060): an account's breakdown. Empty for none.
+	Opens string `json:",omitempty"`
 }
 
 // Strip is a meter laid out along one line of a pane: the window the bar is

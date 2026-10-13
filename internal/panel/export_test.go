@@ -106,3 +106,16 @@ func SetCPUName(c *Cooler, name func() string) { c.cpuName = name }
 // RememberIn keeps a source's memory of devices in a test's file, and loads
 // what is already there (spec 032).
 func RememberIn(p *Peripherals, path string) { p.remember(path) }
+
+// SetBandwidthClock steps the clock the bandwidth source measures a rate
+// against, so two polls in a test are a known time apart.
+func SetBandwidthClock(b *Bandwidth, now func() time.Time) { b.SetClock(now) }
+
+// SetUsageNow replaces the usage source's clock.
+func SetUsageNow(u *Usage, now func() time.Time) { u.now = now }
+
+// SetUsageBreakdown replaces where an account's breakdown is read from, so a
+// test reads one without a cache directory.
+func SetUsageBreakdown(u *Usage, read func(label string) (view.UsageBreakdown, error)) {
+	u.breakdown = read
+}

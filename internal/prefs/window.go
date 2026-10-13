@@ -14,6 +14,7 @@ import (
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 	"github.com/ushineko/fynedesygn/widgets"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/desktop"
 )
 
@@ -71,6 +72,25 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 	fullscreen.SetChecked(c.HidesForFullscreen())
 	fullscreen.OnChanged = func(on bool) { w.setHideForFullscreen(on) }
 
+	sides := map[string]string{
+		config.DrawerAuto:  "Where there is room",
+		config.DrawerRight: "Right",
+		config.DrawerLeft:  "Left",
+	}
+	var sideNames []string
+	for _, side := range config.DrawerSides() {
+		sideNames = append(sideNames, sides[side])
+	}
+	side := widget.NewSelect(sideNames, nil)
+	side.SetSelected(sides[c.DrawerSideOrDefault()])
+	side.OnChanged = func(name string) {
+		for key, label := range sides {
+			if label == name {
+				w.setDrawerSide(key)
+			}
+		}
+	}
+
 	items := []fyne.CanvasObject{
 		widgets.DimWrapped("The panel's own faces and size. This window keeps the ones on its " +
 			"Appearance screen: the two are read at different distances."),
@@ -97,6 +117,11 @@ func (w *Window) buildWindow(s *shell.Shell) fyne.CanvasObject {
 		container.NewBorder(nil, nil, nil, value, slider),
 		widgets.DimWrapped("Drawn by the panel itself, so it works on any desktop."),
 	)
+	items = append(items,
+		widget.NewSeparator(),
+		container.NewBorder(nil, nil, widget.NewLabel("Detail drawer"), nil, side),
+		widgets.DimWrapped("A click on a card opens its detail beside the panel: the processes behind "+
+			"a reading, the limits behind a meter. Press f in a list to filter it."))
 	if desktop.HidesForFullscreen {
 		items = append(items,
 			widget.NewSeparator(),
@@ -136,6 +161,13 @@ func (w *Window) setFontSize(size float32) {
 func (w *Window) setOpacity(opacity int) {
 	c := w.opts.Store.Config()
 	c.Opacity = opacity
+	w.save(c)
+}
+
+// setDrawerSide saves the side the detail drawer opens on.
+func (w *Window) setDrawerSide(side string) {
+	c := w.opts.Store.Config()
+	c.DrawerSide = side
 	w.save(c)
 }
 
