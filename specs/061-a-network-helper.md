@@ -210,5 +210,5 @@ Windows 11, build 26200, on the desk this was written at.
 
 Not verified here: Windows' prompt for an administrator from the wizard. The
 shell these ran from was elevated, where no prompt is shown. The Network
-page's look in the real wizard was checked by eye and not by a test that
-reads its pixels.
+page in the real wizard has a headless test of what it holds and no test
+that reads its pixels.
