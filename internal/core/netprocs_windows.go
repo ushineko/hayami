@@ -20,16 +20,44 @@ network provider, Microsoft-Windows-Kernel-Network, raises an event for each
 send and receive with the process and the size, and a real-time trace session
 that listens to it is what Resource Monitor is.
 
-**Windows keeps a trace session for administrators** and members of
-Performance Log Users. hayami runs as the person at the desk, asks for no
-elevation and installs nothing, so on most desks the session is refused and
-the list is a typed absence that says what is needed. Where it is allowed the
-list counts TCP and UDP both, which Linux's cannot.
+**Windows keeps the provider for administrators.** Its access list names
+SYSTEM, Local Service and Administrators, so membership of Performance Log
+Users starts a session and is still refused the provider (measured, spec
+061). hayami runs as the person at the desk and asks for no elevation, so the
+list comes from the network helper, a service the installer sets up when
+asked (nethelper_windows.go). Without it the list is a typed absence that
+says what is needed. The list counts TCP and UDP both, which Linux's cannot.
 */
 
-// newNetReader is Windows' network by process.
+/*
+newNetReader is Windows' network by process: the helper where one is
+installed, and this process's own trace where it is not, which Windows allows
+only a panel started as an administrator.
+
+The helper is asked first on every reading, so one installed while the panel
+runs is found without a restart, and so two programs never start a session of
+the same name: the second would stop the first's.
+*/
 func newNetReader(samples func(context.Context) ([]ProcessSample, error)) NetReader {
-	return &traceNet{samples: samples, now: time.Now}
+	return &chainNet{
+		helper: newHelperNet(samples),
+		own:    &traceNet{samples: samples, now: time.Now},
+	}
+}
+
+type chainNet struct{ helper, own NetReader }
+
+func (c *chainNet) Read(ctx context.Context) (NetUse, error) {
+	use, err := c.helper.Read(ctx)
+	if !errors.Is(err, errNoNetHelper) {
+		return use, err
+	}
+	return c.own.Read(ctx)
+}
+
+func (c *chainNet) Close() {
+	c.helper.Close()
+	c.own.Close()
 }
 
 var (
@@ -188,47 +216,56 @@ var (
 // Read is each process's rate since the previous call. The first call starts
 // the session and has no rate.
 func (t *traceNet) Read(ctx context.Context) (NetUse, error) {
-	t.mu.Lock()
-	if t.denied != nil {
-		defer t.mu.Unlock()
-		return NetUse{}, t.denied
+	counts, elapsed, err := t.take()
+	if err != nil {
+		return NetUse{}, err
 	}
-	use := NetUse{Counts: "TCP and UDP"}
+	return netUse(ctx, t.samples, traceCounts, counts, elapsed), nil
+}
+
+// traceCounts is what an event trace counts, which Linux's sockets cannot.
+const traceCounts = "TCP and UDP"
+
+// take is the bytes counted since the previous call and how long that was.
+// The first call starts the session and has neither.
+func (t *traceNet) take() (map[uint32][2]uint64, float64, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.denied != nil {
+		return nil, 0, t.denied
+	}
 	now := t.now()
 	t.readAt = now
 	if t.session == 0 {
 		err := t.start()
 		t.lastAt = now
-		t.mu.Unlock()
-		if err != nil {
-			return NetUse{}, err
-		}
-		return use, nil
+		return nil, 0, err
 	}
 	counts, elapsed := t.counts, now.Sub(t.lastAt).Seconds()
 	t.counts, t.lastAt = map[uint32][2]uint64{}, now
-	t.mu.Unlock()
-
-	if elapsed <= 0 {
-		return use, nil
-	}
-	use.HasRate = true
-	names := map[int]string{}
-	if samples, err := t.samples(ctx); err == nil {
-		for _, p := range samples {
-			names[p.PID] = p.Name
-		}
-	}
-	for pid, c := range counts {
-		p := NetProcess{PID: int(pid), Name: names[int(pid)],
-			Rx: float64(c[0]) / elapsed, Tx: float64(c[1]) / elapsed}
-		if p.Name == "" {
-			p.PID = 0 // gone since it sent: still traffic, under "other"
-		}
-		use.Processes = append(use.Processes, p)
-	}
-	return use, nil
+	return counts, elapsed, nil
 }
+
+/*
+NetTrace is the trace with nothing made of it: the bytes each process sent
+and received since it was last asked. It is what the network helper serves
+(spec 061), which runs with the right to trace and gives the panel only these
+numbers.
+*/
+type NetTrace struct{ t *traceNet }
+
+// NewNetTrace is a trace that starts when it is first asked.
+func NewNetTrace() *NetTrace { return &NetTrace{t: &traceNet{now: time.Now}} }
+
+// Take is the bytes received and sent by each process ID since the previous
+// call. The first call starts the session and returns nothing.
+func (n *NetTrace) Take() (map[uint32][2]uint64, error) {
+	counts, _, err := n.t.take()
+	return counts, err
+}
+
+// Close stops the session. A later Take starts another.
+func (n *NetTrace) Close() { n.t.Close() }
 
 // start makes the session, turns the provider on and begins reading. The
 // caller holds the lock.
@@ -260,9 +297,10 @@ func (t *traceNet) start() error {
 	if r != 0 {
 		err := syscall.Errno(r)
 		if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
-			t.denied = &Absence{Code: AbsenceNetProcessesDenied, Text: "needs an administrator",
-				Detail: "Windows gives the network by process only through event tracing, which it allows " +
-					"an administrator or a member of Performance Log Users; hayami does not ask for elevation",
+			t.denied = &Absence{Code: AbsenceNetProcessesDenied, Text: "needs hayami's helper",
+				Detail: "Windows gives the network by process only to an administrator, and hayami runs as you. " +
+					"Its network helper reads it for the panel: run hayami's installer again and choose it, " +
+					"or run `hayami-tui network-helper install`",
 				Err: err}
 			return t.denied
 		}

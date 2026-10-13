@@ -48,8 +48,9 @@ const (
 	// AbsenceNetProcesses is no list of the network by process on this
 	// system.
 	AbsenceNetProcesses AbsenceCode = "net-processes"
-	// AbsenceNetProcessesDenied is Windows refusing the trace session the
-	// network by process is read from, to a user who is not an administrator.
+	// AbsenceNetProcessesDenied is Windows refusing the network by process
+	// to a panel that is not an administrator and has no network helper
+	// (spec 061), or has one installed for another account.
 	AbsenceNetProcessesDenied AbsenceCode = "net-processes-denied"
 	// AbsencePermission is a device the system would not let this program
 	// open.

@@ -3,13 +3,15 @@ Package installer is hayami's own code in its installer and uninstaller
 (spec 059): what fynstall, which builds them from fynstall.yaml, cannot be
 told in a config file.
 
-It is one page and two hooks. The page checks for LibreHardwareMonitor,
+It is two pages and two hooks. One page checks for LibreHardwareMonitor,
 which is where the panel reads the processor's temperature on Windows (spec
-036), says what it found, and offers to install and configure it. The offer
-is never taken for the person: LibreHardwareMonitor is a second program, it
-runs as administrator, and it loads a kernel driver. After the install, a
-hook does what the page was told. Before an uninstall, another stops the
-panel, so Windows lets its files go.
+036), says what it found, and offers to install and configure it. The other
+does the same for hayami's network helper, the service behind the bandwidth
+card's list of programs (spec 061). Neither offer is taken for the person:
+each puts something on the machine that an administrator has to agree to.
+After the install, a hook does what the pages were told. Before an
+uninstall, another stops the panel, so Windows lets its files go, and
+removes the helper when hayami is going for good.
 
 This file builds without a window. The page's window is in window.go, which
 a command-line-only installer leaves out.
@@ -36,6 +38,13 @@ const (
 // PageSensors is the page's ID.
 const PageSensors = "sensors"
 
+// ParamNetwork is the parameter the network page sets, declared in
+// fynstall.yaml: Yes to install the network helper, No to leave it.
+const ParamNetwork = "network"
+
+// PageNetwork is the network page's ID.
+const PageNetwork = "network"
+
 // Extension is what fynstall links into the installer and the uninstaller.
 // The name is fixed.
 var Extension = extension.Extension{
@@ -44,6 +53,10 @@ var Extension = extension.Extension{
 		// Before the summary, the zero place: the last question.
 		Sets: []string{ParamSensors},
 		CLI:  sensorsCLI,
+	}, {
+		ID:   PageNetwork,
+		Sets: []string{ParamNetwork},
+		CLI:  networkCLI,
 	}},
 	AfterInstall:    afterInstall,
 	BeforeUninstall: beforeUninstall,
@@ -58,64 +71,110 @@ var probe = probeSensors
 var setUp = setUpSensors
 
 /*
-sensorsCLI is the page on the command line: what was found, what setting it
-up does, and one question. Where there is nothing to ask (it is set up
-already, or this is not Windows) it says so and asks nothing.
+offering is what a page that offers one thing says: what the check found,
+the question, what saying yes does, and what a person is agreeing to. Both
+pages are one of these, in a window and on the command line.
 */
-func sensorsCLI(ctx context.Context, c *extension.Context, p extension.Prompter) error {
-	s := probe(ctx)
-	if !s.Applies {
-		return c.SetParam(ParamSensors, No) //nolint:wrapcheck // names the parameter
+type offering interface {
+	// applies is false where there is nothing to check, and the page is
+	// passed over.
+	applies() bool
+	// Found says what the check found, in a sentence or two.
+	Found() string
+	// Offer is the question, or "" when there is nothing to offer.
+	Offer() string
+	// Steps are what saying yes does, in order.
+	Steps() []string
+	why() string
+	caution() string
+}
+
+/*
+askCLI is a page on the command line: what was found, what saying yes does,
+and one question. Where there is nothing to ask it says so and asks nothing,
+and the parameter is no whatever a flag said: nothing is set up twice.
+*/
+func askCLI(param string, o offering, c *extension.Context, p extension.Prompter) error {
+	if !o.applies() {
+		return c.SetParam(param, No) //nolint:wrapcheck // names the parameter
 	}
 	p.Say("")
-	p.Say(s.Found())
-	offer := s.Offer()
+	p.Say(o.Found())
+	offer := o.Offer()
 	if offer == "" {
-		return c.SetParam(ParamSensors, No) //nolint:wrapcheck // names the parameter
+		return c.SetParam(param, No) //nolint:wrapcheck // names the parameter
 	}
 	p.Say("")
-	p.Say(Why)
-	for _, step := range s.Steps() {
+	p.Say(o.why())
+	for _, step := range o.Steps() {
 		p.Say("  - " + step)
 	}
-	p.Say(Caution)
+	p.Say(o.caution())
 	ok, err := p.Confirm(offer + "?")
 	if err != nil {
-		return fmt.Errorf("asking about LibreHardwareMonitor: %w", err)
+		return fmt.Errorf("asking %q: %w", offer, err)
 	}
 	value := No
 	if ok {
 		value = Yes
 	}
-	return c.SetParam(ParamSensors, value) //nolint:wrapcheck // names the parameter
+	return c.SetParam(param, value) //nolint:wrapcheck // names the parameter
+}
+
+// sensorsCLI is the sensors page on the command line.
+func sensorsCLI(ctx context.Context, c *extension.Context, p extension.Prompter) error {
+	return askCLI(ParamSensors, probe(ctx), c, p)
+}
+
+// networkCLI is the network page on the command line.
+func networkCLI(_ context.Context, c *extension.Context, p extension.Prompter) error {
+	return askCLI(ParamNetwork, probeNet(c), c, p)
 }
 
 /*
-afterInstall sets LibreHardwareMonitor up when the page was told to. hayami
+afterInstall sets up what the pages were told to. hayami
 is installed by now and works without it, so nothing here fails the install:
 what went wrong is a warning in the installer's log, and the panel's own
 reason line says what is missing afterwards.
 */
 func afterInstall(ctx context.Context, c *extension.Context) error {
-	if c.Param(ParamSensors) != Yes {
-		return nil
+	if c.Param(ParamSensors) == Yes {
+		c.Log(extension.Info, "Setting up LibreHardwareMonitor, for the processor's temperature")
+		if err := setUp(ctx, c); err != nil {
+			c.Logf(extension.Warn, "LibreHardwareMonitor was not set up, and hayami is installed without it: %v", err)
+		}
 	}
-	c.Log(extension.Info, "Setting up LibreHardwareMonitor, for the processor's temperature")
-	if err := setUp(ctx, c); err != nil {
-		c.Logf(extension.Warn, "LibreHardwareMonitor was not set up, and hayami is installed without it: %v", err)
+	if c.Param(ParamNetwork) == Yes {
+		c.Log(extension.Info, "Installing the network helper, for the bandwidth card's list of programs")
+		if err := setUpNet(ctx, c); err != nil {
+			c.Logf(extension.Warn, "The network helper was not installed, and hayami is installed without it: %v", err)
+		} else if n := probeNet(c); n.State.Installed {
+			c.Logf(extension.Info, "The network helper is installed (%s)", n.State.Version)
+		}
 	}
 	return nil
 }
 
 /*
 beforeUninstall stops the panel and the terminal panel that run from the
-install directory. Windows does not remove the file of a running program,
+install directory, and removes the network helper with an uninstall. Windows does not remove the file of a running program,
 and an uninstall, or the first half of an upgrade, that leaves hayami.exe
 behind has not removed hayami.
 */
-func beforeUninstall(_ context.Context, c *extension.Context) error {
+func beforeUninstall(ctx context.Context, c *extension.Context) error {
 	for _, name := range stopPrograms(c.Root()) {
 		c.Logf(extension.Info, "Stopped %s, which was running", name)
+	}
+	// The helper outlives an upgrade: its program is a copy in Program
+	// Files, and the page offers to bring it up to date. An uninstall takes
+	// it too, while the program that removes it is still here.
+	if !c.Upgrade() && probeNet(c).State.Installed {
+		c.Log(extension.Info, "Removing the network helper; Windows asks for an administrator")
+		if err := removeNet(ctx, c); err != nil {
+			c.Logf(extension.Warn, "The network helper was not removed: %v. "+
+				"To remove it, as an administrator: hayami-tui network-helper remove, "+
+				"or sc.exe delete hayami-network", err)
+		}
 	}
 	return nil
 }

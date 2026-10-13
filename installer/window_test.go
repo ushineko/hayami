@@ -47,14 +47,14 @@ func labels(o fyne.CanvasObject) []string {
 }
 
 // built is the sensors page, built and entered, on a machine in state s.
-func built(t *testing.T, s Sensors, sensors string) (*sensorsPage, fyne.CanvasObject) {
+func built(t *testing.T, s Sensors, sensors string) (*offerPage, fyne.CanvasObject) {
 	t.Helper()
 	test.NewApp()
 	inline(t)
 	answer(t, s)
 	build, ok := gui.Lookup(PageSensors)
 	require.True(t, ok, "the page has no window registered")
-	page, ok := build(install(sensors, nil)).(*sensorsPage)
+	page, ok := build(install(sensors, nil)).(*offerPage)
 	require.True(t, ok)
 	content := page.Build(nil)
 	page.Enter(nil)

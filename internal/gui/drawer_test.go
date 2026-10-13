@@ -355,7 +355,7 @@ func TestADetailThatCouldNotBeReadShowsItsReason(t *testing.T) {
 	src := newDetailSource("bandwidth", view.Section{Title: "Bandwidth", Opens: "processes",
 		Rows: []view.Row{{ID: "eth0", Label: "eth0", Value: "1"}}}, map[string]view.Detail{
 		"processes": {Section: "bandwidth", ID: "processes", Title: "Bandwidth by process",
-			Reasons: []view.Reason{{Text: "needs an administrator", Detail: "a long sentence nobody draws"}}},
+			Reasons: []view.Reason{{Text: "needs hayami's helper", Detail: "a long sentence nobody draws"}}},
 	})
 	p, await := drawerPanel(t, src)
 
@@ -363,7 +363,7 @@ func TestADetailThatCouldNotBeReadShowsItsReason(t *testing.T) {
 	await("the reason", func() bool { return len(gui.DrawerNoteLines(p)) == 1 })
 
 	assert.Equal(t, "Bandwidth by process", gui.DrawerTitle(p))
-	assert.Equal(t, []string{"needs an administrator"}, gui.DrawerNoteLines(p))
+	assert.Equal(t, []string{"needs hayami's helper"}, gui.DrawerNoteLines(p))
 	assert.Empty(t, gui.DrawerLines(p))
 }
 

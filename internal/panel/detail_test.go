@@ -346,7 +346,7 @@ func TestTheBandwidthNoteHoldsToWhatItKnows(t *testing.T) {
 // in the reader's own words, and names what is needed.
 func TestTheBandwidthListWithoutATraceIsATypedAbsence(t *testing.T) {
 	reader := &netReader{err: &core.Absence{Code: core.AbsenceNetProcessesDenied,
-		Text: "needs an administrator", Detail: "only an administrator may trace"}}
+		Text: "needs hayami's helper", Detail: "only an administrator may trace"}}
 	b := bandwidthWith(t, 8000, 2000, reader)
 
 	d, err := b.PollDetail(t.Context(), view.DetailProcesses)
@@ -357,7 +357,7 @@ func TestTheBandwidthListWithoutATraceIsATypedAbsence(t *testing.T) {
 	assert.Equal(t, core.AbsenceNetProcessesDenied, a.Code)
 	assert.Empty(t, d.Lines)
 	require.Len(t, d.Reasons, 1)
-	assert.Equal(t, "needs an administrator", d.Reasons[0].Text)
+	assert.Equal(t, "needs hayami's helper", d.Reasons[0].Text)
 	assert.Equal(t, "only an administrator may trace", d.Reasons[0].Detail)
 	assert.Equal(t, "Bandwidth by process", d.Title)
 }

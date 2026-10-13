@@ -162,6 +162,14 @@ place updates the guide's Status table in the same PR.
   takes requests that set fan speeds -- and matches sensors by label, never by
   index. It is never installed unasked: `install_windows.ps1 -WithSensors` is
   the one opt-in route.
+- **The network by process on Windows is the network helper's** (spec 061).
+  Windows gives it only to an administrator, and the panel never runs as one.
+  The helper is a service, `hayami-network`, that runs as Local Service and
+  only while a panel reads it; its program is a copy of `hayami-tui` in
+  Program Files, and it writes process IDs and byte counts down a one-way
+  pipe that one account may open. It is never installed unasked: the
+  installer's Network page, `install_windows.ps1 -WithNetwork` and
+  `hayami-tui network-helper install` are the opt-in routes.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that

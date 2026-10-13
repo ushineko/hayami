@@ -31,6 +31,10 @@ type Sensors struct {
 	Problem string
 }
 
+func (s Sensors) applies() bool   { return s.Applies }
+func (s Sensors) why() string     { return Why }
+func (s Sensors) caution() string { return Caution }
+
 // Ready reports whether hayami already reads the temperature: there is
 // nothing to set up.
 func (s Sensors) Ready() bool { return s.Reading != "" }

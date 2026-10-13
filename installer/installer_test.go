@@ -63,8 +63,8 @@ func install(value string, logged *[]string) *extension.Context {
 		App:      extension.App{ID: "io.ushineko.hayami", Name: "hayami", Version: "0.0.0"},
 		Scope:    func() string { return "user" },
 		Root:     func() string { return "" },
-		Params:   map[string]string{ParamSensors: value},
-		Declared: []string{ParamSensors},
+		Params:   map[string]string{ParamSensors: value, ParamNetwork: No},
+		Declared: []string{ParamSensors, ParamNetwork},
 		Log: func(_ extension.Level, text string) {
 			if logged != nil {
 				*logged = append(*logged, text)
@@ -168,8 +168,9 @@ func TestTheHookSetsUpOnlyWhenAskedAndNeverFailsTheInstall(t *testing.T) {
 func TestTheExtensionKeepsFynstallsRules(t *testing.T) {
 	config := readRoot(t, "fynstall.yaml")
 	require.Regexp(t, `(?m)^  - name: `+ParamSensors+`$`, config, "fynstall.yaml does not declare the page's parameter")
+	require.Regexp(t, `(?m)^  - name: `+ParamNetwork+`$`, config, "fynstall.yaml does not declare the network page's parameter")
 	require.Regexp(t, `(?m)^extension: \./installer$`, config)
-	require.NoError(t, Extension.Check([]string{ParamSensors}))
+	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork}))
 	require.NotNil(t, Extension.AfterInstall)
 	require.NotNil(t, Extension.BeforeUninstall)
 }

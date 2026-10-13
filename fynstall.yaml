@@ -58,11 +58,18 @@ parameters:
     label: Set up LibreHardwareMonitor
     description: "yes installs and configures LibreHardwareMonitor, where the panel reads the processor's temperature on Windows"
     default: "no"
+  # Set by the network page. On the command line: --network=yes. "no" unless
+  # a person says otherwise: the helper is a Windows service, and installing
+  # one takes an administrator.
+  - name: network
+    label: Install the network helper
+    description: "yes installs hayami's network helper, the service the bandwidth card's list of programs is read from on Windows"
+    default: "no"
 
 ui:
   launch: bin/hayami{exe}
 
-# hayami's own installer code: the page that checks for LibreHardwareMonitor
-# and offers to set it up, and the hooks that do it and that stop the panel
-# before an uninstall.
+# hayami's own installer code: the pages that check for LibreHardwareMonitor
+# and for the network helper and offer to set each up, and the hooks that do
+# it, that stop the panel before an uninstall and that remove the helper.
 extension: ./installer
