@@ -208,7 +208,11 @@ Windows 11, build 26200, on the desk this was written at.
 - `network-helper remove`: the service and `C:\Program Files\hayami` are
   gone, and the same medium-integrity read says "needs hayami's helper".
 
-Not verified here: Windows' prompt for an administrator from the wizard. The
-shell these ran from was elevated, where no prompt is shown. The Network
-page in the real wizard has a headless test of what it holds and no test
-that reads its pixels.
+- The wizard, started without elevation and gone through by hand by the
+  desk's user with the Network box ticked: reported working. Afterwards
+  `sc qc` shows the service registered for that account, `DEMAND_START`
+  under `NT AUTHORITY\LocalService`.
+
+The Network page in the real wizard has a headless test of what it holds and
+no test that reads its pixels; what it looks like was seen by a person and
+not by a test.
