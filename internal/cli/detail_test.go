@@ -114,14 +114,14 @@ func TestDetailPrintsAnAbsenceWithoutWaiting(t *testing.T) {
 		stub:    stub{key: "bandwidth", drawn: true},
 		offered: []view.DetailInfo{{ID: "processes", Title: "Bandwidth by process"}},
 		readings: map[string][]view.Detail{"processes": {{Title: "Bandwidth by process", Reasons: []view.Reason{
-			{Text: "needs an administrator", Detail: "only an administrator may trace"},
+			{Text: "needs hayami's helper", Detail: "only an administrator may trace"},
 		}}}},
 	}
 	var out bytes.Buffer
 
 	require.NoError(t, cli.Detail(t.Context(), &out, []panel.Source{src}, "bandwidth", false, time.Hour))
 
-	assert.Equal(t, "Bandwidth by process\n  needs an administrator\n    only an administrator may trace\n", out.String())
+	assert.Equal(t, "Bandwidth by process\n  needs hayami's helper\n    only an administrator may trace\n", out.String())
 	assert.Equal(t, 1, src.reads["processes"])
 }
 

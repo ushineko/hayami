@@ -39,6 +39,20 @@ if ($running -and -not $DryRun) {
 
 Write-Host "Removing hayami ..."
 $removed = 0
+# The network helper (spec 061) is removed by the program that installed it,
+# so before that program goes. Windows asks for an administrator.
+if (Get-Service hayami-network -ErrorAction SilentlyContinue) {
+    $removed++
+    if ($DryRun) {
+        Write-Host "  would remove the network helper: $Pane network-helper remove (Windows asks for an administrator)"
+    } elseif (Test-Path $Pane) {
+        & $Pane network-helper remove | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Host "  removed the network helper" }
+        else { Write-Host "  the network helper was not removed; as administrator: sc.exe delete hayami-network" }
+    } else {
+        Write-Host "  the network helper is installed and $Pane is not here to remove it; as administrator: sc.exe delete hayami-network"
+    }
+}
 $paths = @(
     (Join-Path $StartupDir "hayami.lnk"),
     (Join-Path $StartMenuDir "hayami.lnk"),

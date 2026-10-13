@@ -84,10 +84,11 @@ The network list is partial and says so under the list:
   privileges hayami does not ask for, so video calls and much of a browser's
   traffic are missing. A socket whose program your user cannot see is counted
   under "other".
-- **Windows** gives the network by program only through event tracing, which
-  it allows an administrator or a member of the Performance Log Users group.
-  hayami asks for neither, so on most desks the drawer says "needs an
-  administrator". Where it is allowed, the list counts TCP and UDP.
+- **Windows** gives the network by program only to an administrator, and the
+  panel runs as you. The list is read from hayami's network helper, a service
+  the installer sets up when asked (see
+  [The network helper](#the-network-helper)). Without it the drawer says
+  "needs hayami's helper". With it, the list counts TCP and UDP.
 
 The terminal panel has no drawer. `hayami-tui detail` prints the same detail
 once.
@@ -167,12 +168,15 @@ gcc on `PATH`, or finds the one winget installed.
 .\scripts\install_windows.ps1               # both programs and a Start menu shortcut
 .\scripts\install_windows.ps1 -Autostart    # and start the panel when you log in
 .\scripts\install_windows.ps1 -WithSensors  # and LibreHardwareMonitor, for the CPU temperature
+.\scripts\install_windows.ps1 -WithNetwork  # and the network helper, for bandwidth by program
 .\scripts\install_windows.ps1 -DryRun       # show what it would do, change nothing
 .\scripts\uninstall_windows.ps1             # remove those, keeping your settings
 ```
 
 Everything is per user, under `%LOCALAPPDATA%\Programs\hayami`: no
-administrator rights, no registry writes, no `PATH` changes. The programs
+administrator rights, no registry writes, no `PATH` changes. The two
+exceptions are opt-in and each asks Windows for an administrator once:
+`-WithSensors` and `-WithNetwork`. The programs
 carry hayami's icon and version, which the Start menu and a file's Properties
 show. Installing over a running panel works: Windows renames the running copy
 to `<name>.old`, it keeps running until restarted, and the next install
@@ -217,6 +221,7 @@ hayami-tui readings                       # the readings as JSON, no display nee
 hayami-tui doctor                         # what each section found, and why not
 hayami-tui detail cooler/cpu              # what is behind a reading: programs by processor
 hayami-tui detail bandwidth --json        # ... by network use, as JSON
+hayami-tui network-helper                 # Windows: whether the network helper is installed
 hayami-tui arrangements                   # the values --arrangement takes
 ```
 
@@ -356,6 +361,42 @@ Settings, Privacy & security, Location, "Let desktop apps access your
 location". Without it the Wi-Fi row shows what it can, and the hover note and
 `doctor` say why the rest is blank.
 
+#### The network helper
+
+The drawer behind the bandwidth card lists programs by network rate. Windows
+gives that only to an administrator: the kernel's network provider is open to
+SYSTEM, Local Service and Administrators, and membership of Performance Log
+Users does not change it (measured on Windows 11). hayami does not run as an
+administrator, so the list comes from a helper. It is optional. Without it
+the drawer says "needs hayami's helper" and the rest of the panel is as it
+is.
+
+The installer's Network page offers it, `--network=yes` asks for it on the
+command line, and from a checkout it is `install_windows.ps1 -WithNetwork` or
+`hayami-tui network-helper install`. Windows asks for an administrator once.
+What that does:
+
+- copies `hayami-tui.exe` to `%ProgramFiles%\hayami\hayami-network.exe`,
+  where only an administrator can change it;
+- registers the service `hayami-network` to run that copy as Local Service,
+  which is not an administrator, started on demand;
+- lets your account, and no other, start the service and read its pipe.
+
+The service runs only while a panel shows the list: opening the drawer starts
+it, and it stops itself about fifteen seconds after the drawer closes. It
+sends process IDs and byte counts down a pipe and reads nothing back.
+
+```
+hayami-tui network-helper          # installed or not, which version, running or not
+hayami-tui network-helper install  # install it, or put this version in its place
+hayami-tui network-helper remove   # stop it, unregister it, remove its program
+```
+
+Uninstalling hayami removes it, and asks for an administrator to. An upgrade
+leaves it in place and working; the installer's Network page offers to bring
+it up to the new version. It serves one account: installing it from a second
+account on the same computer moves it to that account.
+
 ### Linux
 
 #### The udev rule
@@ -451,6 +492,19 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **New**: on Windows the bandwidth card's list of programs works without
+  running the panel as an administrator (spec 061, #194). An opt-in network
+  helper reads it: a service that runs as Local Service, only while the list
+  is open, and hands the panel process IDs and byte counts. The installer's
+  Network page offers it, as do `--network=yes`,
+  `install_windows.ps1 -WithNetwork` and `hayami-tui network-helper install`.
+  Windows asks for an administrator once. Uninstalling hayami removes it.
+- **Change**: without the helper the list says "needs hayami's helper", where
+  it said "needs an administrator". Membership of Performance Log Users does
+  not give the list, as 0.10.0 said it did.
 
 ### 0.10.0 (2026-10-13)
 

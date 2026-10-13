@@ -10,7 +10,8 @@
 
     Everything is per-user: no administrator rights, no registry writes, no
     PATH changes -- except with -WithSensors, whose one elevated step sets up
-    LibreHardwareMonitor. Re-running is safe. uninstall_windows.ps1 removes
+    LibreHardwareMonitor, and -WithNetwork, whose one elevated step registers
+    hayami's network helper. Re-running is safe. uninstall_windows.ps1 removes
     exactly what this writes for hayami and leaves your settings.
 
     The desktop panel links OpenGL through cgo, so the build needs an x86_64
@@ -33,6 +34,15 @@
     through that task. The settings, the task and the start are one elevated
     step, so Windows asks (UAC) once. It ends by checking that data.json has a
     processor temperature, and says which step is missing if not.
+
+.PARAMETER WithNetwork
+    Also install hayami's network helper, which is where the panel reads the
+    network by program on Windows (spec 061). Opt-in, because it is a Windows
+    service and registering one takes an administrator. It runs the installed
+    hayami-tui's own `network-helper install`: that copies hayami-tui to
+    Program Files, registers the service hayami-network to run the copy as
+    Local Service, and lets your account start it. Windows asks (UAC) once.
+    The service runs only while a panel shows the list.
 
 .PARAMETER DryRun
     Say what would be done and change nothing. Needs neither Go nor gcc.
@@ -61,6 +71,7 @@
 param(
     [switch] $Autostart,
     [switch] $WithSensors,
+    [switch] $WithNetwork,
     [switch] $DryRun,
     [switch] $SkipBuild,
     [switch] $BuildOnly,
@@ -377,6 +388,17 @@ if ($Autostart) {
     New-Shortcut $Startup $Panel
 }
 if ($WithSensors) { Install-Sensors }
+if ($WithNetwork) {
+    Write-Step "The network helper, for the bandwidth card's list of programs"
+    if ($DryRun) {
+        Write-Note "would run: $Pane network-helper install"
+        Write-Note "which copies hayami-tui to Program Files, registers the service hayami-network as Local Service,"
+        Write-Note "and lets your account start it: one elevated step, Windows asks (UAC) once"
+    } else {
+        & $Pane network-helper install
+        if ($LASTEXITCODE -ne 0) { Write-Note "not installed; the panel runs without the list of programs." }
+    }
+}
 
 Write-Host ""
 Write-Host "Done."
@@ -390,4 +412,7 @@ if (-not $Autostart) {
 }
 if (-not $WithSensors) {
     Write-Host "  .\scripts\install_windows.ps1 -WithSensors  and LibreHardwareMonitor, for the CPU temperature"
+}
+if (-not $WithNetwork) {
+    Write-Host "  .\scripts\install_windows.ps1 -WithNetwork  and the network helper, for bandwidth by program"
 }

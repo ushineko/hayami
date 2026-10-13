@@ -187,6 +187,38 @@ func socketInode(target string) (uint32, bool) {
 	return uint32(n), true
 }
 
+/*
+netUse makes a reading of the bytes each process ID received and sent over
+elapsed seconds. A process that is gone since it sent has no name, and its
+bytes are counted under no process, which the panel calls "other". With no
+time passed there is no rate, which is the first reading's answer.
+*/
+func netUse(ctx context.Context, samples func(context.Context) ([]ProcessSample, error),
+	what string, counts map[uint32][2]uint64, elapsed float64) NetUse {
+	use := NetUse{Counts: what}
+	if elapsed <= 0 {
+		return use
+	}
+	use.HasRate = true
+	names := map[int]string{}
+	if samples != nil {
+		if got, err := samples(ctx); err == nil {
+			for _, p := range got {
+				names[p.PID] = p.Name
+			}
+		}
+	}
+	for pid, c := range counts {
+		p := NetProcess{PID: int(pid), Name: names[int(pid)],
+			Rx: float64(c[0]) / elapsed, Tx: float64(c[1]) / elapsed}
+		if p.Name == "" {
+			p.PID = 0
+		}
+		use.Processes = append(use.Processes, p)
+	}
+	return use
+}
+
 // noNet is a platform this build reads no network by process on.
 type noNet struct{ absence *Absence }
 

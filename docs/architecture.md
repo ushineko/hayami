@@ -201,6 +201,14 @@ adds a table, not a ladder.
 - **Network:** the usage providers' APIs, and LibreHardwareMonitor's
   `data.json` over loopback. A new network destination needs a Discussion
   first.
+- **No elevation of its own.** The panel never runs as an administrator and
+  never asks to. The one reading Windows keeps for an administrator, the
+  network by process, comes from the network helper (`internal/nethelper`,
+  spec 061): a service that runs as Local Service, only while a panel reads
+  it, whose program is a copy in Program Files and whose pipe is one-way and
+  open to one account. It is never installed unasked. A second reading that
+  needs a right the panel lacks goes through the same helper, by a spec, and
+  not through a second service.
 - **No kernel driver of its own.** Where the OS needs one, as for the
   processor's temperature on Windows, hayami reads a program that has one
   (LibreHardwareMonitor) and never installs it unasked.
@@ -270,6 +278,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | `row` drawn by the window | 3 | In place | #153 |
 | Details behind a reading, drawn in the window's drawer | 3 | In place | #191 |
 | A detail view in the terminal pane | 3 | Planned | |
+| The network helper: a reading that needs a right the panel lacks | 9 | In place | #194 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a
