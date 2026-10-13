@@ -224,6 +224,7 @@ func (p *Panel) showDetail(src panel.Detailer, section, id string) {
 	dr := p.win.Panel().Drawer()
 	dr.SetTitle(d.detail.Title)
 	start := func() {
+		p.drawerOut.Store(true)
 		dr.SetOpen(true)
 		p.renderDrawer()
 		p.pollDetail(src, id)
@@ -339,6 +340,7 @@ func (p *Panel) closeDrawer() {
 	p.stopDetail()
 	p.drawer.section, p.drawer.id = "", ""
 	p.win.Panel().Drawer().SetOpen(false)
+	p.drawerOut.Store(false)
 }
 
 // applyDrawer brings the drawer into line with the settings: its side, and

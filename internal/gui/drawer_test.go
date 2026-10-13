@@ -602,3 +602,30 @@ func TestARowThatArrivesLaterOpensItsDetail(t *testing.T) {
 
 	assert.Equal(t, "Memory by process", gui.DrawerTitle(p))
 }
+
+// The place the panel is remembered at is the cards' and not the drawer's.
+// A drawer on the left moves the window's corner by its own width; that
+// corner is not saved while the drawer is out, and the place reported when
+// it has closed is.
+func TestThePanelsPlaceIsNotSavedWhileTheDrawerIsOut(t *testing.T) {
+	s := store(t)
+	require.NoError(t, s.SetConfig(s.Config().WithPosition(3690, 2037)))
+	p, await := drawerPanel(t, coolerDetails())
+
+	gui.Moved(p, s, 3700, 2037)
+	x, _, _ := s.Config().Position()
+	require.Equal(t, 3700, x, "a move with the drawer closed is remembered")
+
+	gui.Tap(p, "cooler", "cpu", -1)
+	await("the drawer to open", func() bool { return gui.DrawerOpen(p) })
+	gui.Moved(p, s, 3451, 2037) // the corner, a drawer's width to the left
+	x, _, _ = s.Config().Position()
+	assert.Equal(t, 3700, x, "the drawer's corner was saved as the panel's place")
+
+	gui.Tap(p, "cooler", "cpu", -1)
+	await("the drawer to close", func() bool { return !gui.DrawerOpen(p) })
+	gui.Moved(p, s, 3702, 2040)
+	x, y, _ := s.Config().Position()
+	assert.Equal(t, 3702, x)
+	assert.Equal(t, 2040, y)
+}

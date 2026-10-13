@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -110,7 +111,10 @@ type Panel struct {
 	wake    map[string]chan struct{}
 
 	// drawer is the detail beside the cards (spec 060); see drawer.go.
-	drawer *drawer
+	// drawerOut is whether it is out, for the position watcher, which runs
+	// on another goroutine (moved).
+	drawer    *drawer
+	drawerOut atomic.Bool
 
 	// do hands a poll's result to the UI thread. It is fyne.Do; a test with
 	// more than one poller replaces it, because the test driver runs fyne.Do
@@ -963,13 +967,7 @@ func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()
 
 	// Saved only when it differs from what is held, so the storm of
 	// geometryChanged a drag produces is one write at the end of it.
-	if err := pos.Watch(func(x, y int) {
-		c := store.Config()
-		if had, hadY, ok := c.Position(); ok && had == x && hadY == y {
-			return
-		}
-		_ = store.SetConfig(c.WithPosition(x, y))
-	}); err != nil {
+	if err := pos.Watch(func(x, y int) { p.moved(store, x, y) }); err != nil {
 		fmt.Fprintln(os.Stderr, "hayami: the position will not be remembered:", err)
 		return func() {}
 	}
@@ -980,6 +978,27 @@ func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()
 		}
 	}
 	return pos.Stop
+}
+
+/*
+moved remembers a place the panel was moved to, unless the drawer is out.
+
+A drawer on the left grows the window leftwards, so while it is out the
+window's corner is a drawer's width from where the cards are, and that is not
+where the panel was put: saved, a panel quit with its drawer open came back
+that far to the left. The place is saved again when the drawer closes and the
+corner is the cards' once more, so a panel dragged with its drawer out is
+remembered where it ends up. Called from the watcher's own goroutine.
+*/
+func (p *Panel) moved(store *config.Store, x, y int) {
+	if p.drawerOut.Load() {
+		return
+	}
+	c := store.Config()
+	if had, hadY, ok := c.Position(); ok && had == x && hadY == y {
+		return
+	}
+	_ = store.SetConfig(c.WithPosition(x, y))
 }
 
 // CacheInterval is how often the readings are written out.

@@ -5,9 +5,11 @@
 ## Status: INCOMPLETE
 
 Built and tested on Windows 11, with every reader read for real on both
-desks. One thing remains: the drawer has not been clicked on a Plasma
-desktop. Two faults this spec's checks on the real window found in
-fynedesygn are fixed in its 0.1.98, which `go.mod` names (Gaps found).
+desks, and clicked on Plasma for the bandwidth card. Two things remain: on
+Plasma the cooler's rows and a usage meter have not been clicked, and a third
+fault found in fynedesygn, a tip that takes the next click, is fixed on its
+`main` and not yet in a release (Gaps found). `go.mod` names 0.1.98, which
+has the first two fixes.
 
 ## Context
 
@@ -161,8 +163,9 @@ Verification.
   processor's, the graphics card's and the memory's rows and on a meter each
   opens its detail at the cards' height; a second click closes it; the
   window's rectangle comes back; a value changing moves nothing.
-- [ ] The same on Plasma. Not run: the Linux desk was in use, and a test
-  that clicks takes the pointer there.
+- [ ] The same on Plasma. Done for the bandwidth card and one of its rows,
+  with real clicks (Verification). Not done for the cooler's rows and a
+  meter: the desk was in use and the clicks take its pointer and its focus.
 - [x] Each reader read for real once on each desk, with the reading under
   Verification; `hayami-tui readings` and `doctor` show them.
 - [x] Each test falsified. `go test ./...`, the linter and `make vuln` pass;
@@ -265,6 +268,15 @@ In fynedesygn, for its own issues and specs:
   real-window tests with a usage card but still not with cells.
 - Both are fixed in fynedesygn 0.1.98 (its issue #201), which `go.mod` here
   names.
+- **A tip took the next click.** hayami's panel has a theme of its own, which
+  wraps its content in a theme override; the search for the tip layer did not
+  look inside one, so a card's hover tip was a popup, and a popup is an
+  overlay that swallows a click to dismiss itself. The click after the
+  pointer had rested a second was lost: on Plasma one in eight, each time
+  with an overlay on top when it arrived. In that state, on the panel at the
+  screen's corner, the cards kept the open window's width after the drawer
+  closed and reflowed into two columns. Fixed on fynedesygn's `main` (its
+  issue #203), **not yet released**.
 - A drawer cannot have its filter taken away: `Drawer.SetFilter(nil)` leaves
   the canvas's key handlers calling a nil filter. The breakdown has no
   filter, so its key is set to one nobody can type while it shows.
@@ -276,6 +288,15 @@ In fynedesygn, for its own issues and specs:
 
 In hayami:
 
+- **The panel's place was saved with the drawer out.** A drawer on the left
+  moves the window's corner by its own width, and the position watcher saved
+  that corner. Fixed here: a move is not remembered while the drawer is out.
+- The position watcher and the drawer's scripts find the panel by its app ID
+  and title, so a second panel on the desk is found too: a scratch panel run
+  for these checks was reported as the desk's own and its place saved. Older
+  than this spec; two panels on one desk is not a supported arrangement.
+- In the drawer a name of thirteen characters touches the arrow of a network
+  line's value at the Linux desk's text size.
 - `view.Size` and `view.Rate` are six characters wide for a value from 1000
   to 1023 of a unit above bytes ("1000.0"), one more than the column. It is
   older than this spec and shows in a memory list.
@@ -336,6 +357,27 @@ clone over SSH, with fynedesygn 0.1.97:
   person using the desk. It was unloaded by hand. The window now asks the
   compositor through `gui.Desk`, a panel built without one asks nothing, and
   a test holds that; after the second run no script was loaded.
-- Not done: the drawer clicked on a Plasma desktop. The KWin scripts are the
-  ones fynedesygn's spec 068 measured there; hayami's wiring of them is
-  tested against a fake and has not met a real KWin through a click.
+
+Plasma 6.7.5 on Wayland, scale 1.5, grid arrangement, with real clicks and
+keys (ydotool) and the geometry read from KWin:
+
+- The desk's own panel, four cards, 304 by 523 at the right edge of a
+  screen, side by room: a click on the bandwidth card opens the drawer on
+  the left, 3690 to 3441 and 304 to 553 wide, the right edge and the height
+  where they were, with `hayami-hold-edge` loaded; another reading moves
+  nothing; `f` and a letter typed with real keys narrow the list to two
+  programs (photographed) and do not resize the window; Escape gives the
+  keyboard back to the window it came from.
+- With fynedesygn 0.1.98 the close failed there: the click after the pointer
+  had rested was taken by a tip's popup, and the window was left 553 wide
+  with its cards in two columns, growing by a drawer's width at each later
+  click. Restarting the panel put it right.
+- With the tip fix: the same panel in the same place opened to 553 and
+  closed to 304 at x=3690 twice running, every click arriving, and the
+  keyboard went back to the window in front each time. Scratch panels with
+  the desk's settings did the same with the side named left, named right,
+  and by room at the screen's edge; the scripts were unloaded when each
+  panel stopped.
+- Not done on Plasma: the cooler's rows and a usage meter. The clicks take
+  the desk's pointer and, for a moment, its focus, and the desk was in use.
+

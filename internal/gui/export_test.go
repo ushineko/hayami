@@ -466,3 +466,7 @@ func AsksNothing(p *Panel) bool {
 // window cannot grow leftwards opens on the right, so this is where it
 // ended up and not only where it was asked to be.
 func DrawerOnSide(p *Panel) glance.Side { return p.win.Panel().Drawer().Side() }
+
+// Moved is what the position watcher calls when the compositor reports the
+// panel somewhere new.
+func Moved(p *Panel, store *config.Store, x, y int) { p.moved(store, x, y) }
