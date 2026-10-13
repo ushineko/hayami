@@ -2,14 +2,12 @@
 
 **Issue**: #191
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
-Built and tested on Windows 11, with every reader read for real on both
-desks, and clicked on Plasma for the bandwidth card. Two things remain: on
-Plasma the cooler's rows and a usage meter have not been clicked, and a third
-fault found in fynedesygn, a tip that takes the next click, is fixed on its
-`main` and not yet in a release (Gaps found). `go.mod` names 0.1.98, which
-has the first two fixes.
+Built and tested on Windows 11 and on Plasma 6.7.5, with every reader read
+for real and every detail clicked on the real window on both desks. Four
+faults found in fynedesygn on the way are fixed in its 0.1.98 to 0.1.100,
+which `go.mod` names (Gaps found).
 
 ## Context
 
@@ -163,9 +161,9 @@ Verification.
   processor's, the graphics card's and the memory's rows and on a meter each
   opens its detail at the cards' height; a second click closes it; the
   window's rectangle comes back; a value changing moves nothing.
-- [ ] The same on Plasma. Done for the bandwidth card and one of its rows,
-  with real clicks (Verification). Not done for the cooler's rows and a
-  meter: the desk was in use and the clicks take its pointer and its focus.
+- [x] The same on Plasma, with real clicks: the bandwidth card, the
+  processor's, the card's and the memory's rows and three accounts' meters
+  (Verification).
 - [x] Each reader read for real once on each desk, with the reading under
   Verification; `hayami-tui readings` and `doctor` show them.
 - [x] Each test falsified. `go test ./...`, the linter and `make vuln` pass;
@@ -275,8 +273,17 @@ In fynedesygn, for its own issues and specs:
   pointer had rested a second was lost: on Plasma one in eight, each time
   with an overlay on top when it arrived. In that state, on the panel at the
   screen's corner, the cards kept the open window's width after the drawer
-  closed and reflowed into two columns. Fixed on fynedesygn's `main` (its
-  issue #203), **not yet released**.
+  closed and reflowed into two columns. Fixed in fynedesygn 0.1.99 (its
+  issue #203).
+- **A window put back to its open width was taken as a width the user
+  chose.** On Wayland the compositor answers a change of focus with the size
+  it last knew. The drawer closes and hands the keyboard back in the same
+  moment, the two crossed, and the window returned to its open width; the
+  panel read that as chosen, gave it to the cards, and every later opening
+  added a drawer's width. It was a race, seen on the usage card and not the
+  others. Fixed in fynedesygn 0.1.100; hayami also measures the panel again
+  shortly after a close, so the window is wide for a moment and not until
+  the next reading.
 - A drawer cannot have its filter taken away: `Drawer.SetFilter(nil)` leaves
   the canvas's key handlers calling a nil filter. The breakdown has no
   filter, so its key is set to one nobody can type while it shows.
@@ -378,6 +385,13 @@ keys (ydotool) and the geometry read from KWin:
   the desk's settings did the same with the side named left, named right,
   and by room at the screen's edge; the scripts were unloaded when each
   panel stopped.
-- Not done on Plasma: the cooler's rows and a usage meter. The clicks take
-  the desk's pointer and, for a moment, its focus, and the desk was in use.
+- With fynedesygn 0.1.99 the usage card still failed, on the second close:
+  the log has the canvas at 304 after the close and at 553 at the next
+  reading, taken as a chosen width. With 0.1.100's fix the same clicks
+  opened and closed it four times running, 304 to 553 and back at x=3690,
+  the window put back to 553 once and asked for 303 again.
+- Then every detail, on the desk's own panel: the processor's row, the
+  card's and the memory's, twice each; the bandwidth card; and the meters of
+  three accounts. Each opened to 553 on the left and closed to 304 at
+  x=3690, 523 high throughout, and the panel was still running after.
 

@@ -341,6 +341,15 @@ func (p *Panel) closeDrawer() {
 	p.drawer.section, p.drawer.id = "", ""
 	p.win.Panel().Drawer().SetOpen(false)
 	p.drawerOut.Store(false)
+
+	// The keyboard goes back as the drawer closes, and on Wayland the
+	// compositor's answer to that carries the window's size from before the
+	// close: the window is put back to its open width a moment later. The
+	// panel is measured again once that has had time to arrive, so the
+	// window is wide for a moment and not until the next reading.
+	for _, wait := range [...]time.Duration{120 * time.Millisecond, 500 * time.Millisecond} {
+		time.AfterFunc(wait, func() { p.do(func() { p.win.Panel().Resize() }) })
+	}
 }
 
 // applyDrawer brings the drawer into line with the settings: its side, and
