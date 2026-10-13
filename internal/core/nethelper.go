@@ -40,10 +40,6 @@ type NetHelperLine struct {
 	Error string `json:"error,omitempty"`
 }
 
-// errNoNetHelper is the helper not being installed, which is the ordinary
-// state of a desk and sends the reader on to the next way of asking.
-var errNoNetHelper = errors.New("the network helper is not installed")
-
 /*
 helperStream is the panel's end: it reads lines until the pipe closes and
 keeps the bytes counted since they were last taken.

@@ -201,7 +201,8 @@ func (s *server) accept(ctx context.Context, h windows.Handle, security *windows
 // write sends one line, whole or not at all as far as the reader can tell:
 // a reader whose buffer cannot take it is reported as gone.
 func write(h windows.Handle, line []byte) bool {
-	b := append(line[:len(line):len(line)], '\n')
+	b := make([]byte, 0, len(line)+1)
+	b = append(append(b, line...), '\n')
 	var n uint32
 	err := windows.WriteFile(h, b, &n, nil)
 	return err == nil && int(n) == len(b)
