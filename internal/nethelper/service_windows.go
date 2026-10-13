@@ -385,7 +385,7 @@ func RunElevated(ctx context.Context, exe string, args ...string) error {
 		return err //nolint:wrapcheck // an argument with a NUL in it
 	}
 	info := shellExecuteInfo{Mask: noCloseProcess | noAsync, Verb: verb, File: file, Parameters: params, Show: windows.SW_HIDE}
-	info.Size = uint32(unsafe.Sizeof(info)) //nolint:gosec // the structure's own size
+	info.Size = uint32(unsafe.Sizeof(info))                                       //nolint:gosec // the structure's own size
 	if r, _, err := shellExecuteEx.Call(uintptr(unsafe.Pointer(&info))); r == 0 { //nolint:gosec // the structure Windows asks for
 		if errors.Is(err, windows.ERROR_CANCELLED) {
 			return errors.New("Windows asked for an administrator and was told no") //nolint:err113,staticcheck // said plainly; Windows is a name
