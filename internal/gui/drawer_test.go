@@ -565,10 +565,8 @@ func TestANamedSideDoesNotAskForTheRoom(t *testing.T) {
 // drawers: the answer to the first question is dropped.
 func TestAClickWhileTheCompositorIsAskedIsNotLost(t *testing.T) {
 	d := &compositor{left: 10, right: 5000, answers: true}
-	p, await := deskPanel(t, d, coolerDetails())
-
 	src := coolerDetails()
-	p, await = deskPanel(t, d, src)
+	p, await := deskPanel(t, d, src)
 
 	gui.Tap(p, "cooler", "cpu", -1)
 	gui.Tap(p, "cooler", "memory", -1)
