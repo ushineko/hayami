@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.9.11
+**Version**: 0.10.0
 
 *a chart you read at a glance*
 
@@ -452,7 +452,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.10.0 (2026-10-13)
 
 - **New**: a drawer of detail beside the panel (spec 060, #191). A click on a
   card opens it: programs by processor time, by memory, by use of the
