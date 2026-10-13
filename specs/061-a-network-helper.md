@@ -186,4 +186,29 @@ Windows 11, build 26200.
 
 ## Verification
 
-See the PR for the commands and what they printed.
+Windows 11, build 26200, on the desk this was written at.
+
+- `go test ./...` passes, apart from `TestTheSlugAgreesWithThePythonItself`,
+  which predates this and needs a Python module the desk lacks.
+- Falsified by breaking what each holds: the chain's order
+  (`TestTheHelperIsAskedBeforeThisProcessTraces`), the server ending when
+  idle (`TestTheServerCountsOnlyWhileSomebodyReads`) and an upgrade leaving
+  the helper (`TestAnUninstallRemovesTheHelperAndAnUpgradeLeavesIt`).
+- The command-line installer with `--network=yes`, from an elevated shell:
+  its log says "The network helper is installed (0.10.0)"; `sc qc` shows
+  `DEMAND_START` and `NT AUTHORITY\LocalService`; the program is alone in
+  `C:\Program Files\hayami`.
+- A process with a filtered, medium-integrity token ran
+  `hayami-tui detail bandwidth`: the service started and the list came back
+  under "TCP and UDP". Twenty seconds later the service was stopped and no
+  `hayami-network` trace session was left.
+- `tests/window`'s `TestAClickOnTheBandwidthCardOpensItsDrawer` on the real
+  window with the helper installed: the drawer shows five programs with
+  rates and "TCP and UDP", and the service was running while it was open.
+- `network-helper remove`: the service and `C:\Program Files\hayami` are
+  gone, and the same medium-integrity read says "needs hayami's helper".
+
+Not verified here: Windows' prompt for an administrator from the wizard. The
+shell these ran from was elevated, where no prompt is shown. The Network
+page's look in the real wizard was checked by eye and not by a test that
+reads its pixels.
