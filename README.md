@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.0
+**Version**: 0.10.1
 
 *a chart you read at a glance*
 
@@ -493,7 +493,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.10.1 (2026-10-13)
 
 - **New**: on Windows the bandwidth card's list of programs works without
   running the panel as an administrator (spec 061, #194). An opt-in network
