@@ -10,6 +10,7 @@ import (
 // not open. BlueZ and Apple's accessory protocol read Bluetooth batteries here
 // because their descriptions say they read on Linux (spec 048).
 func NewHost(HostConfig) Host {
+	processes := ProcProcesses(ProcPath)
 	return Host{
 		Platform:       "linux",
 		CPUTemperature: linuxCPUTemperature(hwmon.Root),
@@ -20,6 +21,14 @@ func NewHost(HostConfig) Host {
 		CPUName:        func() string { return CPUName(CPUInfoPath) },
 		Counters:       ReadCounters,
 		Wireless:       ReadWireless,
-		Permission:     PermissionAbsence,
+		Memory:         linuxMemory(MemInfoPath),
+		MemoryMissing:  memoryMissing,
+		Processes:      func() *ProcessList { return NewProcessList(processes) },
+		GPUProcesses: &gpuProcesses{
+			chain:   linuxGPUProcesses(NewFDInfoGPU(ProcPath).Read, pmonProcesses(NvidiaPMON)),
+			samples: processes,
+		},
+		NetProcesses: func() NetReader { return newNetReader(processes) },
+		Permission:   PermissionAbsence,
 	}
 }

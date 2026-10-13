@@ -95,7 +95,7 @@ func TUI(version string) *cobra.Command {
 	root.Flags().BoolVar(&once, "once", false,
 		"draw one frame and exit, for a prompt or a status line")
 	addPanelFlags(root, &f)
-	root.AddCommand(readingsCmd(&f), arrangementsCmd(), doctorCmd(&f))
+	root.AddCommand(readingsCmd(&f), arrangementsCmd(), doctorCmd(&f), detailCmd(&f))
 	return root
 }
 

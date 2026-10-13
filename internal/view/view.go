@@ -277,6 +277,12 @@ type Row struct {
 	// a label changing ("CPU" to a model name) is the same row (spec 044).
 	// Empty for a row whose builder gives none; a shell derives one.
 	ID string `json:",omitempty"`
+
+	// Opens is the ID of the detail a click on this row asks for, within the
+	// row's section (spec 060). Empty for a row with none of its own: a click
+	// on it asks for the section's. It is not Detail, which is the line of
+	// text under a reading.
+	Opens string `json:",omitempty"`
 }
 
 // DetailLines are the row's detail lines, in order, and none for a row
@@ -303,6 +309,12 @@ type Section struct {
 	Title  string
 	Rows   []Row
 	Meters []Meter
+
+	// Opens is the ID of the detail a click on the section's card asks for,
+	// where the click is not on a row or a meter with one of its own
+	// (spec 060). Empty for a section with no detail: its card does nothing
+	// on a click.
+	Opens string `json:",omitempty"`
 
 	// Cells are readings drawn as blocks rather than as lines, laid out
 	// across the width. A section has rows or cells; nothing so far has both,

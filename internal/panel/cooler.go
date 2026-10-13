@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -83,6 +84,16 @@ type Cooler struct {
 	// host's chain has (spec 043).
 	cpuDetail func() string
 	gpuDetail func() string
+
+	// memory is the memory in use, and nil for a source that reads none: a
+	// test that does not ask. processes and gpuProcesses are the readers the
+	// details ask, nil likewise; gpuVia is the provider the last reading of
+	// the card came from, which the list of its processes is chosen by
+	// (spec 060).
+	memory       func(context.Context) (core.Memory, error)
+	processes    *core.ProcessList
+	gpuProcesses core.GPUProcessReader
+	gpuVia       string
 }
 
 // coolerDrivers are the drivers the cooler section asks.
@@ -96,6 +107,11 @@ func NewCooler(h *core.Host, scan Scan) *Cooler {
 	c.load = h.CPULoad().Load
 	c.graphics = h.ReadGraphics
 	c.cpuName = h.CPUName
+	c.memory = h.ReadMemory
+	if h.Processes != nil {
+		c.processes = h.Processes()
+	}
+	c.gpuProcesses = h.GPUProcesses
 	return c
 }
 
@@ -166,6 +182,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 		out.GPU, out.HasGPU = g.Temperature, true
 		out.GPULoad, out.HasGPULoad = g.Load, g.HasLoad
 		out.GPUName = g.Name
+		out.gpuVia = g.Via
 	} else {
 		// Aside: most machines have no card this build can read, and a line
 		// saying so on every one of them would be the card talking about
@@ -175,6 +192,18 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 			Text: "no GPU sensor", Status: view.Info, Aside: true,
 			Detail: c.gpuDetail(),
 		}, err))
+	}
+
+	if c.memory != nil {
+		if m, err := c.memory(ctx); err == nil {
+			out.Memory, out.MemoryTotal, out.HasMemory = m.Used, m.Total, true
+		} else {
+			// Aside: a machine whose memory cannot be read has a card without
+			// the row, and the hover note and doctor say why.
+			reasons = append(reasons, reason(view.Reason{
+				Label: "Memory", Text: "not read", Status: view.Info, Aside: true,
+			}, err))
+		}
 	}
 
 	status, name, why, err := c.liquid(ctx)
@@ -350,8 +379,12 @@ func (c *Cooler) record(out coolerState) bool {
 	out.CPUTrail = c.cpu.Mean()
 	out.GPUTrail = c.gpu.Mean()
 
+	if out.HasGPU && !out.GPUStale {
+		c.gpuVia = out.gpuVia
+	}
+
 	c.reading = out
-	return out.HasCPU || out.HasCPULoad || out.HasGPU || out.HasLiquid
+	return out.HasCPU || out.HasCPULoad || out.HasGPU || out.HasLiquid || out.HasMemory
 }
 
 // keepName is a row's name, or the one it had when this poll brought none.
@@ -418,12 +451,21 @@ type coolerState struct {
 	CoolerName string
 
 	GPUStale bool
+
+	// Memory is the memory in use and MemoryTotal all there is, in bytes.
+	Memory      uint64
+	MemoryTotal uint64
+	HasMemory   bool
+
+	// gpuVia is the provider this poll's reading of the card came from.
+	gpuVia string
 }
 
 // The probes' IDs: one of each part this source reads.
 const (
 	probeCPU     = "cpu"
 	probeGPU     = "gpu"
+	probeMemory  = "memory"
 	probeCoolant = "coolant"
 	probeFan     = "fan"
 	probePump    = "pump"
@@ -448,6 +490,14 @@ func (s coolerState) probes() view.CoolerReading {
 			Trail: s.GPUTrail, Stale: s.GPUStale,
 		})
 	}
+	if s.HasMemory {
+		p := view.Probe{ID: probeMemory, Role: view.RoleMemory,
+			Bytes: view.Some(float64(s.Memory)), Of: view.Maybe(float64(s.MemoryTotal), s.MemoryTotal > 0)}
+		if s.MemoryTotal > 0 {
+			p.Load = view.Some(100 * float64(s.Memory) / float64(s.MemoryTotal))
+		}
+		out = append(out, p)
+	}
 	if s.HasLiquid {
 		out = append(out, view.Probe{
 			ID: probeCoolant, Role: view.RoleCoolant, Name: s.CoolerName,
@@ -462,3 +512,119 @@ func (s coolerState) probes() view.CoolerReading {
 	}
 	return view.CoolerReading{Probes: out}
 }
+
+// Details are the lists this reading has: the processor's and the memory's
+// where the processes can be read, and the card's where there is a card.
+func (c *Cooler) Details() []view.DetailInfo {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []view.DetailInfo
+	if c.processes != nil {
+		if c.reading.HasCPU || c.reading.HasCPULoad {
+			out = append(out, view.DetailInfo{ID: view.DetailCPU, Title: view.ProcessTitle(view.DetailCPU)})
+		}
+		if c.reading.HasMemory {
+			out = append(out, view.DetailInfo{ID: view.DetailMemory, Title: view.ProcessTitle(view.DetailMemory)})
+		}
+	}
+	if c.gpuProcesses != nil && c.reading.HasGPU {
+		out = append(out, view.DetailInfo{ID: view.DetailGPU, Title: view.ProcessTitle(view.DetailGPU)})
+	}
+	return out
+}
+
+// DetailInterval is ProcessInterval: every detail here is a list of
+// processes.
+func (c *Cooler) DetailInterval(string) time.Duration { return ProcessInterval }
+
+// CloseDetail has nothing to let go of: the readers hold nothing open.
+func (c *Cooler) CloseDetail(string) {}
+
+// coolerDetails is how each of the lists is read, by ID.
+var coolerDetails = map[string]func(*Cooler, context.Context) ([]view.ProcessUse, string, error){
+	view.DetailCPU:    (*Cooler).cpuUse,
+	view.DetailMemory: (*Cooler).memoryUse,
+	view.DetailGPU:    (*Cooler).gpuUse,
+}
+
+// PollDetail reads one list of processes. Only names and figures leave here:
+// a process is its name (spec 060 R6).
+func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+	key := c.Key()
+	read, ok := coolerDetails[id]
+	if !ok {
+		return view.Detail{}, fmt.Errorf("the %s section has no detail %q", key, id)
+	}
+	uses, note, err := read(c, ctx)
+	if err != nil {
+		return unread(key, id, view.ProcessTitle(id), err), err
+	}
+	d := view.Processes(key, id, uses)
+	d.Note = note
+	return d, nil
+}
+
+// cpuUse is each process's share of the processors since the last reading.
+func (c *Cooler) cpuUse(ctx context.Context) ([]view.ProcessUse, string, error) {
+	if c.processes == nil {
+		return nil, "", errNoProcesses
+	}
+	processes, err := c.processes.Read(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("reading the processes: %w", err)
+	}
+	uses := make([]view.ProcessUse, 0, len(processes))
+	for _, p := range processes {
+		if p.HasCPU {
+			uses = append(uses, view.ProcessUse{Name: p.Name, Value: p.CPU})
+		}
+	}
+	return uses, "share of every processor together", nil
+}
+
+// memoryUse is the memory each process holds.
+func (c *Cooler) memoryUse(ctx context.Context) ([]view.ProcessUse, string, error) {
+	if c.processes == nil {
+		return nil, "", errNoProcesses
+	}
+	processes, err := c.processes.Read(ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("reading the processes: %w", err)
+	}
+	uses := make([]view.ProcessUse, 0, len(processes))
+	for _, p := range processes {
+		uses = append(uses, view.ProcessUse{Name: p.Name, Value: float64(p.Memory)})
+	}
+	c.mu.Lock()
+	state := c.reading
+	c.mu.Unlock()
+	note := ""
+	if state.HasMemory && state.MemoryTotal > 0 {
+		used, usedUnit := view.Size(float64(state.Memory))
+		total, totalUnit := view.Size(float64(state.MemoryTotal))
+		note = strings.TrimSpace(used) + " " + usedUnit + " of " + strings.TrimSpace(total) + " " + totalUnit + " in use"
+	}
+	return uses, note, nil
+}
+
+// gpuUse is each process's use of the card the row is about.
+func (c *Cooler) gpuUse(ctx context.Context) ([]view.ProcessUse, string, error) {
+	if c.gpuProcesses == nil {
+		return nil, "", errNoProcesses
+	}
+	c.mu.Lock()
+	via := c.gpuVia
+	c.mu.Unlock()
+	processes, err := c.gpuProcesses.Read(ctx, via)
+	if err != nil {
+		return nil, "", err //nolint:wrapcheck // the reader's own account of the absence
+	}
+	uses := make([]view.ProcessUse, 0, len(processes))
+	for _, p := range processes {
+		uses = append(uses, view.ProcessUse{Name: p.Name, Value: p.Load})
+	}
+	return uses, "each program's busiest engine", nil
+}
+
+// errNoProcesses is a source built without a process reader: a test's.
+var errNoProcesses = errors.New("this source reads no processes")

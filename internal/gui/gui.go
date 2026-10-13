@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -65,6 +66,11 @@ type Options struct {
 	// on the page it names. Empty means the window is not opened.
 	Preferences string
 
+	// Desk is the compositor the detail drawer asks for what a window cannot
+	// do itself (spec 060). Nil asks nothing, which is what a test has;
+	// Start gives the panel the real one.
+	Desk Desk
+
 	// Sections are the sections to build the cards from, by key, where they
 	// are already known: a live first reading, or what the cache restored.
 	// A key with no entry falls back to asking its source, which is what a
@@ -104,6 +110,12 @@ type Panel struct {
 	shown   map[string]bool
 	wake    map[string]chan struct{}
 
+	// drawer is the detail beside the cards (spec 060); see drawer.go.
+	// drawerOut is whether it is out, for the position watcher, which runs
+	// on another goroutine (moved).
+	drawer    *drawer
+	drawerOut atomic.Bool
+
 	// do hands a poll's result to the UI thread. It is fyne.Do; a test with
 	// more than one poller replaces it, because the test driver runs fyne.Do
 	// on the caller's goroutine and two pollers would then draw at once.
@@ -139,6 +151,30 @@ type card struct {
 	// lines are the rows the section last gave, by ID and before detail lines
 	// are flattened in, so a change of arrangement can redraw them.
 	lines []view.Row
+
+	// opens is the detail a click on the card asks for, rowOpens the one a
+	// click on each row asks for, by the row's ID, and meterOpens each
+	// meter's, in the meters' order (spec 060). Empty is none.
+	opens      string
+	rowOpens   map[string]string
+	meterOpens []string
+}
+
+// remember keeps what a click on each part of the section's card opens. A
+// detail line under a row opens what its row does.
+func (c *card) remember(sec view.Section) {
+	c.opens = sec.Opens
+	c.rowOpens = map[string]string{}
+	for _, r := range c.lines {
+		c.rowOpens[r.ID] = r.Opens
+		for i := range r.DetailLines() {
+			c.rowOpens[fmt.Sprintf("%s/detail:%d", r.ID, i+1)] = r.Opens
+		}
+	}
+	c.meterOpens = c.meterOpens[:0]
+	for _, m := range sec.Meters {
+		c.meterOpens = append(c.meterOpens, m.Opens)
+	}
 }
 
 // SparkCapacity is how many samples the window's plot holds.
@@ -267,6 +303,7 @@ func New(a fyne.App, o Options) *Panel {
 		// The rows the section has now; a row that arrives later is inserted
 		// among them by its ID, above the plot (spec 044).
 		holder.lines = rowIDs(sec.Lines())
+		holder.remember(sec)
 		for _, r := range flatten(holder.lines, true) {
 			c.AddRow(holder.newRow(r))
 		}
@@ -330,6 +367,7 @@ func New(a fyne.App, o Options) *Panel {
 		p.cards[s.Key()] = holder
 		p.win.Panel().Add(c)
 	}
+	p.buildDrawer(a, o)
 	return p
 }
 
@@ -363,6 +401,7 @@ func (p *Panel) Apply(c config.Config) {
 	}
 	p.win.Panel().SetArrangement(arr)
 	p.win.SetHideForFullscreen(c.HidesForFullscreen())
+	p.applyDrawer(c)
 
 	// And repaint in it. A card restyles its title and its rows; a meter and
 	// a sparkline go in as plain canvas objects and have to be told, and
@@ -451,6 +490,7 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// The rows matched by ID: set in place, inserted, or removed (spec 044).
 	// The panel is re-measured below in every case.
 	c.lines = rowIDs(sec.Lines())
+	c.remember(sec)
 	p.rebuild(c, flatten(c.lines, !p.row))
 
 	// A cell the card was not built with cannot be added now, for the reason
@@ -515,6 +555,10 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 		requested size again.
 	*/
 	p.win.Panel().Resize()
+
+	// The drawer is the cards' height, so a card that grew or shrank changes
+	// how many lines it has room for.
+	p.renderDrawer()
 }
 
 /*
@@ -923,13 +967,7 @@ func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()
 
 	// Saved only when it differs from what is held, so the storm of
 	// geometryChanged a drag produces is one write at the end of it.
-	if err := pos.Watch(func(x, y int) {
-		c := store.Config()
-		if had, hadY, ok := c.Position(); ok && had == x && hadY == y {
-			return
-		}
-		_ = store.SetConfig(c.WithPosition(x, y))
-	}); err != nil {
+	if err := pos.Watch(func(x, y int) { p.moved(store, x, y) }); err != nil {
 		fmt.Fprintln(os.Stderr, "hayami: the position will not be remembered:", err)
 		return func() {}
 	}
@@ -940,6 +978,27 @@ func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()
 		}
 	}
 	return pos.Stop
+}
+
+/*
+moved remembers a place the panel was moved to, unless the drawer is out.
+
+A drawer on the left grows the window leftwards, so while it is out the
+window's corner is a drawer's width from where the cards are, and that is not
+where the panel was put: saved, a panel quit with its drawer open came back
+that far to the left. The place is saved again when the drawer closes and the
+corner is the cards' once more, so a panel dragged with its drawer out is
+remembered where it ends up. Called from the watcher's own goroutine.
+*/
+func (p *Panel) moved(store *config.Store, x, y int) {
+	if p.drawerOut.Load() {
+		return
+	}
+	c := store.Config()
+	if had, hadY, ok := c.Position(); ok && had == x && hadY == y {
+		return
+	}
+	_ = store.SetConfig(c.WithPosition(x, y))
 }
 
 // CacheInterval is how often the readings are written out.
@@ -1180,6 +1239,7 @@ func Start(o Options) error {
 	}
 
 	o.Sections = sections
+	o.Desk = desktop.NewDrawer(AppID, o.Title)
 	a.SetIcon(appIcon())
 
 	p = New(a, o)
@@ -1206,6 +1266,11 @@ func Start(o Options) error {
 	p.Poll(ctx)
 
 	p.win.ShowAndRun()
+
+	// The detail's poll first: on Windows the network list holds a trace
+	// session open, which outlives a process that does not close it.
+	p.stopDetail()
+	p.drawer.desk.Stop()
 
 	// The window has gone. The scripts come out of the compositor first,
 	// while the process is still here to ask. Anything set in the window's
@@ -1297,6 +1362,7 @@ func (p *Panel) restyle() {
 	// The panel last, so it measures the cards after they have been resized
 	// by whatever the new face and size are.
 	p.win.Panel().Restyle()
+	p.restyleDrawer()
 }
 
 // isShown is whether the settings show a section, for its poll.

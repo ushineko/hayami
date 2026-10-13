@@ -28,6 +28,10 @@ type Spec struct {
 
 	// Decode reads the provider's payload into windows.
 	Decode func(now time.Time, data json.RawMessage) ([]Window, error)
+
+	// Breakdown reads the same payload into everything else it says about
+	// the account (spec 060).
+	Breakdown func(now time.Time, data json.RawMessage) (Breakdown, error)
 }
 
 // DefaultProvider is the provider whose files carry no suffix: the widget
@@ -38,9 +42,10 @@ const DefaultProvider = ProviderClaude
 // providers is every provider, in the order a pane lists them: the default
 // first.
 var providers = []Spec{
-	{Name: ProviderClaude, Display: "Claude", Short: ShortClaude, Decode: Claude},
+	{Name: ProviderClaude, Display: "Claude", Short: ShortClaude, Decode: Claude, Breakdown: ClaudeBreakdown},
 	{Name: ProviderCodex, Display: "Codex", Short: ShortCodex,
-		Decode: func(_ time.Time, data json.RawMessage) ([]Window, error) { return Codex(data) }},
+		Decode:    func(_ time.Time, data json.RawMessage) ([]Window, error) { return Codex(data) },
+		Breakdown: CodexBreakdown},
 }
 
 // Providers are every provider the cache holds, default first.

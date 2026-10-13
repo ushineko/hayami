@@ -42,6 +42,19 @@ type Host struct {
 	Counters func() (map[string]Counters, error)
 	Wireless func(context.Context) (map[string]Wireless, error)
 
+	// Memory is the physical memory in use, and MemoryMissing the account
+	// given when no provider answered (spec 060).
+	Memory        Chain[Memory]
+	MemoryMissing func(tried []string, err error) *Absence
+
+	// Processes builds a reader of the processes, which keeps its own
+	// previous sample; GPUProcesses is the graphics card by process and
+	// NetProcesses builds a reader of the network by process (spec 060).
+	// Each is asked only while its list is shown.
+	Processes    func() *ProcessList
+	GPUProcesses GPUProcessReader
+	NetProcesses func() NetReader
+
 	// Permission is an Open refused for want of permission, as the absence a
 	// reader can act on, with this platform's advice.
 	Permission func(error) (*Absence, bool)
@@ -74,6 +87,21 @@ func (h *Host) ReadCPUTemperature(ctx context.Context) (float64, error) {
 // with none.
 func (h *Host) CPUSensorDetail() string {
 	return h.CPUMissing(h.CPUTemperature.Names(), nil).Detail
+}
+
+// ReadMemory is the memory in use from the chain, or the absence.
+func (h *Host) ReadMemory(ctx context.Context) (Memory, error) {
+	o := h.Memory.Read(ctx)
+	if o.Answered {
+		return o.Value, nil
+	}
+	if o.Absence != nil {
+		return Memory{}, o.Absence
+	}
+	if h.MemoryMissing == nil {
+		return Memory{}, memoryMissing(o.Tried, o.Err)
+	}
+	return Memory{}, h.MemoryMissing(o.Tried, o.Err)
 }
 
 // ReadGraphics is the card, and an absence when the chain found no

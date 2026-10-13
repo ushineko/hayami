@@ -235,14 +235,23 @@ type engineLoad struct {
 
 // load is the adapter's busiest engine since the previous call.
 func (e *engineLoad) load(luid string) (float64, bool) {
+	values, ok := e.collect()
+	if !ok {
+		return 0, false
+	}
+	return BusiestEngine(values, luid)
+}
+
+// collect is every engine instance's use since the previous call.
+func (e *engineLoad) collect() (map[string]float64, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.failed {
-		return 0, false
+		return nil, false
 	}
 	if e.query == 0 && !e.open() {
 		e.failed = true
-		return 0, false
+		return nil, false
 	}
 	if e.last.IsZero() {
 		_, _, _ = procPdhCollect.Call(e.query)
@@ -254,9 +263,9 @@ func (e *engineLoad) load(luid string) (float64, bool) {
 	r, _, _ := procPdhCollect.Call(e.query)
 	e.last = time.Now()
 	if r != 0 {
-		return 0, false
+		return nil, false
 	}
-	return BusiestEngine(e.values(), luid)
+	return e.values(), true
 }
 
 // open builds the query. A machine without the counter set (a server core
@@ -310,4 +319,30 @@ func (e *engineLoad) values() map[string]float64 {
 		return out
 	}
 	return nil
+}
+
+/*
+engineProcesses is the first adapter's use by process, from the GPU Engine
+counters (spec 060). It holds a query of its own: the counters are a rate
+over the time between two collections, and sharing the card's query would
+make each reader's interval the other's.
+*/
+func engineProcesses() func(context.Context) ([]GPUProcess, error) {
+	e := &engineLoad{}
+	return func(context.Context) ([]GPUProcess, error) {
+		a, ok := firstAdapter()
+		if !ok {
+			return nil, errNothing
+		}
+		values, ok := e.collect()
+		if !ok {
+			return nil, errNothing
+		}
+		by := BusiestByProcess(values, a.LUID)
+		out := make([]GPUProcess, 0, len(by))
+		for pid, load := range by {
+			out = append(out, GPUProcess{PID: pid, Load: load})
+		}
+		return out, nil
+	}
 }
