@@ -10,15 +10,16 @@ import (
 	"time"
 
 	"github.com/ushineko/fynstall/extension"
+
+	"github.com/ushineko/hayami/packaging"
 )
 
-// The udev rule that lets the logged-in user open the devices hayami reads:
-// its name, where the payload carries it (fynstall.yaml), and where udev
-// reads it.
+// Where udev reads its rules, and where the install keeps a copy of the
+// device rule for a person to install: beside the programs, when the
+// installer could not put it in place itself.
 const (
-	ruleName    = "60-sanshoku.rules"
-	rulePayload = "share/" + ruleName
-	udevRules   = "/etc/udev/rules.d"
+	udevRules = "/etc/udev/rules.d"
+	ruleCopy  = "share/" + packaging.UdevRuleName
 )
 
 // UdevDirEnv names a directory to use in place of /etc/udev/rules.d. It is
@@ -47,20 +48,25 @@ func placeRule(ctx context.Context, c *extension.Context) {
 	if c.Root() == "" {
 		return
 	}
-	src := filepath.Join(c.Root(), filepath.FromSlash(rulePayload))
-	want, err := os.ReadFile(src) //nolint:gosec // a file of this install
-	if err != nil {
-		c.Logf(extension.Warn, "The device rule was not looked at: %v", err)
+	dest := filepath.Join(udevDir(), packaging.UdevRuleName)
+	if have, err := os.ReadFile(dest); err == nil && rulesOf(have) == rulesOf(packaging.UdevRule) { //nolint:gosec // udev's directory
 		return
 	}
-	dest := filepath.Join(udevDir(), ruleName)
-	if have, err := os.ReadFile(dest); err == nil && rulesOf(have) == rulesOf(want) { //nolint:gosec // udev's directory
-		return
-	}
-	if writeRule(dest, want) == nil {
+	if writeRule(dest, packaging.UdevRule) == nil {
 		reloadUdev(ctx)
 		c.Logf(extension.Info, "Installed the device rule to %s", dest)
 		c.Log(extension.Info, "Replug the receivers, docks and cooler hayami reads, or reboot, for it to apply.")
+		return
+	}
+	// A file for the command to name: the rule is inside this program and
+	// nowhere on the disk until it is written here.
+	src := filepath.Join(c.Root(), filepath.FromSlash(ruleCopy))
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil { //nolint:gosec // beside the programs, which anyone may read
+		c.Logf(extension.Warn, "The device rule was not written out: %v", err)
+		return
+	}
+	if err := writeRule(src, packaging.UdevRule); err != nil {
+		c.Logf(extension.Warn, "The device rule was not written out: %v", err)
 		return
 	}
 	for _, line := range []string{
@@ -75,19 +81,34 @@ func placeRule(ctx context.Context, c *extension.Context) {
 }
 
 /*
+dropCopy removes the copy of the rule placeRule wrote into the install, and
+its directory when that leaves it empty. fynstall did not write the file and
+does not remove it, and an uninstall that leaves a file behind leaves the
+install directory behind. An upgrade's install writes it again if it is
+still wanted.
+*/
+func dropCopy(c *extension.Context) {
+	if c.Root() == "" {
+		return
+	}
+	src := filepath.Join(c.Root(), filepath.FromSlash(ruleCopy))
+	_ = os.Remove(src)
+	_ = os.Remove(filepath.Dir(src))
+}
+
+/*
 removeRule takes the device rule away with an uninstall, when it is the copy
-this install carries. A file of the same name with other contents came from
+this installer carries. A file of the same name with other contents came from
 somewhere else, sanshoku's own packaging or another program that reads the
 same devices, and is not the uninstaller's to remove.
 */
 func removeRule(ctx context.Context, c *extension.Context) {
-	dest := filepath.Join(udevDir(), ruleName)
+	dest := filepath.Join(udevDir(), packaging.UdevRuleName)
 	have, err := os.ReadFile(dest) //nolint:gosec // udev's directory
 	if err != nil {
 		return
 	}
-	ours, err := os.ReadFile(filepath.Join(c.Root(), filepath.FromSlash(rulePayload))) //nolint:gosec // a file of this install
-	if err != nil || !bytes.Equal(have, ours) {
+	if !bytes.Equal(have, packaging.UdevRule) {
 		c.Logf(extension.Info, "Left %s alone: it is not the copy this installer wrote", dest)
 		return
 	}

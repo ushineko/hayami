@@ -15,3 +15,4 @@ func stopEarlier(string) []string { return nil }
 // placeRule and removeRule do nothing off Linux, where there is no udev.
 func placeRule(context.Context, *extension.Context)  {}
 func removeRule(context.Context, *extension.Context) {}
+func dropCopy(*extension.Context)                    {}

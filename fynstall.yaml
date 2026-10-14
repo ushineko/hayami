@@ -28,12 +28,6 @@ payload:
     dst: bin/hayami{exe}
   - src: hayami-tui{exe}
     dst: bin/hayami-tui{exe}
-  # The udev rule that lets a person open the devices the panel reads. It
-  # belongs in /etc/udev/rules.d, where a per-user install may not write, so
-  # it is carried here and installer/ puts it in place or says how (spec 063).
-  - src: packaging/60-sanshoku.rules
-    dst: share/60-sanshoku.rules
-    targets: [linux/*]
 
 integration:
   path_links:
@@ -77,12 +71,6 @@ ui:
   # A glance panel is there when the desktop is: an install starts it unless
   # a person says no, so an upgrade, which had to stop it, brings it back.
   launch_default: true
-
-# What an installer is built for. Named because the payload has an entry for
-# Linux alone, and an entry for a target the config does not build is a
-# mistake to fynstall. Each platform's build asks for its own:
-# `make installer` and scripts/installer_windows.ps1 pass -target.
-targets: [linux/amd64, windows/amd64]
 
 # hayami's own installer code: the pages that check for LibreHardwareMonitor
 # and for the network helper and offer to set each up, and the hooks that do

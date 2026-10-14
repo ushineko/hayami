@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/fynstall/extension"
+
+	"github.com/ushineko/hayami/packaging"
 )
 
 // standInEnv makes this test program a process that only waits, so a test
@@ -31,11 +33,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// A rule with invented contents: what the tests compare is whether a file is
-// this one, not what it grants.
-const rule = "# the installer's copy\nKERNEL==\"hidraw*\", ATTRS{idVendor}==\"aaaa\", TAG+=\"uaccess\"\n"
+// The rule the installer carries, and its name.
+var rule = string(packaging.UdevRule)
 
-// installedAt is the context of an install whose directory carries the rule,
+const ruleName = packaging.UdevRuleName
+
+// installedAt is the context of an install into a directory of the test's,
 // with udev's directory a test's own. It returns the context, the directory
 // and what was logged.
 func installedAt(t *testing.T, upgrade bool) (c *extension.Context, udev string, logged *[]string) {
@@ -43,9 +46,6 @@ func installedAt(t *testing.T, upgrade bool) (c *extension.Context, udev string,
 	root := t.TempDir()
 	udev = t.TempDir()
 	t.Setenv(UdevDirEnv, udev)
-	src := filepath.Join(root, filepath.FromSlash(rulePayload))
-	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
-	require.NoError(t, os.WriteFile(src, []byte(rule), 0o644))
 	logged = &[]string{}
 	c = extension.NewContext(extension.Host{
 		App:      extension.App{ID: "io.ushineko.hayami", Name: "hayami", Version: "0.0.0"},
@@ -84,6 +84,7 @@ func TestTheRuleIsInstalledWhereItMayBe(t *testing.T) {
 	assert.Contains(t, said, "Installed the device rule to "+filepath.Join(udev, ruleName))
 	assert.Contains(t, said, "Replug")
 	assert.NotContains(t, said, "sudo", "nothing is asked of a person where nothing is needed")
+	assert.NoDirExists(t, filepath.Join(c.Root(), "share"), "no copy is kept of a rule that is in place")
 }
 
 // Where it cannot, the install succeeds, writes nothing, and says the two
@@ -98,7 +99,11 @@ func TestTheRuleIsExplainedWhereItMayNotBeWritten(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries, "nothing is left half written")
 	said := strings.Join(*logged, "\n")
-	assert.Contains(t, said, "sudo install -m644 "+filepath.Join(c.Root(), "share", ruleName)+" "+filepath.Join(udev, ruleName))
+	kept := filepath.Join(c.Root(), "share", ruleName)
+	assert.Contains(t, said, "sudo install -m644 "+kept+" "+filepath.Join(udev, ruleName))
+	got, err := os.ReadFile(kept)
+	require.NoError(t, err, "the file the command names is there")
+	assert.Equal(t, rule, string(got))
 	assert.Contains(t, said, "sudo udevadm control --reload")
 	assert.Contains(t, said, "not permitted")
 }
@@ -107,7 +112,7 @@ func TestTheRuleIsExplainedWhereItMayNotBeWritten(t *testing.T) {
 // its comments: sanshoku's own copy has another header.
 func TestARuleAlreadyInPlaceIsLeftAlone(t *testing.T) {
 	c, udev, logged := installedAt(t, false)
-	theirs := strings.Replace(rule, "# the installer's copy", "# another program's copy\n", 1)
+	theirs := "# another program's copy of the same rule\n\n" + rule
 	dest := filepath.Join(udev, ruleName)
 	require.NoError(t, os.WriteFile(dest, []byte(theirs), 0o644))
 	readOnly(t, udev)
@@ -117,6 +122,21 @@ func TestARuleAlreadyInPlaceIsLeftAlone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, theirs, string(got))
 	assert.NotContains(t, strings.Join(*logged, "\n"), "sudo", "a rule that is in place is not asked for")
+}
+
+// The copy an install kept for a person goes with the uninstall, and with
+// the first half of an upgrade: fynstall did not write it and would leave
+// the install directory behind for it.
+func TestTheCopyKeptForAPersonGoesWithTheInstall(t *testing.T) {
+	for _, upgrade := range []bool{false, true} {
+		c, udev, _ := installedAt(t, upgrade)
+		readOnly(t, udev)
+		require.NoError(t, afterInstall(context.Background(), c))
+		require.FileExists(t, filepath.Join(c.Root(), "share", ruleName))
+
+		require.NoError(t, beforeUninstall(context.Background(), c))
+		assert.NoDirExists(t, filepath.Join(c.Root(), "share"), "upgrade=%v", upgrade)
+	}
 }
 
 // An uninstall takes the rule it wrote. An upgrade leaves it, and so does an

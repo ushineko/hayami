@@ -32,19 +32,21 @@ from it unchanged. Two things `install.sh` does had no place in it.
   from `fynstall.yaml`. The builder is run from the module
   (`go run github.com/ushineko/fynstall/cmd/fynstall`), so it is the version
   go.mod requires and nothing is installed to build.
-- R2 The payload carries `packaging/60-sanshoku.rules` as
-  `share/60-sanshoku.rules`, for Linux targets only.
+- R2 The installer carries `packaging/60-sanshoku.rules` inside its own
+  program (`packaging/embed.go`), not in the payload: see "Gaps found".
 - R3 **The rule**, in `installer/`'s install hook, as `install.sh` does it:
   - R3.1 A rule already in `/etc/udev/rules.d` that says the same, comments
     aside, is left as it is and nothing is said.
   - R3.2 Where the directory can be written the rule is copied there, whole
     or not at all, `udevadm control --reload` is run, and the log says to
     replug.
-  - R3.3 Where it cannot, the install succeeds and the log has the two
-    commands that install the rule, with this install's paths. The
-    installer never asks to become root.
+  - R3.3 Where it cannot, the install succeeds, writes the rule to
+    `share/60-sanshoku.rules` in the install directory, and the log has the
+    two commands that install it from there. The installer never asks to
+    become root. That copy is the hook's and not fynstall's, so the
+    uninstall hook removes it, in an upgrade too.
   - R3.4 An uninstall removes the rule when it is byte for byte the copy the
-    install carries, or says the commands that do; a different file of that
+    installer carries, or says the commands that do; a different file of that
     name is left and said to be. An upgrade leaves the rule.
   - R3.5 `HAYAMI_UDEV_DIR` names another directory, as it does for
     `install.sh`, for the tests.
@@ -67,20 +69,20 @@ from it unchanged. Two things `install.sh` does had no place in it.
 
 - [x] `make installer` writes the four programs to `dist/`, and the
   command-line installer's `--version` is `hayami <version> installer`.
-- [x] The config still builds for Windows: `fynstall build -target
-  windows/amd64 -cli-only` from this checkout, with the Linux-only payload
-  entry in place.
+- [x] The config is unchanged for Windows: nothing in `fynstall.yaml` is
+  for one platform, and the hooks are in files built for Linux only
+  (`GOOS=windows go vet -tags nogui ./installer/`).
 - [x] R3, in `installer/hooks_linux_test.go`: installed where it may be; explained
   where it may not, with nothing half written; a rule in place under another
   header left alone; an uninstall removes only its own copy, an upgrade
-  leaves it.
+  leaves it; the copy kept in the install directory goes with either.
 - [x] R4, in `installer/hooks_linux_test.go`, against real processes: the panel in
   the install directory and the one in `~/.local/bin` have ended when the
   hook returns; a panel elsewhere and a terminal panel in the install
   directory run on; a panel whose file was replaced by a link is found.
 - [x] Each of those tests fails when the behaviour it names is broken
   (falsified: the deleted-file suffix, the name check, the directory check,
-  the comment-blind comparison, the upgrade guard).
+  the comment-blind comparison, the upgrade guard, the kept copy's removal).
 - [x] The real downstream system: `tests/structure/linux_installer_test.go`
   runs the built command-line installer in a home of its own over a running
   stand-in for `install.sh`'s panel, then the uninstaller. Both panels, the
@@ -142,9 +144,9 @@ from it unchanged. Two things `install.sh` does had no place in it.
   about 75 MB; the tarball is far smaller. A release grows by about 190 MB.
 - **glibc.** The installers are built on the same runner as the tarball and
   carry the same panel, so the same floor applies.
-- Rollback: revert the PR. The hooks are in files built only for Linux, the
-  payload entry is for Linux targets only, and the Windows installers are
-  built by a script this does not touch.
+- Rollback: revert the PR. The hooks are in files built only for Linux,
+  `fynstall.yaml` changes by nothing, and the Windows installers are built
+  by a script this does not touch.
 
 ## E2E Test Plan
 
@@ -169,6 +171,13 @@ For fynstall:
 - **The wizard is made before the app.** `launch_default: true` stopped the
   wizard with a nil pointer (ushineko/fynstall#51), and a Settings page with
   a field does the same for the same reason (ushineko/fynstall#52).
+- **A payload entry for one platform cannot be built one platform at a
+  time.** The rule was first a payload entry with `targets: [linux/*]`. A
+  config without `targets` builds for the machine it is on, and on Windows
+  the entry then "matches none of the targets this config builds", with or
+  without `-target`. A config that names both targets wants every target's
+  payload present for any build, and the panel cannot be cross-compiled.
+  So the rule is embedded and the hook writes it out.
 - **A hook cannot see whether the program will be started**, so it cannot
   leave a running panel alone when it will not be replaced by a new one.
 - **Nothing in a per-user install can ask for root for one file.** The
@@ -182,9 +191,11 @@ For fynstall:
 - `make installer` built the four programs: 115 MB, 75 MB, and
   uninstallers of 25 MB and 5 MB.
 - The command-line installer, with `HOME` and `HAYAMI_UDEV_DIR` in a
-  scratch directory: 13 files installed, the rule copied and said, both
+  scratch directory: 12 files installed, the rule copied and said, both
   entries with an absolute `Exec`; the uninstaller removed all of it and
-  left a settings file put there by hand.
+  left a settings file put there by hand. With that directory read-only:
+  the five lines with the two commands, the copy at
+  `share/60-sanshoku.rules`, and nothing left after the uninstall.
 - `go test ./installer/` and the structure test with `HAYAMI_INSTALLERS`
   set pass.
 - The wizard built against fynstall 0.2.3 stopped before its window. Built

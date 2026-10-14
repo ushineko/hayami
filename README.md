@@ -453,8 +453,9 @@ sudo install -m644 packaging/60-sanshoku.rules /etc/udev/rules.d/60-sanshoku.rul
 sudo udevadm control --reload
 ```
 
-The installer carries its copy in `~/.local/share/hayami/share/` and prints
-the same two commands with that path. Then replug the device, or reboot.
+The installer, where it may not write there, leaves a copy in
+`~/.local/share/hayami/share/` and prints the same two commands with that
+path. Then replug the device, or reboot.
 `hayami-tui doctor` names any device it may not open. `uninstall.sh` and the
 uninstaller remove the rule they installed, or print the commands to, and
 leave a rule of the same name that is not their copy.

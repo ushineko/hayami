@@ -193,5 +193,6 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 	if !c.Upgrade() {
 		removeRule(ctx, c)
 	}
+	dropCopy(c)
 	return nil
 }
