@@ -13,7 +13,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const wmMouseLeave = 0x02A3
+const (
+	wmMouseLeave = 0x02A3
+	wmChar       = 0x0102
+)
+
+// typed posts a character to the panel's window, as a key pressed while it
+// holds the keyboard arrives.
+func typed(t *testing.T, hwnd uintptr, r rune) {
+	t.Helper()
+	ok, _, err := postMessageW.Call(hwnd, wmChar, uintptr(r), 0)
+	require.NotZero(t, ok, "posting a character: %v", err)
+}
 
 /*
 tap is click, and then the pointer leaves the window. A click's posted move
@@ -78,10 +89,12 @@ func inkIn(p *picture, x0, x1 int) int {
 }
 
 /*
-Spec 060. On the real window a click on the processor's row, the graphics
-card's and the memory's each opens its list in a drawer the cards' height; a
-second click closes it and the window's rectangle comes back; and while the
-list is open, a value changing moves nothing.
+Spec 060, spec 062 R1. On the real window a click on the processor's row, the
+graphics card's and the memory's each opens the cooler's drawer at the cards'
+height; a second click closes it and the window's rectangle comes back; and
+while the list is open, a value changing moves nothing. Which row is clicked
+no longer chooses the list: the card is one target, and the list is the one
+last shown.
 
 Read off the window's rectangle and its picture. The rows are found by their
 labels in the closed picture (the harness's card). Open, the window is wider
@@ -89,7 +102,7 @@ by the drawer and no taller, one of its sides has not moved, and the drawer's
 columns hold lines of text. The clicks are posted to the panel's own window,
 so the pointer on the desk is not touched.
 */
-func TestAClickOnEachCoolerRowOpensItsListAndASecondClosesIt(t *testing.T) {
+func TestAClickOnAnyCoolerRowOpensItsDrawerAndASecondClosesIt(t *testing.T) {
 	cpuLabel, gpuLabel := processorRows(t)
 	s := panelSettings{Sections: []string{"cooler"}, LHM: "http://127.0.0.1:9/data.json", Settle: coolerSettle}
 	hwnd := start(t, s)
@@ -125,9 +138,16 @@ func TestAClickOnEachCoolerRowOpensItsListAndASecondClosesIt(t *testing.T) {
 	}
 }
 
-// A click on one row and then on another changes what the drawer shows and
-// leaves it open: the window is the same rectangle before and after.
-func TestAClickOnAnotherRowLeavesTheDrawerOpen(t *testing.T) {
+/*
+Spec 062 R4, R6. With the cooler's drawer open, a choice's key changes what
+it shows and leaves it open: the window is the same rectangle before and
+after, and the picture is another. A click on another row of the card then
+closes it, because the card is one target.
+
+The key is posted to the panel's own window as a character. Not run on the
+desk this was written at, which is not a Windows one.
+*/
+func TestAChoiceChangesTheListAndLeavesTheDrawerOpen(t *testing.T) {
 	cpuLabel, _ := processorRows(t)
 	s := panelSettings{Sections: []string{"cooler"}, LHM: "http://127.0.0.1:9/data.json", Settle: coolerSettle}
 	hwnd := start(t, s)
@@ -140,11 +160,11 @@ func TestAClickOnAnotherRowLeavesTheDrawerOpen(t *testing.T) {
 	tap(t, hwnd, width/2, mid(cpuLabel))
 	time.Sleep(drawerSettle)
 	open := place(t, hwnd)
-	shift := opened(t, closed, open, "the processor's")
+	shift := opened(t, closed, open, "the cooler's")
 	time.Sleep(listSettle)
 	first := shoot(t, hwnd, "switch-cpu.png")
 
-	tap(t, hwnd, shift+width/2, mid("Memory"))
+	typed(t, hwnd, 'm')
 	time.Sleep(listSettle)
 	assert.Equal(t, open, place(t, hwnd), "changing what is shown moved the window")
 	second := shoot(t, hwnd, "switch-memory.png")
@@ -152,7 +172,7 @@ func TestAClickOnAnotherRowLeavesTheDrawerOpen(t *testing.T) {
 
 	tap(t, hwnd, shift+width/2, mid("Memory"))
 	time.Sleep(drawerSettle)
-	assert.Equal(t, closed, place(t, hwnd))
+	assert.Equal(t, closed, place(t, hwnd), "a click on another row of the card did not close the drawer")
 }
 
 // barPixels counts the pixels in a region that are a meter's fill in the
@@ -197,11 +217,13 @@ func writeUsageBreakdown(t *testing.T, dir string, now time.Time) {
 }
 
 /*
-Spec 060 R13. A click on a usage meter opens that account's breakdown at the
-cards' height, and a second click closes it. The cooler is drawn beside it
-so the drawer has a panel's height to show the breakdown in.
+Spec 060 R13, spec 062 R9. A click on a usage meter opens every account's
+breakdown at the cards' height, here one account's, and a second click closes
+it. The cooler is drawn beside it so the drawer has a panel's height to show
+the breakdown in. A breakdown taller than the cards is held headless
+(internal/gui) and has no test here.
 */
-func TestAClickOnAMeterOpensItsBreakdownAndASecondClosesIt(t *testing.T) {
+func TestAClickOnAMeterOpensTheBreakdownAndASecondClosesIt(t *testing.T) {
 	now := time.Now()
 	s := panelSettings{Sections: []string{"usage", "cooler"}, LHM: "http://127.0.0.1:9/data.json",
 		Settle: coolerSettle, Cache: func(dir string) { writeUsageBreakdown(t, filepath.Join(dir, "claude-usage-widget"), now) }}

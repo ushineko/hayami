@@ -427,6 +427,58 @@ func shownRows(rows []*glance.Row) []string {
 	return out
 }
 
+// DrawerChoices are the labels in the drawer's switch, and none where there
+// is nothing to choose; DrawerChosen is the detail selected in it.
+func DrawerChoices(p *Panel) []string {
+	if !p.drawer.sw.Object().Visible() {
+		return nil
+	}
+	var out []string
+	for _, c := range p.drawer.sw.Choices() {
+		out = append(out, c.Label)
+	}
+	return out
+}
+func DrawerChosen(p *Panel) string { return p.drawer.sw.Selected() }
+
+// TypeRune and TypeKey type at the panel's window, as a person does: the
+// drawer's filter, switch and scroller take what is theirs.
+func TypeRune(p *Panel, r rune) { p.win.Window().Canvas().OnTypedRune()(r) }
+func TypeKey(p *Panel, name fyne.KeyName) {
+	p.win.Window().Canvas().OnTypedKey()(&fyne.KeyEvent{Name: name})
+}
+
+// DrawerPartHeads are the headings of the parts the drawer shows, and
+// DrawerPartMeters how many meters each has.
+func DrawerPartHeads(p *Panel) []string {
+	var out []string
+	for _, part := range p.drawer.parts {
+		out = append(out, strings.Join(visibleTexts(part.head.Object()), "|"))
+	}
+	return out
+}
+
+func DrawerPartMeters(p *Panel) []int {
+	var out []int
+	for _, part := range p.drawer.parts {
+		out = append(out, len(part.meters))
+	}
+	return out
+}
+
+// DrawerRules is how many rules the drawer draws between its parts.
+func DrawerRules(p *Panel) int { return p.drawer.rules }
+
+// DrawerPartLines are the lines of one part, top to bottom, then its notes.
+func DrawerPartLines(p *Panel, i int) []string {
+	return append(shownRows(p.drawer.parts[i].rows), shownRows(p.drawer.parts[i].notes)...)
+}
+
+// DrawerOffset is how far the drawer's content is scrolled, and DrawerScrolls
+// whether it scrolls at all when it is taller than the room.
+func DrawerOffset(p *Panel) float32 { return p.win.Panel().Drawer().Offset() }
+func DrawerScrolls(p *Panel) bool   { return p.win.Panel().Drawer().Scrolling() }
+
 // DrawerMeterCount is how many meters the content of the drawer holds.
 func DrawerMeterCount(p *Panel) int { return p.drawer.shownMeters }
 
@@ -469,4 +521,9 @@ func DrawerOnSide(p *Panel) glance.Side { return p.win.Panel().Drawer().Side() }
 
 // Moved is what the position watcher calls when the compositor reports the
 // panel somewhere new.
-func Moved(p *Panel, store *config.Store, x, y int) { p.moved(store, x, y) }
+func Moved(p *Panel, store *config.Store, x, y, width int) { p.moved(store, x, y, width) }
+
+// CardsWidth is the width of the cards without the drawer, and DrawerReach
+// what the drawer adds to the window when it is out.
+func CardsWidth(p *Panel) float32  { return p.win.Panel().CardsSize().Width }
+func DrawerReach(p *Panel) float32 { return p.win.Panel().Drawer().Reach() }

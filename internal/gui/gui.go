@@ -152,30 +152,13 @@ type card struct {
 	// are flattened in, so a change of arrangement can redraw them.
 	lines []view.Row
 
-	// opens is the detail a click on the card asks for, rowOpens the one a
-	// click on each row asks for, by the row's ID, and meterOpens each
-	// meter's, in the meters' order (spec 060). Empty is none.
-	opens      string
-	rowOpens   map[string]string
-	meterOpens []string
+	// opens is the detail a click anywhere on the card asks for (spec 062).
+	// Empty is none.
+	opens string
 }
 
-// remember keeps what a click on each part of the section's card opens. A
-// detail line under a row opens what its row does.
-func (c *card) remember(sec view.Section) {
-	c.opens = sec.Opens
-	c.rowOpens = map[string]string{}
-	for _, r := range c.lines {
-		c.rowOpens[r.ID] = r.Opens
-		for i := range r.DetailLines() {
-			c.rowOpens[fmt.Sprintf("%s/detail:%d", r.ID, i+1)] = r.Opens
-		}
-	}
-	c.meterOpens = c.meterOpens[:0]
-	for _, m := range sec.Meters {
-		c.meterOpens = append(c.meterOpens, m.Opens)
-	}
-}
+// remember keeps what a click on the section's card opens.
+func (c *card) remember(sec view.Section) { c.opens = sec.Opens }
 
 // SparkCapacity is how many samples the window's plot holds.
 //
@@ -967,7 +950,7 @@ func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()
 
 	// Saved only when it differs from what is held, so the storm of
 	// geometryChanged a drag produces is one write at the end of it.
-	if err := pos.Watch(func(x, y int) { p.moved(store, x, y) }); err != nil {
+	if err := pos.Watch(func(x, y, width int) { p.moved(store, x, y, width) }); err != nil {
 		fmt.Fprintln(os.Stderr, "hayami: the position will not be remembered:", err)
 		return func() {}
 	}
@@ -981,22 +964,70 @@ func (p *Panel) rememberPosition(store *config.Store, title string) (stop func()
 }
 
 /*
-moved remembers a place the panel was moved to, unless the drawer is out.
+moved remembers the place the panel came to rest at: where its cards are,
+whether or not the drawer is out (spec 062).
 
 A drawer on the left grows the window leftwards, so while it is out the
 window's corner is a drawer's width from where the cards are, and that is not
 where the panel was put: saved, a panel quit with its drawer open came back
-that far to the left. The place is saved again when the drawer closes and the
-corner is the cards' once more, so a panel dragged with its drawer out is
-remembered where it ends up. Called from the watcher's own goroutine.
+that far to the left. The first answer was to save nothing while the drawer
+was out, and it was not enough. The window is also at its open width for a
+moment after the drawer has closed, and a report of that corner was saved as
+the panel's; and a panel dragged with its drawer out was remembered where it
+had been.
+
+So the corner is worked out from the report. The compositor says how wide
+the window is; where that is wider than the cards by a drawer, on the left,
+the cards begin that much further along.
+
+width is nought where the desktop cannot say it in the panel's own units,
+on Windows, and there a move with the drawer out is still not remembered.
+Called from the watcher's goroutine; the widths are the UI thread's to read.
 */
-func (p *Panel) moved(store *config.Store, x, y int) {
-	if p.drawerOut.Load() {
+func (p *Panel) moved(store *config.Store, x, y, width int) {
+	if width <= 0 {
+		if p.drawerOut.Load() {
+			return
+		}
+		p.place(store, x, y, 0)
 		return
 	}
+	p.do(func() {
+		shift := p.drawerShift(float32(width))
+		p.place(store, x+shift, y, shift)
+	})
+}
+
+/*
+drawerShift is how far the cards are from the corner of a window that wide:
+the drawer's width and its gap when the window is the cards and a drawer on
+the left, and nothing otherwise.
+
+Only a difference that is a drawer's is taken. A window a person is dragging
+wider is wider than its cards too, until the next reading, and its corner is
+theirs.
+*/
+func (p *Panel) drawerShift(width float32) int {
+	pn := p.win.Panel()
+	dr := pn.Drawer()
+	extra, reach := width-pn.CardsSize().Width, dr.Reach()
+	// The compositor's widths are whole pixels and these are not: two of
+	// them rounded are within two of the difference.
+	if dr.Side() != glance.Left || extra < reach-2 || extra > reach+2 {
+		return 0
+	}
+	return int(extra + 0.5)
+}
+
+// place saves a place the cards are at, unless it is the one held. A place
+// worked out from a wider window is a whole number of pixels rounded twice,
+// so one a pixel from the place held is the same place.
+func (p *Panel) place(store *config.Store, x, y, shift int) {
 	c := store.Config()
-	if had, hadY, ok := c.Position(); ok && had == x && hadY == y {
-		return
+	if had, hadY, ok := c.Position(); ok && hadY == y {
+		if had == x || (shift != 0 && had-x >= -1 && had-x <= 1) {
+			return
+		}
 	}
 	_ = store.SetConfig(c.WithPosition(x, y))
 }

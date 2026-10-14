@@ -114,10 +114,12 @@ func detailCmd(f *flags) *cobra.Command {
 		Long: "Print what is behind a reading and exit.\n\n" +
 			"What the window shows in its drawer when a card is clicked: the processes\n" +
 			"behind the processor's load, the memory in use, the graphics card or the\n" +
-			"network, and an account's limits behind its meter.\n\n" +
+			"network, and every account's limits behind the usage meters. A section\n" +
+			"alone is the first detail it offers.\n\n" +
 			"  hayami-tui detail cooler/cpu\n" +
 			"  hayami-tui detail cooler/memory\n" +
 			"  hayami-tui detail bandwidth\n" +
+			"  hayami-tui detail usage\n" +
 			"  hayami-tui detail \"usage/CC max\" --json\n\n" +
 			"A process is listed by its name and nothing else. The pane itself has no\n" +
 			"detail view.",

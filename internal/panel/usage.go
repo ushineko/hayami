@@ -2,6 +2,7 @@ package panel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -365,17 +366,32 @@ var codexInstalled = sync.OnceValue(func() bool {
 	return err == nil
 })
 
-// Details are the accounts' breakdowns, one per meter, by the label the
+// Details are every account's breakdown as one detail, which is what the
+// card opens (spec 062 R9), and then each account's own, by the label its
 // meter carries.
 func (u *Usage) Details() []view.DetailInfo {
+	accounts := u.accounts()
+	if len(accounts) == 0 {
+		return nil
+	}
+	out := []view.DetailInfo{{ID: view.DetailAccounts, Title: view.AccountsTitle}}
+	for _, account := range accounts {
+		out = append(out, view.DetailInfo{ID: account, Title: account})
+	}
+	return out
+}
+
+// accounts are the labels of the accounts the last reading had, in the
+// meters' order.
+func (u *Usage) accounts() []string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	var out []view.DetailInfo
+	var out []string
 	seen := map[string]bool{}
 	for _, w := range u.windows {
 		if !seen[w.Account] {
 			seen[w.Account] = true
-			out = append(out, view.DetailInfo{ID: w.Account, Title: w.Account})
+			out = append(out, w.Account)
 		}
 	}
 	return out
@@ -389,13 +405,27 @@ func (u *Usage) DetailInterval(string) time.Duration { return UsageInterval }
 func (u *Usage) CloseDetail(string) {}
 
 /*
-PollDetail reads one account's breakdown out of the cache.
+PollDetail reads one account's breakdown out of the cache, or every
+account's. An account that cannot be read is a part with its reason in it,
+and the others are whole; the error is every account's that failed.
 
 **It reads and never fetches.** The meters' poll is what goes upstream, behind
 the cache's gate; this decodes more of the entry that poll left, so opening a
 drawer costs no request and writes nothing (spec 060 R14).
 */
-func (u *Usage) PollDetail(_ context.Context, id string) (view.Detail, error) {
+func (u *Usage) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+	if id == view.DetailAccounts {
+		var parts []view.Detail
+		var failed []error
+		for _, account := range u.accounts() {
+			part, err := u.PollDetail(ctx, account)
+			if err != nil {
+				failed = append(failed, err)
+			}
+			parts = append(parts, part)
+		}
+		return view.UsageAccounts(parts), errors.Join(failed...)
+	}
 	b, err := u.breakdown(id)
 	if err != nil {
 		return unread(u.Key(), id, id, err), err
