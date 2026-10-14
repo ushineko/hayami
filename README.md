@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.3
+**Version**: 0.10.4
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.10.4 (2026-10-13)
 
 - A Linux installer (spec 063,
   [#201](https://github.com/ushineko/hayami/issues/201)). A release carries
