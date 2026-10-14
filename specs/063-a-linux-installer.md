@@ -70,11 +70,11 @@ from it unchanged. Two things `install.sh` does had no place in it.
 - [x] The config still builds for Windows: `fynstall build -target
   windows/amd64 -cli-only` from this checkout, with the Linux-only payload
   entry in place.
-- [x] R3, in `installer/linux_test.go`: installed where it may be; explained
+- [x] R3, in `installer/hooks_linux_test.go`: installed where it may be; explained
   where it may not, with nothing half written; a rule in place under another
   header left alone; an uninstall removes only its own copy, an upgrade
   leaves it.
-- [x] R4, in `installer/linux_test.go`, against real processes: the panel in
+- [x] R4, in `installer/hooks_linux_test.go`, against real processes: the panel in
   the install directory and the one in `~/.local/bin` have ended when the
   hook returns; a panel elsewhere and a terminal panel in the install
   directory run on; a panel whose file was replaced by a link is found.
