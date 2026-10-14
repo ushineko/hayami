@@ -98,7 +98,7 @@ from it unchanged. Two things `install.sh` does had no place in it.
   `ui.launch_default` (ushineko/fynstall#51). Built against 0.2.3 the
   wizard stops before its window; the desk check above used an installer
   built with `-runtime-path` against the fix.
-- [ ] CI is green with the new steps, on a runner.
+- [x] CI is green with the new steps, on a runner, on both platforms.
 - [ ] A release carries both Linux installers and `SHA256SUMS` lists them.
 - [ ] Desk check: the wizard's uninstaller, and an upgrade from one
   installer-installed version to the next.
