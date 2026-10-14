@@ -78,6 +78,12 @@ ui:
   # a person says no, so an upgrade, which had to stop it, brings it back.
   launch_default: true
 
+# What an installer is built for. Named because the payload has an entry for
+# Linux alone, and an entry for a target the config does not build is a
+# mistake to fynstall. Each platform's build asks for its own:
+# `make installer` and scripts/installer_windows.ps1 pass -target.
+targets: [linux/amd64, windows/amd64]
+
 # hayami's own installer code: the pages that check for LibreHardwareMonitor
 # and for the network helper and offer to set each up, and the hooks that do
 # it, that stop the panel before an uninstall and that remove the helper.

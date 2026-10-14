@@ -96,7 +96,9 @@ try {
     Write-Ok "dist\hayami.png"
 
     Write-Step "Building the installer"
-    $arguments = @("build", "-c", (Join-Path $Root "fynstall.yaml"))
+    # The config names every target hayami has an installer for; this
+    # script builds the one for Windows.
+    $arguments = @("build", "-c", (Join-Path $Root "fynstall.yaml"), "-target", "windows/amd64")
     if ($RuntimePath) { $arguments += @("--runtime-path", (Resolve-Path $RuntimePath).Path) }
     if ($WithCliOnly) { $arguments += "--with-cli-only" }
     if ($Windowed) { $arguments += "--windowed" }
