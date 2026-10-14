@@ -134,6 +134,23 @@ release: build ## Package the binaries into dist/ as a tar.gz with SHA256SUMS
 	@set -e; 	rm -rf dist; mkdir -p dist; 	base="hayami-$(VERSION)-linux-amd64"; 	stage="dist/$$base"; 	mkdir -p "$$stage/packaging"; 	cp hayami hayami-tui install.sh uninstall.sh README.md LICENSE "$$stage/"; 	cp packaging/io.ushineko.hayami.desktop packaging/hayami.svg packaging/60-sanshoku.rules "$$stage/packaging/"; 	tar -C dist -czf "dist/$$base.tar.gz" "$$base"; 	rm -rf "$$stage"; 	cd dist && (sha256sum *.tar.gz 2>/dev/null || shasum -a 256 *.tar.gz) > SHA256SUMS
 	@ls -l dist/*.tar.gz dist/SHA256SUMS
 
+# The Linux installers (spec 063): the one with the wizard and the one for a
+# terminal, each a single program that carries both panels, built by fynstall
+# from fynstall.yaml as the Windows ones are (scripts/installer_windows.ps1).
+#
+# The builder is run from the module, not from PATH: an installer is built
+# against the fynstall go.mod requires, and a builder of another version
+# would be a second one to keep in step.
+#
+# After `release` when both are wanted, because that target empties dist/.
+FYNSTALL ?= go run github.com/ushineko/fynstall/cmd/fynstall
+
+.PHONY: installer
+installer: build ## Build the Linux installers into dist/ with fynstall
+	@mkdir -p dist
+	go run ./tools/appicon -size 512 -out dist/hayami.png
+	$(FYNSTALL) build -c fynstall.yaml -target linux/amd64 -with-cli-only
+
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities, before every tagged release
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

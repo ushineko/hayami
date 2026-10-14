@@ -132,8 +132,34 @@ The preferences window:
 
 ### On Linux
 
-From a [release](https://github.com/ushineko/hayami/releases), which has both
-programs built for linux-amd64:
+**An installer.** A [release](https://github.com/ushineko/hayami/releases)
+carries `hayami-<version>-linux-amd64-installer`: one program that holds both
+panels and needs no toolchain and no archive. A download is not executable
+until you say so:
+
+```
+chmod +x hayami-<version>-linux-amd64-installer
+./hayami-<version>-linux-amd64-installer                # the wizard
+./hayami-<version>-linux-amd64-cli-installer --yes       # no window: install with the defaults
+./hayami-<version>-linux-amd64-cli-installer --dry-run   # list every change, make none
+~/.local/share/hayami/uninstall                         # remove it, keeping your settings
+```
+
+It installs to `~/.local/share/hayami`, links both programs from
+`~/.local/bin`, adds the launcher entry and the icon, starts the panel when
+you log in, and starts it when it is done unless you say no
+(`--launch=false`). A panel that is already running, from an earlier install
+or from `install.sh`, is stopped first, so there is one panel afterwards and
+not two; terminal panels are left running. It installs for you and not for
+the computer, and asks for no password: the [udev rule](#the-udev-rule) is
+copied to `/etc/udev/rules.d` only where that directory is yours to write,
+and otherwise the installer prints the two commands that install it. What
+the install replaced, a copy `install.sh` put in `~/.local/bin`, the
+uninstaller puts back. To build the installers from a checkout:
+`make installer`, which writes them to `dist/`.
+
+**A tarball.** The same release has both programs built for linux-amd64 with
+`install.sh` beside them:
 
 ```
 tar xzf hayami-<version>-linux-amd64.tar.gz
@@ -202,7 +228,7 @@ and keeps them as the `hayami-windows-installers` artifact. To build them
 here:
 
 ```
-go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.3   # the version go.mod requires
+go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.4   # the version go.mod requires
 .\scripts\installer_windows.ps1 -Windowed -WithCliOnly
 dist\hayami-<version>-windows-amd64-installer.exe                  # the wizard
 dist\hayami-<version>-windows-amd64-cli-installer.exe --dry-run    # list every change, make none
@@ -419,17 +445,20 @@ permitted*. `packaging/60-sanshoku.rules` is that rule, matched by vendor:
 Logitech, SteelSeries, Razer, NZXT and the AULA F75's receiver. Bluetooth
 needs no rule.
 
-The installer copies it to `/etc/udev/rules.d` when it can, and otherwise
-prints the commands:
+`install.sh` and the installer both copy it to `/etc/udev/rules.d` when they
+can, and otherwise print the commands. From a checkout or the tarball:
 
 ```
 sudo install -m644 packaging/60-sanshoku.rules /etc/udev/rules.d/60-sanshoku.rules
 sudo udevadm control --reload
 ```
 
-Then replug the device, or reboot. `hayami-tui doctor` names any device it may
-not open. `uninstall.sh` removes the rule it installed, or prints the commands
-to.
+The installer, where it may not write there, leaves a copy in
+`~/.local/share/hayami/share/` and prints the same two commands with that
+path. Then replug the device, or reboot.
+`hayami-tui doctor` names any device it may not open. `uninstall.sh` and the
+uninstaller remove the rule they installed, or print the commands to, and
+leave a rule of the same name that is not their copy.
 
 #### KWin and the window
 
@@ -503,6 +532,25 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- A Linux installer (spec 063,
+  [#201](https://github.com/ushineko/hayami/issues/201)). A release carries
+  `hayami-<version>-linux-amd64-installer`, with a wizard, and
+  `…-cli-installer` for a terminal, built by fynstall from the config the
+  Windows installers are built from. One program installs both panels under
+  `~/.local/share/hayami` with the launcher entry, the icon and the start at
+  login, and its uninstaller takes them away and keeps the settings. The
+  udev rule is copied to `/etc/udev/rules.d` where that is yours to write
+  and is otherwise two commands the installer prints. An install over a
+  running panel stops it before it starts the new one. The tarball and
+  `install.sh` stay.
+- **Fix**: the installer's wizard opens. 0.10.3 made starting the panel the
+  default, and the wizard of an installer built with fynstall 0.2.3 from
+  such a config stopped before its window, on Windows as on Linux
+  (ushineko/fynstall#51). The command-line installer was not affected.
+  fynstall 0.2.4 has the fix.
 
 ### 0.10.3 (2026-10-13)
 

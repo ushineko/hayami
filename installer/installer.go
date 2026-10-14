@@ -13,6 +13,11 @@ After the install, a hook does what the pages were told. Before an
 uninstall, another stops the panel, so Windows lets its files go, and
 removes the helper when hayami is going for good.
 
+On Linux the pages pass themselves over and the hooks do two other things
+(spec 063): they put the udev rule that lets a person open their devices
+where udev reads it, or say how, and they stop a panel that is running, so
+an install over one leaves one panel on the desk and not two.
+
 This file builds without a window. The page's window is in window.go, which
 a command-line-only installer leaves out.
 */
@@ -152,6 +157,13 @@ func afterInstall(ctx context.Context, c *extension.Context) error {
 			c.Logf(extension.Info, "The network helper is installed (%s)", n.State.Version)
 		}
 	}
+	// Linux (spec 063). A panel that an earlier install left running is
+	// stopped before the installer starts the new one, and the device rule
+	// goes where it may.
+	for _, name := range stopEarlier(c.Root()) {
+		c.Logf(extension.Info, "Stopped %s, which was running from the earlier install", name)
+	}
+	placeRule(ctx, c)
 	return nil
 }
 
@@ -176,5 +188,11 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 				"or sc.exe delete hayami-network", err)
 		}
 	}
+	// The device rule goes with an uninstall and stays through an upgrade,
+	// which would only put it back.
+	if !c.Upgrade() {
+		removeRule(ctx, c)
+	}
+	dropCopy(c)
 	return nil
 }
