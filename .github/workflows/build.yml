@@ -66,6 +66,28 @@ jobs:
       - name: The terminal panel builds without cgo
         run: CGO_ENABLED=0 go build ./cmd/hayami-tui
 
+      # Spec 063. The Linux installers, built by fynstall from fynstall.yaml
+      # as the Windows ones are below. The builder is run from the module, at
+      # the version go.mod requires.
+      - name: Build the installers
+        run: make installer
+
+      # Run, not only built: each says its version, and the command-line one
+      # lists the whole plan and changes nothing. The wizard is not opened:
+      # the runner has no display.
+      - name: The installers run
+        run: |
+          v="$(tr -d '[:space:]' < VERSION)"
+          "dist/hayami-$v-linux-amd64-cli-installer" --version | grep -F "hayami $v installer"
+          "dist/hayami-$v-linux-amd64-cli-installer" --dry-run --yes
+          "dist/hayami-$v-linux-amd64-installer" --version | grep -F "hayami $v installer"
+
+      # And installed: into a home of the test's own, over a panel that is
+      # running, and uninstalled again. Skipped by `go test ./...` above,
+      # which has no installer to run.
+      - name: The installer installs and uninstalls
+        run: HAYAMI_INSTALLERS="$PWD/dist" go test -count=1 -run TestTheLinuxInstaller ./tests/structure
+
   # Spec 033. Both panels build and every test passes on Windows. The desktop
   # panel needs cgo; the runner image carries a mingw gcc on PATH.
   windows:
@@ -130,8 +152,8 @@ jobs:
 
   # The Release is published here and never by hand. Pushing a v* tag is the
   # whole of the ceremony: the job checks the tag against VERSION, builds the
-  # tarball, takes the Windows installers the job above built, and attaches
-  # them all.
+  # tarball and the Linux installers, takes the Windows installers the job
+  # above built, and attaches them all.
   #
   # Linux amd64 and Windows amd64, for now. The desktop panel links against
   # the system's OpenGL and X11 or Wayland libraries, so another target means
@@ -168,6 +190,14 @@ jobs:
       - name: Build the release tarball
         run: make release
 
+      # After the tarball, for the same reason as the download below.
+      - name: Build the Linux installers
+        run: |
+          make installer
+          v="$(tr -d '[:space:]' < VERSION)"
+          "dist/hayami-$v-linux-amd64-cli-installer" --version | grep -F "hayami $v installer"
+          "dist/hayami-$v-linux-amd64-installer" --version | grep -F "hayami $v installer"
+
       # After the tarball, because `make release` empties dist/. The sums are
       # written again so the one file covers everything attached.
       - uses: actions/download-artifact@v4
@@ -179,7 +209,7 @@ jobs:
         run: |
           cd dist
           ls -l
-          sha256sum *.tar.gz *.exe > SHA256SUMS
+          sha256sum *.tar.gz *.exe *-linux-amd64-installer *-linux-amd64-cli-installer > SHA256SUMS
           cat SHA256SUMS
 
       # The notes are this version's changelog entry, not a list of commit
@@ -204,6 +234,8 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.exe
+            dist/*-linux-amd64-installer
+            dist/*-linux-amd64-cli-installer
             dist/SHA256SUMS
           body_path: dist/NOTES.md
           generate_release_notes: true

@@ -28,6 +28,12 @@ payload:
     dst: bin/hayami{exe}
   - src: hayami-tui{exe}
     dst: bin/hayami-tui{exe}
+  # The udev rule that lets a person open the devices the panel reads. It
+  # belongs in /etc/udev/rules.d, where a per-user install may not write, so
+  # it is carried here and installer/ puts it in place or says how (spec 063).
+  - src: packaging/60-sanshoku.rules
+    dst: share/60-sanshoku.rules
+    targets: [linux/*]
 
 integration:
   path_links:
