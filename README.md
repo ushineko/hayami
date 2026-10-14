@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.1
+**Version**: 0.10.2
 
 *a chart you read at a glance*
 
@@ -502,7 +502,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.10.2 (2026-10-13)
 
 - **Change**: a click anywhere on a card opens its drawer, and a second click
   anywhere on it closes it (spec 062, #197). The row or the meter under the
