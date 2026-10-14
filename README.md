@@ -56,23 +56,32 @@ marked stale: dim in the terminal, with its age in the window's hover note.
 
 ### What is behind a reading
 
-In the window, a click on a card opens a drawer beside the panel, as tall as
-the cards, with what the card has no room for. A second click on the same
-thing closes it, and a click on something else changes what it shows.
+In the window, a click anywhere on a card opens a drawer beside the panel, as
+tall as the cards, with what the card has no room for. A second click
+anywhere on the same card closes it, and a click on another card changes
+what it shows.
 
 | Click on | The drawer shows | Where it reads from |
 |---|---|---|
-| The processor's row | Programs by processor time, as a share of the whole machine | `/proc/<pid>/stat` on Linux; the system's process table on Windows |
-| The memory's row | Programs by the memory they hold | `/proc/<pid>/statm` on Linux; the private working set on Windows |
-| The graphics card's row | Programs by their busiest engine on that card | The `GPU Engine` counters on Windows; DRM fdinfo on Linux, and `nvidia-smi pmon` for a card on NVIDIA's own driver |
+| The cooler card, on **CPU** (`c`) | Programs by processor time, as a share of the whole machine | `/proc/<pid>/stat` on Linux; the system's process table on Windows |
+| The cooler card, on **GPU** (`g`) | Programs by their busiest engine on that card | The `GPU Engine` counters on Windows; DRM fdinfo on Linux, and `nvidia-smi pmon` for a card on NVIDIA's own driver |
+| The cooler card, on **Mem** (`m`) | Programs by the memory they hold | `/proc/<pid>/statm` on Linux; the private working set on Windows |
 | The bandwidth card | Programs by download and upload rate | TCP socket counters on Linux; event tracing on Windows, where Windows allows it |
-| A usage meter | That account's limits, what the week went on, extra usage and credits | The same cache entry the meter is read from; opening the drawer makes no request |
+| The usage card | Every account, one under another: its limits, what the week went on, extra usage and credits | The same cache entries the meters are read from; opening the drawer makes no request |
+
+The cooler's drawer has a switch under its heading, **CPU  GPU  Mem**, for
+the lists the machine has. Click one or press its letter. The card opens
+next on the list it last showed.
 
 A list is as long as the drawer is tall and does not scroll, greatest first.
 Press `f` to filter it by name, with a regular expression if you like; Return
 keeps the filter and Escape clears it. Programs with one name are one line.
 A program is shown by its name and never by its command line, its path or
 its owner.
+
+The usage drawer is not a list. When every account does not fit the cards'
+height it scrolls inside the drawer, by the wheel or by Up, Down, Page Up,
+Page Down, Home and End, and the panel stays the height it was.
 
 Nothing here is read until the drawer is open, and it stops when the drawer
 closes. The drawer opens on whichever side of the panel the screen has room
@@ -492,6 +501,30 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Change**: a click anywhere on a card opens its drawer, and a second click
+  anywhere on it closes it (spec 062, #197). The row or the meter under the
+  pointer no longer chooses what is shown.
+- **New**: the cooler's drawer has a switch between its lists, CPU, GPU and
+  Mem, by a click or by `c`, `g` and `m`. The card opens next on the list it
+  last showed.
+- **Change**: the usage card's drawer shows every account at once, with a
+  rule between accounts, and scrolls inside the drawer when they are taller
+  than the cards. `hayami-tui detail usage` prints every account;
+  `hayami-tui detail "usage/<account>"` prints one, as before.
+- **Fix**: on Plasma, closing the drawer no longer flashes the panel
+  sideways. The fix is the design system's (fynedesygn 0.1.101).
+- **Fix**: the panel is remembered where its cards are, whatever the drawer
+  is doing. A panel whose drawer was on the left could be saved at the
+  drawer's corner and come back a drawer's width to the left: the compositor
+  puts the window back to its open width for a moment after a close, and its
+  reports of where the window is arrived out of order. The place saved is
+  now worked out from the width the compositor reports, from the newest
+  report, once the window has stood still. A panel dragged with its drawer
+  out is remembered at once, and not at the next close. Linux only; on
+  Windows a move with the drawer out is still remembered at the close.
 
 ### 0.10.1 (2026-10-13)
 

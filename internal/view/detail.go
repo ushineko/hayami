@@ -39,6 +39,12 @@ type Detail struct {
 	// Reasons are what the detail could not read, and why, as a section's
 	// are.
 	Reasons []Reason `json:"reasons,omitempty"`
+
+	// Parts are the details a detail is made of, each under its own Title,
+	// for a section that shows everything it has at once: the usage of every
+	// account (spec 062). A detail with parts has nothing else of its own
+	// but its heading, and a shell that cannot fit them scrolls.
+	Parts []Detail `json:"parts,omitempty"`
 }
 
 // DetailLine is one line of a detail: a name at the left and a value at the
@@ -72,6 +78,14 @@ const DetailNameWidth = 13
 type DetailInfo struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+
+	// Label and Key are how a person chooses this detail among a section's
+	// others once it is shown (spec 062): a word for a switch, "CPU", and the
+	// one character that selects it. Empty for a detail that is not one of a
+	// choice: a section's only detail, or one a shell shows as part of
+	// another.
+	Label string `json:"label,omitempty"`
+	Key   string `json:"key,omitempty"`
 }
 
 // Matching is the detail with only the lines keep passes, headings kept. It
@@ -101,11 +115,12 @@ func (d Detail) Top(n int) Detail {
 
 // Quiet reports whether a detail has nothing at all to draw.
 func (d Detail) Quiet() bool {
-	return len(d.Lines) == 0 && len(d.Meters) == 0 && len(d.Reasons) == 0 && d.Note == ""
+	return len(d.Lines) == 0 && len(d.Meters) == 0 && len(d.Reasons) == 0 && d.Note == "" && len(d.Parts) == 0
 }
 
 // Text is the detail as plain lines, for the command line: the heading, the
-// meters, the lines, the note, and each reason with its detail.
+// meters, the lines, the note, and each reason with its detail, then each
+// part the same way under a blank line.
 func (d Detail) Text() string {
 	var b strings.Builder
 	b.WriteString(d.Title + "\n")
@@ -136,6 +151,9 @@ func (d Detail) Text() string {
 			b.WriteString("    " + r.Detail + "\n")
 		}
 	}
+	for _, part := range d.Parts {
+		b.WriteString("\n" + part.Text())
+	}
 	return b.String()
 }
 
@@ -157,6 +175,9 @@ type ProcessUse struct {
 // processKind is how one kind of process list is drawn.
 type processKind struct {
 	title string
+	// label and key are how the list is chosen in a switch; empty for a
+	// list that is its section's only one.
+	label, key string
 	// format is a summed process as a line's value.
 	format func(ProcessUse) DetailLine
 	// order is what the list is sorted by, greatest first.
@@ -173,9 +194,9 @@ const (
 )
 
 var processKinds = map[string]processKind{
-	DetailCPU:    {title: "CPU by process", format: percentLine, order: first},
-	DetailGPU:    {title: "GPU by process", format: percentLine, order: first},
-	DetailMemory: {title: "Memory by process", format: sizeLine, order: first},
+	DetailCPU:    {title: "CPU by process", label: "CPU", key: "c", format: percentLine, order: first},
+	DetailGPU:    {title: "GPU by process", label: "GPU", key: "g", format: percentLine, order: first},
+	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first},
 	DetailProcesses: {title: "Bandwidth by process", format: ratesLine,
 		order: func(p ProcessUse) float64 { return p.Value + p.Second }},
 }
@@ -184,6 +205,13 @@ func first(p ProcessUse) float64 { return p.Value }
 
 // ProcessTitle is the heading of a process list.
 func ProcessTitle(id string) string { return processKinds[id].title }
+
+// ProcessInfo is a process list as a source offers it: its heading, and the
+// label and key it is chosen by where its section has more than one.
+func ProcessInfo(id string) DetailInfo {
+	kind := processKinds[id]
+	return DetailInfo{ID: id, Title: kind.title, Label: kind.label, Key: kind.key}
+}
 
 // OtherProcesses is the name of the line for what was measured and could not
 // be put to a process.

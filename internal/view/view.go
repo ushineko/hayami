@@ -277,12 +277,6 @@ type Row struct {
 	// a label changing ("CPU" to a model name) is the same row (spec 044).
 	// Empty for a row whose builder gives none; a shell derives one.
 	ID string `json:",omitempty"`
-
-	// Opens is the ID of the detail a click on this row asks for, within the
-	// row's section (spec 060). Empty for a row with none of its own: a click
-	// on it asks for the section's. It is not Detail, which is the line of
-	// text under a reading.
-	Opens string `json:",omitempty"`
 }
 
 // DetailLines are the row's detail lines, in order, and none for a row

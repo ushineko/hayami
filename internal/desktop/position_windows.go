@@ -69,7 +69,12 @@ func NewPosition(_, title string) *Position { return &Position{title: title} }
 
 // Watch reports each place the panel is moved to. The place it has when the
 // watch starts is not reported: that is where it was put, not where it went.
-func (p *Position) Watch(onMove func(x, y int)) error {
+//
+// The width is reported as nought, which is "not known": a window's rectangle
+// is in physical pixels here and the caller's widths are not, so a caller
+// that wants the cards' corner of a panel with its drawer out has to go by
+// whether the drawer is out and not by the width.
+func (p *Position) Watch(onMove func(x, y, width int)) error {
 	stop := p.started()
 	if stop == nil {
 		return nil
@@ -90,7 +95,7 @@ func (p *Position) Watch(onMove func(x, y int)) error {
 				continue
 			}
 			if seen && (r.Left != last.Left || r.Top != last.Top) {
-				onMove(int(r.Left), int(r.Top))
+				onMove(int(r.Left), int(r.Top), 0)
 			}
 			last, seen = r, true
 		}

@@ -119,9 +119,6 @@ type roleSpec struct {
 	series bool
 	// word names a speed on the Speeds row.
 	word string
-	// opens is the ID of the detail a click on the role's row asks for
-	// (spec 060); empty for a role with none.
-	opens string
 }
 
 /*
@@ -135,9 +132,9 @@ and colouring the processor would make every compilation look like a fault.
 The coolant is: its bands are the pump's own alarm.
 */
 var coolerRoles = []roleSpec{
-	{role: RoleCPU, label: "CPU", kind: kindProcessor, series: true, opens: DetailCPU},
-	{role: RoleGPU, label: "GPU", kind: kindProcessor, series: true, opens: DetailGPU},
-	{role: RoleMemory, label: "Memory", kind: kindAmount, opens: DetailMemory},
+	{role: RoleCPU, label: "CPU", kind: kindProcessor, series: true},
+	{role: RoleGPU, label: "GPU", kind: kindProcessor, series: true},
+	{role: RoleMemory, label: "Memory", kind: kindAmount},
 	{role: RoleCoolant, label: "Coolant", kind: kindTemperature, bands: &CoolantBands},
 	{role: RoleFan, label: "Fan", kind: kindSpeed, word: "fan"},
 	{role: RolePump, label: "Pump", kind: kindSpeed, word: "pump"},
@@ -215,7 +212,6 @@ func Cooler(r CoolerReading) Section {
 			continue
 		}
 		row.ID = in.ID
-		row.Opens = in.spec.opens
 		row.Stale = in.Stale
 		s.Rows = append(s.Rows, row)
 	}

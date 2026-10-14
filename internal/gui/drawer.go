@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -22,13 +23,21 @@ them (spec 060). The surface, its place, the filter and the keyboard are the
 design system's (fynedesygn spec 068); what it shows is a view.Detail, which
 a source reads and this draws.
 
-A click on a card opens that section's detail, and on a row or a meter with
-one of its own, that one. A click on what is already shown closes the drawer;
-a click on something else changes what it shows. A detail is read only while
-it is shown, by a poll of its own that starts when the drawer opens on it and
-stops when the drawer closes, moves on, or the section is hidden.
+A click anywhere on a card opens that section's detail, a second click on the
+same card closes the drawer, and a click on another card changes what it
+shows (spec 062). Where a section has several details the drawer has a switch
+between them, and what was chosen is where that card opens next. A detail is
+read only while it is shown, by a poll of its own that starts when the drawer
+opens on it and stops when the drawer closes, moves on, or the section is
+hidden.
 */
 type drawer struct {
+	// sw chooses between a section's details where it has several: the
+	// cooler's lists. last is the detail each section last showed, which is
+	// what its card opens on next; it is not kept across a restart.
+	sw   *glance.Switch
+	last map[string]string
+
 	filter *glance.Filter
 	meters []*glance.Meter
 	rows   []*glance.Row
@@ -47,6 +56,15 @@ type drawer struct {
 	shownMeters int
 	listed      bool
 	built       bool
+
+	// parts are the pieces of a detail made of details, every account's
+	// usage, built to its shape and set in place until the shape changes.
+	// rules is how many rules stand between them. name is the width a
+	// line's name column is pinned to.
+	parts      []drawerPart
+	rules      int
+	partsShape string
+	name       float32
 
 	// stop ends the poll of what is shown, and gen tells a result that
 	// arrives after the drawer has moved on from one that is current.
@@ -80,6 +98,15 @@ type Desk interface {
 	Stop()
 }
 
+// drawerPart is one part of a detail made of details, as drawn: its heading,
+// its meters, its lines, and the lines for its reasons and its note.
+type drawerPart struct {
+	head   *glance.Row
+	meters []*glance.Meter
+	rows   []*glance.Row
+	notes  []*glance.Row
+}
+
 // noDesk is no compositor to ask: a test's panel, or a caller that named
 // none.
 type noDesk struct{}
@@ -106,12 +133,14 @@ const DrawerNotes = 4
 // buildDrawer makes the drawer's pieces and points the panel's clicks at it.
 // The pieces are built once; a detail sets them in place.
 func (p *Panel) buildDrawer(a fyne.App, o Options) {
-	d := &drawer{filter: glance.NewFilter(), desk: o.Desk}
+	d := &drawer{sw: glance.NewSwitch(), last: map[string]string{}, filter: glance.NewFilter(), desk: o.Desk}
 	if d.desk == nil {
 		d.desk = noDesk{}
 	}
 	d.filter.OnChanged = p.renderDrawer
-	name := detailNameWidth(a, o)
+	d.sw.OnChanged = p.chosen
+	d.name = detailNameWidth(a, o)
+	name := d.name
 	// Every line starts hidden: a line is shown when a detail has something
 	// to put on it.
 	for range DrawerRows {
@@ -131,6 +160,7 @@ func (p *Panel) buildDrawer(a fyne.App, o Options) {
 
 	dr := p.win.Panel().Drawer()
 	dr.SetFilter(d.filter)
+	dr.SetSwitch(d.sw)
 	// A Wayland client cannot give the keyboard away; the compositor is
 	// asked, off this thread. On Windows the design system has already done
 	// it and this is not called.
@@ -159,27 +189,13 @@ func detailNameWidth(a fyne.App, o Options) float32 {
 	return t.MinSize().Width
 }
 
-// subject is the section and the detail a click asks for: the row's own, the
-// meter's own, or the section's.
+// subject is the section a click asks about and the detail its card opens.
+// What on the card was clicked makes no difference (spec 062 R1).
 func (p *Panel) subject(tap glance.Tap) (section, id string) {
 	for key, c := range p.cards {
-		if c.card != tap.Card {
-			continue
+		if c.card == tap.Card {
+			return key, c.opens
 		}
-		id = c.opens
-		if tap.Row != nil {
-			if opens, ok := c.rowOpens[tap.Row.ID()]; ok && opens != "" {
-				id = opens
-			}
-		}
-		if tap.Meter != nil {
-			for i, m := range c.meters {
-				if m == tap.Meter && i < len(c.meterOpens) && c.meterOpens[i] != "" {
-					id = c.meterOpens[i]
-				}
-			}
-		}
-		return key, id
 	}
 	return "", ""
 }
@@ -194,22 +210,93 @@ func (p *Panel) source(key string) (panel.Source, bool) {
 	return nil, false
 }
 
-// tapped opens the drawer on what was clicked, changes what it shows, or
-// closes it on a second click of the same thing (spec 060 R3). A click on a
-// card with no detail does nothing.
+// tapped opens the drawer on the card clicked, changes what it shows when
+// another card's is out, or closes it on a second click of the same card
+// (spec 062 R1). A click on a card with no detail does nothing.
 func (p *Panel) tapped(tap glance.Tap) {
-	section, id := p.subject(tap)
+	section, opens := p.subject(tap)
 	src, ok := p.source(section)
-	if !ok || id == "" || !panel.Offers(src, id) {
+	if !ok || opens == "" {
+		return
+	}
+	det, ok := src.(panel.Detailer)
+	if !ok {
 		return
 	}
 	d := p.drawer
-	dr := p.win.Panel().Drawer()
-	if dr.Open() && d.section == section && d.id == id {
+	if p.win.Panel().Drawer().Open() && d.section == section {
 		p.closeDrawer()
 		return
 	}
-	p.showDetail(src.(panel.Detailer), section, id)
+	if id := d.opensOn(det, section, opens); id != "" {
+		p.showDetail(det, section, id)
+	}
+}
+
+/*
+opensOn is the detail a section's card opens on: the one it last showed while
+that is still offered, then the one the section names, then the first of its
+choices (spec 062 R7). Empty when the source offers none of them.
+*/
+func (d *drawer) opensOn(src panel.Detailer, section, opens string) string {
+	offered := src.Details()
+	has := func(id string) bool {
+		for _, info := range offered {
+			if info.ID == id {
+				return id != ""
+			}
+		}
+		return false
+	}
+	if last := d.last[section]; has(last) {
+		return last
+	}
+	if has(opens) {
+		return opens
+	}
+	for _, info := range offered {
+		if info.Label != "" {
+			return info.ID
+		}
+	}
+	return ""
+}
+
+// choices are the details a person chooses between where id is one of them:
+// those the source offers with a label. A detail that is not one of a choice
+// has no switch.
+func choices(src panel.Detailer, id string) []glance.Choice {
+	var out []glance.Choice
+	among := false
+	for _, info := range src.Details() {
+		if info.Label == "" {
+			continue
+		}
+		c := glance.Choice{ID: info.ID, Label: info.Label}
+		for _, r := range info.Key {
+			c.Key = r
+			break
+		}
+		out = append(out, c)
+		among = among || info.ID == id
+	}
+	if !among {
+		return nil
+	}
+	return out
+}
+
+// chosen shows the detail a person chose in the drawer's switch, in place of
+// the one shown (spec 062 R6).
+func (p *Panel) chosen(id string) {
+	d := p.drawer
+	src, ok := p.source(d.section)
+	if !ok {
+		return
+	}
+	if det, ok := src.(panel.Detailer); ok && panel.Offers(src, id) {
+		p.showDetail(det, d.section, id)
+	}
 }
 
 // showDetail points the drawer at a detail, opening it if it is closed, and
@@ -218,8 +305,11 @@ func (p *Panel) showDetail(src panel.Detailer, section, id string) {
 	d := p.drawer
 	p.stopDetail()
 	d.section, d.id = section, id
+	d.last[section] = id
 	d.detail = view.Detail{Section: section, ID: id, Title: title(src, id)}
 	d.filter.Clear()
+	d.sw.SetChoices(choices(src, id))
+	d.sw.Select(id)
 
 	dr := p.win.Panel().Drawer()
 	dr.SetTitle(d.detail.Title)
@@ -341,15 +431,6 @@ func (p *Panel) closeDrawer() {
 	p.drawer.section, p.drawer.id = "", ""
 	p.win.Panel().Drawer().SetOpen(false)
 	p.drawerOut.Store(false)
-
-	// The keyboard goes back as the drawer closes, and on Wayland the
-	// compositor's answer to that carries the window's size from before the
-	// close: the window is put back to its open width a moment later. The
-	// panel is measured again once that has had time to arrive, so the
-	// window is wide for a moment and not until the next reading.
-	for _, wait := range [...]time.Duration{120 * time.Millisecond, 500 * time.Millisecond} {
-		time.AfterFunc(wait, func() { p.do(func() { p.win.Panel().Resize() }) })
-	}
 }
 
 // applyDrawer brings the drawer into line with the settings: its side, and
@@ -386,6 +467,12 @@ func (p *Panel) renderDrawer() {
 		return
 	}
 	detail := d.detail
+	if len(detail.Parts) > 0 {
+		p.renderParts(detail)
+		return
+	}
+	d.partsShape, d.parts = "", nil
+	dr.SetScrolling(false)
 	if detail.Filterable {
 		detail = detail.Matching(d.filter.Matches)
 	}
@@ -402,7 +489,7 @@ func (p *Panel) renderDrawer() {
 	meters := min(len(detail.Meters), len(d.meters))
 	if !d.built || meters != d.shownMeters || detail.Filterable != d.listed {
 		d.built, d.shownMeters, d.listed = true, meters, detail.Filterable
-		var pieces []glance.Piece
+		pieces := []glance.Piece{d.sw}
 		if detail.Filterable {
 			pieces = append(pieces, d.filter)
 		}
@@ -418,32 +505,19 @@ func (p *Panel) renderDrawer() {
 		dr.SetContent(pieces...)
 	}
 	for i, m := range detail.Meters[:meters] {
-		d.meters[i].SetLabel(m.Name())
-		d.meters[i].Set(m.Fraction, m.Caption, status(m.Status))
-		d.meters[i].SetTrailing(m.Reset)
-		d.meters[i].SetStats(m.StatsLeft, m.StatsRight)
+		setMeter(d.meters[i], m)
 	}
 
 	// What stands above the list, and the lines under it that are always
 	// drawn: the reasons and the note come out of the room the list has.
-	var above []glance.Piece
+	above := []glance.Piece{d.sw}
 	if detail.Filterable {
 		above = append(above, d.filter)
 	}
 	for _, m := range d.meters[:meters] {
 		above = append(above, m)
 	}
-	var tail []string
-	for _, r := range detail.Reasons {
-		text := r.Text
-		if r.Label != "" {
-			text = r.Label + ": " + text
-		}
-		tail = append(tail, text)
-	}
-	if detail.Note != "" {
-		tail = append(tail, detail.Note)
-	}
+	tail := tailLines(detail)
 	fit := dr.Fit(d.rows[0], above...)
 	tail = tail[:min(len(tail), len(d.notes), max(fit, 0))]
 	lines := detail.Top(min(max(fit-len(tail), 0), len(d.rows))).Lines
@@ -453,9 +527,7 @@ func (p *Panel) renderDrawer() {
 			r.SetShown(false)
 			continue
 		}
-		l := lines[i]
-		r.SetLabel(l.Name)
-		r.Set(p.value(view.Row{Value: l.Value, Unit: l.Unit, Parts: l.Parts, Status: l.Status}))
+		p.setLine(r, lines[i])
 		r.SetShown(true)
 	}
 	for i, r := range d.notes {
@@ -468,6 +540,104 @@ func (p *Panel) renderDrawer() {
 	}
 }
 
+// setMeter draws a detail's meter on one of the drawer's.
+func setMeter(to *glance.Meter, m view.Meter) {
+	to.SetLabel(m.Name())
+	to.Set(m.Fraction, m.Caption, status(m.Status))
+	to.SetTrailing(m.Reset)
+	to.SetStats(m.StatsLeft, m.StatsRight)
+}
+
+// setLine draws a detail's line on one of the drawer's rows.
+func (p *Panel) setLine(r *glance.Row, l view.DetailLine) {
+	r.SetLabel(l.Name)
+	r.Set(p.value(view.Row{Value: l.Value, Unit: l.Unit, Parts: l.Parts, Status: l.Status}))
+}
+
+// tailLines are the lines under a detail's list: its reasons, then its note.
+func tailLines(detail view.Detail) []string {
+	var tail []string
+	for _, r := range detail.Reasons {
+		text := r.Text
+		if r.Label != "" {
+			text = r.Label + ": " + text
+		}
+		tail = append(tail, text)
+	}
+	if detail.Note != "" {
+		tail = append(tail, detail.Note)
+	}
+	return tail
+}
+
+/*
+renderParts draws a detail made of details, one under another: every
+account's usage (spec 062 R9). Each part is its heading, its meters, its
+lines, then its reasons and its note.
+
+Nothing is cut to the height: the whole of it is drawn and the drawer scrolls
+when it is taller than the cards (R11). The pieces are built when the shape
+changes, an account or a limit arriving or going, and set in place otherwise,
+so a reading leaves a scrolled breakdown where it is (R12).
+*/
+func (p *Panel) renderParts(detail view.Detail) {
+	d := p.drawer
+	dr := p.win.Panel().Drawer()
+	dr.SetTitle(detail.Title)
+	d.filter.Key = 0 // not a list: nothing to filter, as for one breakdown
+
+	shape := ""
+	for _, part := range detail.Parts {
+		shape += fmt.Sprintf("%d/%d/%d;", len(part.Meters), len(part.Lines), len(tailLines(part)))
+	}
+	if shape != d.partsShape {
+		d.partsShape, d.built = shape, false
+		d.parts, d.rules = d.parts[:0], 0
+		var pieces []glance.Piece
+		for i, part := range detail.Parts {
+			if i > 0 {
+				// A rule between one account and the next: their meters
+				// look alike, and a gap alone does not say where one ends.
+				pieces = append(pieces, glance.NewRule())
+				d.rules++
+			}
+			built := drawerPart{head: glance.NewRow("", "")}
+			pieces = append(pieces, built.head)
+			for range part.Meters {
+				m := glance.NewMeter("", MeterLabelWidth)
+				built.meters = append(built.meters, m)
+				pieces = append(pieces, m)
+			}
+			for range part.Lines {
+				r := glance.NewRowWidth("", "", d.name)
+				built.rows = append(built.rows, r)
+				pieces = append(pieces, r)
+			}
+			for range tailLines(part) {
+				r := glance.NewRow("", "")
+				built.notes = append(built.notes, r)
+				pieces = append(pieces, r)
+			}
+			d.parts = append(d.parts, built)
+		}
+		dr.SetScrolling(true)
+		dr.SetContent(pieces...)
+	}
+	for i, part := range detail.Parts {
+		built := d.parts[i]
+		built.head.SetLabel(part.Title)
+		for j, m := range part.Meters {
+			setMeter(built.meters[j], m)
+		}
+		for j, l := range part.Lines {
+			p.setLine(built.rows[j], l)
+		}
+		for j, text := range tailLines(part) {
+			built.notes[j].SetLabel(text)
+		}
+	}
+}
+
 // restyleDrawer repaints the drawer's own pieces in the current theme.
 func (p *Panel) restyleDrawer() {
 	if p.drawer == nil {
@@ -475,6 +645,11 @@ func (p *Panel) restyleDrawer() {
 	}
 	for _, m := range p.drawer.meters {
 		m.Restyle()
+	}
+	for _, part := range p.drawer.parts {
+		for _, m := range part.meters {
+			m.Restyle()
+		}
 	}
 	p.renderDrawer()
 }

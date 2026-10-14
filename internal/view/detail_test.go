@@ -255,34 +255,57 @@ func TestNoMemoryIsNoRow(t *testing.T) {
 	assert.Empty(t, s.Rows)
 }
 
-// R3. A click on the processor's, the card's and the memory's rows asks for
-// each one's own list, the coolant's for none of its own, and the card for
-// the processor's.
-func TestTheCoolersRowsNameTheDetailTheyOpen(t *testing.T) {
+// Spec 062 R1, R2. A card is one target: the cooler's opens on the
+// processor's list and no row names a detail of its own.
+func TestTheCoolersCardOpensOnTheProcessorsList(t *testing.T) {
 	r := processors()
 	r.Probes = append(r.Probes, view.Probe{ID: "memory", Role: view.RoleMemory, Bytes: view.Some(1.0)})
 
-	s := view.Cooler(r)
-
-	opens := map[string]string{}
-	for _, row := range s.Rows {
-		opens[row.ID] = row.Opens
-	}
-	assert.Equal(t, map[string]string{"cpu": "cpu", "gpu": "gpu", "memory": "memory", "coolant": ""}, opens)
-	assert.Equal(t, "cpu", s.Opens)
+	assert.Equal(t, "cpu", view.Cooler(r).Opens)
 }
 
-// A usage meter opens its own account's breakdown, and the card the first.
-func TestAUsageMeterOpensItsAccount(t *testing.T) {
+// Spec 062 R5. A process list says how it is chosen among its section's
+// others: a word and a key. The bandwidth's, which is its section's only
+// one, has neither.
+func TestAProcessListSaysHowItIsChosen(t *testing.T) {
+	assert.Equal(t, view.DetailInfo{ID: "cpu", Title: "CPU by process", Label: "CPU", Key: "c"}, view.ProcessInfo(view.DetailCPU))
+	assert.Equal(t, view.DetailInfo{ID: "gpu", Title: "GPU by process", Label: "GPU", Key: "g"}, view.ProcessInfo(view.DetailGPU))
+	assert.Equal(t, view.DetailInfo{ID: "memory", Title: "Memory by process", Label: "Mem", Key: "m"}, view.ProcessInfo(view.DetailMemory))
+	assert.Equal(t, view.DetailInfo{ID: "processes", Title: "Bandwidth by process"}, view.ProcessInfo(view.DetailProcesses))
+}
+
+// Spec 062 R9. The usage card opens every account's breakdown, whichever
+// meter is clicked, and there is nothing to open with no meters.
+func TestTheUsageCardOpensEveryAccount(t *testing.T) {
 	now := time.Now()
 	s := view.Usage(now, []view.UsageWindow{
 		{Account: "CC desk", Name: "5h", Fraction: 0.1, Span: 5 * time.Hour},
-		{Account: "CC desk", Name: "7d", Fraction: 0.2, Span: 7 * 24 * time.Hour},
 		{Account: "CX", Name: "5h", Fraction: 0.3, Span: 5 * time.Hour},
 	}, now)
 
 	require.Len(t, s.Meters, 2)
-	assert.Equal(t, "CC desk", s.Meters[0].Opens)
-	assert.Equal(t, "CX", s.Meters[1].Opens)
-	assert.Equal(t, "CC desk", s.Opens)
+	assert.Equal(t, view.DetailAccounts, s.Opens)
+	assert.Empty(t, view.Usage(now, nil, now).Opens)
+}
+
+// Spec 062 R9, R13. The whole detail is each account's own, in order, under
+// one heading, and prints as each one's text under a blank line. It is not
+// quiet while it has a part.
+func TestEveryAccountIsADetailOfParts(t *testing.T) {
+	now := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+	desk := view.UsageDetail(now, view.UsageBreakdown{Account: "CC desk", Plan: "team",
+		Limits: []view.UsageLimit{{Name: "Week", Fraction: 0.4}}})
+	failed := view.Detail{Section: "usage", ID: "CX", Title: "CX",
+		Reasons: []view.Reason{{Text: "not available", Detail: "nothing in the usage cache for CX"}}}
+
+	d := view.UsageAccounts([]view.Detail{desk, failed})
+
+	assert.Equal(t, "usage", d.Section)
+	assert.Equal(t, view.DetailAccounts, d.ID)
+	assert.Equal(t, []view.Detail{desk, failed}, d.Parts)
+	assert.False(t, d.Filterable)
+	assert.False(t, d.Quiet())
+	assert.True(t, view.UsageAccounts(nil).Quiet())
+	assert.Equal(t, view.AccountsTitle+"\n\n"+desk.Text()+"\n"+failed.Text(), d.Text())
+	assert.Contains(t, d.Text(), "CX\n  not available\n    nothing in the usage cache for CX\n")
 }

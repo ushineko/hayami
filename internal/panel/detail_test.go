@@ -137,9 +137,9 @@ func TestTheCoolerOffersAListForEachRowThatHasOne(t *testing.T) {
 	var ids []string
 	for _, info := range c.Details() {
 		ids = append(ids, info.ID)
-		assert.Equal(t, view.ProcessTitle(info.ID), info.Title)
+		assert.Equal(t, view.ProcessInfo(info.ID), info, "a list is offered with the word and the key it is chosen by")
 	}
-	assert.Equal(t, []string{"memory", "gpu"}, ids, "this host has no processor load, so no processor list")
+	assert.Equal(t, []string{"gpu", "memory"}, ids, "this host has no processor load, so no processor list")
 	assert.True(t, panel.Offers(c, "gpu"))
 	assert.False(t, panel.Offers(c, "cpu"))
 	assert.False(t, panel.Offers(c, "nonsense"))
@@ -147,6 +147,22 @@ func TestTheCoolerOffersAListForEachRowThatHasOne(t *testing.T) {
 
 	_, err := c.PollDetail(t.Context(), "nonsense")
 	assert.Error(t, err)
+}
+
+// Spec 062 R4. A machine with all three is offered them in the rows' order,
+// which is the order the drawer's switch reads in: CPU, GPU, Mem.
+func TestTheCoolersListsAreOfferedInTheRowsOrder(t *testing.T) {
+	c := panel.NewCoolerOn(detailHost(stepping(nil), &gpuReader{}, ""), noScan)
+	panel.SetProcessors(c, func() (float64, bool) { return 12, true }, func(context.Context) core.Graphics {
+		return core.Graphics{Load: 9, HasLoad: true, Temperature: 40, HasTemperature: true}
+	})
+	_, _ = c.Poll(t.Context())
+
+	var labels []string
+	for _, info := range c.Details() {
+		labels = append(labels, info.Label)
+	}
+	assert.Equal(t, []string{"CPU", "GPU", "Mem"}, labels)
 }
 
 // R7, R9. The processor's list is each program's share since the last
@@ -422,7 +438,9 @@ func TestUsageOffersABreakdownPerAccount(t *testing.T) {
 	_, err := u.Poll(t.Context())
 	require.NoError(t, err)
 
-	assert.Equal(t, []view.DetailInfo{{ID: "CC desk", Title: "CC desk"}, {ID: "CX", Title: "CX"}}, u.Details())
+	assert.Equal(t, []view.DetailInfo{
+		{ID: view.DetailAccounts, Title: view.AccountsTitle}, {ID: "CC desk", Title: "CC desk"}, {ID: "CX", Title: "CX"},
+	}, u.Details())
 	assert.Equal(t, panel.UsageInterval, u.DetailInterval("CX"))
 
 	d, err := u.PollDetail(t.Context(), "CC desk")
@@ -438,6 +456,25 @@ func TestUsageOffersABreakdownPerAccount(t *testing.T) {
 	require.Len(t, d.Reasons, 1)
 	assert.Contains(t, d.Reasons[0].Detail, "nothing in the usage cache")
 	assert.Equal(t, []string{"CC desk", "CX"}, asked)
+
+	// Spec 062 R9, R10. Every account at once, in the meters' order: the one
+	// that cannot be read keeps its heading and says why, and the other is
+	// whole.
+	all, err := u.PollDetail(t.Context(), view.DetailAccounts)
+	require.Error(t, err, "the account that failed is in the log")
+	assert.Equal(t, view.AccountsTitle, all.Title)
+	require.Len(t, all.Parts, 2)
+	assert.Equal(t, "CC desk", all.Parts[0].Title)
+	require.Len(t, all.Parts[0].Meters, 1)
+	assert.Empty(t, all.Parts[0].Reasons)
+	assert.Equal(t, "CX", all.Parts[1].Title)
+	require.Len(t, all.Parts[1].Reasons, 1)
+	assert.Contains(t, all.Parts[1].Reasons[0].Detail, "nothing in the usage cache")
+}
+
+// Usage with no accounts read offers nothing, so its card does nothing.
+func TestUsageWithNoAccountsOffersNothing(t *testing.T) {
+	assert.Empty(t, panel.NewUsage().Details())
 }
 
 // A source with no details is not a Detailer's worth of anything: the

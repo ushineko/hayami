@@ -48,7 +48,7 @@ type Position struct {
 
 	mu      sync.Mutex
 	conn    *dbus.Conn
-	onMove  func(x, y int)
+	settle  *settler
 	watched bool
 }
 
@@ -66,22 +66,26 @@ func NewPosition(appID, title string) *Position {
 
 // geometry is the object KWin calls. Its one method takes what the script
 // sends: the frame's x, y, width and height.
-type geometry struct{ report func(x, y int32) }
+type geometry struct{ settle *settler }
 
 // Report is the D-Bus method the KWin script calls.
 //
-// The width and height are taken and dropped. A glance panel is sized by its
-// content and Panel.Resize owns that; remembering a size here would put the
-// two in an argument the user would see as a window that will not stay the
-// size they made it.
-func (g geometry) Report(x, y, _, _ int32) *dbus.Error {
-	g.report(x, y)
+// The sender and the message are the bus library's to fill in and are not
+// part of what the script sends: they are how reports are put back in order
+// (settler). The width is passed on, because a panel with a drawer out is
+// wider than its cards and its corner is not theirs. It is never remembered
+// as a size: a glance panel is sized by its content and Panel.Resize owns
+// that. The height is dropped.
+func (g geometry) Report(sender dbus.Sender, msg dbus.Message, x, y, width, _ int32) *dbus.Error {
+	g.settle.take(string(sender), msg.Serial(), int(x), int(y), int(width))
 	return nil
 }
 
 /*
 Watch asks KWin to report the panel's position whenever it changes, and calls
-onMove with it.
+onMove with the place it came to rest at and the width it has there, in the
+compositor's logical pixels. A panel is wider than its cards while its drawer
+is out, and by how much is the caller's to know.
 
 The script stays loaded, which is what makes this cheap: a handler fires when
 the window actually moves rather than a round trip every few seconds for an
@@ -89,10 +93,10 @@ answer that changes twice a day. A loaded script keeps its handlers -- "a
 script runs once" is about the body -- which is verified in
 kwin.WatchGeometryScript's own documentation.
 
-onMove is called from the bus's goroutine, so a caller that touches the
-interface queues it.
+onMove is called from a goroutine of the watch's own, SettleWait after the
+last change, so a caller that touches the interface queues it.
 */
-func (p *Position) Watch(onMove func(x, y int)) error {
+func (p *Position) Watch(onMove func(x, y, width int)) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.watched {
@@ -103,16 +107,9 @@ func (p *Position) Watch(onMove func(x, y int)) error {
 	if err != nil {
 		return err
 	}
-	p.conn, p.onMove = conn, onMove
+	p.conn, p.settle = conn, &settler{wait: SettleWait, out: onMove}
 
-	obj := geometry{report: func(x, y int32) {
-		p.mu.Lock()
-		fn := p.onMove
-		p.mu.Unlock()
-		if fn != nil {
-			fn(int(x), int(y))
-		}
-	}}
+	obj := geometry{settle: p.settle}
 	if err := conn.Export(obj, dbus.ObjectPath(geometryPath), geometryIface); err != nil {
 		return fmt.Errorf("%w: exporting the geometry object: %w", ErrNoKWin, err)
 	}
@@ -191,6 +188,7 @@ func (p *Position) Stop() {
 		_ = p.conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
 			Call(unload.Interface+"."+unload.Method, 0, name).Err
 	}
+	p.settle.stop()
 	_, _ = p.conn.ReleaseName(geometryService)
 	_ = p.conn.Close()
 	p.conn, p.watched = nil, false

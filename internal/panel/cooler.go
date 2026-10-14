@@ -519,16 +519,16 @@ func (c *Cooler) Details() []view.DetailInfo {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var out []view.DetailInfo
-	if c.processes != nil {
-		if c.reading.HasCPU || c.reading.HasCPULoad {
-			out = append(out, view.DetailInfo{ID: view.DetailCPU, Title: view.ProcessTitle(view.DetailCPU)})
-		}
-		if c.reading.HasMemory {
-			out = append(out, view.DetailInfo{ID: view.DetailMemory, Title: view.ProcessTitle(view.DetailMemory)})
-		}
+	// In the rows' order, which is the order a switch between them reads
+	// in (spec 062 R4).
+	if c.processes != nil && (c.reading.HasCPU || c.reading.HasCPULoad) {
+		out = append(out, view.ProcessInfo(view.DetailCPU))
 	}
 	if c.gpuProcesses != nil && c.reading.HasGPU {
-		out = append(out, view.DetailInfo{ID: view.DetailGPU, Title: view.ProcessTitle(view.DetailGPU)})
+		out = append(out, view.ProcessInfo(view.DetailGPU))
+	}
+	if c.processes != nil && c.reading.HasMemory {
+		out = append(out, view.ProcessInfo(view.DetailMemory))
 	}
 	return out
 }

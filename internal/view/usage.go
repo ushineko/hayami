@@ -80,11 +80,10 @@ func Usage(now time.Time, windows []UsageWindow, fetchedAt time.Time) Section {
 			Strip:      strip(now, group, lead),
 			Fraction:   lead.Fraction,
 			Status:     verdict(lead),
-			Opens:      group[0].Account,
 		})
 	}
 	if len(s.Meters) > 0 {
-		s.Opens = s.Meters[0].Opens
+		s.Opens = DetailAccounts
 	}
 
 	// An old reading is drawn dim with its age as an aside, never as a line:
@@ -490,6 +489,20 @@ type UsageShare struct {
 type UsageFact struct {
 	Name  string
 	Value string
+}
+
+// DetailAccounts is the ID of the usage section's whole detail: every
+// account's breakdown, one under another (spec 062 R9).
+const DetailAccounts = "accounts"
+
+// AccountsTitle is the heading of the usage section's whole detail.
+const AccountsTitle = "Usage by account"
+
+// UsageAccounts is the usage section's whole detail: each account's own, in
+// the order given, as its parts. An account that could not be read is a part
+// too, with its reason in it (spec 062 R10).
+func UsageAccounts(accounts []Detail) Detail {
+	return Detail{Section: UsageInfo.Key, ID: DetailAccounts, Title: AccountsTitle, Parts: accounts}
 }
 
 // UsageDetail turns a breakdown into a detail: a meter per limit, the shares
