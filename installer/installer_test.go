@@ -175,6 +175,15 @@ func TestTheExtensionKeepsFynstallsRules(t *testing.T) {
 	require.NotNil(t, Extension.BeforeUninstall)
 }
 
+// The installer starts the panel when it is done unless a person says no:
+// an upgrade had to stop it, and one run with --yes has nobody to start it
+// again (fynstall spec 008).
+func TestTheInstallerStartsThePanelByDefault(t *testing.T) {
+	config := readRoot(t, "fynstall.yaml")
+	require.Regexp(t, `(?m)^  launch: bin/hayami\{exe\}$`, config)
+	require.Regexp(t, `(?m)^  launch_default: true$`, config, "an upgrade leaves the panel stopped")
+}
+
 // The installer says the version VERSION says, or it installs one version
 // and calls it another.
 func TestTheInstallersVersionIsVERSIONs(t *testing.T) {

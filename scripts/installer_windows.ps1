@@ -35,7 +35,7 @@
     is the one for a terminal. A release is built this way, with -WithCliOnly.
 
 .EXAMPLE
-    go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.1
+    go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.3
     .\scripts\installer_windows.ps1 -Windowed -WithCliOnly
 
 .EXAMPLE
