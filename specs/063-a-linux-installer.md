@@ -94,10 +94,11 @@ from it unchanged. Two things `install.sh` does had no place in it.
   One panel afterwards, running from `~/.local/share/hayami/bin/hayami`, at
   the saved position; the links in `~/.local/bin` and the autostart entry
   point into the install.
-- [ ] go.mod requires a fynstall whose wizard opens with
-  `ui.launch_default` (ushineko/fynstall#51). Built against 0.2.3 the
-  wizard stops before its window; the desk check above used an installer
-  built with `-runtime-path` against the fix.
+- [x] go.mod requires a fynstall whose wizard opens with
+  `ui.launch_default`: 0.2.4 (ushineko/fynstall#51). Built against 0.2.3
+  the wizard stops before its window; the desk check above used an
+  installer built with `-runtime-path` against the fix, and the one built
+  against 0.2.4 gets as far as asking for the display.
 - [x] CI is green with the new steps, on a runner, on both platforms.
 - [ ] A release carries both Linux installers and `SHA256SUMS` lists them.
 - [ ] Desk check: the wizard's uninstaller, and an upgrade from one

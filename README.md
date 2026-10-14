@@ -228,7 +228,7 @@ and keeps them as the `hayami-windows-installers` artifact. To build them
 here:
 
 ```
-go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.3   # the version go.mod requires
+go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.4   # the version go.mod requires
 .\scripts\installer_windows.ps1 -Windowed -WithCliOnly
 dist\hayami-<version>-windows-amd64-installer.exe                  # the wizard
 dist\hayami-<version>-windows-amd64-cli-installer.exe --dry-run    # list every change, make none
@@ -546,6 +546,11 @@ MIT. See
   and is otherwise two commands the installer prints. An install over a
   running panel stops it before it starts the new one. The tarball and
   `install.sh` stay.
+- **Fix**: the installer's wizard opens. 0.10.3 made starting the panel the
+  default, and the wizard of an installer built with fynstall 0.2.3 from
+  such a config stopped before its window, on Windows as on Linux
+  (ushineko/fynstall#51). The command-line installer was not affected.
+  fynstall 0.2.4 has the fix.
 
 ### 0.10.3 (2026-10-13)
 
