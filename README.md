@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.2
+**Version**: 0.10.3
 
 *a chart you read at a glance*
 
@@ -202,7 +202,7 @@ and keeps them as the `hayami-windows-installers` artifact. To build them
 here:
 
 ```
-go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.1   # the version go.mod requires
+go install github.com/ushineko/fynstall/cmd/fynstall@v0.2.3   # the version go.mod requires
 .\scripts\installer_windows.ps1 -Windowed -WithCliOnly
 dist\hayami-<version>-windows-amd64-installer.exe                  # the wizard
 dist\hayami-<version>-windows-amd64-cli-installer.exe --dry-run    # list every change, make none
@@ -210,7 +210,9 @@ dist\hayami-<version>-windows-amd64-cli-installer.exe --dry-run    # list every 
 
 It installs to the same directory, adds the Start menu shortcut and an entry
 in Settings > Apps, starts the panel at login, and puts both programs on
-`PATH`. Its Sensors page checks for LibreHardwareMonitor, says what it found,
+`PATH`. When it is done it starts the panel, so an upgrade brings back the
+panel it stopped: clear "Launch now" on the last page, or pass
+`--launch=false`, to leave it stopped. Its Sensors page checks for LibreHardwareMonitor, says what it found,
 and offers to install and configure it; the offer is never taken for you.
 The uninstaller, in the install directory and in Settings > Apps, stops the
 panel, removes what the install added, and keeps your settings. Remove a
@@ -501,6 +503,15 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.10.3 (2026-10-13)
+
+- **Fix**: the Windows installer starts the panel when it is done, also on
+  the command line. An upgrade stops the running panel, and one run with
+  `--yes` left it stopped until somebody started it by hand. The wizard's
+  "Launch now" now starts ticked, `--yes` starts the panel, and
+  `--launch=false` is how to say no. The fix is the installer framework's
+  (fynstall 0.2.3).
 
 ### 0.10.2 (2026-10-13)
 

@@ -10,7 +10,7 @@ app:
   id: io.ushineko.hayami
   name: hayami
   # VERSION's, and a test holds the two together.
-  version: 0.10.2
+  version: 0.10.3
   publisher: ushineko
   # Drawn from the panel's own SVG when the installer is built (spec 053).
   icon: dist/hayami.png
@@ -68,6 +68,9 @@ parameters:
 
 ui:
   launch: bin/hayami{exe}
+  # A glance panel is there when the desktop is: an install starts it unless
+  # a person says no, so an upgrade, which had to stop it, brings it back.
+  launch_default: true
 
 # hayami's own installer code: the pages that check for LibreHardwareMonitor
 # and for the network helper and offer to set each up, and the hooks that do
