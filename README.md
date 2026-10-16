@@ -533,6 +533,18 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- The bandwidth and cooler plots move between polls instead of jumping a
+  step when one lands (spec 064,
+  [#204](https://github.com/ushineko/hayami/issues/204)). Each drifts left at
+  a constant speed over its own section's interval, 2 s and 5 s, and its
+  scale blends rather than snaps when a peak arrives or leaves; a trend that
+  is filling grows from the right edge instead of re-spacing every point.
+  The plot runs up to one poll behind the figures above it, which update at
+  once. It costs about one percentage point of a core while the panel is on
+  screen. fynedesygn 0.1.103.
+
 ### 0.10.4 (2026-10-13)
 
 - A Linux installer (spec 063,

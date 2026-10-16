@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"strings"
 	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -195,6 +196,16 @@ func SparkSamples(p *Panel, key, trace string) []float64 {
 		return nil
 	}
 	return c.spark.Samples(trace)
+}
+
+// SparkDrift is the time a card's plot drifts over, and false when the card
+// has no plot.
+func SparkDrift(p *Panel, key string) (time.Duration, bool) {
+	c, ok := p.cards[key]
+	if !ok || c.spark == nil {
+		return 0, false
+	}
+	return c.spark.Drift(), true
 }
 
 // SparkScale is how a card's plot fits its traces, and false when the card

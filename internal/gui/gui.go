@@ -130,8 +130,11 @@ type card struct {
 	meters []*glance.Meter
 
 	// spark is the section's trend, for a section that has one. Nil for the
-	// rest, which is most of them.
-	spark *glance.Sparkline
+	// rest, which is most of them. traces are the names it has declared, so
+	// a later draw recolours a trace rather than declaring it again, which
+	// would drop its history and stop its drift (spec 064).
+	spark  *glance.Sparkline
+	traces map[string]bool
 
 	// grid is the section's cells, for a section whose readings are blocks
 	// rather than lines. Nil for the rest, which is every section but the
@@ -339,11 +342,17 @@ func New(a fyne.App, o Options) *Panel {
 		// A section under ScaleShared -- bandwidth -- draws every series
 		// against one range, zero to the window's peak, so a quiet interface
 		// is the flatter line (spec 021).
+		//
+		// It drifts over the section's own interval (spec 064): it moves
+		// between polls at a constant speed rather than jumping a step when
+		// one lands.
 		if len(sec.Trails) > 0 {
 			holder.spark = glance.NewSparkline(SparkCapacity)
+			holder.traces = map[string]bool{}
 			if sec.TrailScale == view.ScaleShared {
 				holder.spark.SetScale(glance.ScaleShared)
 			}
+			holder.spark.SetDrift(s.Interval())
 			c.AddObject(holder.spark)
 		}
 
@@ -508,18 +517,29 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// section keeps the trails and this is a view of them, so a window that
 	// missed a poll or was rebuilt still draws the same shape the pane does.
 	//
-	// The series are registered on every draw because their colour follows
-	// the reading -- the coolant's band, and Dim for a section whose source
-	// has stopped answering -- and because a section that gains a trail
-	// should not have to wait for a restart to plot it.
+	// The colours are set on every draw because they follow the reading --
+	// the coolant's band, and Dim for a section whose source has stopped
+	// answering -- and a section that gains a trail should not have to wait
+	// for a restart to plot it. A trace is declared once and recoloured
+	// after, and the samples go over in one call, which is what lets the plot
+	// tell a new sample (it drifts) from a new history (it is redrawn in
+	// place). A trace the section no longer has is emptied.
 	if c.spark != nil && len(sec.Trails) > 0 {
-		c.spark.Clear()
-		for _, t := range sec.Trails {
-			c.spark.AddSeries(t.Name, p.trailColour(t, sec), view.SparkMinSpan)
-			for _, v := range t.Samples {
-				c.spark.Add(t.Name, v)
-			}
+		samples := make(map[string][]float64, len(c.traces)+len(sec.Trails))
+		for name := range c.traces {
+			samples[name] = nil
 		}
+		for _, t := range sec.Trails {
+			colour := p.trailColour(t, sec)
+			if c.traces[t.Name] {
+				c.spark.SetColour(t.Name, colour)
+			} else {
+				c.spark.AddSeries(t.Name, colour, view.SparkMinSpan)
+				c.traces[t.Name] = true
+			}
+			samples[t.Name] = t.Samples
+		}
+		c.spark.SetSamples(samples)
 	}
 
 	/*

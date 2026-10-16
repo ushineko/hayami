@@ -134,3 +134,49 @@ func TestThePlotHoldsBothTrendsWindows(t *testing.T) {
 	assert.Equal(t, core.BandwidthTrail, gui.SparkCapacity)
 	assert.Equal(t, panel.CoolerTrail, gui.SparkCapacity)
 }
+
+// Each plot drifts over its own section's interval (spec 064): the motion
+// between two polls lasts until the next is due.
+func TestEachPlotDriftsOverItsSourcesInterval(t *testing.T) {
+	a := test.NewTempApp(t)
+	src := panel.NewBandwidth([]string{"eno2"}, growing())
+	_, err := src.Poll(t.Context())
+	require.NoError(t, err)
+	p := gui.New(a, gui.Options{Sources: []panel.Source{src, coolerSource{}}, Title: "hayami"})
+
+	for key, want := range map[string]time.Duration{
+		"bandwidth": core.BandwidthInterval,
+		"cooler":    coolerSource{}.Interval(),
+	} {
+		got, ok := gui.SparkDrift(p, key)
+		require.True(t, ok, "the %s card has no plot", key)
+		assert.Equal(t, want, got, key)
+	}
+}
+
+// A draw hands the plot the section's trails (spec 064). A trace is kept
+// across a draw that recolours it, and a trace the section no longer has is
+// emptied, as the clear this replaced emptied it.
+func TestADrawReplacesTheTrailsAndEmptiesOnesThatLeft(t *testing.T) {
+	a := test.NewTempApp(t)
+	p := gui.New(a, gui.Options{Sources: []panel.Source{coolerSource{}}, Title: "hayami"})
+
+	first := coolerSource{}.Section()
+	p.Draw("cooler", first, true)
+	require.Len(t, first.Trails, 3)
+	coolant, gpu := first.Trails[0].Name, first.Trails[2].Name
+	assert.Equal(t, []float64{45.8, 46, 46.2}, gui.SparkSamples(p, "cooler", coolant))
+
+	// The coolant crosses into its hot band, which recolours its trace, and
+	// the graphics card has gone.
+	second := view.Cooler(view.CoolerReading{Probes: []view.Probe{
+		{ID: "coolant", Role: view.RoleCoolant, Temp: view.Some(58.0), Trail: []float64{46, 46.2, 58}},
+		{ID: "cpu", Role: view.RoleCPU, Temp: view.Some(70.0), Trail: []float64{80, 98, 70}},
+	}})
+	require.NotEqual(t, gui.TrailColour(p, first.Trails[0], first), gui.TrailColour(p, second.Trails[0], second),
+		"the second draw should recolour the coolant")
+	p.Draw("cooler", second, true)
+
+	assert.Equal(t, []float64{46, 46.2, 58}, gui.SparkSamples(p, "cooler", coolant))
+	assert.Empty(t, gui.SparkSamples(p, "cooler", gpu), "a trail the section no longer has is not drawn")
+}
