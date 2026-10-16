@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.4
+**Version**: 0.10.5
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.10.5 (2026-10-16)
 
 - The bandwidth and cooler plots move between polls instead of jumping a
   step when one lands (spec 064,
