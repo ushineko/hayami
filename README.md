@@ -533,6 +533,14 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- A drawer on the left opens and closes with the cards in place again on
+  Plasma 6.8 ([#207](https://github.com/ushineko/hayami/issues/207)). KWin
+  6.8 keeps a window's centre when the window widens itself, and the script
+  that holds the panel's right edge stood aside whenever the window had
+  moved, so the cards slid by half the drawer's width. fynedesygn 0.1.104.
+
 ### 0.10.5 (2026-10-16)
 
 - The bandwidth and cooler plots move between polls instead of jumping a
