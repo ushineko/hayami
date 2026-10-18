@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.5
+**Version**: 0.10.6
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.10.6 (2026-10-17)
 
 - A drawer on the left opens and closes with the cards in place again on
   Plasma 6.8 ([#207](https://github.com/ushineko/hayami/issues/207)). KWin
