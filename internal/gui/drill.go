@@ -1,9 +1,7 @@
 package gui
 
 import (
-	"errors"
 	"fmt"
-	"syscall"
 	"time"
 
 	"github.com/ushineko/fynedesygn/glance"
@@ -214,7 +212,14 @@ func (p *Panel) kill(id string) {
 		return
 	}
 	pids := core.ProcDescendants(core.ProcPath, path.PID)
-	sent, refused := signalAll(pids, syscall.SIGTERM)
+	sent, refused, err := endAll(pids, false)
+	if err != nil {
+		// A machine where this is not done yet says so, rather than
+		// reporting nought sent as though the processes had refused.
+		p.drawer.killed = err.Error()
+		p.renderDrawer()
+		return
+	}
 	p.drawer.killed = fmt.Sprintf("TERM sent to %d", sent)
 	if refused > 0 {
 		p.drawer.killed += fmt.Sprintf(", %d refused", refused)
@@ -231,7 +236,7 @@ func (p *Panel) kill(id string) {
 			})
 			return
 		}
-		killed, denied := signalAll(left, syscall.SIGKILL)
+		killed, denied, _ := endAll(left, true)
 		p.do(func() {
 			p.drawer.killed = fmt.Sprintf("KILL sent to %d", killed)
 			if denied > 0 {
@@ -240,34 +245,6 @@ func (p *Panel) kill(id string) {
 			p.renderDrawer()
 		})
 	}()
-}
-
-// signalAll sends one signal to every process, and counts what was taken and
-// what was refused. A process that has already gone is neither.
-func signalAll(pids []int, sig syscall.Signal) (sent, refused int) {
-	for _, pid := range pids {
-		err := syscall.Kill(pid, sig)
-		switch {
-		case err == nil:
-			sent++
-		case errors.Is(err, syscall.ESRCH):
-			// Already gone, which is what was wanted.
-		default:
-			refused++
-		}
-	}
-	return sent, refused
-}
-
-// alive is which of the processes are still there, asked with signal 0.
-func alive(pids []int) []int {
-	var out []int
-	for _, pid := range pids {
-		if syscall.Kill(pid, 0) == nil {
-			out = append(out, pid)
-		}
-	}
-	return out
 }
 
 // killGrace is how long a process is given to end on a TERM before it is

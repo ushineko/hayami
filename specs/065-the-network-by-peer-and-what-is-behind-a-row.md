@@ -138,6 +138,12 @@ and not only read). Nothing here copies from the library.
   still there. Ending the parent alone leaves its children running,
   reparented to init and still holding their sockets, which to the person
   who pressed the button looks as though nothing happened.
+- R30 Ending a process is platform code (`kill_unix.go`, `kill_windows.go`).
+  Windows has no signals -- no TERM to ask with, no process group to ask
+  across -- and ending a tree there is a different piece of work. It answers
+  that it is not done yet rather than reporting nothing sent as though every
+  process had refused. The offer does not arrive there in practice: the kill
+  is carried on a page built from `/proc`, which Windows does not have.
 - R27 The outcome is said on the page with counts, because part of a tree
   can be refused: anything this user did not start answers `EPERM`, and
   `ESRCH` is success and not failure.
@@ -238,7 +244,10 @@ and not only read). Nothing here copies from the library.
    The `internal/core` rate tests compared whole `NetProcess` values, so
    every new field in the breakdown broke four tests that are not about the
    breakdown.
-8. **`hayami-tui detail` could never show the share.** It polls the section
+8. **The kill did not compile on Windows.** `syscall.Kill` is not there, and
+   the code was written without a build tag because the desk it was written
+   at is a Linux one. Caught by CI, not by review.
+9. **`hayami-tui detail` could never show the share.** It polls the section
    once and the detail twice, so every interface reading has `HasRate` false
    and `netNote` returns the bare count. The share is unreachable from the
    command line by construction. Fixed by polling the section again after
