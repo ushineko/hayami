@@ -67,11 +67,28 @@ type DetailLine struct {
 
 	// Heading marks a line that names the lines under it and has no value.
 	Heading bool `json:"heading,omitempty"`
+
+	// Open is what a click on the line asks for: the ID of the detail it
+	// leads to, or one of the Act names below. Empty for a line that is
+	// only to be read, which is most of them.
+	Open string `json:"open,omitempty"`
 }
+
+// The actions a detail line can carry in Open, as against a detail to open.
+// They are named and not a second field because a line does one thing when
+// it is clicked, and a line that could both navigate and act would have to
+// say which it meant.
+const (
+	ActPause   = "!pause"
+	ActBack    = "!back"
+	ActKill    = "!kill"
+	ActConfirm = "!kill-yes"
+	ActCancel  = "!kill-no"
+)
 
 // DetailNameWidth is the width a detail line's name is cut to. A drawer is a
 // fixed number of ems wide and the widest value, two rates, takes most of it.
-const DetailNameWidth = 13
+const DetailNameWidth = 20
 
 // DetailInfo is a detail a source offers: its ID within the section and the
 // heading it would carry.
@@ -191,6 +208,7 @@ const (
 	DetailGPU       = "gpu"
 	DetailMemory    = "memory"
 	DetailProcesses = "processes"
+	DetailPeers     = "peers"
 )
 
 var processKinds = map[string]processKind{
@@ -198,6 +216,8 @@ var processKinds = map[string]processKind{
 	DetailGPU:    {title: "GPU by process", label: "GPU", key: "g", format: percentLine, order: first},
 	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first},
 	DetailProcesses: {title: "Bandwidth by process", format: ratesLine,
+		order: func(p ProcessUse) float64 { return p.Value + p.Second }},
+	DetailPeers: {title: "Bandwidth by peer", label: "Peers", key: "p", format: ratesLine,
 		order: func(p ProcessUse) float64 { return p.Value + p.Second }},
 }
 
@@ -286,5 +306,35 @@ func ratesLine(p ProcessUse) DetailLine {
 	for _, part := range parts {
 		line.Value += part.Text
 	}
+	return line
+}
+
+/*
+DrillLine is one line of a drill-down, drawn in the units of the list it
+was reached through.
+
+The formatter is the list's own (processKinds), so a process's share of the
+processors is a percentage on every page it appears on and a byte count is
+a byte count. A drill that formatted its own figures would be a second
+place for the units to be decided, and the two would drift.
+
+Indent shows depth in a model whose lines are flat, by padding the name. A
+later form would carry it on DetailLine so a shell could lay it out.
+*/
+func DrillLine(detail, name string, indent int, u ProcessUse) DetailLine {
+	kind, ok := processKinds[detail]
+	if !ok || kind.format == nil {
+		return DetailLine{Name: strings.Repeat(" ", indent) + name}
+	}
+	line := kind.format(u)
+	line.Name = strings.Repeat(" ", indent) + name
+	return line
+}
+
+// PeerLine is one line of the peer breakdown: a process, or a peer indented
+// under it, or the remainder. Indent shows depth by padding the name.
+func PeerLine(name string, indent int, rx, tx float64) DetailLine {
+	line := ratesLine(ProcessUse{Value: rx, Second: tx})
+	line.Name = strings.Repeat(" ", indent) + name
 	return line
 }

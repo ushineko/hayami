@@ -67,6 +67,11 @@ func Detail(ctx context.Context, w io.Writer, sources []panel.Source, subject st
 		case <-ctx.Done():
 		case <-time.After(settle):
 		}
+		// The section is polled again as well as the detail. A section's
+		// rate is a difference too, and a detail that is a share of one --
+		// the bandwidth note, the peer breakdown's remainder -- has nothing
+		// to be a share of until the second reading.
+		_, _ = src.Poll(ctx)
 		detail, _ = d.PollDetail(ctx, id)
 	}
 

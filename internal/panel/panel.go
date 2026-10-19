@@ -74,6 +74,12 @@ func Offers(s Source, id string) bool {
 	if !ok {
 		return false
 	}
+	// A drill-down is a detail the section reaches from one it offers, not
+	// one it offers itself: a list of every process a person could open
+	// would be a list of every process.
+	if dr, ok := s.(Driller); ok && dr.Drills(id) {
+		return true
+	}
 	for _, info := range d.Details() {
 		if info.ID == id {
 			return true
@@ -87,4 +93,18 @@ func unread(section, id, title string, err error) view.Detail {
 	return view.Detail{Section: section, ID: id, Title: title, Reasons: []view.Reason{
 		reason(view.Reason{Text: "not available", Status: view.Info}, err),
 	}}
+}
+
+// Driller is a source whose details lead to further details: a row opened
+// for what is behind it. The path is carried in the detail's ID, so a drill
+// is polled, closed and offered exactly as any other detail is.
+type Driller interface {
+	// Drills reports whether an ID is one of this section's drill-downs.
+	Drills(id string) bool
+
+	// DrillUp is where a drill's way out leads. How deep a path goes is
+	// the section's own -- the bandwidth breakdown has an interface before
+	// the name, the cooler's lists do not -- so the section says, and no
+	// shell counts the parts of an ID it did not build.
+	DrillUp(id string) string
 }

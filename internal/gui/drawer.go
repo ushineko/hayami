@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -65,6 +66,17 @@ type drawer struct {
 	rules      int
 	partsShape string
 	name       float32
+
+	// paused stops the reading of the open detail; confirming is the kill
+	// waiting for its second click; killed is what the last one did, said
+	// on the page until the drill is left.
+	// paused is read by the poll on its own goroutine and written by a
+	// click on the UI thread, so it is atomic and not a plain bool: the
+	// first attempt asked the UI thread for it and read the answer before
+	// it arrived, and the pause did nothing at all.
+	paused     atomic.Bool
+	confirming bool
+	killed     string
 
 	// stop ends the poll of what is shown, and gen tells a result that
 	// arrives after the drawer has moved on from one that is current.
@@ -286,6 +298,17 @@ func choices(src panel.Detailer, id string) []glance.Choice {
 	return out
 }
 
+// detailRoot is the detail a drill was reached through, and the ID itself
+// for anything that is not one.
+func detailRoot(src panel.Detailer, id string) string {
+	dr, ok := src.(panel.Driller)
+	if !ok || !dr.Drills(id) {
+		return id
+	}
+	root, _ := panel.DrillRoot(id)
+	return root
+}
+
 // chosen shows the detail a person chose in the drawer's switch, in place of
 // the one shown (spec 062 R6).
 func (p *Panel) chosen(id string) {
@@ -308,8 +331,12 @@ func (p *Panel) showDetail(src panel.Detailer, section, id string) {
 	d.last[section] = id
 	d.detail = view.Detail{Section: section, ID: id, Title: title(src, id)}
 	d.filter.Clear()
-	d.sw.SetChoices(choices(src, id))
-	d.sw.Select(id)
+	// A drill keeps the switch of the list it was reached through, selected
+	// on that list: a person inside one can still see which of the three
+	// they are in, and leave for another without coming back out first.
+	root := detailRoot(src, id)
+	d.sw.SetChoices(choices(src, root))
+	d.sw.Select(root)
 
 	dr := p.win.Panel().Drawer()
 	dr.SetTitle(d.detail.Title)
@@ -372,6 +399,16 @@ func title(src panel.Detailer, id string) string {
 			return info.Title
 		}
 	}
+	// A drill-down is not in the list a section offers, so its heading
+	// comes from the detail it was reached through. Without this the
+	// drawer is headed with the path itself, which is plumbing.
+	if root, _, ok := strings.Cut(id, "/"); ok {
+		for _, info := range src.Details() {
+			if info.ID == root {
+				return info.Title
+			}
+		}
+	}
 	return id
 }
 
@@ -388,7 +425,26 @@ func (p *Panel) pollDetail(src panel.Detailer, id string) {
 	go func() {
 		t := time.NewTicker(src.DetailInterval(id))
 		defer t.Stop()
+		// The first two readings are taken whether or not the reading is
+		// stopped. Pause holds a page still; it does not leave a page a
+		// person has just opened blank. Two and not one because a rate is
+		// a difference: opening a drill builds a reader with no history,
+		// whose first answer is empty, and a page stopped on that one
+		// reading would report a busy process as idle.
+		reads := 0
 		for {
+			// A paused detail is not read. The ticker keeps running, so
+			// unpausing picks the reading up at the next tick rather than
+			// needing the poll restarted.
+			if d.paused.Load() && reads >= 2 {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+				continue
+			}
+			reads++
 			detail, _ := src.PollDetail(ctx, id)
 			if ctx.Err() != nil {
 				return
@@ -466,7 +522,12 @@ func (p *Panel) renderDrawer() {
 	if d == nil || !dr.Open() {
 		return
 	}
-	detail := d.detail
+	// The reading is kept as it was read and decorated on the way to being
+	// drawn. Writing the decoration back would add it again at the next
+	// render, and a drawer redrawn three times between readings would grow
+	// three pause rows.
+	p.setControls()
+	detail := p.decorate(d.detail)
 	if len(detail.Parts) > 0 {
 		p.renderParts(detail)
 		return
@@ -530,6 +591,10 @@ func (p *Panel) renderDrawer() {
 		p.setLine(r, lines[i])
 		r.SetShown(true)
 	}
+	// A list of lines is clickable on the same terms a breakdown of parts
+	// is: the row carries what it asks for and the drawer reports which was
+	// hit. A row with nothing to ask does nothing.
+	dr.SetRowTapped(p.tappedRow, d.rows...)
 	for i, r := range d.notes {
 		if i >= len(tail) {
 			r.SetShown(false)
@@ -550,6 +615,7 @@ func setMeter(to *glance.Meter, m view.Meter) {
 
 // setLine draws a detail's line on one of the drawer's rows.
 func (p *Panel) setLine(r *glance.Row, l view.DetailLine) {
+	r.SetID(l.Open)
 	r.SetLabel(l.Name)
 	r.Set(p.value(view.Row{Value: l.Value, Unit: l.Unit, Parts: l.Parts, Status: l.Status}))
 }
@@ -591,6 +657,12 @@ func (p *Panel) renderParts(detail view.Detail) {
 		shape += fmt.Sprintf("%d/%d/%d;", len(part.Meters), len(part.Lines), len(tailLines(part)))
 	}
 	if shape != d.partsShape {
+		// A rebuild starts the content again at the top. A live breakdown
+		// changes shape whenever a row comes or goes, so without putting the
+		// offset back the drawer could not be scrolled at all: each reading
+		// would take the reader to the top again.
+		was := dr.Offset()
+		defer func() { fyne.Do(func() { dr.SetOffset(was) }) }()
 		d.partsShape, d.built = shape, false
 		d.parts, d.rules = d.parts[:0], 0
 		var pieces []glance.Piece
@@ -622,6 +694,11 @@ func (p *Panel) renderParts(detail view.Detail) {
 		}
 		dr.SetScrolling(true)
 		dr.SetContent(pieces...)
+		var taps []*glance.Row
+		for _, built := range d.parts {
+			taps = append(taps, built.rows...)
+		}
+		dr.SetRowTapped(p.tappedRow, taps...)
 	}
 	for i, part := range detail.Parts {
 		built := d.parts[i]
