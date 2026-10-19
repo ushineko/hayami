@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.1
+**Version**: 0.11.2
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.2 (2026-10-19)
 
 - **Fixed**: the cooler's CPU, GPU and memory lists carry the navigation
   they were given. They shipped with no pause button and no light under the
