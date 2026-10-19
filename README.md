@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.10.6
+**Version**: 0.11.0
 
 *a chart you read at a glance*
 
@@ -533,33 +533,17 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.0 (2026-10-19)
 
-- A drill-down is drawn whole and scrolls, instead of being cut to the
-  drawer's height from the end. Beside a short card the page about a process
-  kept only "now" and "pid" and silently dropped parent, state, threads,
-  sockets and children -- the answers it was opened for.
-- The back button, the pause and the breadcrumbs use a glyph the panel's
-  face can actually draw, asked of the face rather than picked by eye. The
-  triangles drew as missing-glyph boxes on Windows, and in fact neither the
-  bundled face nor Adwaita Sans had them: this desk only ever drew them
-  because the platform substituted another font. fynedesygn 0.1.106.
-
-- The page about a process, and Kill, work on Windows (spec 065 R30-R32).
-  The page reads the process table and the socket owner tables, with no
-  helper and no administrator; Kill asks a program's windows to close and
-  ends what is left with TerminateProcess, and says how many were asked,
-  ended and refused. Kill on a page reached from the cooler's lists now
-  ends something on every platform: it read the page's ID as a bandwidth
-  one and returned.
 - The bandwidth drawer can say who a process is talking to (spec 065,
   [#210](https://github.com/ushineko/hayami/issues/210)). A second list,
   "Peers", breaks the network down by interface, then process, then the far
   end of each connection, naming peers by their PTR records and marking the
-  ones that are clients of ours. The traffic the list does not account for
-  is a row with a figure on it rather than only a percentage: it runs
-  between a tenth and a half of an interface depending on what is running,
-  because the counters are TCP only and the kernel keeps none for UDP.
+  ones that are clients of ours rather than destinations we chose. The
+  traffic the list does not account for is a row with a figure on it rather
+  than only a percentage: it runs between a tenth and a half of an
+  interface depending on what is running, because the counters are TCP only
+  and the kernel keeps none for a UDP socket at any privilege.
 - A row leads to what is behind it (specs 065 and 066,
   [#210](https://github.com/ushineko/hayami/issues/210),
   [#211](https://github.com/ushineko/hayami/issues/211)). A name opens the
@@ -571,11 +555,27 @@ MIT. See
 - The open list can be stopped while it is read, and the row under the
   pointer lights. Pause belongs to the detail and not to the panel, so the
   cards behind the drawer keep running.
-- A process can be ended from its page: SIGTERM to it and everything it
-  started, SIGKILL to whatever is still there after five seconds, and the
-  outcome said with counts. The tree and not the process alone, because
-  ending a parent leaves its children running and reparented, which looks
-  like nothing having happened. fynedesygn 0.1.105.
+- A process can be ended from its page, behind two presses. On Linux that
+  is SIGTERM to the process and everything it started, then SIGKILL to
+  whatever is still there; on Windows the program's windows are asked to
+  close and TerminateProcess ends what is left. The tree and not the
+  process alone, because ending a parent leaves its children running and
+  reparented, which looks like nothing having happened. The outcome is said
+  with counts, since part of a tree can be refused.
+- The page about a process and its Kill work on Windows (spec 065
+  R30-R32), reading the process table and the socket owner tables with no
+  helper and no administrator.
+- **Fixed**: Kill did nothing on a page reached from the cooler's lists, on
+  every platform. It read the page's ID as a bandwidth one and gave up.
+- **Fixed**: a drill-down is drawn whole and scrolls, instead of being cut
+  to the drawer's height from the end. Beside a short card the page about a
+  process kept only "now" and "pid" and silently dropped parent, state,
+  threads, sockets and children -- the answers it was opened for.
+- **Fixed**: the back button, the pause and the breadcrumbs use a glyph the
+  panel's face can actually draw, asked of the face rather than picked by
+  eye. The triangles drew as missing-glyph boxes on Windows, and neither
+  the bundled face nor Adwaita Sans had them at all: a Linux desk drew them
+  only because the platform substituted another font. fynedesygn 0.1.106.
 
 ### 0.10.6 (2026-10-17)
 
