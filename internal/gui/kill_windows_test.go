@@ -1,8 +1,10 @@
 package gui
 
 import (
+	"bufio"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -59,7 +61,16 @@ func TestEndAllWindowless(t *testing.T) {
 	}
 }
 
-// A process with a window is asked through it, and closes.
+/*
+A process with a window is asked through it, and closes.
+
+Two waits, and only the second is the test. The first is for the form to be
+shown, which the form says itself from its Shown event: a cold runner can
+spend a long time loading PowerShell and Windows Forms, and a session with
+no desktop to draw on never shows it at all. That is the machine, not the
+kill, and the test says so and skips. Once the form is shown, a window is
+there to be found, and not asking it is a failure.
+*/
 func TestEndAllAsksAWindowToClose(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts PowerShell")
@@ -67,20 +78,42 @@ func TestEndAllAsksAWindowToClose(t *testing.T) {
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-Command",
 		"Add-Type -AssemblyName System.Windows.Forms; "+
 			"$f = New-Object Windows.Forms.Form; $f.Text = 'hayami kill test'; "+
+			"$f.Add_Shown({ [Console]::Out.WriteLine('shown'); [Console]::Out.Flush() }); "+
 			"[Windows.Forms.Application]::Run($f)")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	pid := startChild(t, cmd)
 
-	// The form takes a moment to be shown.
+	shown := make(chan struct{})
+	go func() {
+		if line, _ := bufio.NewReader(out).ReadString('\n'); strings.TrimSpace(line) == "shown" {
+			close(shown)
+		}
+	}()
+	select {
+	case <-shown:
+	case <-time.After(formShown):
+		t.Skipf("PowerShell did not show its form in %s: this session may have no desktop to draw on", formShown)
+	}
+
 	var sent int
-	for end := time.Now().Add(20 * time.Second); time.Now().Before(end) && sent == 0; {
-		time.Sleep(200 * time.Millisecond)
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end) && sent == 0; {
 		sent, _, _ = endAll([]int{pid}, false)
+		if sent == 0 {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
 	if sent != 1 {
-		t.Fatal("the form's window was never asked to close")
+		t.Fatal("the form was shown and its window was never asked to close")
 	}
 	waitGone(t, pid, 10*time.Second)
 }
+
+// formShown is how long PowerShell is given to load Windows Forms and show
+// a form: seconds on a desk, and longer on a cold runner.
+const formShown = 90 * time.Second
 
 // The kernel's own process is not this user's to end.
 func TestEndAllRefusesSystem(t *testing.T) {
