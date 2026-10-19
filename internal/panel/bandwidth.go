@@ -102,8 +102,10 @@ func (b *Bandwidth) Details() []view.DetailInfo {
 	if b.net == nil {
 		return nil
 	}
+	// Both through ProcessInfo, so both carry the label and key a switch is
+	// built from. One built by hand lost them, and lost the switch with it.
 	return []view.DetailInfo{
-		{ID: view.DetailProcesses, Title: view.ProcessTitle(view.DetailProcesses)},
+		view.ProcessInfo(view.DetailProcesses),
 		view.ProcessInfo(view.DetailPeers),
 	}
 }

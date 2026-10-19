@@ -533,6 +533,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: the bandwidth card's drawer has a switch again, so the Peers
+  list can be reached. 0.11.0 shipped it unreachable: a switch is drawn
+  only over the lists that carry a label, the process list had none, and
+  the panel showed that list with no way to leave it.
+
 ### 0.11.0 (2026-10-19)
 
 - The bandwidth drawer can say who a process is talking to (spec 065,

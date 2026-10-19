@@ -215,9 +215,14 @@ var processKinds = map[string]processKind{
 	DetailCPU:    {title: "CPU by process", label: "CPU", key: "c", format: percentLine, order: first},
 	DetailGPU:    {title: "GPU by process", label: "GPU", key: "g", format: percentLine, order: first},
 	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first},
-	DetailProcesses: {title: "Bandwidth by process", format: ratesLine,
+	// Both of the bandwidth lists carry a label, because a switch is drawn
+	// only from the choices that have one and only when the open detail is
+	// among them (gui.choices). With one of the two unlabelled there was no
+	// switch at all, and the peer breakdown could not be reached from the
+	// panel: it existed, and nothing led to it.
+	DetailProcesses: {title: "Bandwidth by process", label: "Procs", key: "p", format: ratesLine,
 		order: func(p ProcessUse) float64 { return p.Value + p.Second }},
-	DetailPeers: {title: "Bandwidth by peer", label: "Peers", key: "p", format: ratesLine,
+	DetailPeers: {title: "Bandwidth by peer", label: "Peers", key: "e", format: ratesLine,
 		order: func(p ProcessUse) float64 { return p.Value + p.Second }},
 }
 
