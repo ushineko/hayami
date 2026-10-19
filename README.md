@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.0
+**Version**: 0.11.1
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.1 (2026-10-19)
 
 - **Fixed**: the bandwidth card's drawer has a switch again, so the Peers
   list can be reached. 0.11.0 shipped it unreachable: a switch is drawn
