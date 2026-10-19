@@ -146,7 +146,7 @@ func (c *Cooler) coolerDrill(ctx context.Context, id string) (view.Detail, error
 			}
 			d.Lines = append(d.Lines, line)
 		}
-		return d, nil
+		return AsPage(d), nil
 	}
 
 	pid, _ := strconv.Atoi(steps[1])
@@ -156,5 +156,5 @@ func (c *Cooler) coolerDrill(ctx context.Context, id string) (view.Detail, error
 		}
 	}
 	d.Lines = append(d.Lines, ProcessLines(pid)...)
-	return d, nil
+	return AsPage(d), nil
 }

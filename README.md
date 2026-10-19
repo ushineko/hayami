@@ -535,6 +535,16 @@ MIT. See
 
 ### Unreleased
 
+- A drill-down is drawn whole and scrolls, instead of being cut to the
+  drawer's height from the end. Beside a short card the page about a process
+  kept only "now" and "pid" and silently dropped parent, state, threads,
+  sockets and children -- the answers it was opened for.
+- The back button, the pause and the breadcrumbs use a glyph the panel's
+  face can actually draw, asked of the face rather than picked by eye. The
+  triangles drew as missing-glyph boxes on Windows, and in fact neither the
+  bundled face nor Adwaita Sans had them: this desk only ever drew them
+  because the platform substituted another font. fynedesygn 0.1.106.
+
 - The page about a process, and Kill, work on Windows (spec 065 R30-R32).
   The page reads the process table and the socket owner tables, with no
   helper and no administrator; Kill asks a program's windows to close and

@@ -73,6 +73,19 @@ something the section knows, so the section says where its way out leads.
 - R13 A drill keeps the switch of the list it was reached through, selected
   on that list, so a person inside one can see which of the three they are
   in and leave for another without coming back out first.
+- R15 A drill is one part and not a list of lines (`panel.AsPage`): its trail
+  becomes the part's heading and everything under it the part's lines. The
+  lines path cuts to the drawer's height and the cut is a prefix, so a
+  process page beside a short card kept "now" and "pid" and dropped parent,
+  state, threads, sockets and children -- the answers the page was opened
+  for -- and said nothing about dropping them. A page of parts is drawn
+  whole and scrolls.
+- R16 A drill's lines are read through `panel.DrillLines` wherever it keeps
+  them, so moving them into a part does not take the kill button away.
+- R17 Glyphs in a label are asked of the face (`fdtheme.FirstDrawable`,
+  fynedesygn spec 073), each time the controls are drawn, because the font
+  can change while the panel runs. A section's own text has no theme to ask
+  and so uses ASCII: a layer that cannot ask the face does not guess.
 - R14 Pause, hover, back and kill behave as spec 065 describes. Nothing in
   the shell is about bandwidth or about the cooler.
 
@@ -139,6 +152,24 @@ something the section knows, so the section says where its way out leads.
    so beside the cooler alone the page is "now" and "pid"; the parent,
    state, threads, sockets and children are cut. Seen on Windows with one
    section; the Linux desk's panel is taller.
+
+## Gaps closed
+
+Gaps 3 and 4, both recorded from the Windows desk and both introduced by
+spec 065 rather than by this one:
+
+3. **The glyphs drew as boxes on Windows.** The cause was worse than the
+   report: neither Fyne's bundled face nor Adwaita Sans contains U+25C2, so
+   the Linux desk that "proved" it was substituting another font at draw
+   time. A character checked by looking at one screen was never checked at
+   all. Fixed by asking the face (R17, fynedesygn spec 073), and the chosen
+   glyphs confirmed as glyphs on gamerson-w11 (Windows 11), which is the
+   desk that reported the boxes. The Linux desk cannot see that and the
+   confirmation is that desk's.
+4. **A process page beside the cooler kept only "now" and "pid".** The
+   lines path cuts to the drawer's height from the end. Fixed by making a
+   drill one part (R15), with `TestADrillIsOnePartSoNothingIsCutFromIt`,
+   which fails when the page is built the old way.
 
 ## Verification
 

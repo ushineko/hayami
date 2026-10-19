@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"github.com/ushineko/fynedesygn/glance"
+	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
@@ -103,12 +105,13 @@ func (p *Panel) setControls() {
 		dr.SetHighlight(false)
 		return
 	}
+	words := p.words()
 	if up := p.drillUp(d.id); up != d.id {
 		src, _ := p.source(d.section)
 		det, _ := src.(panel.Detailer)
 		dr.SetLeadButton(&glance.DrawerSpec{
-			Label: backLabel,
-			Words: []string{backLabel},
+			Label: words.back,
+			Words: []string{words.back},
 			On: func() {
 				d.confirming = false
 				p.showDetail(det, d.section, up)
@@ -119,12 +122,12 @@ func (p *Panel) setControls() {
 	}
 
 	pause := glance.DrawerSpec{
-		Label: pauseLabel,
+		Label: words.pause,
 		On:    func() { p.setPaused(true) },
-		Words: []string{pauseLabel, resumeLabel},
+		Words: []string{words.pause, words.resume},
 	}
 	if d.paused.Load() {
-		pause.Label = resumeLabel
+		pause.Label = words.resume
 		pause.On = func() { p.setPaused(false) }
 		pause.Active = true
 	}
@@ -185,7 +188,7 @@ func (p *Panel) drillUp(id string) string {
 // be ended. The section says so by offering the action; this does not go
 // looking for processes of its own.
 func (p *Panel) killable() bool {
-	for _, l := range p.drawer.detail.Lines {
+	for _, l := range panel.DrillLines(p.drawer.detail) {
 		if l.Open == view.ActKill {
 			return true
 		}
@@ -316,17 +319,39 @@ func (p *Panel) drills(section string) bool {
 	return ok && dr.Drills(p.drawer.id)
 }
 
-// The button's two words, with a glyph in front of each. These are the
-// text-presentation forms: U+25B6 and U+23F8 are drawn from a colour emoji
-// font here, which beside a word reads as a picture stuck to it.
+// The words with no glyph in them, which need no face to be right.
 const (
-	pauseLabel  = "\u2016 Pause"
-	resumeLabel = "\u25b8 Resume"
-	// U+25C2, the mirror of the U+25B8 used elsewhere and in the trail.
-	// U+2190 is not in the panel's face and was drawn as a missing-glyph
-	// box; a glyph that is already known to render is the safe one.
-	backLabel    = "\u25c2 Back"
 	killLabel    = "Kill"
 	confirmLabel = "Confirm?"
 	cancelLabel  = "Cancel"
 )
+
+// buttonWords are the drawer's glyph-carrying labels, for the face the
+// panel is drawn in.
+type buttonWords struct{ pause, resume, back string }
+
+/*
+words are the button labels, each with a glyph the face can draw.
+
+A character picked by eye is a character that draws as a missing-glyph box
+on the next machine. U+2190 was absent from Adwaita Sans, and U+25C2 --
+chosen here to fix that, and checked against one face on one desk -- drew as
+a box on Windows. Neither face had U+25C2 at all: the desk that said it was
+right was quietly substituting another font behind it, which is why looking
+proved nothing (fynedesygn spec 073, spec 066 gap 3).
+
+So the face is asked rather than a desk, and asked again every time the
+controls are drawn, because a person can change the panel's font while it is
+running. The emoji forms are still avoided -- U+25B6 and U+23F8 come from a
+colour emoji font here and read as pictures stuck to a word.
+*/
+func (p *Panel) words() buttonWords {
+	th, _ := p.theme()
+	plain := fyne.TextStyle{}
+	return buttonWords{
+		// Two bars for a pause, falling back to two ASCII pipes.
+		pause:  fdtheme.FirstDrawable(th, plain, "\u2016", "||") + " Pause",
+		resume: fdtheme.FirstDrawable(th, plain, fdtheme.ForwardGlyphs...) + " Resume",
+		back:   fdtheme.FirstDrawable(th, plain, fdtheme.BackGlyphs...) + " Back",
+	}
+}

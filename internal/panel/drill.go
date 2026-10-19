@@ -56,8 +56,20 @@ func Trail(head, id string) []view.DetailLine {
 	for _, s := range steps {
 		crumbs = append(crumbs, strings.TrimPrefix(s, "@"))
 	}
-	return []view.DetailLine{{Name: strings.Join(crumbs, " ▸ "), Heading: true}}
+	return []view.DetailLine{{Name: strings.Join(crumbs, crumbSeparator), Heading: true}}
 }
+
+/*
+crumbSeparator is ASCII, and deliberately plainer than the glyph the
+heading's buttons carry.
+
+Those are chosen by asking the face what it can draw (fynedesygn spec 073),
+which this cannot do: a section builds its readings without a theme, and it
+should not be given one for the sake of a decoration. A layer that cannot
+ask the face has no business guessing, and guessing here is exactly what
+drew a missing-glyph box on Windows (spec 066 gap 3).
+*/
+const crumbSeparator = " > "
 
 /*
 ProcessLines is one process: who it is, who started it, what it holds, and
@@ -118,4 +130,48 @@ func PIDLabel(pid int) string {
 		return "not attributable"
 	}
 	return fmt.Sprintf("pid %d", pid)
+}
+
+/*
+AsPage turns a drill's lines into the one part a drawer draws whole.
+
+A detail of lines is cut to the drawer's height and never scrolls, and the
+cut is a prefix: the rows at the end go first. On a drill that is the wrong
+end. Beside a short card the page about a process kept "now" and "pid" and
+dropped parent, state, threads, sockets and children -- the answers a person
+opened the page to read -- and said nothing about having dropped them
+(fynedesygn spec 072 gap 6, this spec's gap 4).
+
+A detail of parts is drawn whole and scrolls. So a drill is one part: its
+trail becomes the part's heading, which is where a heading belongs anyway,
+and everything under it is the part's lines.
+*/
+func AsPage(d view.Detail) view.Detail {
+	if len(d.Parts) > 0 || len(d.Lines) == 0 {
+		return d
+	}
+	head, rest := d.Lines[0], d.Lines[1:]
+	title := head.Name
+	if !head.Heading {
+		// No trail to promote: keep every line and let the part be headed
+		// by the detail itself.
+		title, rest = d.Title, d.Lines
+	}
+	d.Parts = []view.Detail{{
+		Section: d.Section,
+		ID:      d.ID,
+		Title:   title,
+		Lines:   rest,
+	}}
+	d.Lines = nil
+	return d
+}
+
+// DrillLines are a drill's own lines, wherever it keeps them: a page made by
+// AsPage holds them in its one part.
+func DrillLines(d view.Detail) []view.DetailLine {
+	if len(d.Parts) > 0 {
+		return d.Parts[0].Lines
+	}
+	return d.Lines
 }
