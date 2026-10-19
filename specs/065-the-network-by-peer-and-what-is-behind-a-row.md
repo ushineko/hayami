@@ -140,10 +140,29 @@ and not only read). Nothing here copies from the library.
   who pressed the button looks as though nothing happened.
 - R30 Ending a process is platform code (`kill_unix.go`, `kill_windows.go`).
   Windows has no signals -- no TERM to ask with, no process group to ask
-  across -- and ending a tree there is a different piece of work. It answers
-  that it is not done yet rather than reporting nothing sent as though every
-  process had refused. The offer does not arrive there in practice: the kill
-  is carried on a page built from `/proc`, which Windows does not have.
+  across. There the ask is `WM_CLOSE` to the process's visible top-level
+  windows, which is what closing them does and what `taskkill` without `/F`
+  sends, and the force is `TerminateProcess`. A process with no window has
+  nothing to ask through: it is neither sent to nor refused, and a tree in
+  which nothing could be asked is forced at once rather than after a grace
+  spent waiting for an answer that cannot come. The page names the two steps
+  in the platform's words (`core.EndAsk`, `core.EndForce`): "TERM, then
+  KILL" on Linux, "close, then end" on Windows.
+- R31 The page about a process is read from the platform's own table
+  (`core.ProcessInfo`, `ProcessChildren`, `ProcessTree`). On Windows that is
+  the process table `NtQuerySystemInformation` gives, which the lists
+  already read, and iphlpapi's owner tables for the sockets. Neither needs a
+  handle to the process or an administrator, so there is no helper, unlike
+  the network by process (spec 061). The state is the threads': running if
+  any runs or is ready to, suspended if all are suspended, otherwise
+  waiting. A parent is only a parent if it started before the child,
+  because Windows never updates the ID it records and a later process may
+  hold it. The sockets are TCP and UDP only: Windows keeps no table of a
+  process's Unix sockets that this user can read.
+- R32 The process a page is about is the last step of its ID
+  (`panel.DrillPID`), whichever section the page is in. The kill once read
+  it with the bandwidth section's own parser, which a cooler page's ID does
+  not satisfy, so Kill on a cooler page ended nothing.
 - R27 The outcome is said on the page with counts, because part of a tree
   can be refused: anything this user did not start answers `EPERM`, and
   `ESRCH` is success and not failure.
@@ -253,6 +272,11 @@ and not only read). Nothing here copies from the library.
    command line by construction. Fixed by polling the section again after
    the settle.
 
+10. **Kill on a cooler page did nothing.** The kill found its process with
+    the bandwidth section's parser, and `cpu/firefox/4411` is not a
+    bandwidth ID, so it returned before ending anything, on every platform.
+    Found reading the code on the Windows desk. Fixed by R32.
+
 ## Verification
 
 Driven at the Linux desk against live traffic, including a Steam download at
@@ -270,7 +294,21 @@ list long enough to scroll.
   parent `1922961` and its child both ended, page reported "gone (2 ended)"
   (after).
 
-Not verified: tests, Windows, macOS, a second text size.
+On the Windows desk (Windows 11, 100 % scale): the cooler's processor list
+drilled to `explorer` showed its state, threads and eight children, an
+empty parent (its starter had exited), and "kill: close, then end"
+(`hayami-tui detail`). Tests in
+`internal/core` and `internal/gui` drive the real process table and a real
+kill: a child of the test is on its page with this test as its parent; a
+windowless process is not asked and is ended by the force; a WinForms
+window is asked and closes; System is refused and stays. The socket count,
+the parent check and the window ask were each falsified by breaking the
+code under them and watching the test fail.
+
+Not verified: macOS, a second text size, and the Windows window itself.
+`tests/window/kill_windows_test.go` drives Kill from a cooler page on the
+real window and checks the tree is gone; when it was written the desk's
+captures came back black for every window test, so it has not passed yet.
 
 ## E2E Test Plan
 

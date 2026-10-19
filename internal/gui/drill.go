@@ -207,11 +207,11 @@ ended and some refused: anything this user did not start answers with a
 refusal, and a panel that said nothing would look as though it had worked.
 */
 func (p *Panel) kill(id string) {
-	path, ok := panel.ParseDrillPath(id)
-	if !ok || path.PID == 0 {
+	pid, ok := panel.DrillPID(id)
+	if !ok {
 		return
 	}
-	pids := core.ProcDescendants(core.ProcPath, path.PID)
+	pids := core.ProcessTree(pid)
 	sent, refused, err := endAll(pids, false)
 	if err != nil {
 		// A machine where this is not done yet says so, rather than
@@ -220,14 +220,21 @@ func (p *Panel) kill(id string) {
 		p.renderDrawer()
 		return
 	}
-	p.drawer.killed = fmt.Sprintf("TERM sent to %d", sent)
-	if refused > 0 {
-		p.drawer.killed += fmt.Sprintf(", %d refused", refused)
+	// Nothing asked and nothing refused is a tree with nothing to ask
+	// through -- on Windows, processes with no window -- and a grace would
+	// be a wait for an answer that cannot come.
+	grace := time.Duration(0)
+	if sent > 0 || refused > 0 {
+		grace = killGrace
+		p.drawer.killed = fmt.Sprintf("%s sent to %d", core.EndAsk, sent)
+		if refused > 0 {
+			p.drawer.killed += fmt.Sprintf(", %d refused", refused)
+		}
+		p.renderDrawer()
 	}
-	p.renderDrawer()
 
 	go func() {
-		time.Sleep(killGrace)
+		time.Sleep(grace)
 		left := alive(pids)
 		if len(left) == 0 {
 			p.do(func() {
@@ -238,7 +245,7 @@ func (p *Panel) kill(id string) {
 		}
 		killed, denied, _ := endAll(left, true)
 		p.do(func() {
-			p.drawer.killed = fmt.Sprintf("KILL sent to %d", killed)
+			p.drawer.killed = fmt.Sprintf("%s sent to %d", core.EndForce, killed)
 			if denied > 0 {
 				p.drawer.killed += fmt.Sprintf(", %d refused", denied)
 			}
@@ -247,8 +254,8 @@ func (p *Panel) kill(id string) {
 	}()
 }
 
-// killGrace is how long a process is given to end on a TERM before it is
-// sent a KILL.
+// killGrace is how long a process is given to end when asked before it is
+// made to.
 const killGrace = 5 * time.Second
 
 /*

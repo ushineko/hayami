@@ -56,20 +56,6 @@ func parseDrill(id string) (drillPath, bool) {
 	return p, true
 }
 
-// DrillPath is a drill ID broken into its parts, for a shell that has to
-// know which process a page is about.
-type DrillPath struct {
-	Iface, Name string
-	PID         int
-	Peer        string
-}
-
-// ParseDrillPath reads a drill ID. ok is false for the top of the list.
-func ParseDrillPath(id string) (DrillPath, bool) {
-	p, ok := parseDrill(id)
-	return DrillPath{Iface: p.iface, Name: p.name, PID: p.pid, Peer: p.peer}, ok
-}
-
 /*
 DrillUp is where this section's way out leads.
 
@@ -210,30 +196,14 @@ func (b *Bandwidth) drillProcess(d *view.Detail, procs []core.NetProcess, pid in
 			self = p
 		}
 	}
-	info := core.ReadProc(core.ProcPath, pid)
-	if info.Gone {
+	lines := ProcessLines(pid)
+	if lines == nil {
 		// The page says it once. What became of a kill is the drawer's to
 		// say, and this saying so too read as two different facts.
 		return
 	}
 	d.Lines = append(d.Lines, view.PeerLine("now", 0, self.Rx, self.Tx))
-	add := func(name, value string) {
-		d.Lines = append(d.Lines, view.DetailLine{Name: name, Value: value})
-	}
-	add("pid", strconv.Itoa(info.PID))
-	add("parent", info.Parent)
-	add("state", info.State)
-	add("threads", strconv.Itoa(info.Threads))
-	add("sockets", strconv.Itoa(info.Sockets))
-	if children := core.ProcChildren(core.ProcPath, pid); len(children) > 0 {
-		d.Lines = append(d.Lines, view.DetailLine{Name: "children", Heading: true})
-		for _, c := range children {
-			d.Lines = append(d.Lines, view.DetailLine{Name: "  " + c})
-		}
-	}
-	d.Lines = append(d.Lines, view.DetailLine{
-		Name: "kill", Value: "TERM, then KILL", Open: view.ActKill,
-	})
+	d.Lines = append(d.Lines, lines...)
 }
 
 // drillPeer is the connections to one peer: a row of figures is a number of
