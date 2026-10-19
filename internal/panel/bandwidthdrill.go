@@ -70,20 +70,6 @@ func (b *Bandwidth) DrillUp(id string) string {
 	return view.DetailPeers
 }
 
-// trail is the first line of a drill: where the page is. The way out is a
-// button in the heading, which is the same corner on every page, and not a
-// row in a list of readings.
-func trail(id string) []view.DetailLine {
-	parts := strings.Split(id, "/")
-	crumbs := []string{"Bandwidth"}
-	for _, p := range parts[1:] {
-		crumbs = append(crumbs, strings.TrimPrefix(p, "@"))
-	}
-	return []view.DetailLine{
-		{Name: strings.Join(crumbs, " ▸ "), Heading: true},
-	}
-}
-
 // drillDetail is a drill-down of the peer breakdown.
 func (b *Bandwidth) drillDetail(key, id string, use core.NetUse) view.Detail {
 	path, ok := parseDrill(id)
@@ -91,7 +77,7 @@ func (b *Bandwidth) drillDetail(key, id string, use core.NetUse) view.Detail {
 		return b.peerDetail(key, use)
 	}
 	d := view.Detail{Section: key, ID: id, Title: view.ProcessTitle(view.DetailPeers)}
-	d.Lines = trail(id)
+	d.Lines = Trail("Bandwidth", id)
 
 	var procs []core.NetProcess
 	for _, p := range use.Processes {
@@ -122,7 +108,7 @@ func (b *Bandwidth) drillDetail(key, id string, use core.NetUse) view.Detail {
 		b.drillName(&d, procs)
 	}
 	d.Note = use.Counts
-	return d
+	return AsPage(d)
 }
 
 // drillName is the processes behind one name: a browser is forty of them and
