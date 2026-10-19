@@ -162,7 +162,10 @@ spec 065 rather than by this one:
    report: neither Fyne's bundled face nor Adwaita Sans contains U+25C2, so
    the Linux desk that "proved" it was substituting another font at draw
    time. A character checked by looking at one screen was never checked at
-   all. Fixed by asking the face (R17, fynedesygn spec 073).
+   all. Fixed by asking the face (R17, fynedesygn spec 073), and the chosen
+   glyphs confirmed as glyphs on gamerson-w11 (Windows 11), which is the
+   desk that reported the boxes. The Linux desk cannot see that and the
+   confirmation is that desk's.
 4. **A process page beside the cooler kept only "now" and "pid".** The
    lines path cuts to the drawer's height from the end. Fixed by making a
    drill one part (R15), with `TestADrillIsOnePartSoNothingIsCutFromIt`,
