@@ -535,6 +535,13 @@ MIT. See
 
 ### Unreleased
 
+- The page about a process, and Kill, work on Windows (spec 065 R30-R32).
+  The page reads the process table and the socket owner tables, with no
+  helper and no administrator; Kill asks a program's windows to close and
+  ends what is left with TerminateProcess, and says how many were asked,
+  ended and refused. Kill on a page reached from the cooler's lists now
+  ends something on every platform: it read the page's ID as a bandwidth
+  one and returned.
 - The bandwidth drawer can say who a process is talking to (spec 065,
   [#210](https://github.com/ushineko/hayami/issues/210)). A second list,
   "Peers", breaks the network down by interface, then process, then the far

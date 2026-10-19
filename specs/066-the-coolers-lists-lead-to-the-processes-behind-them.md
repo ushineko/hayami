@@ -86,8 +86,14 @@ something the section knows, so the section says where its way out leads.
 - [x] Back, Pause and the hover work on the cooler's drills unchanged.
 - [ ] A name with no live processes reads "idle" (built, not yet exercised).
 - [ ] Tests: the drill levels, the shared helpers, and `DrillUp` per section.
-- [ ] A kill from a cooler drill ends the tree (built, not yet exercised
-      from this section).
+- [x] A kill from a cooler drill ends the tree. It could not at first: the
+      kill read the page's ID with the bandwidth section's parser and
+      returned (spec 065 gap 10, fixed by R32). Pressed on a real window by
+      `TestAKillFromTheCoolerEndsTheTree` (`tests/window`): CPU list, the
+      process, Kill, Confirm; the process and its child are gone and the
+      page says "end sent to 2". Passed on the Windows desk (Windows 11,
+      2560x1440 at 100 %, Smart App Control off for the run); fails with the
+      parser put back.
 
 ## Out of scope
 
@@ -123,6 +129,17 @@ something the section knows, so the section says where its way out leads.
    through. Without R13 a person drilling into a CPU row lost the way to
    the GPU and memory lists until they came back out.
 
+3. **Two glyphs are missing on Windows.** Back's U+25C2 and the trail's
+   U+25B8 draw as missing-glyph boxes in the face the panel gets on Windows
+   (`�Back`, `CPU by process �window.test`), seen in the window test's
+   pictures. Not fixed here: which glyph every platform's face has is a
+   choice for the design system.
+4. **A process page in a short panel shows two of its lines.** The drawer
+   is the cards' height and its `Lines` are cut as a prefix (spec 065 R7),
+   so beside the cooler alone the page is "now" and "pid"; the parent,
+   state, threads, sockets and children are cut. Seen on Windows with one
+   section; the Linux desk's panel is taller.
+
 ## Verification
 
 Driven at the Linux desk, and read from the command line at each level:
@@ -134,7 +151,10 @@ Driven at the Linux desk, and read from the command line at each level:
 - In the panel: Back, the CPU/GPU/Mem switch, the breadcrumb and Resume all
   drawn together on a cooler drill.
 
-Not verified: the idle path, a kill from this section, Windows, macOS.
+On Windows (spec 065 R31): `hayami-tui detail cooler/cpu/explorer/<pid>`
+renders the page from the Windows process table.
+
+Not verified: the idle path, macOS.
 
 ## E2E Test Plan
 

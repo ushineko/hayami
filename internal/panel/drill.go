@@ -72,7 +72,7 @@ carried as a line the shells read (view.ActKill) and draw as they choose,
 and a page about a process that has gone does not carry it.
 */
 func ProcessLines(pid int) []view.DetailLine {
-	info := core.ReadProc(core.ProcPath, pid)
+	info := core.ProcessInfo(pid)
 	if info.Gone {
 		return nil
 	}
@@ -86,15 +86,30 @@ func ProcessLines(pid int) []view.DetailLine {
 		add("threads", strconv.Itoa(info.Threads)),
 		add("sockets", strconv.Itoa(info.Sockets)),
 	}
-	if children := core.ProcChildren(core.ProcPath, pid); len(children) > 0 {
+	if children := core.ProcessChildren(pid); len(children) > 0 {
 		out = append(out, view.DetailLine{Name: "children", Heading: true})
 		for _, c := range children {
 			out = append(out, view.DetailLine{Name: "  " + c})
 		}
 	}
 	return append(out, view.DetailLine{
-		Name: "kill", Value: "TERM, then KILL", Open: view.ActKill,
+		Name: "kill", Value: core.EndAsk + ", then " + core.EndForce, Open: view.ActKill,
 	})
+}
+
+/*
+DrillPID is the process a drill is about, from the last step of its path:
+`cpu/firefox/4411` and `peers/eno2/fpsd/1534` are both about a process, and
+a name or a peer (`@host`) is not a number. A shell that has to act on a
+process reads it here and not from one section's notion of its path.
+*/
+func DrillPID(id string) (int, bool) {
+	_, steps := DrillRoot(id)
+	if len(steps) == 0 {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(steps[len(steps)-1])
+	return pid, err == nil && pid > 0
 }
 
 // PIDLabel names a process's row in the list of processes behind a name.

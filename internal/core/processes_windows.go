@@ -26,6 +26,27 @@ The idle process is left out. Its "kernel time" is the time nothing ran, and
 it would head every list.
 */
 func systemProcesses(context.Context) ([]ProcessSample, error) {
+	buf, err := processTable()
+	if err != nil {
+		return nil, err
+	}
+	var out []ProcessSample
+	eachProcess(buf, func(p *windows.SYSTEM_PROCESS_INFORMATION) {
+		if pid := int(p.UniqueProcessID); pid != 0 {
+			out = append(out, ProcessSample{
+				PID:        pid,
+				Name:       programName(p.ImageName.String()),
+				CPUSeconds: float64(p.UserTime+p.KernelTime) / filetimeSecond,
+				Memory:     uint64(p.WorkingSetPrivateSize), //nolint:gosec // a size is not negative
+			})
+		}
+	})
+	return out, nil
+}
+
+// processTable is NtQuerySystemInformation(SystemProcessInformation) as it
+// stood when it was read.
+func processTable() ([]byte, error) {
 	size := uint32(1 << 20)
 	var buf []byte
 	for range 4 {
@@ -45,24 +66,19 @@ func systemProcesses(context.Context) ([]ProcessSample, error) {
 	if buf == nil {
 		return nil, errors.New("NtQuerySystemInformation: the process table kept growing")
 	}
+	return buf, nil
+}
 
-	var out []ProcessSample
+// eachProcess calls fn for every entry of a process table.
+func eachProcess(buf []byte, fn func(*windows.SYSTEM_PROCESS_INFORMATION)) {
 	for offset := uintptr(0); ; {
 		p := (*windows.SYSTEM_PROCESS_INFORMATION)(unsafe.Pointer(&buf[offset]))
-		if pid := int(p.UniqueProcessID); pid != 0 {
-			out = append(out, ProcessSample{
-				PID:        pid,
-				Name:       programName(p.ImageName.String()),
-				CPUSeconds: float64(p.UserTime+p.KernelTime) / filetimeSecond,
-				Memory:     uint64(p.WorkingSetPrivateSize), //nolint:gosec // a size is not negative
-			})
-		}
+		fn(p)
 		if p.NextEntryOffset == 0 {
-			break
+			return
 		}
 		offset += uintptr(p.NextEntryOffset)
 	}
-	return out, nil
 }
 
 // programName is an image name as a person says it: "chrome" for
