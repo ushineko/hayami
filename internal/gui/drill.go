@@ -308,15 +308,27 @@ func (p *Panel) decorate(d view.Detail) view.Detail {
 	return d
 }
 
-// drills reports whether a section's details carry the navigation: the
-// bandwidth breakdown and the cooler's three lists do.
+/*
+drills reports whether the open section's drawer carries the navigation.
+
+It asks about the section and not about the detail on show. The question is
+whether to draw the button that stops the reading and to light the row
+under the pointer, and the answer is the same on a list as on a page
+reached from it: a list whose rows lead somewhere needs the light most of
+all, because without it nothing says a row can be clicked.
+
+Asking the detail instead is what left the cooler's three lists inert.
+They answered no for themselves -- a list is not a drill, only the pages
+below it are -- so they were drawn with no pause and no hover, exactly as
+they had been before any of this existed.
+*/
 func (p *Panel) drills(section string) bool {
 	src, ok := p.source(section)
 	if !ok {
 		return false
 	}
-	dr, ok := src.(panel.Driller)
-	return ok && dr.Drills(p.drawer.id)
+	_, ok = src.(panel.Driller)
+	return ok
 }
 
 // The words with no glyph in them, which need no face to be right.

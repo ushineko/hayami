@@ -533,6 +533,15 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: the cooler's CPU, GPU and memory lists carry the navigation
+  they were given. They shipped with no pause button and no light under the
+  pointer, so nothing said a row could be clicked and they looked exactly as
+  they had before: the drawer asked the open list whether it was a page
+  reached from somewhere, instead of asking the section whether its rows led
+  anywhere.
+
 ### 0.11.1 (2026-10-19)
 
 - **Fixed**: the bandwidth card's drawer has a switch again, so the Peers

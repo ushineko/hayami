@@ -82,6 +82,12 @@ something the section knows, so the section says where its way out leads.
   whole and scrolls.
 - R16 A drill's lines are read through `panel.DrillLines` wherever it keeps
   them, so moving them into a part does not take the kill button away.
+- R18 The drawer asks the **section** whether its rows lead somewhere, not
+  the detail on show. A list is not itself a drill -- only the pages below
+  it are -- so a section asked about its own list answered no, and the
+  cooler's three were drawn with no pause and no hover: nothing on screen
+  said a row could be clicked, and they looked exactly as they had before
+  any of this existed.
 - R17 Glyphs in a label are asked of the face (`fdtheme.FirstDrawable`,
   fynedesygn spec 073), each time the controls are drawn, because the font
   can change while the panel runs. A section's own text has no theme to ask
@@ -170,6 +176,16 @@ spec 065 rather than by this one:
    lines path cuts to the drawer's height from the end. Fixed by making a
    drill one part (R15), with `TestADrillIsOnePartSoNothingIsCutFromIt`,
    which fails when the page is built the old way.
+
+## Gaps closed, second round
+
+5. **The cooler's lists were inert.** Shipped in 0.11.0 and 0.11.1 with no
+   pause and no hover, because the drawer asked the open detail whether it
+   was a drill rather than asking the section whether its rows led
+   anywhere. Fixed by R18. The first attempt at the fix made the cooler
+   call its own list a drill, which broke `Offers`: a host with no
+   processor load offers no CPU list, and the section began claiming it
+   did. A test caught that before it left the desk.
 
 ## Verification
 
