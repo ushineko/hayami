@@ -307,10 +307,11 @@ window is asked and closes; System is refused and stays. The socket count,
 the parent check and the window ask were each falsified by breaking the
 code under them and watching the test fail.
 
-Not verified: macOS, a second text size, and the Windows window itself.
-`tests/window/kill_windows_test.go` drives Kill from a cooler page on the
-real window and checks the tree is gone; when it was written the desk's
-captures came back black for every window test, so it has not passed yet.
+In the window, on the same desk with Smart App Control off for the run:
+`TestAKillFromTheCoolerEndsTheTree` presses Kill and Confirm on a cooler
+page and the tree is gone, the page then saying "end sent to 2" (spec 066).
+
+Not verified: macOS, a second text size.
 
 ## E2E Test Plan
 

@@ -78,27 +78,45 @@ func stillRunning(pid int) bool {
 	return ev == uint32(windows.WAIT_TIMEOUT)
 }
 
-// drawerText is the picture's lines of text inside the drawer's columns.
-func drawerText(p *picture, from, to int) []span {
+// drawer is the drawer's columns of a picture, as a picture of their own:
+// the cards beside it have lines and words at the same heights.
+func drawer(p *picture, from, to int) *picture {
 	b := p.img.Bounds()
 	crop := image.NewNRGBA(image.Rect(0, 0, to-from, b.Dy()))
 	for y := range b.Dy() {
 		copy(crop.Pix[y*crop.Stride:y*crop.Stride+(to-from)*4], p.img.Pix[y*p.img.Stride+from*4:y*p.img.Stride+to*4])
 	}
-	return textLines(crop)
+	return &picture{img: crop, path: p.path, text: textLines(crop)}
+}
+
+// figured are a drawer's rows that carry a figure at their right: the list's
+// rows, and not the heading, the switch, the filter or the note under them.
+func figured(d *picture) []span {
+	var out []span
+	for i, line := range d.text {
+		if i == 0 {
+			continue // the heading, whose right holds buttons
+		}
+		ws := d.words(line)
+		if len(ws) > 1 && ws[len(ws)-1].From > d.img.Bounds().Dx()*2/3 {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 /*
 Spec 065 R24-R27, spec 066, on Windows (R30, R31). From the cooler's
 processor list: the spinner's name, then its process, then Kill and
-Confirm in the heading; the spinner and the child it started are both
+Confirm in the heading, left of Pause; the spinner and the child it started are both
 gone. A cooler page's ID is not a bandwidth one, and the kill once read it
 as one and ended nothing.
 
 The clicks are found from the pictures: the list is sorted by share and the
 spinner is busier than anything else on a desk at rest, so it is the first
 row; the process is the second row of its page, under "all"; the kill is
-the heading's last word and the confirm takes its place.
+the heading's last word but one, Pause being the last, and the confirm
+takes its place.
 */
 func TestAKillFromTheCoolerEndsTheTree(t *testing.T) {
 	cpuLabel, _ := processorRows(t)
@@ -121,28 +139,31 @@ func TestAKillFromTheCoolerEndsTheTree(t *testing.T) {
 	}
 	time.Sleep(listSettle)
 
-	// step clicks the drawer's line at index i, from the left of its text.
-	step := func(name string, i int) *picture {
+	// step clicks the drawer's i-th row with a figure, from the left of its
+	// text.
+	step := func(name string, i int) {
 		t.Helper()
 		shot := shoot(t, hwnd, name+".png")
-		lines := drawerText(shot, from, to)
-		require.Greater(t, len(lines), i, "%s: the drawer has %d lines (picture %s)", name, len(lines), shot.path)
-		tap(t, hwnd, from+(to-from)/3, (lines[i].From+lines[i].To)/2)
+		rows := figured(drawer(shot, from, to))
+		require.Greater(t, len(rows), i, "%s: the drawer has %d rows (picture %s)", name, len(rows), shot.path)
+		tap(t, hwnd, from+(to-from)/3, (rows[i].From+rows[i].To)/2)
 		time.Sleep(listSettle)
-		return shot
 	}
-	// The heading, then the first row: the spinner.
-	step("kill-list", 1)
-	// The trail, "all", then the one process.
-	step("kill-name", 2)
+	// The spinner is the busiest name, so the first row.
+	step("kill-list", 0)
+	// "all", then the spinner's own process, which is the busiest of its
+	// name: this test is a process of the same name, idle.
+	step("kill-name", 1)
 
 	page := shoot(t, hwnd, "kill-process.png")
-	lines := drawerText(page, from, to)
-	require.NotEmpty(t, lines, "picture %s", page.path)
-	heading := lines[0]
-	words := words(page.img, heading, page.gap())
-	require.NotEmpty(t, words, "picture %s", page.path)
-	kill := words[len(words)-1]
+	d := drawer(page, from, to)
+	require.NotEmpty(t, d.text, "picture %s", page.path)
+	heading := d.text[0]
+	ws := d.words(heading)
+	// The heading ends in its buttons: Kill, then Pause.
+	require.GreaterOrEqual(t, len(ws), 3, "picture %s", page.path)
+	kill := ws[len(ws)-2]
+	kill.From, kill.To = kill.From+from, kill.To+from
 	require.Greater(t, kill.From, from+(to-from)/2,
 		"the heading's last word is not at its right: no Kill button (picture %s)", page.path)
 	y := (heading.From + heading.To) / 2
@@ -160,4 +181,9 @@ func TestAKillFromTheCoolerEndsTheTree(t *testing.T) {
 	done := shoot(t, hwnd, "kill-done.png")
 	require.False(t, stillRunning(parent), "the process is still there (picture %s)", done.path)
 	require.False(t, stillRunning(child), fmt.Sprintf("the process's child is still there (picture %s)", done.path))
+
+	// What the page says once a reading has come since: for a person to look
+	// at, not asserted.
+	time.Sleep(listSettle)
+	shoot(t, hwnd, "kill-after.png")
 }
