@@ -538,3 +538,7 @@ func Moved(p *Panel, store *config.Store, x, y, width int) { p.moved(store, x, y
 // what the drawer adds to the window when it is out.
 func CardsWidth(p *Panel) float32  { return p.win.Panel().CardsSize().Width }
 func DrawerReach(p *Panel) float32 { return p.win.Panel().Drawer().Reach() }
+
+// Choices are the switch a section's details would be offered through, for
+// a test asking whether one is drawn at all.
+func Choices(src panel.Detailer, id string) []glance.Choice { return choices(src, id) }

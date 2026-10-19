@@ -69,6 +69,12 @@ and not only read). Nothing here copies from the library.
 
 ### The breakdown
 
+- R33 Both of the section's lists carry a label and a key. A switch is built
+  only from the choices that have a label, and drawn only when the open
+  detail is among them, so one unlabelled list means no switch at all and
+  the other list cannot be reached from the panel. Shipped that way in
+  0.11.0: the breakdown was built, tested and released, and nothing on
+  screen led to it.
 - R6 The bandwidth section offers a second detail, `peers`: one part per
   watched interface, each the interface's own rate, the processes that used
   it with their peers under them, and the traffic the list does not account
@@ -268,7 +274,14 @@ and not only read). Nothing here copies from the library.
 8. **The kill did not compile on Windows.** `syscall.Kill` is not there, and
    the code was written without a build tag because the desk it was written
    at is a Linux one. Caught by CI, not by review.
-9. **`hayami-tui detail` could never show the share.** It polls the section
+9. **Nothing on screen led to the new list.** The peer breakdown shipped
+   unreachable: its section offered two details but only one carried a
+   label, so no switch was drawn and the panel showed the old list with no
+   way to leave it. Every check that passed was one that bypassed the
+   switch -- the command line takes a detail by name, and the spike opened
+   one through an environment variable written for screenshots. The path a
+   person actually takes was the one path never exercised.
+10. **`hayami-tui detail` could never show the share.** It polls the section
    once and the detail twice, so every interface reading has `HasRate` false
    and `netNote` returns the bare count. The share is unreachable from the
    command line by construction. Fixed by polling the section again after

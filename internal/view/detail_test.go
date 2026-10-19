@@ -265,13 +265,15 @@ func TestTheCoolersCardOpensOnTheProcessorsList(t *testing.T) {
 }
 
 // Spec 062 R5. A process list says how it is chosen among its section's
-// others: a word and a key. The bandwidth's, which is its section's only
-// one, has neither.
+// others: a word and a key. The bandwidth section has two lists now, so
+// both of its own carry them; when one did not, no switch was drawn and the
+// peer breakdown could not be reached from the panel.
 func TestAProcessListSaysHowItIsChosen(t *testing.T) {
 	assert.Equal(t, view.DetailInfo{ID: "cpu", Title: "CPU by process", Label: "CPU", Key: "c"}, view.ProcessInfo(view.DetailCPU))
 	assert.Equal(t, view.DetailInfo{ID: "gpu", Title: "GPU by process", Label: "GPU", Key: "g"}, view.ProcessInfo(view.DetailGPU))
 	assert.Equal(t, view.DetailInfo{ID: "memory", Title: "Memory by process", Label: "Mem", Key: "m"}, view.ProcessInfo(view.DetailMemory))
-	assert.Equal(t, view.DetailInfo{ID: "processes", Title: "Bandwidth by process"}, view.ProcessInfo(view.DetailProcesses))
+	assert.Equal(t, view.DetailInfo{ID: "processes", Title: "Bandwidth by process", Label: "Procs", Key: "p"}, view.ProcessInfo(view.DetailProcesses))
+	assert.Equal(t, view.DetailInfo{ID: "peers", Title: "Bandwidth by peer", Label: "Peers", Key: "e"}, view.ProcessInfo(view.DetailPeers))
 }
 
 // Spec 062 R9. The usage card opens every account's breakdown, whichever
