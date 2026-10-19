@@ -10,7 +10,7 @@ app:
   id: io.ushineko.hayami
   name: hayami
   # VERSION's, and a test holds the two together.
-  version: 0.10.6
+  version: 0.11.0
   publisher: ushineko
   # Drawn from the panel's own SVG when the installer is built (spec 053).
   icon: dist/hayami.png
