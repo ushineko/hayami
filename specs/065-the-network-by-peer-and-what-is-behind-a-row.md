@@ -152,8 +152,10 @@ and not only read). Nothing here copies from the library.
   (`core.ProcessInfo`, `ProcessChildren`, `ProcessTree`). On Windows that is
   the process table `NtQuerySystemInformation` gives, which the lists
   already read, and iphlpapi's owner tables for the sockets. Neither needs a
-  handle to the process or an administrator, so there is no helper, unlike
-  the network by process (spec 061). The state is the threads': running if
+  handle to the process or an administrator, so there is no helper. The
+  network by process needed one (spec 061) only because its source, the
+  kernel's network trace, is an administrator's; nothing on this page is,
+  and a helper that is not needed is a service with no reason to exist. The state is the threads': running if
   any runs or is ready to, suspended if all are suspended, otherwise
   waiting. A parent is only a parent if it started before the child,
   because Windows never updates the ID it records and a later process may

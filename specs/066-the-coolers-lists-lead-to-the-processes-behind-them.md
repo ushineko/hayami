@@ -86,8 +86,12 @@ something the section knows, so the section says where its way out leads.
 - [x] Back, Pause and the hover work on the cooler's drills unchanged.
 - [ ] A name with no live processes reads "idle" (built, not yet exercised).
 - [ ] Tests: the drill levels, the shared helpers, and `DrillUp` per section.
-- [ ] A kill from a cooler drill ends the tree (built, not yet exercised
-      from this section).
+- [ ] A kill from a cooler drill ends the tree. It could not: the kill read
+      the page's ID with the bandwidth section's parser and returned (spec
+      065 gap 10, fixed by R32, with `TestDrillPID`). Not ticked until it is
+      pressed on a real window: `TestAKillFromTheCoolerEndsTheTree` in
+      `tests/window` does that on Windows and has not yet run on a desk
+      whose captures are not black.
 
 ## Out of scope
 
@@ -134,7 +138,11 @@ Driven at the Linux desk, and read from the command line at each level:
 - In the panel: Back, the CPU/GPU/Mem switch, the breadcrumb and Resume all
   drawn together on a cooler drill.
 
-Not verified: the idle path, a kill from this section, Windows, macOS.
+On Windows (spec 065 R31): `hayami-tui detail cooler/cpu/explorer/<pid>`
+renders the page from the Windows process table.
+
+Not verified: the idle path, a kill from this section pressed in a window,
+macOS.
 
 ## E2E Test Plan
 
