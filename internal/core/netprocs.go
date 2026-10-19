@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +32,12 @@ type SocketCount struct {
 
 	// Rx is bytes received and Tx bytes sent and acknowledged.
 	Rx, Tx uint64
+
+	// Local and Peer are the two ends, and LocalPort the near one's port.
+	// They are kept to group a process's sockets by interface and to
+	// name who is at the far end; the shipped reader threw them away.
+	Local, Peer         string
+	LocalPort, PeerPort uint16
 }
 
 type socketKey struct {
@@ -54,6 +62,11 @@ type socketNet struct {
 	owners  func(context.Context) (map[uint32]int, error)
 	samples func(context.Context) ([]ProcessSample, error)
 	counts  string
+
+	// ifaces maps a local address to the interface that holds it, and
+	// listening is the set of ports this machine answers on.
+	ifaces    func() map[string]string
+	listening map[uint16]bool
 
 	mu     sync.Mutex
 	last   map[socketKey]SocketCount
@@ -96,7 +109,19 @@ func (s *socketNet) Read(ctx context.Context) (NetUse, error) {
 		}
 	}
 
-	by := map[int]*NetProcess{}
+	// A reader built without an interface table -- a test's, and any
+	// system that does not keep one -- puts every socket under no
+	// interface rather than refusing to count it.
+	ifaces := map[string]string{}
+	if s.ifaces != nil {
+		ifaces = s.ifaces()
+	}
+	type procKey struct {
+		pid   int
+		iface string
+	}
+	peers := map[procKey]map[string]*NetPeer{}
+	by := map[procKey]*NetProcess{}
 	for key, c := range now {
 		before := was[key] // a new socket differences against nought
 		if c.Rx < before.Rx || c.Tx < before.Tx {
@@ -107,19 +132,43 @@ func (s *socketNet) Read(ctx context.Context) (NetUse, error) {
 		if _, named := names[pid]; !named {
 			pid = 0
 		}
-		p, ok := by[pid]
+		k := procKey{pid, ifaces[c.Local]}
+		p, ok := by[k]
 		if !ok {
-			p = &NetProcess{PID: pid, Name: names[pid]}
-			by[pid] = p
+			p = &NetProcess{PID: pid, Name: names[pid], Iface: k.iface}
+			by[k] = p
+			peers[k] = map[string]*NetPeer{}
 		}
 		p.Rx += rx
 		p.Tx += tx
+
+		// A socket whose near end is a listening port is one this process
+		// serves, so the far end is a client of ours and not a destination
+		// we chose. The two read differently and the list says which.
+		served := s.listening[c.LocalPort]
+		far, ok := peers[k][c.Peer]
+		if !ok {
+			far = &NetPeer{Addr: c.Peer, Served: served}
+			_ = far
+			peers[k][c.Peer] = far
+		}
+		far.Rx += rx
+		far.Tx += tx
+		far.Sockets = append(far.Sockets, NetSocket{
+			LocalPort: c.LocalPort, PeerPort: c.PeerPort, Rx: rx, Tx: tx,
+		})
 	}
-	for _, p := range by {
+	for k, p := range by {
 		// "other" with nothing in it is not a line worth drawing.
 		if p.PID == 0 && p.Rx == 0 && p.Tx == 0 {
 			continue
 		}
+		for _, far := range peers[k] {
+			p.Peers = append(p.Peers, *far)
+		}
+		sort.Slice(p.Peers, func(i, j int) bool {
+			return p.Peers[i].Rx+p.Peers[i].Tx > p.Peers[j].Rx+p.Peers[j].Tx
+		})
 		use.Processes = append(use.Processes, *p)
 	}
 	return use, nil
@@ -224,3 +273,52 @@ type noNet struct{ absence *Absence }
 
 func (n noNet) Read(context.Context) (NetUse, error) { return NetUse{}, n.absence }
 func (noNet) Close()                                 {}
+
+// localIfaces maps every local address to the interface that holds it, which
+// is how a socket is put to an interface: the kernel's socket ID carries an
+// interface index only for a bound socket, and most are not bound.
+func localIfaces() map[string]string {
+	out := map[string]string{}
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return out
+	}
+	for _, i := range ifs {
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if n, ok := a.(*net.IPNet); ok {
+				out[n.IP.String()] = i.Name
+			}
+		}
+	}
+	return out
+}
+
+// listeningPorts is every TCP port this machine answers on, read once: a
+// socket whose near end is one of them is a connection we accepted.
+func listeningPorts() map[uint16]bool {
+	out := map[uint16]bool{}
+	for _, f := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n")[1:] {
+			fields := strings.Fields(line)
+			if len(fields) < 4 || fields[3] != "0A" {
+				continue
+			}
+			_, port, ok := strings.Cut(fields[1], ":")
+			if !ok {
+				continue
+			}
+			if n, err := strconv.ParseUint(port, 16, 16); err == nil {
+				out[uint16(n)] = true
+			}
+		}
+	}
+	return out
+}

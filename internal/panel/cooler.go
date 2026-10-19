@@ -551,6 +551,9 @@ var coolerDetails = map[string]func(*Cooler, context.Context) ([]view.ProcessUse
 // a process is its name (spec 060 R6).
 func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error) {
 	key := c.Key()
+	if c.Drills(id) {
+		return c.coolerDrill(ctx, id)
+	}
 	read, ok := coolerDetails[id]
 	if !ok {
 		return view.Detail{}, fmt.Errorf("the %s section has no detail %q", key, id)
@@ -560,6 +563,14 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 		return unread(key, id, view.ProcessTitle(id), err), err
 	}
 	d := view.Processes(key, id, uses)
+	// Every row leads to the processes behind its name. The row carries
+	// what it asks for; what a click does with it is the shell's.
+	for i, l := range d.Lines {
+		if l.Heading || l.Name == "" || l.Name == view.OtherProcesses {
+			continue
+		}
+		d.Lines[i].Open = DrillUnder(id, l.Name)
+	}
 	d.Note = note
 	return d, nil
 }

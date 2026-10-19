@@ -533,6 +533,33 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- The bandwidth drawer can say who a process is talking to (spec 065,
+  [#210](https://github.com/ushineko/hayami/issues/210)). A second list,
+  "Peers", breaks the network down by interface, then process, then the far
+  end of each connection, naming peers by their PTR records and marking the
+  ones that are clients of ours. The traffic the list does not account for
+  is a row with a figure on it rather than only a percentage: it runs
+  between a tenth and a half of an interface depending on what is running,
+  because the counters are TCP only and the kernel keeps none for UDP.
+- A row leads to what is behind it (specs 065 and 066,
+  [#210](https://github.com/ushineko/hayami/issues/210),
+  [#211](https://github.com/ushineko/hayami/issues/211)). A name opens the
+  processes behind it -- a browser is forty and the list says one -- and a
+  process opens its own page: parent, state, threads, sockets, children,
+  and the offer to end it. The bandwidth breakdown also opens a peer, for
+  the connections to it. The cooler's CPU, GPU and memory lists have the
+  same navigation, one level shallower.
+- The open list can be stopped while it is read, and the row under the
+  pointer lights. Pause belongs to the detail and not to the panel, so the
+  cards behind the drawer keep running.
+- A process can be ended from its page: SIGTERM to it and everything it
+  started, SIGKILL to whatever is still there after five seconds, and the
+  outcome said with counts. The tree and not the process alone, because
+  ending a parent leaves its children running and reparented, which looks
+  like nothing having happened. fynedesygn 0.1.105.
+
 ### 0.10.6 (2026-10-17)
 
 - A drawer on the left opens and closes with the cards in place again on

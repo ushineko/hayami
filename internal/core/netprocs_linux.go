@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"net/netip"
 	"syscall"
 	"time"
 
@@ -14,11 +15,13 @@ import (
 // from sock_diag, each put to the process that holds it.
 func newNetReader(samples func(context.Context) ([]ProcessSample, error)) NetReader {
 	return &socketNet{
-		sockets: tcpSockets,
-		owners:  ProcSocketOwners(ProcPath),
-		samples: samples,
-		counts:  "TCP only",
-		now:     time.Now,
+		sockets:   tcpSockets,
+		owners:    ProcSocketOwners(ProcPath),
+		samples:   samples,
+		counts:    "TCP only",
+		now:       time.Now,
+		ifaces:    localIfaces,
+		listening: listeningPorts(),
 	}
 }
 
@@ -37,6 +40,8 @@ const (
 	// destination addresses and the cookie inside its socket ID, and the
 	// inode.
 	msgFamily = 0
+	msgSport  = 4
+	msgDport  = 6
 	msgSrc    = 8
 	msgDst    = 24
 	msgCookie = 44
@@ -139,8 +144,12 @@ func parseInetDiag(data []byte) (SocketCount, bool) {
 		return SocketCount{}, false
 	}
 	c := SocketCount{
-		Inode:  binary.NativeEndian.Uint32(data[msgInode:]),
-		Cookie: binary.NativeEndian.Uint64(data[msgCookie:]),
+		Inode:     binary.NativeEndian.Uint32(data[msgInode:]),
+		Cookie:    binary.NativeEndian.Uint64(data[msgCookie:]),
+		Local:     addrText(data[msgFamily], data[msgSrc:msgSrc+16]),
+		Peer:      addrText(data[msgFamily], data[msgDst:msgDst+16]),
+		LocalPort: binary.BigEndian.Uint16(data[msgSport:]),
+		PeerPort:  binary.BigEndian.Uint16(data[msgDport:]),
 	}
 	// The attributes follow, each a length, a type and a payload, padded to
 	// four bytes.
@@ -162,6 +171,22 @@ func parseInetDiag(data []byte) (SocketCount, bool) {
 		rest = rest[min((length+3)&^3, len(rest)):]
 	}
 	return SocketCount{}, false
+}
+
+// addrText is a socket ID address as text, v4 or v6. A v4-mapped v6 address
+// is written as the v4 it is, so one peer is one name however it arrived.
+func addrText(family uint8, addr []byte) string {
+	if family == unix.AF_INET {
+		a, _ := netip.AddrFromSlice(addr[:4])
+		return a.String()
+	}
+	var b [16]byte
+	copy(b[:], addr[:16])
+	a := netip.AddrFrom16(b)
+	if a.Is4In6() {
+		a = a.Unmap()
+	}
+	return a.String()
 }
 
 // loopback reports whether an address from a socket ID is this machine's

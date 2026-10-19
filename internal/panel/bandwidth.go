@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -21,6 +22,9 @@ type Bandwidth struct {
 	net    func() core.NetReader
 	netMu  sync.Mutex
 	reader core.NetReader
+
+	// names puts names to peers.
+	names *core.PeerNames
 }
 
 // NewBandwidth builds the bandwidth source over the named interfaces. read is
@@ -98,7 +102,10 @@ func (b *Bandwidth) Details() []view.DetailInfo {
 	if b.net == nil {
 		return nil
 	}
-	return []view.DetailInfo{{ID: view.DetailProcesses, Title: view.ProcessTitle(view.DetailProcesses)}}
+	return []view.DetailInfo{
+		{ID: view.DetailProcesses, Title: view.ProcessTitle(view.DetailProcesses)},
+		view.ProcessInfo(view.DetailPeers),
+	}
 }
 
 // DetailInterval is ProcessInterval.
@@ -124,8 +131,8 @@ traffic the list adds up to, so a list that comes to less than the rows above
 it reads as partial and not as wrong.
 */
 func (b *Bandwidth) PollDetail(ctx context.Context, id string) (view.Detail, error) {
-	key, title := b.Key(), view.ProcessTitle(view.DetailProcesses)
-	if id != view.DetailProcesses || b.net == nil {
+	key, title := b.Key(), view.ProcessTitle(id)
+	if (id != view.DetailProcesses && !b.Drills(id)) || b.net == nil {
 		return view.Detail{}, fmt.Errorf("the %s section has no detail %q", key, id)
 	}
 	b.netMu.Lock()
@@ -138,6 +145,12 @@ func (b *Bandwidth) PollDetail(ctx context.Context, id string) (view.Detail, err
 	use, err := reader.Read(ctx)
 	if err != nil {
 		return unread(key, id, title, err), err //nolint:wrapcheck // the account the reader gives of the absence
+	}
+	if b.Drills(id) {
+		if b.names == nil {
+			b.names = core.NewPeerNames()
+		}
+		return b.drillDetail(key, id, use), nil
 	}
 	uses := make([]view.ProcessUse, 0, len(use.Processes))
 	listed := 0.0
@@ -197,3 +210,119 @@ func (b *Bandwidth) Key() string { return view.BandwidthInfo.Key }
 
 // Data is the last sample as plain values.
 func (b *Bandwidth) Data() any { return b.Readings() }
+
+/*
+peerDetail is the breakdown: one part per interface, each the
+processes that used it with their peers under them, and the interface's
+traffic the list does not account for as its last line.
+
+Parts and not Lines, deliberately. The Lines path cuts the list to the
+drawer's height (gui.Panel.render, detail.Top) and never scrolls, and the cut
+is a prefix -- so the remainder, which is last, would be the first row
+dropped, and a list whose job is to say it is incomplete would go quiet about
+it. The Parts path scrolls and draws the whole of what it is given.
+*/
+func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
+	d := view.Detail{Section: key, ID: view.DetailPeers, Title: view.ProcessTitle(view.DetailPeers)}
+
+	byIface := map[string][]core.NetProcess{}
+	for _, p := range use.Processes {
+		name := p.Iface
+		if name == "" {
+			name = "elsewhere"
+		}
+		byIface[name] = append(byIface[name], p)
+	}
+
+	for _, r := range b.Readings() {
+		if !r.Present || !r.HasRate {
+			continue
+		}
+		part := view.Detail{Section: key, ID: view.DetailPeers, Title: r.Name}
+		part.Lines = append(part.Lines, view.PeerLine("all", 0, r.RxRate, r.TxRate))
+
+		// Summed by name, as the process list is (spec 060 R6): a browser
+		// is forty processes and a person asks about the browser.
+		type group struct {
+			rx, tx float64
+			peers  map[string]*core.NetPeer
+		}
+		byName := map[string]*group{}
+		var order []string
+		for _, p := range byIface[r.Name] {
+			name := p.Name
+			if p.PID == 0 {
+				name = view.OtherProcesses
+			}
+			g, ok := byName[name]
+			if !ok {
+				g = &group{peers: map[string]*core.NetPeer{}}
+				byName[name] = g
+				order = append(order, name)
+			}
+			g.rx += p.Rx
+			g.tx += p.Tx
+			for _, far := range p.Peers {
+				f, ok := g.peers[far.Addr]
+				if !ok {
+					c := far
+					g.peers[far.Addr] = &c
+					continue
+				}
+				f.Rx += far.Rx
+				f.Tx += far.Tx
+			}
+		}
+		sort.Slice(order, func(i, j int) bool {
+			a, b := byName[order[i]], byName[order[j]]
+			return a.rx+a.tx > b.rx+b.tx
+		})
+
+		var rx, tx float64
+		for _, name := range order {
+			g := byName[name]
+			rx += g.rx
+			tx += g.tx
+			// A row that is moving nothing says nothing, and in a list long
+			// enough to scroll it costs a line that a row with a figure in
+			// it could have had.
+			if g.rx+g.tx < peerFloor {
+				continue
+			}
+			row := view.PeerLine(name, 1, g.rx, g.tx)
+			row.Open = view.DetailPeers + "/" + r.Name + "/" + name
+			part.Lines = append(part.Lines, row)
+			var fars []core.NetPeer
+			for _, f := range g.peers {
+				if f.Rx+f.Tx >= peerFloor {
+					fars = append(fars, *f)
+				}
+			}
+			sort.Slice(fars, func(i, j int) bool {
+				return fars[i].Rx+fars[i].Tx > fars[j].Rx+fars[j].Tx
+			})
+			for _, far := range fars {
+				label := b.names.Name(far.Addr)
+				if far.Served {
+					label = "\u2190 " + label
+				}
+				line := view.PeerLine(label, 3, far.Rx, far.Tx)
+				line.Open = view.DetailPeers + "/" + r.Name + "/" + name + "/@" + far.Addr
+				part.Lines = append(part.Lines, line)
+			}
+		}
+		part.Lines = append(part.Lines,
+			view.PeerLine("unmeasured", 1, max(0, r.RxRate-rx), max(0, r.TxRate-tx)))
+		d.Parts = append(d.Parts, part)
+	}
+	if len(d.Parts) == 0 {
+		d.Note = use.Counts + ", measuring"
+	}
+	return d
+}
+
+// peerFloor is the least a peer has to be moving, in bytes per second, to be
+// worth a line of its own: under it the figure is one packet either way and
+// the row is noise in a list that is already long.
+// Anything at all, so a row that is moving nothing is not drawn.
+const peerFloor = 1

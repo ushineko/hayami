@@ -158,6 +158,30 @@ type NetProcess struct {
 	Name string  `json:"name,omitempty"`
 	Rx   float64 `json:"rx"`
 	Tx   float64 `json:"tx"`
+
+	// Iface is the interface the process's sockets left by, and Peers the
+	// far ends. A process talking over two interfaces is two
+	// entries, because the interface is what the breakdown groups by.
+	Iface string    `json:"iface,omitempty"`
+	Peers []NetPeer `json:"peers,omitempty"`
+}
+
+// NetPeer is one far end of one process's sockets, in bytes per second.
+type NetPeer struct {
+	Addr    string      `json:"addr"`
+	Rx      float64     `json:"rx"`
+	Tx      float64     `json:"tx"`
+	Served  bool        `json:"served,omitempty"`
+	Sockets []NetSocket `json:"sockets,omitempty"`
+}
+
+// NetSocket is one connection to a peer, for the drill-down that asks what
+// a process and a peer are actually saying to each other.
+type NetSocket struct {
+	LocalPort uint16  `json:"local_port"`
+	PeerPort  uint16  `json:"peer_port"`
+	Rx        float64 `json:"rx"`
+	Tx        float64 `json:"tx"`
 }
 
 // NetUse is the network by process, and what the list counts: its own

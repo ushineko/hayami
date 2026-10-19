@@ -42,8 +42,19 @@ func newSocketFixture() *socketFixture {
 	return f
 }
 
+/*
+byPID is the rates, by process, for a test that is about the rates.
+
+The breakdown a process carries -- which interface it used, which peers it
+talked to -- is spec 065's and has its own tests. Keeping it out of these
+comparisons means a test of the arithmetic says what it is about, and does
+not have to be rewritten every time the breakdown gains a field.
+*/
 func byPID(use NetUse) []NetProcess {
 	out := append([]NetProcess(nil), use.Processes...)
+	for i := range out {
+		out[i].Iface, out[i].Peers = "", nil
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
 	return out
 }
@@ -148,7 +159,7 @@ func TestOwnersThatCannotBeReadLeaveEverythingOther(t *testing.T) {
 	use, err := f.net.Read(t.Context())
 
 	require.NoError(t, err)
-	assert.Equal(t, []NetProcess{{PID: 0, Rx: 8, Tx: 2}}, use.Processes)
+	assert.Equal(t, []NetProcess{{PID: 0, Rx: 8, Tx: 2}}, byPID(use))
 }
 
 // A socket's process is found by its inode in an fd directory, the lower

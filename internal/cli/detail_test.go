@@ -68,9 +68,15 @@ func coolerStub() *detailStub {
 	}
 }
 
-// Spec 060 R21. `detail <section>/<id>` prints one detail as text: the
-// second of two readings, because a rate read once has nothing in it, after
-// the section has been polled, and the detail is let go afterwards.
+// Spec 060 R21, amended by spec 065. `detail <section>/<id>` prints one
+// detail as text: the second of two readings, because a rate read once has
+// nothing in it, and the detail is let go afterwards.
+//
+// The section is polled twice for the same reason the detail is. A detail
+// that is a share of a section's reading -- the bandwidth note, the peer
+// breakdown's remainder -- has nothing to be a share of until the section
+// has been read twice, so with one poll the share was unreachable from the
+// command line by construction.
 func TestDetailPrintsTheSecondReadingAsText(t *testing.T) {
 	polled := 0
 	src := coolerStub()
@@ -81,10 +87,10 @@ func TestDetailPrintsTheSecondReadingAsText(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "CPU by process\n"+
-		"  editor          12.5 %\n"+
-		"  browser          3.0 %\n"+
+		"  editor                 12.5 %\n"+
+		"  browser                 3.0 %\n"+
 		"  share of every processor together\n", out.String())
-	assert.Equal(t, 1, polled, "a detail is of a reading: the section is polled first")
+	assert.Equal(t, 2, polled, "a section's rate is a difference too: it is polled before and after the settle")
 	assert.Equal(t, 2, src.reads["cpu"])
 	assert.Equal(t, 1, src.closed["cpu"])
 }
