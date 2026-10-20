@@ -541,6 +541,11 @@ MIT. See
   slot of its own and grew the Peripherals card from two cells to four. A
   device is now drawn as soon as it answers, and kept once it has answered
   in two polls; heard once and gone, it is dropped and not written down.
+- sanshoku 0.1.15. Its Logitech driver no longer reports a read whose
+  device would not say which it was as a device called "Logitech"
+  (sanshoku #54). The udev rule gains the AULA F75 on its cable
+  (`258a:010c`), from sanshoku 0.1.14; run `install.sh` again, or copy
+  `packaging/60-sanshoku.rules` into `/etc/udev/rules.d`, to pick it up.
 
 ### 0.11.2 (2026-10-19)
 

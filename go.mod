@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/ushineko/fynedesygn v0.1.106
 	github.com/ushineko/fynstall v0.2.4
-	github.com/ushineko/sanshoku v0.1.12
+	github.com/ushineko/sanshoku v0.1.15
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.48.0
 )
