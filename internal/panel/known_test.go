@@ -29,7 +29,9 @@ func TestARestartWithTheMouseAsleepStillDrawsTheMouse(t *testing.T) {
 	mouse := receiver(battery.Battery{Name: "G502 X PLUS", Level: 86, HasLevel: true})
 	k := &desk{devices: []*peripheral{mouse}}
 	c := &clock{at: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)}
-	poll(t, remembering(k, c, path))
+	first := remembering(k, c, path)
+	poll(t, first)
+	poll(t, first) // two polls make it a device (spec 067)
 
 	mouse.says = nil
 	c.tick(10 * time.Hour)
@@ -52,7 +54,9 @@ func TestADeviceUnheardForAWeekIsForgotten(t *testing.T) {
 	old := receiver(battery.Battery{Name: "Old Headset", Level: 40, HasLevel: true})
 	k := &desk{devices: []*peripheral{old}}
 	c := &clock{at: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)}
-	poll(t, remembering(k, c, path))
+	first := remembering(k, c, path)
+	poll(t, first)
+	poll(t, first) // two polls make it a device (spec 067)
 	old.says = nil
 
 	c.tick(6 * 24 * time.Hour)
@@ -95,4 +99,28 @@ func TestAMalformedMemoryIsAFirstRun(t *testing.T) {
 	p := remembering(k, &clock{at: time.Now()}, path)
 	poll(t, p)
 	assert.Empty(t, devices(p))
+}
+
+// AC (spec 067). A device heard in one poll is not written down, so a restart
+// straight after it does not bring back what the running panel would have
+// dropped at its next poll.
+func TestADeviceHeardInOnePollIsNotWritten(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "peripherals.json")
+	mouse := battery.Battery{Name: "G502 X PLUS", Level: 83, HasLevel: true}
+	rx := receiver(mouse)
+	k := &desk{devices: []*peripheral{rx}}
+	c := &clock{at: time.Date(2026, 10, 20, 11, 18, 46, 0, time.UTC)}
+	first := remembering(k, c, path)
+	poll(t, first)
+	poll(t, first)
+	rx.says = []battery.Battery{mouse, {Name: "Logitech", HasLevel: true}}
+	poll(t, first)
+
+	rx.says = nil
+	restarted := remembering(k, c, path)
+	poll(t, restarted)
+
+	found := devices(restarted)
+	require.Len(t, found, 1, "a device heard in one poll was written down")
+	assert.Equal(t, "G502 X PLUS", found[0].Name)
 }

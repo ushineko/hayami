@@ -192,6 +192,7 @@ func TestADeviceThatStopsAnsweringKeepsItsLevelAndGoesDim(t *testing.T) {
 	c := &clock{at: time.Now()}
 	p := k.section(c)
 	poll(t, p)
+	poll(t, p) // two polls make it a device (spec 067)
 
 	mouse.says = nil
 	c.tick(time.Minute)
@@ -220,6 +221,7 @@ func TestADeviceQuietForLongIsStillInTheReading(t *testing.T) {
 	c := &clock{at: time.Now()}
 	p := k.section(c)
 	poll(t, p)
+	poll(t, p) // two polls make it a device (spec 067)
 
 	headset.says = nil
 	c.tick(10*time.Minute + time.Minute)
@@ -377,6 +379,7 @@ func TestADeviceThatComesBackIsNewAgain(t *testing.T) {
 	c := &clock{at: time.Now()}
 	p := k.section(c)
 	poll(t, p)
+	poll(t, p) // two polls make it a device (spec 067)
 	arrived := c.at
 
 	rx.says = nil
@@ -878,4 +881,37 @@ func TestADeviceFirstSeenChargingWithoutALevelIsACell(t *testing.T) {
 	found := devices(p)
 	require.Len(t, found, 1)
 	assert.True(t, found[0].NoLevel)
+}
+
+/*
+AC (spec 067). A device heard in one poll and not the next is dropped, not
+remembered: one reading is not yet a device.
+
+The desk this was found on had a mouse and headphones, and one poll of the
+mouse's receiver came back as "Logitech", 0 %, kind other -- the mouse, read
+without its name. Kept as a quiet device it took a slot of its own, and the
+card grew from two cells to four for a week.
+*/
+func TestADeviceHeardInOnePollIsNotKept(t *testing.T) {
+	mouse := battery.Battery{Name: "G502 X PLUS", Level: 83, HasLevel: true, Kind: battery.KindMouse}
+	rx := receiver(mouse)
+	k := &desk{devices: []*peripheral{rx}}
+	c := &clock{at: time.Now()}
+	p := k.section(c)
+	poll(t, p)
+	poll(t, p)
+
+	rx.says = []battery.Battery{mouse, {Name: "Logitech", HasLevel: true}}
+	c.tick(15 * time.Second)
+	poll(t, p)
+	require.Len(t, devices(p), 2, "a device that answered was not drawn while it answered")
+
+	rx.says = []battery.Battery{mouse}
+	c.tick(15 * time.Second)
+	poll(t, p)
+
+	found := devices(p)
+	require.Len(t, found, 1, "a device heard in one poll was kept")
+	assert.Equal(t, "G502 X PLUS", found[0].Name)
+	assert.Len(t, p.Section().Cells, view.MinPeripheralSlots, "the card kept a slot for it")
 }
