@@ -135,6 +135,14 @@ type remembered struct {
 	// was quiet or forgotten in between, which is what makes it "when you
 	// switched this on" rather than "when this program started".
 	since time.Time
+
+	// confirmed is whether the device has answered in two polls (spec 067).
+	// Until it has, it is drawn while it answers and dropped the poll it
+	// stops: one reading is not yet a device. A G502 X PLUS read once without
+	// its name came out as "Logitech", 0 %, kind other, and the memory kept
+	// that for a week and gave it a slot. A device loaded from the file was
+	// confirmed before it was written.
+	confirmed bool
 }
 
 // NewPeripherals builds the peripherals source over sanshoku's drivers for
@@ -442,7 +450,7 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 			}
 			reading.Since, reading.Seen = was.since, off
 			fresh[b.Name] = true
-			p.seen[b.Name] = remembered{reading: reading, since: was.since}
+			p.seen[b.Name] = remembered{reading: reading, since: was.since, confirmed: true}
 			continue
 		}
 
@@ -453,6 +461,13 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 	for name, was := range p.seen {
 		if !fresh[name] && was.reading.Stale && now.Sub(was.reading.Seen) > ForgetAfter {
 			// Not heard for a week: put away, not asleep (spec 032).
+			delete(p.seen, name)
+			continue
+		}
+		if !fresh[name] && !was.confirmed {
+			// Heard in one poll and not this one: a reading, not a device
+			// (spec 067). Dropped, so it is neither drawn dim nor written
+			// down; a device that answers again starts over.
 			delete(p.seen, name)
 			continue
 		}
@@ -468,18 +483,20 @@ func (p *Peripherals) readings(found []battery.Battery) view.PeripheralsReading 
 }
 
 // heard keeps a device that answered this poll: marked fresh, seen now, and
-// arrived now unless it was already answering.
+// arrived now unless it was already answering. It is confirmed if it was
+// already kept, which is a second poll's answer (spec 067).
 //
 // A device that was quiet on the last poll has just come back, which is a
 // change of state and a claim on its kind's slot.
 func (p *Peripherals) heard(now time.Time, reading view.PeripheralReading, fresh map[string]bool) {
 	since := now
-	if was, ok := p.seen[reading.Name]; ok && !was.reading.Stale {
+	was, ok := p.seen[reading.Name]
+	if ok && !was.reading.Stale {
 		since = was.since
 	}
 	reading.Since, reading.Seen = since, now
 	fresh[reading.Name] = true
-	p.seen[reading.Name] = remembered{reading: reading, since: since}
+	p.seen[reading.Name] = remembered{reading: reading, since: since, confirmed: ok}
 }
 
 // cells translates a device's separate batteries into the view's.

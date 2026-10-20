@@ -58,16 +58,20 @@ func loadKnown(path string, now time.Time) map[string]remembered {
 			continue
 		}
 		d.Reading.Stale = true
-		seen[d.Reading.Name] = remembered{reading: d.Reading, since: d.Since}
+		seen[d.Reading.Name] = remembered{reading: d.Reading, since: d.Since, confirmed: true}
 	}
 	return seen
 }
 
 // encodeKnown is the memory as it is written, in name order so an unchanged
-// memory encodes to the same bytes and is not written again.
+// memory encodes to the same bytes and is not written again. A device heard
+// in one poll only is not written (spec 067).
 func encodeKnown(seen map[string]remembered) ([]byte, error) {
 	devices := make([]knownDevice, 0, len(seen))
 	for _, was := range seen {
+		if !was.confirmed {
+			continue
+		}
 		devices = append(devices, knownDevice{Reading: was.reading, Since: was.since})
 	}
 	sort.Slice(devices, func(i, j int) bool { return devices[i].Reading.Name < devices[j].Reading.Name })

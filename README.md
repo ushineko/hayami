@@ -533,6 +533,15 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: a device heard in one poll is no longer remembered (spec 067,
+  #218). The panel kept every device it read as a quiet device for a week,
+  so one bad read of a G502 X PLUS, reported as "Logitech" at 0 %, held a
+  slot of its own and grew the Peripherals card from two cells to four. A
+  device is now drawn as soon as it answers, and kept once it has answered
+  in two polls; heard once and gone, it is dropped and not written down.
+
 ### 0.11.2 (2026-10-19)
 
 - **Fixed**: the cooler's CPU, GPU and memory lists carry the navigation
