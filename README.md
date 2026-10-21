@@ -535,6 +535,12 @@ MIT. See
 
 ### Unreleased
 
+- **Fixed**: installing the window rule no longer deletes the user's other
+  window rules on Plasma 6.8 (#221). The rule was written over whatever rule
+  KWin kept first, with a list KWin 6.8 read as the only rule to keep, so
+  every other rule in `kwinrulesrc` was deleted, ototo's included, and
+  ototo's install did the same to hayami's: the panel got its titlebar back.
+  Fixed in fynedesygn 0.1.107, which hayami now builds against.
 - **Fixed**: a device heard in one poll is no longer remembered (spec 067,
   #218). The panel kept every device it read as a quiet device for a week,
   so one bad read of a G502 X PLUS, reported as "Logitech" at 0 %, held a
