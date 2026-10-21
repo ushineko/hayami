@@ -541,6 +541,11 @@ MIT. See
   resolves to ..., outside the directory it belongs in", and the only way past
   was to run the old uninstaller first. An installer built by this version
   upgrades such an install, including one an older installer made.
+- sanshoku 0.1.15. Its Logitech driver no longer reports a read whose
+  device would not say which it was as a device called "Logitech"
+  (sanshoku #54). The udev rule gains the AULA F75 on its cable
+  (`258a:010c`), from sanshoku 0.1.14; run `install.sh` again, or copy
+  `packaging/60-sanshoku.rules` into `/etc/udev/rules.d`, to pick it up.
 
 ### 0.11.3 (2026-10-20)
 
