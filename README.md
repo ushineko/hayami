@@ -533,6 +533,15 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: the installer upgrades an install whose links in `~/.local/bin`
+  replaced an earlier copy (fynstall 0.2.5, ushineko/fynstall#56). The 0.11.3
+  installer stopped over a 0.11.2 install with "`~/.local/bin/hayami`
+  resolves to ..., outside the directory it belongs in", and the only way past
+  was to run the old uninstaller first. An installer built by this version
+  upgrades such an install, including one an older installer made.
+
 ### 0.11.3 (2026-10-20)
 
 - **Fixed**: installing the window rule no longer deletes the user's other
