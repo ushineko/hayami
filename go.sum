@@ -106,8 +106,8 @@ github.com/ushineko/fynedesygn v0.1.107 h1:XLxdUHy229y8rTlUD8Ig3IcXFvJjhEeXsPt2J
 github.com/ushineko/fynedesygn v0.1.107/go.mod h1:8zpNN1/E6y6L8S9H+b/3SorOfCdjqNRfPJsnYJVPCL8=
 github.com/ushineko/fynstall v0.2.4 h1:V4XIzOyR/S78Z8OZpuCry+LDugacuSsv4aJ7pRm/9BY=
 github.com/ushineko/fynstall v0.2.4/go.mod h1:lQHMv843H2LvrE+3jlEgPAgjj5kKKKxkWNY6s7S3Ul8=
-github.com/ushineko/sanshoku v0.1.12 h1:r2W8Fmm8jnRYn2eGo5x5q+AB+k3z6TQ90O1BqxSdYTM=
-github.com/ushineko/sanshoku v0.1.12/go.mod h1:fCmgH+mFCK66xoZEW7QST/5CLoXhezR6gNFGeT/1qWY=
+github.com/ushineko/sanshoku v0.1.15 h1:T48FDm460WJAudSOpIMt7AMuWtvSeDVrI1Mp+2kmyGo=
+github.com/ushineko/sanshoku v0.1.15/go.mod h1:fCmgH+mFCK66xoZEW7QST/5CLoXhezR6gNFGeT/1qWY=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
