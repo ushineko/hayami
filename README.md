@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.2
+**Version**: 0.11.3
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.3 (2026-10-20)
 
 - **Fixed**: installing the window rule no longer deletes the user's other
   window rules on Plasma 6.8 (#221). The rule was written over whatever rule
