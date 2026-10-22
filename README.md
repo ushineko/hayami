@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.3
+**Version**: 0.11.4
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.4 (2026-10-22)
 
 - The usage card's lower line drops `limit:` and `left`, so the panel can be
   narrower. Once the five hours or the week is used up, a Codex Business
