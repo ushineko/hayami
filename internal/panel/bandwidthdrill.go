@@ -62,8 +62,15 @@ DrillUp is where this section's way out leads.
 Its levels are the root, the name on an interface (two steps), and a
 process or a peer under that (three). An interface on its own is not a page
 anybody asked for, so the way out of a name is the root and not it.
+
+A page that is not a drill has no way out: the process list is the peers'
+neighbour, not their child, and a Back on it that led to the peers was a
+switch in the wrong place (#226).
 */
 func (b *Bandwidth) DrillUp(id string) string {
+	if !b.Drills(id) {
+		return id
+	}
 	if up := DrillOut(id); strings.Count(up, "/") >= 2 {
 		return up
 	}

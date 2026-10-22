@@ -665,7 +665,11 @@ func (p *Panel) renderParts(detail view.Detail) {
 		defer func() { fyne.Do(func() { dr.SetOffset(was) }) }()
 		d.partsShape, d.built = shape, false
 		d.parts, d.rules = d.parts[:0], 0
-		var pieces []glance.Piece
+		// The switch heads a breakdown as it heads a list: the peers are one
+		// of two bandwidth lists, and without it there was no way back to the
+		// other but a key nobody could see (#226). A breakdown with nothing to
+		// choose between has a switch that draws nothing.
+		pieces := []glance.Piece{d.sw}
 		for i, part := range detail.Parts {
 			if i > 0 {
 				// A rule between one account and the next: their meters

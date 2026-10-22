@@ -110,8 +110,33 @@ function Find-Gcc {
     return $found
 }
 
+# A build that is not the release says so, as the Makefile's BUILD_VERSION
+# does: the plain version only when HEAD is exactly on its tag with nothing
+# modified, and <version>-<commit>-dev otherwise, so a panel built from a
+# checkout can be told from the installed one. The version resource Explorer
+# shows stays the plain number: it has to be one.
+function Get-BuildVersion($version) {
+    # git's complaints are answers here, not failures: off a tag, describe
+    # says so on stderr, which "Stop" would turn into a throw.
+    $ErrorActionPreference = "Continue"
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return "$version-dev" }
+    Push-Location $Root
+    try {
+        $commit = (& git rev-parse --short HEAD 2>$null | Out-String).Trim()
+        $dirty = (& git status --porcelain 2>$null | Out-String).Trim()
+        & git describe --exact-match --tags --match "v$version" HEAD *> $null
+        $atTag = ($LASTEXITCODE -eq 0)
+    } finally {
+        Pop-Location
+    }
+    if ($atTag -and -not $dirty) { return $version }
+    if ($commit) { return "$version-$commit-dev" }
+    return "$version-dev"
+}
+
 function Build {
-    Write-Step "Building hayami $Version"
+    $buildVersion = Get-BuildVersion $Version
+    Write-Step "Building hayami $buildVersion"
     if (-not (Get-Command go -ErrorAction SilentlyContinue)) { Fail "Go is not on PATH. winget install --id GoLang.Go -e" }
     $gcc = Find-Gcc
     if (-not $gcc) { Fail "No mingw gcc. The panel links OpenGL through cgo: winget install --id BrechtSanders.WinLibs.POSIX.UCRT -e" }
@@ -119,7 +144,7 @@ function Build {
     if ($target -notmatch '^x86_64-.*mingw') { Fail "gcc at $gcc targets '$target'; the panel needs an x86_64 mingw gcc." }
     Write-Ok "gcc $((& $gcc -dumpfullversion | Out-String).Trim()) ($target)"
 
-    $ldflags = "-X github.com/ushineko/hayami/internal/buildinfo.version=$Version"
+    $ldflags = "-X github.com/ushineko/hayami/internal/buildinfo.version=$buildVersion"
     $savedPath = $env:PATH
     $savedCgo = $env:CGO_ENABLED
     try {

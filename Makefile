@@ -11,6 +11,21 @@ BINDIR=$(shell go env GOPATH)
 MODULE=github.com/ushineko/hayami
 VERSION=$(shell cat VERSION)
 
+# A build that is not the release says so, as hotaru's does.
+#
+# VERSION is the version of record and names the release files, and stamping
+# it into every binary meant a panel built from a working tree reported the
+# same string as the installed one: the two side by side could not be told
+# apart from their About pages.
+#
+# Released is HEAD sitting exactly on this version's tag with nothing
+# modified. Anything else is `0.11.5-1a2b3c4-dev`, which names the commit it
+# came from. The release job checks that what it ships says the plain version.
+COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null)
+DIRTY=$(shell git status --porcelain 2>/dev/null | head -1)
+ATTAG=$(shell git describe --exact-match --tags --match 'v$(VERSION)' HEAD 2>/dev/null)
+BUILD_VERSION=$(if $(and $(ATTAG),$(if $(DIRTY),,x)),$(VERSION),$(VERSION)$(if $(COMMIT),-$(COMMIT))-dev)
+
 # migrated_fynedo tells Fyne this front end has been through the fyne.Do
 # migration, so it stops asking which goroutine it is on. Without it, Fyne
 # answers that question with runtime.Stack -- a full traceback -- on every
@@ -100,7 +115,7 @@ test: ## Run the tests with the race detector
 coverage: ## Run the tests and open a coverage report
 	go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out
 
-LDFLAGS=-X github.com/ushineko/hayami/internal/buildinfo.version=$(VERSION)
+LDFLAGS=-X github.com/ushineko/hayami/internal/buildinfo.version=$(BUILD_VERSION)
 
 .PHONY: build
 build: ## Build both panels for the host platform

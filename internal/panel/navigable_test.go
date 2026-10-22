@@ -45,3 +45,25 @@ func TestEachSectionRoutesItsOwnDrillPaths(t *testing.T) {
 	assert.False(t, c.Drills("nope/x"), "an unknown list is not one")
 	assert.False(t, c.Drills("cpu/a/b/c"), "a path too deep is not one")
 }
+
+// Where each page's way out leads. A top list leads nowhere, so the drawer
+// draws no Back on it: the process list once led to the peers, a Back on a
+// page that is the peers' neighbour and not their child (#226).
+func TestOnlyADrillHasAWayOut(t *testing.T) {
+	for id, up := range map[string]string{
+		view.DetailProcesses:          view.DetailProcesses,
+		view.DetailPeers:              view.DetailPeers,
+		"peers/eth0/curl":             view.DetailPeers,
+		"peers/eth0/curl/1534":        "peers/eth0/curl",
+		"peers/eth0/curl/@192.0.2.10": "peers/eth0/curl",
+	} {
+		assert.Equal(t, up, (&panel.Bandwidth{}).DrillUp(id), "the way out of %q", id)
+	}
+	for id, up := range map[string]string{
+		view.DetailCPU:  view.DetailCPU,
+		"cpu/firefox":   view.DetailCPU,
+		"cpu/firefox/1": "cpu/firefox",
+	} {
+		assert.Equal(t, up, (&panel.Cooler{}).DrillUp(id), "the way out of %q", id)
+	}
+}

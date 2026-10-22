@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -83,7 +84,10 @@ func TestTheLinuxInstallerInstallsOverAPanelAndUninstalls(t *testing.T) {
 	said := run(installer, "--yes", "--launch=false")
 
 	root := filepath.Join(home, ".local", "share", "hayami")
-	assert.Equal(t, "hayami-tui version "+version, strings.TrimSpace(run(filepath.Join(home, ".local", "bin", "hayami-tui"), "--version")),
+	// This version, plain on a release and with its commit off one (Makefile,
+	// BUILD_VERSION); the release job holds a release to the plain form.
+	assert.Regexp(t, `^hayami-tui version `+regexp.QuoteMeta(version)+`(-[0-9a-f]+-dev)?$`,
+		strings.TrimSpace(run(filepath.Join(home, ".local", "bin", "hayami-tui"), "--version")),
 		"the terminal panel runs from the link on PATH")
 	target, err := os.Readlink(link)
 	require.NoError(t, err, "the panel on PATH is a link into the install")
