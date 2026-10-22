@@ -118,13 +118,18 @@ func byAccount(windows []UsageWindow) [][]UsageWindow {
 	return out
 }
 
-// leading is the window the bar shows: the shortest the account has.
+// leading is the window the bar shows: the shortest the account has, until a
+// window is full and the account has a limit to spend instead.
 //
 // "The shortest there is" rather than "the five-hour one", because an account
 // may not have one — a Team account reports a monthly spend and no windows at
 // all — and a bar is better about the longest window than about nothing. A
 // window with no stated length sorts last for the same reason: an allowance
 // with no period is not a window that turns over this afternoon.
+//
+// A Codex Business account spends its own limit once the five hours or the
+// week is used up, so from then on the limit is what is being spent and what
+// the bar is about: a bar stuck at 100 % says nothing a reader can act on.
 func leading(group []UsageWindow) UsageWindow {
 	lead := group[0]
 	for _, w := range group[1:] {
@@ -132,7 +137,27 @@ func leading(group []UsageWindow) UsageWindow {
 			lead = w
 		}
 	}
+	if limit, ok := spending(group); ok {
+		return limit
+	}
 	return lead
+}
+
+// spending is the account's limit when one of its windows is full.
+func spending(group []UsageWindow) (UsageWindow, bool) {
+	full := false
+	for _, w := range group {
+		full = full || (w.Span > 0 && w.Fraction >= 1)
+	}
+	if !full {
+		return UsageWindow{}, false
+	}
+	for _, w := range group {
+		if w.Name == "limit" {
+			return w, true
+		}
+	}
+	return UsageWindow{}, false
 }
 
 // shorter reports whether a is the better candidate for the bar than b.
@@ -198,16 +223,16 @@ func caption(now time.Time, w UsageWindow, next time.Time) string {
 }
 
 // figure is one of an account's other windows in the stats row: the caption's
-// form, with the window's amounts where it carries them (spec 023), so a
-// Business limit reads "limit: 974.28 / 1200 (81 %)" as the pane's
-// "individual 974.28/1200 (81%)" does. The amounts are Used and Limit, the
-// widget's compact form the pane prints, not Detail's two decimals.
+// form, or the window's amounts where it carries them (spec 023), so a
+// Business limit reads "974.28 / 1200 (81 %)". The amounts say what it is
+// without its name, and the row is short of room. They are Used and Limit,
+// the widget's compact form the pane prints, not Detail's two decimals.
 func figure(now time.Time, w UsageWindow, next time.Time) string {
 	if w.Used == "" || w.Limit == "" {
 		return caption(now, w, next)
 	}
 	pct := strings.TrimSpace(Percent(w.Fraction))
-	return lasting(now, w, next, w.Name+": "+w.Used+" / "+w.Limit+" ("+pct+")")
+	return lasting(now, w, next, w.Used+" / "+w.Limit+" ("+pct+")")
 }
 
 // lasting is a figure followed by how long its window has left, when there is
@@ -237,20 +262,21 @@ func remaining(now time.Time, w UsageWindow, shown time.Time) string {
 }
 
 // daysLeft is a reset as a count of days, the widget's way: rounded up, "<1d"
-// under a day, nothing once it has passed.
+// under a day, nothing once it has passed. Bare, as the card writes it; the
+// pane adds the widget's " left".
 func daysLeft(now, at time.Time) string {
 	d := at.Sub(now)
 	if d <= 0 {
 		return ""
 	}
 	if d < 24*time.Hour {
-		return "<1d left"
+		return "<1d"
 	}
 	days := int(d / (24 * time.Hour))
 	if d%(24*time.Hour) != 0 {
 		days++
 	}
-	return itoa(days) + "d left"
+	return itoa(days) + "d"
 }
 
 // soonest is the next reset among the group's windows, ignoring the ones the
@@ -353,7 +379,7 @@ func strip(now time.Time, group []UsageWindow, lead UsageWindow) *Strip {
 			out.Figures = append(out.Figures, Figure{Text: stripSeparator + w.Name + " ", Status: Dim},
 				Figure{Text: percent(w.Fraction), Status: verdict(w)})
 			if left := remaining(now, w, lead.ResetsAt); left != "" {
-				out.Figures = append(out.Figures, Figure{Text: " (" + left + ")", Status: Dim})
+				out.Figures = append(out.Figures, Figure{Text: " (" + left + " left)", Status: Dim})
 			}
 		}
 	}
