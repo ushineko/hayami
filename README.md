@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.5
+**Version**: 0.11.6
 
 *a chart you read at a glance*
 
@@ -532,6 +532,16 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.11.6 (2026-10-22)
+
+- **Fixed**: the installer upgrades an install whose links in `~/.local/bin`
+  replaced an earlier copy (fynstall 0.2.5, ushineko/fynstall#56). The
+  installers up to 0.11.5 stopped over such an install with
+  "`~/.local/bin/hayami` resolves to ..., outside the directory it belongs
+  in", and the only way past was to run the old uninstaller first. An
+  installer built by this version upgrades such an install, including one an
+  older installer made.
 
 ### 0.11.5 (2026-10-22)
 
