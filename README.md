@@ -538,6 +538,9 @@ MIT. See
 - "Bandwidth by peer" draws the Procs / Peers switch, so the process list
   can be reached again by a click, and "Bandwidth by process" no longer
   draws a Back button that led to the peers (#226).
+- A build from a working tree says so: `make build` and `install.sh` stamp
+  `0.11.5-1a2b3c4-dev` unless HEAD is exactly on the version's tag with
+  nothing modified, as hotaru does. A release still says `0.11.5`.
 
 ### 0.11.4 (2026-10-22)
 

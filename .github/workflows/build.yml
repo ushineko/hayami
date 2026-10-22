@@ -190,6 +190,14 @@ jobs:
       - name: Build the release tarball
         run: make release
 
+      # A build off the tag, or from a modified tree, says `-dev` (Makefile,
+      # BUILD_VERSION). A release that said it would be a release nobody
+      # could tell from a desk's own build, so it fails here.
+      - name: The release says its own version
+        run: |
+          v="$(tr -d '[:space:]' < VERSION)"
+          ./hayami-tui --version | grep -Fx "hayami-tui version $v"
+
       # After the tarball, for the same reason as the download below.
       - name: Build the Linux installers
         run: |
