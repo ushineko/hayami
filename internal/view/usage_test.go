@@ -323,7 +323,7 @@ func TestALongerWindowSaysHowLongItHasLeft(t *testing.T) {
 	}, now)
 
 	require.Len(t, s.Meters, 1)
-	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (6d left)",
+	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (6d)",
 		"five days and an hour is six days the way a reader counts them")
 	assert.NotContains(t, s.Meters[0].Caption, "5h: 4 % (",
 		"the window whose reset is already in the column repeats nothing")
@@ -340,7 +340,7 @@ func TestAWindowOnItsLastDaySaysSo(t *testing.T) {
 		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(6 * time.Hour)},
 	}, now)
 
-	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (<1d left)")
+	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (<1d)")
 	assert.Contains(t, text(s.Meters[0].Strip), "7d 21% (<1d left)")
 }
 
@@ -356,10 +356,10 @@ func TestDaysLeftAreRoundedUp(t *testing.T) {
 		}, now)
 		return s.Meters[0].StatsLeft
 	}
-	assert.Equal(t, "7d: 21 % (2d left)", left(36*time.Hour))
-	assert.Equal(t, "7d: 21 % (1d left)", left(24*time.Hour))
-	assert.Equal(t, "7d: 21 % (4d left)", left(4*24*time.Hour))
-	assert.Equal(t, "7d: 21 % (<1d left)", left(time.Minute))
+	assert.Equal(t, "7d: 21 % (2d)", left(36*time.Hour))
+	assert.Equal(t, "7d: 21 % (1d)", left(24*time.Hour))
+	assert.Equal(t, "7d: 21 % (4d)", left(4*24*time.Hour))
+	assert.Equal(t, "7d: 21 % (<1d)", left(time.Minute))
 	assert.Equal(t, "7d: 21 %", left(-time.Minute))
 }
 
@@ -379,7 +379,7 @@ func TestALimitBesideTheBarSaysItsAmounts(t *testing.T) {
 
 	require.Len(t, s.Meters, 1)
 	m := s.Meters[0]
-	assert.Equal(t, "7d: 46 %  limit: 300.5 / 1200 (60 %) (6d left)", m.StatsLeft)
+	assert.Equal(t, "7d: 46 %  300.5 / 1200 (60 %) (6d)", m.StatsLeft)
 	assert.Equal(t, "3%  ·  7d 46%  ·  individual 300.5/1200 (60%)", text(m.Strip),
 		"the pane's strip is spec 019's; the 7d resets with the bar's window, so says no more")
 
@@ -389,4 +389,36 @@ func TestALimitBesideTheBarSaysItsAmounts(t *testing.T) {
 	assert.Equal(t, "limit: 60 %", strings.TrimSpace(lead.Caption), "the caption stays a percentage")
 	assert.Equal(t, "300.50 / 1200.00", lead.StatsRight)
 	assert.Equal(t, 1, strings.Count(lead.Line(), "1200"), "the lead's amounts are said once")
+}
+
+// Once the five hours or the week is used up, a Business account spends its
+// own limit, and the bar is about that instead of a window stuck at 100 %.
+// An account with no limit keeps its full window on the bar. The amounts are
+// invented.
+func TestAFullWindowHandsTheBarToTheLimit(t *testing.T) {
+	now := at(9, 0)
+	cx := func(five, week float64) view.Meter {
+		return view.Usage(now, []view.UsageWindow{
+			{Account: "CX", Name: "5h", Span: 5 * time.Hour, Fraction: five, ResetsAt: now.Add(2 * time.Hour)},
+			{Account: "CX", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: week, ResetsAt: now.Add(3 * 24 * time.Hour)},
+			{Account: "CX", Name: "limit", Fraction: 0.6, ResetsAt: now.Add(9 * 24 * time.Hour),
+				Detail: "720 / 1200", Used: "720", Limit: "1200"},
+		}, now).Meters[0]
+	}
+
+	assert.Equal(t, "5h", cx(0.3, 0.4).Window, "with room in every window the bar is the shortest")
+
+	for _, m := range []view.Meter{cx(1, 0.4), cx(0.3, 1)} {
+		assert.Equal(t, "limit", m.Window)
+		assert.InDelta(t, 0.6, m.Fraction, 1e-9)
+		assert.Equal(t, "720 / 1200", m.StatsRight)
+		assert.Contains(t, m.StatsLeft, "5h: ")
+		assert.Contains(t, m.StatsLeft, "7d: ")
+	}
+
+	plain := view.Usage(now, []view.UsageWindow{
+		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 1, ResetsAt: now.Add(2 * time.Hour)},
+		{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.4},
+	}, now).Meters[0]
+	assert.Equal(t, "5h", plain.Window, "without a limit there is nothing else to spend")
 }

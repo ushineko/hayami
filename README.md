@@ -535,6 +535,10 @@ MIT. See
 
 ### Unreleased
 
+- The usage card's lower line drops `limit:` and `left`, so the panel can be
+  narrower. Once the five hours or the week is used up, a Codex Business
+  account's bar shows its individual limit, the bucket then being spent
+  (#224).
 - sanshoku 0.1.15. Its Logitech driver no longer reports a read whose
   device would not say which it was as a device called "Logitech"
   (sanshoku #54). The udev rule gains the AULA F75 on its cable
