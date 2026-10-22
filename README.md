@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.4
+**Version**: 0.11.5
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.5 (2026-10-22)
 
 - "Bandwidth by peer" draws the Procs / Peers switch, so the process list
   can be reached again by a click, and "Bandwidth by process" no longer
