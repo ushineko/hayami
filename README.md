@@ -533,6 +533,12 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- "Bandwidth by peer" draws the Procs / Peers switch, so the process list
+  can be reached again by a click, and "Bandwidth by process" no longer
+  draws a Back button that led to the peers (#226).
+
 ### 0.11.4 (2026-10-22)
 
 - The usage card's lower line drops `limit:` and `left`, so the panel can be

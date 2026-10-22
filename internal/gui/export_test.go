@@ -439,9 +439,11 @@ func shownRows(rows []*glance.Row) []string {
 }
 
 // DrawerChoices are the labels in the drawer's switch, and none where there
-// is nothing to choose; DrawerChosen is the detail selected in it.
+// is nothing to choose or the switch is not in the window; DrawerChosen is
+// the detail selected in it.
 func DrawerChoices(p *Panel) []string {
-	if !p.drawer.sw.Object().Visible() {
+	sw := p.drawer.sw.Object()
+	if !sw.Visible() || !holds(p.win.Window().Canvas().Content(), sw) {
 		return nil
 	}
 	var out []string
@@ -451,6 +453,32 @@ func DrawerChoices(p *Panel) []string {
 	return out
 }
 func DrawerChosen(p *Panel) string { return p.drawer.sw.Selected() }
+
+// holds reports whether an object is drawn under another: a switch whose
+// visible flag is set but which no layout was given is not on screen (#226).
+func holds(o, target fyne.CanvasObject) bool {
+	if o == nil || !o.Visible() {
+		return false
+	}
+	if o == target {
+		return true
+	}
+	switch v := o.(type) {
+	case *fyne.Container:
+		for _, child := range v.Objects {
+			if holds(child, target) {
+				return true
+			}
+		}
+	case fyne.Widget:
+		for _, child := range test.WidgetRenderer(v).Objects() {
+			if holds(child, target) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // TypeRune and TypeKey type at the panel's window, as a person does: the
 // drawer's filter, switch and scroller take what is theirs.

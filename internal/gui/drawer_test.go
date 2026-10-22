@@ -53,7 +53,9 @@ func (d *detailSource) Details() []view.DetailInfo {
 	defer d.mu.Unlock()
 	var out []view.DetailInfo
 	listed := map[string]bool{}
-	for _, id := range []string{view.DetailCPU, view.DetailGPU, view.DetailMemory, view.DetailAccounts} {
+	for _, id := range []string{
+		view.DetailCPU, view.DetailGPU, view.DetailMemory, view.DetailProcesses, view.DetailPeers, view.DetailAccounts,
+	} {
 		if detail, ok := d.details[id]; ok {
 			info := view.ProcessInfo(id)
 			info.ID, info.Title = id, detail.Title
@@ -262,6 +264,39 @@ func TestTheSwitchChangesWhatIsShown(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	after, _ := src.count("gpu")
 	assert.Equal(t, settled, after, "a closed drawer went on reading the list last chosen")
+}
+
+// The peers are a breakdown, one part to an interface, and a breakdown is
+// drawn by another path than a list. That path left the switch out, so the
+// way to the peers had no way back (#226). The figures are invented.
+func TestTheSwitchHeadsTheBreakdownOfPeersAsWell(t *testing.T) {
+	iface := func(name string) view.Detail {
+		return view.Detail{Section: "bandwidth", ID: view.DetailPeers, Title: name,
+			Lines: []view.DetailLine{view.PeerLine("all", 0, 1024, 512)}}
+	}
+	peers := view.Detail{Section: "bandwidth", ID: view.DetailPeers, Title: view.ProcessTitle(view.DetailPeers),
+		Parts: []view.Detail{iface("eth0"), iface("wg0")}}
+	section := coolerSection()
+	section.Opens = view.DetailProcesses
+	src := newDetailSource("bandwidth", section, map[string]view.Detail{
+		view.DetailProcesses: processes(view.DetailProcesses, 3, 1),
+		view.DetailPeers:     peers,
+	})
+	p, await := drawerPanel(t, src)
+
+	gui.Tap(p, "bandwidth", "", -1)
+	await("the process list", func() bool { return gui.DrawerOpen(p) && len(gui.DrawerLines(p)) == 3 })
+	assert.Equal(t, []string{"Procs", "Peers"}, gui.DrawerChoices(p))
+
+	gui.TypeRune(p, 'e')
+	await("the peers", func() bool { return len(gui.DrawerPartHeads(p)) == 2 })
+	assert.Equal(t, "Bandwidth by peer", gui.DrawerTitle(p))
+	assert.Equal(t, []string{"Procs", "Peers"}, gui.DrawerChoices(p), "the peers have no switch")
+	assert.Equal(t, view.DetailPeers, gui.DrawerChosen(p))
+
+	gui.TypeRune(p, 'p')
+	await("the process list again", func() bool { return len(gui.DrawerLines(p)) == 3 })
+	assert.Equal(t, []string{"Procs", "Peers"}, gui.DrawerChoices(p))
 }
 
 // Spec 062 R7. The card opens on the list last shown, and on the first
