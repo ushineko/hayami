@@ -134,6 +134,16 @@ jobs:
 
       # Run, not only built: each says its version, and the command-line one
       # lists the whole plan and changes nothing.
+      # What the installers carry was built by install_windows.ps1, which
+      # says `-dev` off the tag or from a modified tree (Get-BuildVersion).
+      # A release that said it would ship a desk's build, so it fails here.
+      - name: The release says its own version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          v="$(tr -d '[:space:]' < VERSION)"
+          ./hayami-tui.exe --version | tr -d '\r' | grep -Fx "hayami-tui version $v"
+
       - name: The installers run
         shell: bash
         run: |

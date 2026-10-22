@@ -24,7 +24,7 @@ VERSION=$(shell cat VERSION)
 COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null)
 DIRTY=$(shell git status --porcelain 2>/dev/null | head -1)
 ATTAG=$(shell git describe --exact-match --tags --match 'v$(VERSION)' HEAD 2>/dev/null)
-BUILD_VERSION=$(if $(and $(ATTAG),$(if $(DIRTY),,x)),$(VERSION),$(VERSION)-$(COMMIT)-dev)
+BUILD_VERSION=$(if $(and $(ATTAG),$(if $(DIRTY),,x)),$(VERSION),$(VERSION)$(if $(COMMIT),-$(COMMIT))-dev)
 
 # migrated_fynedo tells Fyne this front end has been through the fyne.Do
 # migration, so it stops asking which goroutine it is on. Without it, Fyne
