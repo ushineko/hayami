@@ -187,8 +187,9 @@ adds a table, not a ladder.
 ### 8. The glance rules
 
 - **Nothing transient reflows the window.** Every value is formatted to a fixed
-  width. Only a section appearing or disappearing may change the window's
-  size.
+  width. Only a section appearing or disappearing, or a peripheral connecting
+  or going (a cell per device and none for an empty slot, spec 070), may
+  change the window's size.
 - **The render thread never blocks.** Readers run off it, take a
   `context.Context`, and honour cancellation and a timeout. A device or sensor
   that hangs costs its own timeout and nothing else.

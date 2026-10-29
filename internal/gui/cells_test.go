@@ -52,23 +52,22 @@ func TestACardBuiltEmptyStillDrawsACellLater(t *testing.T) {
 	}}
 	p.Draw("peripherals", src.Section(), true)
 
-	assert.Equal(t, view.MinPeripheralSlots, gui.ShownCells(p, "peripherals"),
+	assert.Equal(t, 1, gui.ShownCells(p, "peripherals"),
 		"a card built with no cells never got a grid to put one in")
 }
 
 /*
-AC (spec 022). The card shows two cells with the headset quiet and with no
-second device at all, and keeps its shape through both.
+AC (spec 022, 070). A quiet headset keeps its cell and the card its size; a
+headset that is gone takes its cell away, and one that answers again gets it
+back.
 
 The headset switched off and on is the transition that happens on the desk,
 and the card is the same size either way: the cell is the same cell, dimmed.
-Against the "no device" placeholder the card is the same height -- two cells
-side by side or one above the other, as before -- but not always the same
-width: the design system sizes a cell to its name up to a budget, and "no
-device" is shorter than "Arctis Nova Pro Wireless". That is logged in the
-spec's gaps; the window is as wide as its widest card, and this is not it.
+A slot with no device behind it is not drawn (spec 070), so the card is one
+cell with the mouse alone, and the hidden slack cell is shown again when the
+second device appears.
 */
-func TestTheCardKeepsItsShapeWithTheHeadsetQuietOrAbsent(t *testing.T) {
+func TestTheCardKeepsAQuietHeadsetAndDropsAnAbsentOne(t *testing.T) {
 	a := test.NewTempApp(t)
 	at := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	mouse := view.PeripheralReading{Name: "G502 X PLUS", Level: 76, Kind: view.KindMouse, Since: at, Seen: at}
@@ -92,11 +91,12 @@ func TestTheCardKeepsItsShapeWithTheHeadsetQuietOrAbsent(t *testing.T) {
 
 	src.reading = view.PeripheralsReading{Devices: []view.PeripheralReading{mouse}}
 	p.Draw("peripherals", src.Section(), true)
-	require.Equal(t, 2, gui.ShownCells(p, "peripherals"), "the empty slot was hidden")
-	assert.True(t, gui.CellStale(p, "peripherals", 1), "the placeholder was not drawn dim")
-	absent := gui.CardMinSize(p, "peripherals")
-	assert.InDelta(t, quiet.Height, absent.Height, 0.01,
-		"the card changed height when the second slot emptied")
+	assert.Equal(t, 1, gui.ShownCells(p, "peripherals"), "an empty slot was drawn")
+
+	headset.Stale = false
+	src.reading = view.PeripheralsReading{Devices: []view.PeripheralReading{mouse, headset}}
+	p.Draw("peripherals", src.Section(), true)
+	assert.Equal(t, 2, gui.ShownCells(p, "peripherals"), "the headset that came back has no cell")
 }
 
 // AC1. A source that gave nothing on the first poll is drawn from the cache,
@@ -114,7 +114,7 @@ func TestASilentSourceIsRestoredFromTheCache(t *testing.T) {
 	require.Contains(t, got, "peripherals")
 	assert.True(t, drawn["peripherals"], "a restored section is a section to draw")
 	assert.True(t, got["peripherals"].Restored)
-	require.Len(t, got["peripherals"].Cells, view.MinPeripheralSlots)
+	require.Len(t, got["peripherals"].Cells, 1)
 	assert.Equal(t, "G502 X PLUS", got["peripherals"].Cells[0].Label)
 }
 
@@ -130,7 +130,7 @@ func TestALiveReadingBeatsTheCache(t *testing.T) {
 
 	got := gui.Restore([]panel.Source{src}, map[string]bool{"peripherals": true}, cached)
 
-	require.Len(t, got["peripherals"].Cells, view.MinPeripheralSlots)
+	require.Len(t, got["peripherals"].Cells, 1)
 	assert.Equal(t, "Live Mouse", got["peripherals"].Cells[0].Label)
 	assert.False(t, got["peripherals"].Restored, "a live reading was marked restored")
 }
@@ -190,7 +190,7 @@ func TestASectionThatNeverReportsKeepsItsCachedReading(t *testing.T) {
 	held := gui.Cached(p)
 	require.Contains(t, held, "peripherals",
 		"the silent section's cached reading was dropped, so the next start has nothing")
-	require.Len(t, held["peripherals"].Section.Cells, view.MinPeripheralSlots)
+	require.Len(t, held["peripherals"].Section.Cells, 1)
 	assert.Equal(t, "G502 X PLUS", held["peripherals"].Section.Cells[0].Label)
 }
 

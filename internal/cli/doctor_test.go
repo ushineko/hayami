@@ -277,10 +277,9 @@ func TestDoctorSaysInstallTheUdevRuleForADeviceThatMayNotBeOpened(t *testing.T) 
 	assert.NotContains(t, out.String(), "no Razer device", "a device that is there was reported absent")
 }
 
-// Spec 022. The peripherals card always draws two cells, and a slot with no
-// device is a placeholder. That is the card keeping its shape, not a reading:
-// doctor on a desk with nothing on it says why, and does not report the
-// placeholders as though something had been read.
+// Spec 022, 070. A desk with nothing on it is a "no mouse" placeholder. That
+// is the card not being empty, not a reading: doctor says why, and does not
+// report the placeholder as though something had been read.
 func TestDoctorDoesNotReportThePlaceholders(t *testing.T) {
 	bare(t)
 	findings := cli.Diagnose(t.Context(), panel.Keys(), panel.Env{Counters: counters})
@@ -290,9 +289,8 @@ func TestDoctorDoesNotReportThePlaceholders(t *testing.T) {
 			continue
 		}
 		assert.NotContains(t, f.Summary, view.NoMouse)
-		assert.NotContains(t, f.Summary, view.NoDevice)
 		for _, r := range f.Reasons {
-			assert.NotContains(t, r.Text, view.NoDevice)
+			assert.NotContains(t, r.Text, view.NoMouse)
 		}
 		return
 	}

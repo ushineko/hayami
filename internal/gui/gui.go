@@ -574,10 +574,9 @@ event -- a mouse is switched on, a headset comes off its cradle -- so the
 surplus is drawn as a hidden cell rather than dropped, and a device that
 appears fills one.
 
-A cell the section emitted is never hidden. The peripherals section always
-emits both of its slots, a placeholder where there is no device (spec 022), so
-the card does not collapse to one cell and widen again; only the slack beyond
-what the section emitted is hidden.
+A cell the section emitted is never hidden; only the slack beyond what the
+section emitted is. The peripherals section emits a cell per device and none
+for an empty slot (spec 070), so the card grows and shrinks with the desk.
 
 CellSlack is how many spare there are. A window that has to be restarted to see
 a peripheral is a window nobody would keep open.

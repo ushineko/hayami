@@ -213,40 +213,28 @@ func Peripherals(r PeripheralsReading) Section {
 	for _, d := range shown {
 		s.Cells = append(s.Cells, peripheral(d))
 	}
-	// The card keeps its shape with nothing behind a slot (spec 022). A card
-	// that collapsed to one centred cell when the headset was forgotten, and
-	// widened again when it came back, reflowed the panel over a battery.
-	for i := len(s.Cells); i < cellCount(len(shown)); i++ {
-		s.Cells = append(s.Cells, placeholder(i))
+	// A slot with no device is not drawn (spec 070): the padding spec 022
+	// kept the card's shape with cost a line in a window three cells wide and
+	// said nothing. A desk with nothing on it still has a card.
+	if len(shown) == 0 {
+		s.Cells = append(s.Cells, placeholder())
 	}
 	s.Note = overflowNote(overflow)
 	return s
 }
 
-// The placeholders' labels, by slot: the left slot is the mouse's.
-const (
-	NoMouse  = "no mouse"
-	NoDevice = "no device"
-)
+// NoMouse is the placeholder's label.
+const NoMouse = "no mouse"
 
 /*
-placeholder is the cell for a slot with no device behind it.
+placeholder is the cell for a card with no device at all.
 
-Drawn dim, like a device that has gone quiet, and with no reading, so the card
-is the same shape with one device as with two and says which slot is empty.
-It is not a reason: nothing is wrong, and doctor does not report it.
-
-A slot is empty only to pad the card to its two or four cells (spec 056):
-every kind that has a slot has a device in it. The first says "no mouse" only
-when there is nothing at all, because without a mouse the first slot goes to
-the next kind rather than staying empty (see SelectPeripherals).
+Drawn dim, like a device that has gone quiet, and with no reading. It is not a
+reason: nothing is wrong, and doctor does not report it. It says "no mouse"
+because the mouse is the first slot (see SelectPeripherals).
 */
-func placeholder(slot int) Cell {
-	label := NoDevice
-	if slot == 0 {
-		label = NoMouse
-	}
-	return Cell{Label: label, Value: NoQuantity(), Stale: true, Placeholder: true}
+func placeholder() Cell {
+	return Cell{Label: NoMouse, Value: NoQuantity(), Stale: true, Placeholder: true}
 }
 
 // overflowNote names the devices there was no slot for, most recent first.
@@ -314,11 +302,8 @@ func OrderPeripherals(devices []PeripheralReading) []PeripheralReading {
 }
 
 /*
-The section's size, in cells (spec 056).
-
-**At least two**, the card's shape since spec 022: a card that collapsed to
-one centred cell when the headset was forgotten, and widened again when it
-came back, reflowed the panel over a battery.
+MaxPeripheralSlots is the most cells the section draws (spec 056): a cell per
+slot with a device in it, and no padding (spec 070).
 
 **At most four**, a slot per kind of device a desk has -- a mouse, headphones,
 a keyboard, a controller -- which is two lines of two in the panel's width. A
@@ -327,20 +312,7 @@ the card grew, everything below it moved, and the panel the eye had learned
 was a different panel. A battery reading is glanced at, and a glance wants the
 number to be where it was last time more than it wants every number at once.
 */
-const (
-	MinPeripheralSlots = 2
-	MaxPeripheralSlots = 4
-)
-
-// cellCount is how many cells a card with a slot for slots kinds draws: at
-// least two, and three made four, so two across the grid stays rectangular.
-func cellCount(slots int) int {
-	n := max(slots, MinPeripheralSlots)
-	if n%2 == 1 {
-		n++
-	}
-	return min(n, MaxPeripheralSlots)
-}
+const MaxPeripheralSlots = 4
 
 /*
 SelectPeripherals cuts the devices down to one per kind, a slot each for the
@@ -393,17 +365,17 @@ func SelectPeripherals(devices []PeripheralReading) (shown, overflow []Periphera
 }
 
 /*
-fillWithOthers puts devices of no known kind into the cells the card would
-otherwise pad with a placeholder, the most recent change first.
+fillWithOthers puts devices of no known kind into the cells a card of the
+kinds shown has room for, the most recent change first.
 
 KindOther is not a kind of device but the absence of one -- a Bluetooth device
 with no icon, a receiver that could not say -- so two of them are not one
 device seen twice, as two mice are, and giving them one slot between them hid
 one on a card with a cell to spare. They take only spare cells, so the card is
-the size its kinds make it either way.
+never larger than its kinds make it.
 */
 func fillWithOthers(shown, overflow []PeripheralReading) ([]PeripheralReading, []PeripheralReading) {
-	target := cellCount(len(shown))
+	target := roomFor(len(shown))
 	rest := overflow[:0:0]
 	for _, d := range overflow {
 		if d.Kind == KindOther && len(shown) < target {
@@ -413,6 +385,17 @@ func fillWithOthers(shown, overflow []PeripheralReading) ([]PeripheralReading, [
 		rest = append(rest, d)
 	}
 	return shown, rest
+}
+
+// roomFor is how many cells a card with slots kinds has room for: at least
+// two, and three made four, so devices of no known kind fill out the lines
+// the kinds started. A cell left over is not drawn (spec 070).
+func roomFor(slots int) int {
+	n := max(slots, 2)
+	if n%2 == 1 {
+		n++
+	}
+	return min(n, MaxPeripheralSlots)
 }
 
 // liveFirst puts an answering device ahead of a remembered one, and otherwise

@@ -210,7 +210,7 @@ func TestADeviceThatStopsAnsweringKeepsItsLevelAndGoesDim(t *testing.T) {
 
 	// The verdict survives the dimming, which is the shells' to apply.
 	cells := p.Section().Cells
-	require.Len(t, cells, view.MinPeripheralSlots)
+	require.Len(t, cells, 1)
 	assert.True(t, cells[0].Stale)
 	assert.Equal(t, "Offline", cells[0].Note)
 	assert.Contains(t, cells[0].Value, "86")
@@ -923,5 +923,5 @@ func TestADeviceHeardInOnePollIsNotKept(t *testing.T) {
 	found := devices(p)
 	require.Len(t, found, 1, "a device heard in one poll was kept")
 	assert.Equal(t, "G502 X PLUS", found[0].Name)
-	assert.Len(t, p.Section().Cells, view.MinPeripheralSlots, "the card kept a slot for it")
+	assert.Len(t, p.Section().Cells, 1, "the card kept a slot for it")
 }
