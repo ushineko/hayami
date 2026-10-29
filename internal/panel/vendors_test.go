@@ -34,7 +34,10 @@ func TestTheVendorListComesFromTheDrivers(t *testing.T) {
 
 	assert.Equal(t, append(append([]panel.Vendor{}, hid...), windowsBluetooth, aula, sony), panel.Vendors("windows"),
 		"Windows: the HID vendors and Bluetooth, through bluez alone")
-	assert.Equal(t, append(append([]panel.Vendor{}, hid...), bluetooth, aula, sony), panel.Vendors("linux"),
-		"Linux: the HID vendors and Bluetooth")
+	// The kernel's batteries are a fallback, asked after every other vendor
+	// so it can leave out what they read; Linux only.
+	kernel := panel.Vendor{Name: "HID", Absent: "no HID device the kernel has a battery for", Drivers: []string{"powersupply"}}
+	assert.Equal(t, append(append([]panel.Vendor{}, hid...), bluetooth, aula, sony, kernel), panel.Vendors("linux"),
+		"Linux: the HID vendors, Bluetooth, and the kernel's last")
 	assert.Empty(t, panel.Vendors("other"), "a system no driver reads on asks none")
 }

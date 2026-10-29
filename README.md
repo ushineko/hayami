@@ -533,6 +533,18 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Added**: on Linux, a peripheral whose battery only the kernel reads is a
+  cell: an 8BitDo pad in its Switch (Bluetooth) mode, which BlueZ has no
+  battery for, drawn as the band the kernel gives (sanshoku 0.1.17,
+  ushineko/sanshoku#62). A device another driver reads as well, such as a
+  DualSense, is still one cell, that driver's: the kernel's reader is asked
+  last and leaves out what the others listed, whatever name the kernel gives
+  the device.
+- **Fixed**: a second device of a kind that reports a band and no level is in
+  the card's "Also connected" note by its band, not as "0 %".
+
 ### 0.11.6 (2026-10-22)
 
 - **Fixed**: the installer upgrades an install whose links in `~/.local/bin`
