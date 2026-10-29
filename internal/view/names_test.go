@@ -173,7 +173,7 @@ func TestACellDrawsTheShortNameAndTheHoverSaysTheFullOne(t *testing.T) {
 			detected("DualSense Wireless Controller", 75, view.KindGamepad, t0),
 		})})
 
-	require.Len(t, s.Cells, view.MinPeripheralSlots)
+	require.Len(t, s.Cells, 2)
 	assert.Equal(t, "Basilisk Ultimate", s.Cells[0].Label)
 	assert.Empty(t, s.Cells[0].Name, "a name that was not shortened is said twice on hover")
 	assert.Equal(t, "DualSense", s.Cells[1].Label)

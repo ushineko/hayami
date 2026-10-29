@@ -533,6 +533,14 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Changed**: the peripherals card draws a cell per device and no "no
+  device" cell for an empty slot, so three devices are three cells rather
+  than four with a blank one on its own line. The card grows and shrinks as
+  devices come and go; an empty desk is still one dim "no mouse" cell
+  (spec 070, #231).
+
 ### 0.11.7 (2026-10-28)
 
 - **Added**: on Linux, a peripheral whose battery only the kernel reads is a

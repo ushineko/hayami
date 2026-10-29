@@ -33,10 +33,9 @@ func TestAReadingSurvivesTheRoundTrip(t *testing.T) {
 
 	sec, err := c.Restore("peripherals")
 	require.NoError(t, err)
-	require.Len(t, sec.Cells, view.MinPeripheralSlots)
+	require.Len(t, sec.Cells, 1)
 	assert.Equal(t, "G502 X PLUS", sec.Cells[0].Label)
 	assert.Contains(t, sec.Cells[0].Value, "76")
-	assert.True(t, sec.Cells[1].Placeholder, "the empty slot came back as a reading")
 }
 
 // AC1. A restored section is marked, because that is the only thing that
