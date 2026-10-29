@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.6
+**Version**: 0.11.7
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.7 (2026-10-28)
 
 - **Added**: on Linux, a peripheral whose battery only the kernel reads is a
   cell: an 8BitDo pad in its Switch (Bluetooth) mode, which BlueZ has no
