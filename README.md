@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.7
+**Version**: 0.11.8
 
 *a chart you read at a glance*
 
@@ -533,7 +533,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.8 (2026-10-29)
 
 - **Changed**: the peripherals card draws a cell per device and no "no
   device" cell for an empty slot, so three devices are three cells rather
