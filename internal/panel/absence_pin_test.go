@@ -40,9 +40,10 @@ func TestEveryReasonIsPinned(t *testing.T) {
 	for _, sc := range reasonScenarios(t) {
 		fmt.Fprintf(&b, "## %s\n", sc.name)
 		for _, r := range sc.reasons {
-			if strings.Contains(r.Text, "Bluetooth") {
+			if strings.Contains(r.Text, "Bluetooth") || strings.Contains(r.Text, "the kernel has a battery for") {
 				// The Bluetooth vendor's lines differ by platform (its
-				// drivers do), so vendors_test.go and host_test.go hold them.
+				// drivers do), and the kernel's batteries are read on Linux
+				// only, so vendors_test.go and host_test.go hold them.
 				continue
 			}
 			fmt.Fprintf(&b, "- label=%q text=%q status=%v aside=%v actionable=%v\n  detail=%q\n",

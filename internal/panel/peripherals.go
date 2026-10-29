@@ -1,9 +1,11 @@
 package panel
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -107,6 +109,10 @@ A driver that does not describe itself is not asked. Every driver in the
 module does, and a test there holds it; one that did not would have no name
 to give a line, and guessing one is how this file used to carry a table of
 its own.
+
+A vendor with a sanshoku.Fallback driver among its drivers comes after every
+other, so the devices the others read are listed before the fallback is
+asked, and its candidates for them are left out (held.list).
 */
 func vendors(platform string) []vendor {
 	var out []vendor
@@ -123,7 +129,19 @@ func vendors(platform string) []vendor {
 		at[desc.Name] = len(out)
 		out = append(out, vendor{name: desc.Name, finds: desc.Finds, drivers: []sanshoku.Driver{d}, quiet: desc.Quiet})
 	}
+	slices.SortStableFunc(out, func(a, b vendor) int { return cmp.Compare(a.fallback(), b.fallback()) })
 	return out
+}
+
+// fallback is 1 for a vendor with a sanshoku.Fallback driver and 0 for one
+// without, the order vendors sorts them in.
+func (v vendor) fallback() int {
+	for _, d := range v.drivers {
+		if _, ok := d.(sanshoku.Fallback); ok {
+			return 1
+		}
+	}
+	return 0
 }
 
 // remembered is one device's last reading that had a level in it.

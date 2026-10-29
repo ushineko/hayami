@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -39,6 +40,9 @@ type peripheral struct {
 	name   string
 	path   string
 	phys   string
+	// key is the candidate's sanshoku.Candidate.Key: which physical device
+	// it is, for a fallback driver's candidate to give way to another's.
+	key string
 
 	says     []battery.Battery
 	openErr  error
@@ -83,6 +87,7 @@ func (k *desk) scan(_ context.Context, drivers ...sanshoku.Driver) ([]sanshoku.C
 			out = append(out, sanshoku.Candidate{
 				Identity: dev.Identity(),
 				Driver:   dev.driver,
+				Key:      dev.key,
 				Open: func(context.Context) (sanshoku.Device, error) {
 					dev.opens++
 					if dev.openErr != nil {
@@ -513,13 +518,18 @@ func TestPeripheralsNamesEachVendorThatFoundNothing(t *testing.T) {
 	// Every vendor is named; their order is sanshoku's driver order (spec
 	// 048), which vendors_test.go pins for each platform, so it is not
 	// repeated here -- it was, and it broke on Linux when the order moved.
-	assert.ElementsMatch(t, append([]string{
+	want := append([]string{
 		"no Logitech receiver",
 		"no Razer device",
 		"no SteelSeries device",
 		"no AULA receiver",
 		"no Sony controller",
-	}, panel.BluetoothAbsent()...), reasonTexts(sec))
+	}, panel.BluetoothAbsent()...)
+	if runtime.GOOS == "linux" {
+		// The kernel's batteries, read on Linux only (sanshoku 0.1.17).
+		want = append(want, "no HID device the kernel has a battery for")
+	}
+	assert.ElementsMatch(t, want, reasonTexts(sec))
 	for _, r := range sec.Reasons {
 		assert.Equal(t, view.Info, r.Status, "%q was marked as a failure", r.Text)
 	}

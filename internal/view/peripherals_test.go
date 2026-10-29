@@ -549,6 +549,22 @@ func TestThreeLiveDevicesGiveTheOverflowNote(t *testing.T) {
 	assert.Equal(t, "Also connected:\n  Arctis Nova Pro  47 %  Discharging", s.Note)
 }
 
+// A second controller with a band and no level is in the note by its band,
+// not as "0 %".
+func TestABandInTheOverflowNoteIsItsWord(t *testing.T) {
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	pad := detected("Pro Controller", 0, view.KindGamepad, t0)
+	pad.Band, pad.Segments = "Good", 3
+	s := view.Peripherals(view.PeripheralsReading{Devices: view.OrderPeripherals(
+		[]view.PeripheralReading{
+			detected("G502 X PLUS", 78, view.KindMouse, t0),
+			detected("DualSense", 75, view.KindGamepad, t0.Add(time.Minute)),
+			pad,
+		})})
+
+	assert.Equal(t, "Also connected:\n  Pro Controller  Good  Discharging", s.Note)
+}
+
 // Without a mouse the slots are filled from the rest, as before spec 022; the
 // "no mouse" placeholder is only for a desk with nothing on it.
 func TestWithoutAMouseTheLeftSlotIsNotLeftEmpty(t *testing.T) {

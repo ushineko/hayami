@@ -33,6 +33,12 @@ type held struct {
 	// listed is this poll's candidates, by key, so prune knows what has gone.
 	listed map[string]bool
 
+	// direct is the device keys (sanshoku.Candidate.Key) the drivers that are
+	// not a sanshoku.Fallback listed this poll, so a fallback's candidate for
+	// the same device is left out. sanshoku.Scan does this within one call;
+	// this section calls it once per driver, so it does it here.
+	direct map[string]bool
+
 	// permission is the host's account of an Open refused for want of
 	// permission, with its platform's advice (spec 043).
 	permission func(error) (*core.Absence, bool)
@@ -49,7 +55,10 @@ func newHeld(scan Scan, permission func(error) (*core.Absence, bool)) *held {
 func key(c sanshoku.Candidate) string { return c.Driver + "\x00" + c.Path }
 
 // begin starts a poll's listing.
-func (h *held) begin() { h.listed = make(map[string]bool) }
+func (h *held) begin() {
+	h.listed = make(map[string]bool)
+	h.direct = make(map[string]bool)
+}
 
 /*
 list is one driver's candidates.
@@ -58,13 +67,27 @@ One driver at a time rather than the section's drivers in one call, so a
 driver's own failure can be named in its own words: sanshoku.Scan joins what
 went wrong across the drivers it is given, and a joined error cannot say
 which vendor it was about without being parsed.
+
+A fallback driver's candidate is left out when a driver that is not one
+listed the same device earlier in the poll: the kernel's battery for a
+DualSense that the sony driver reads. It is not marked listed, so one held
+from before is closed. Fallbacks are listed last (see vendors) for this.
 */
 func (h *held) list(ctx context.Context, d sanshoku.Driver) ([]sanshoku.Candidate, error) {
 	found, err := h.scan(ctx, d)
+	_, fallback := d.(sanshoku.Fallback)
+	kept := found[:0:0]
 	for _, c := range found {
+		switch {
+		case fallback && c.Key != "" && h.direct[c.Key]:
+			continue
+		case !fallback && c.Key != "":
+			h.direct[c.Key] = true
+		}
 		h.listed[key(c)] = true
+		kept = append(kept, c)
 	}
-	return found, err
+	return kept, err
 }
 
 // device is the open device for a candidate, opening it if this section does

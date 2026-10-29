@@ -270,6 +270,12 @@ func overflowNote(overflow []PeripheralReading) string {
 			// either (spec 058).
 			level = NoQuantity()
 		}
+		if d.Segments > 0 {
+			// A device without a gauge says its band here as its cell does,
+			// never a percentage it did not give: the Pro Controller pose of
+			// an 8BitDo pad, read by the kernel (sanshoku 0.1.17).
+			level = d.Band
+		}
 		if d.Stale {
 			quiet = append(quiet, "  "+d.Name+"  "+level)
 			continue
