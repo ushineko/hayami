@@ -146,16 +146,16 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 			// section. The canary in internal/usage reports a format change;
 			// a pane should still draw the accounts that do decode.
 			reasons = append(reasons, reason(view.Reason{
-				Label: a.Label(), Text: "unreadable reading", Status: view.Warn,
+				Label: accountLabel(a, states), Text: "unreadable reading", Status: view.Warn,
 			}, err))
 			continue
 		}
 		if len(windows) == 0 {
-			reasons = append(reasons, silence(now, a, ferr))
+			reasons = append(reasons, silence(now, a, accountLabel(a, states), ferr))
 		}
 		for _, w := range windows {
 			out = append(out, view.UsageWindow{
-				Account:  a.Label(),
+				Account:  accountLabel(a, states),
 				Badge:    states[a.Provider].badges[a.Name],
 				Name:     w.Name,
 				Fraction: w.Fraction,
@@ -190,21 +190,21 @@ The gate is not shortened here. It is written into a file three programs read,
 and a build that set its own would be deciding for the other two; this says
 what is happening instead.
 */
-func silence(now time.Time, a usage.Account, err error) view.Reason {
+func silence(now time.Time, a usage.Account, label string, err error) view.Reason {
 	if err != nil {
-		return reason(view.Reason{Label: a.Label(), Text: "could not be read", Status: view.Warn}, err)
+		return reason(view.Reason{Label: label, Text: "could not be read", Status: view.Warn}, err)
 	}
 
 	entry, rerr := usage.Read(a.Name, a.Provider)
 	if rerr == nil && entry != nil && !entry.Open(now) {
 		return view.Reason{
-			Label: a.Label(), Text: "waiting to retry", Status: view.Warn,
+			Label: label, Text: "waiting to retry", Status: view.Warn,
 			Detail: "an earlier fetch failed; the shared cache's gate opens at " +
 				entry.NextAttempt().Format("15:04"),
 		}
 	}
 	return view.Reason{
-		Label: a.Label(), Text: "nothing fetched yet", Status: view.Info,
+		Label: label, Text: "nothing fetched yet", Status: view.Info,
 	}
 }
 
@@ -239,23 +239,45 @@ func refresh(ctx context.Context, now time.Time, a usage.Account, states map[str
 }
 
 // claudeStores are the credential stores by profile name, with each one's
-// badge. A store that cannot be read contributes neither: it is one account
-// absent, and the others still draw.
-func claudeStores() (map[string]claude.Store, map[string]string) {
-	stores := map[string]claude.Store{}
-	badges := map[string]string{}
+// badge and, where it is called something else on screen, its name. A store
+// that cannot be read contributes neither: it is one account absent, and the
+// others still draw.
+//
+// The default store is the one renamed. "max" is a name this program gave it,
+// after the wrapper that reaches it, and the cache files keep it; on screen it
+// is called by its plan once Claude Code's account record names that plan, so
+// an Ultra account is "CC ultra" and not "CC max". A profile's name is its
+// directory's, which somebody chose, and stays.
+func claudeStores() (stores map[string]claude.Store, badges, names map[string]string) {
+	stores = map[string]claude.Store{}
+	badges = map[string]string{}
+	names = map[string]string{}
 
 	found, err := claude.Stores()
 	if err != nil {
-		return stores, badges
+		return stores, badges, names
 	}
 	for _, s := range found {
 		stores[s.Name] = s
-		if creds, err := claude.Read(s); err == nil {
-			badges[s.Name] = creds.Badge()
+		creds, err := claude.Read(s)
+		if err != nil {
+			continue
+		}
+		badges[s.Name] = creds.Badge()
+		if s.Name == claude.DefaultProfileName && creds.RecordedPlan != "" {
+			names[s.Name] = creds.RecordedPlan
 		}
 	}
-	return stores, badges
+	return stores, badges, names
+}
+
+// accountLabel is what a caption calls an account: its own label, or the
+// label of the name its provider gives it on screen.
+func accountLabel(a usage.Account, states map[string]providerState) string {
+	if name, ok := states[a.Provider].names[a.Name]; ok {
+		return usage.Account{Provider: a.Provider, Name: name}.Label()
+	}
+	return a.Label()
 }
 
 // merge adds an account for every one a provider announces that the cache does
@@ -304,6 +326,10 @@ type providerState struct {
 	// badges are the plan letters by account name.
 	badges map[string]string
 
+	// names are what accounts are called on screen, by the name the cache
+	// gives them, where the two differ.
+	names map[string]string
+
 	// fetcher is how one account is fetched; nil, or a nil result, is an
 	// account read and not fetched, which is what one with no credentials is.
 	fetcher func(ctx context.Context, name string) usage.Fetch
@@ -328,14 +354,15 @@ func loadProviders() map[string]providerState {
 // loadClaude finds the credential stores: each is an account, announced,
 // badged with its plan, and fetched with its own token.
 func loadClaude() providerState {
-	stores, badges := claudeStores()
-	names := make([]string, 0, len(stores))
+	stores, badges, names := claudeStores()
+	announced := make([]string, 0, len(stores))
 	for name := range stores {
-		names = append(names, name)
+		announced = append(announced, name)
 	}
 	return providerState{
-		announced: names,
+		announced: announced,
 		badges:    badges,
+		names:     names,
 		fetcher: func(ctx context.Context, name string) usage.Fetch {
 			store, ok := stores[name]
 			if !ok {
@@ -441,8 +468,10 @@ func cachedBreakdown(now func() time.Time) func(label string) (view.UsageBreakdo
 		if err != nil {
 			return view.UsageBreakdown{}, err
 		}
+		_, _, names := claudeStores()
+		states := map[string]providerState{usage.ProviderClaude: {names: names}}
 		for _, a := range accounts {
-			if a.Label() != label {
+			if accountLabel(a, states) != label {
 				continue
 			}
 			entry, err := usage.Read(a.Name, a.Provider)

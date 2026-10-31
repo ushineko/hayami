@@ -533,6 +533,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: an Ultra account is called "CC ultra" with a U badge, not "CC
+  max" with an M. Its credential store still says "max"; the plan's name is
+  read from Claude Code's account record, and only when the record's tier is
+  the store's. The cache file keeps its shared name (#234).
+
 ### 0.11.8 (2026-10-29)
 
 - **Changed**: the peripherals card draws a cell per device and no "no
