@@ -43,6 +43,10 @@ const ruleName = packaging.UdevRuleName
 // and what was logged.
 func installedAt(t *testing.T, upgrade bool) (c *extension.Context, udev string, logged *[]string) {
 	t.Helper()
+	// The network helper is these tests' to answer for, not the machine's:
+	// one with no trusted pkexec (CI's) would add the helper's sudo line to
+	// what the udev tests read.
+	answerNet(t, netCurrent)
 	root := t.TempDir()
 	udev = t.TempDir()
 	t.Setenv(UdevDirEnv, udev)
