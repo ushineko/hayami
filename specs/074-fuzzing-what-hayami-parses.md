@@ -32,12 +32,16 @@ thought of.
   - The Claude and Codex response parsing (`internal/claude`,
     `internal/codex`).
   - The settings file (`internal/config`), which a person edits by hand.
-- R2 Each target has a seed corpus committed under its package's
-  `testdata/fuzz`, taken from the example tests' inputs and from real
-  output with anything identifying replaced (the repository's
-  public-repository rules).
+- R2 Each target has a seed corpus committed with it, as `f.Add` calls in
+  its test, taken from the example tests' inputs (the repository's
+  public-repository rules hold: invented values only). A crash fuzzing
+  finds is written to the package's `testdata/fuzz` and committed with its
+  fix (R4).
 - R3 CI runs each target for a short, fixed time on every PR, in a job of
-  its own, so a slow fuzz run does not hold the unit tests up.
+  its own, so a slow fuzz run does not hold the unit tests up; a release
+  waits for it. `make fuzz` is the same run by hand, with two workers per
+  target at the lowest priority (`FUZZ_PARALLEL`), because Go's default of
+  one worker per CPU made the desk unusable when it was first run there.
 - R4 A crash fuzzing finds is committed as a corpus entry with its fix, so
   it is a regression test from then on.
 - R5 The HID report decoders are sanshoku's, and are raised there as an
@@ -47,15 +51,21 @@ thought of.
 
 ## Acceptance Criteria
 
-- [ ] A fuzz test exists for each parser of R1, with a seed corpus.
-- [ ] Each target was seen to find a planted panic (an index past the end on
-      a crafted input) before the plant was removed.
+- [x] A fuzz test exists for each parser of R1, with a seed corpus:
+      `FuzzParseNetDev`, `FuzzHelperStream` (both versions, with the
+      helper's bounds and the absence of escapes in its error checked as
+      properties), `FuzzParseInetDiag`, `FuzzLHMTree`, `FuzzParseLHMValue`,
+      `FuzzCacheFile`, `FuzzClaudePayload`, `FuzzCodexPayload`,
+      `FuzzNormalise`, `FuzzSettingsFile`.
+- [x] Each target was seen to find a planted panic before the plant was
+      removed (Verification).
 - [ ] CI runs every target on PRs in its own job, and the job's time is
       recorded in Verification.
-- [ ] Every crash found while writing the targets is fixed and committed as
-      a corpus entry.
-- [ ] An issue on sanshoku asks for fuzzing of its HID decoders.
-- [ ] B4's section of the threat model lists the targets.
+- [x] Every crash found while writing the targets is fixed and committed as
+      a corpus entry: none was found.
+- [x] An issue on sanshoku asks for fuzzing of its HID decoders
+      (ushineko/sanshoku#67).
+- [x] B4's section of the threat model lists the targets.
 
 ## Threat model delta
 
@@ -72,6 +82,18 @@ Fixes to crashes found change the parsers; each fix is its own commit.
   the parser shipped. Each is released like any fix.
 - Rollback: the fuzz tests and the CI job are reverted on their own; fixes
   stay.
+
+## Verification
+
+- Each target fuzzed for 20 seconds on the Linux desk (one worker per CPU,
+  before throttling): between 125,000 (`FuzzSettingsFile`, which writes and
+  parses a file each time) and 9 million (`FuzzNormalise`) executions, no
+  crash and no bound broken.
+- A planted panic in each target's callback, on two chosen bytes in a row,
+  was found by nine of the ten within 90 seconds at two workers;
+  `FuzzSettingsFile`, at its lower rate, found a one-byte plant in a second.
+  The plants and the crash files they wrote were removed.
+- CI's Fuzz job: recorded on the PR.
 
 ## E2E Test Plan
 

@@ -30,7 +30,7 @@ written here; it is a private advisory until the release that fixes it.
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
 | B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its findings fixed (the advisory in 0.11.12, #244 and #245 since) |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; its findings fixed in 0.11.13 |
-| B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
+| B4 What hayami parses | The panel's availability; the helper's input | Fuzzed (spec 074); sanshoku's decoders open |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
 | B7 Supply chain and releases | A tampered binary installed with administrator or root rights | Modelled; hardening is spec 075 |
@@ -230,8 +230,18 @@ sending reports, a helper sending lines, a provider's API.
 **Accepted.** LibreHardwareMonitor's address can be set to another URL in
 the settings, which are the user's own; hayami then fetches that URL.
 
-**Not yet known.** No parser is fuzzed; spec 074 adds it. HID decoders are
-sanshoku's.
+- Every parser of what hayami does not control is fuzzed, in CI on every PR
+  and by hand before a release (`make fuzz`; spec 074): `/proc/net/dev`
+  (`FuzzParseNetDev`), the helper's stream in both versions, with its
+  bounds checked as a property (`FuzzHelperStream`), `sock_diag` replies
+  (`FuzzParseInetDiag`), LibreHardwareMonitor's tree and values
+  (`FuzzLHMTree`, `FuzzParseLHMValue`), the Claude and Codex payloads and
+  breakdowns (`FuzzClaudePayload`, `FuzzCodexPayload`), the shared cache
+  file (`FuzzCacheFile`), Codex's reply (`FuzzNormalise`) and the settings
+  file (`FuzzSettingsFile`).
+
+**Not yet known.** The HID decoders are sanshoku's and are not fuzzed
+(ushineko/sanshoku#67).
 
 ## B5 What hayami does outside itself
 
