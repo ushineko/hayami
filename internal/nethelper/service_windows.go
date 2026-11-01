@@ -42,6 +42,10 @@ var versionInDescription = regexp.MustCompile(`\(([^()]+)\)\.$`)
 // ProgramName is the terminal program's file name here.
 const ProgramName = "hayami-tui.exe"
 
+// RemoveFromCopy is false: Windows cannot delete a running program, so the
+// installed hayami-tui removes the helper's copy.
+const RemoveFromCopy = false
+
 // What the installer's Network page says of the helper here.
 const (
 	OfferWhy = "Windows gives the network by program only to an administrator, and the panel runs as you. " +

@@ -82,6 +82,18 @@ the same as with the sudo line it replaces. polkit's prompt names the program.
 - **The CLI now prompts.** `network-helper install` typed without sudo asks
   for a password through polkit's text agent where it used to print the sudo
   line.
+- **Review of this change** (spec 073's procedure, one reviewer, findings
+  checked against the code by the author). No path to root or to the
+  helper's capabilities beyond what `sudo <same path>` already gave. Fixed
+  here: the uninstaller elevated the user-writable `hayami-tui` to remove
+  the helper, when the helper's root-owned copy can remove itself, and now
+  uses that copy on Linux (`nethelper.RemoveFromCopy`; Windows cannot delete
+  a running program); and `pkexec` was taken from the `PATH` as found, so a
+  fake one placed there by a program running as the user could put the page
+  in front of the person and take the password, and is now used only if it
+  is root's and setuid (`trustedPkexec`, tested both ways). Accepted: `Skip`
+  asks systemd whether the helper runs, which is a short subprocess on the
+  window's thread.
 - Rollback: revert the commit; installs already made are unaffected.
 
 ## Verification

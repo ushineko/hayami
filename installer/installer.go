@@ -191,7 +191,7 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 		// way: the installer never becomes root.
 		c.Logf(extension.Warn, "The network helper stays installed. To remove it: sudo %s network-helper remove", n.State.Path)
 	} else if !c.Upgrade() && n.State.Installed {
-		c.Log(extension.Info, "Removing the network helper; Windows asks for an administrator")
+		c.Log(extension.Info, "Removing the network helper; the system asks for an administrator")
 		if err := removeNet(ctx, c); err != nil {
 			c.Logf(extension.Warn, "The network helper was not removed: %v. "+
 				"To remove it, as an administrator: hayami-tui network-helper remove, "+

@@ -114,7 +114,11 @@ func setUpNetwork(ctx context.Context, c *extension.Context) error {
 
 // removeNetwork removes the helper the same way.
 func removeNetwork(ctx context.Context, c *extension.Context) error {
-	if err := nethelper.RunElevated(ctx, helperProgram(c), "network-helper", "remove"); err != nil {
+	program := helperProgram(c)
+	if state := nethelper.Probe(); nethelper.RemoveFromCopy && state.Path != "" {
+		program = state.Path
+	}
+	if err := nethelper.RunElevated(ctx, program, "network-helper", "remove"); err != nil {
 		return err //nolint:wrapcheck // says what Windows answered
 	}
 	if nethelper.Probe().Installed {

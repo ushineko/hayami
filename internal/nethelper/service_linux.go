@@ -31,6 +31,12 @@ const (
 // ProgramName is the terminal program's file name here.
 const ProgramName = "hayami-tui"
 
+// RemoveFromCopy reports that the helper's own copy, which only root can
+// change, is what removes it: the installed hayami-tui is the user's to
+// change, and an uninstall that elevated it would run whatever was put in
+// its place. Linux can; Windows cannot delete a running program.
+const RemoveFromCopy = true
+
 // What the installer's Network page says of the helper here (spec 078).
 const (
 	OfferWhy = "Linux gives UDP, connections too short to be seen between two readings, and other accounts' programs only " +
@@ -127,7 +133,29 @@ func CurrentUser() (string, error) {
 
 // lookPkexec finds polkit's pkexec. A variable, so a test answers for a
 // machine with or without it.
-var lookPkexec = func() (string, error) { return exec.LookPath("pkexec") }
+var lookPkexec = trustedPkexec
+
+/*
+trustedPkexec is the pkexec on the PATH, if it is the system's: owned by
+root and setuid, as polkit installs it. A pkexec placed earlier on the PATH
+by a program running as the user would otherwise put the Network page in
+front of the person and take the password it asks for (spec 078).
+*/
+func trustedPkexec() (string, error) {
+	path, err := exec.LookPath("pkexec")
+	if err != nil {
+		return "", err //nolint:wrapcheck // exec's own account of it
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("pkexec: %w", err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || st.Uid != 0 || info.Mode()&os.ModeSetuid == 0 {
+		return "", fmt.Errorf("%s is not root's setuid pkexec", path) //nolint:err113 // the path is the message
+	}
+	return path, nil
+}
 
 /*
 RunElevated runs program as root through polkit (spec 078): the desktop asks

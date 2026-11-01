@@ -144,3 +144,32 @@ func fakePkexec(t *testing.T, code int) string {
 	t.Cleanup(func() { lookPkexec = was })
 	return record
 }
+
+// Spec 078. A pkexec that is not root's setuid one, put earlier on the PATH
+// by something running as the user, is not used: the installer would put the
+// Network page in front of the person and hand that program their password.
+func TestAPkexecOnThePathThatIsNotRootsIsNotUsed(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root owns whatever it writes")
+	}
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "pkexec")
+	require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\nexit 0\n"), 0o755)) //nolint:gosec // a test's own script
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, err := trustedPkexec()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "is not root's setuid pkexec")
+}
+
+// The system's pkexec, root's and setuid, is the one used.
+func TestTheSystemsPkexecIsUsed(t *testing.T) {
+	info, err := os.Stat("/usr/bin/pkexec")
+	if err != nil || info.Mode()&os.ModeSetuid == 0 {
+		t.Skip("no setuid pkexec in /usr/bin here")
+	}
+	t.Setenv("PATH", "/usr/bin")
+	path, err := trustedPkexec()
+	require.NoError(t, err)
+	assert.Equal(t, "/usr/bin/pkexec", path)
+}

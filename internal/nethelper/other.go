@@ -35,6 +35,9 @@ const (
 // ProgramName is the terminal program's file name.
 const ProgramName = "hayami-tui"
 
+// RemoveFromCopy has nothing to remove here.
+const RemoveFromCopy = false
+
 // The installer's Network page has nothing to offer here.
 const (
 	OfferWhy     = About
