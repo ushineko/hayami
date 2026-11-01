@@ -225,3 +225,143 @@ func TestARetryAfterIsHonouredForAnHourAtMost(t *testing.T) {
 		assert.Equal(t, claude.MaxRetryAfter, retry.After, "Retry-After: %s", header)
 	}
 }
+
+// rewriteStore changes the store the way another program would, between the
+// refresh's read and its write: f gets the file's top-level object and its
+// oauth object.
+func rewriteStore(t *testing.T, path string, f func(top, oauth map[string]any)) {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var top map[string]any
+	require.NoError(t, json.Unmarshal(body, &top))
+	oauth, ok := top["claudeAiOauth"].(map[string]any)
+	require.True(t, ok)
+	f(top, oauth)
+	out, err := json.Marshal(top)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, out, 0o600))
+}
+
+// Spec 077, #248. Claude Code refreshed while hayami's request was out: its
+// tokens are in the file and in use. The file is left as Claude Code wrote
+// it, and hayami goes on with Claude Code's tokens rather than its own.
+func TestARefreshDefersToOneThatHappenedMeanwhile(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		rewriteStore(t, path, func(_, oauth map[string]any) {
+			oauth["accessToken"], oauth["refreshToken"] = "claude-codes-token", "claude-codes-refresh"
+		})
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","refresh_token":"hayamis-refresh","expires_in":3600}`))
+	})
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+
+	again, err := claude.Read(store)
+	require.NoError(t, err)
+	assert.Equal(t, "claude-codes-token", again.AccessToken, "Claude Code's write was overwritten")
+	assert.Equal(t, "claude-codes-refresh", again.RefreshToken)
+	assert.Equal(t, "claude-codes-token", creds.AccessToken, "hayami goes on with the tokens in the file")
+}
+
+// Spec 077, #248. Claude Code wrote something else to the file meanwhile (a
+// key of its own) without refreshing: hayami's tokens go into the file as it
+// is now, and Claude Code's key is kept.
+func TestARefreshKeepsWhatWasWrittenMeanwhile(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		rewriteStore(t, path, func(top, _ map[string]any) {
+			top["mcpOAuth"] = map[string]any{"some-server": "written-meanwhile"}
+		})
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","refresh_token":"hayamis-refresh","expires_in":3600}`))
+	})
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(body, &got))
+	assert.Contains(t, got, "mcpOAuth", "a key written during the refresh was dropped")
+	oauth, ok := got["claudeAiOauth"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "hayamis-token", oauth["accessToken"])
+	assert.Equal(t, "hayamis-refresh", oauth["refreshToken"])
+}
+
+// Spec 077. A store removed during the refresh is not written: hayami does
+// not recreate a credential file somebody deleted.
+func TestARefreshDoesNotRecreateARemovedStore(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, os.Remove(path))
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","expires_in":3600}`))
+	})
+	require.Error(t, claude.Refresh(t.Context(), client, store, creds))
+	assert.NoFileExists(t, path)
+}
+
+// Spec 077. Claude Code is part-way through writing the file when hayami
+// reads it again: empty for a moment, then whole. hayami waits for it, and
+// its tokens go into the file as Claude Code left it.
+func TestARefreshWaitsOutAWriteInProgress(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+	whole, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, os.WriteFile(path, nil, 0o600))
+		go func() {
+			defer close(done)
+			time.Sleep(30 * time.Millisecond)
+			_ = os.WriteFile(path, whole, 0o600)
+		}()
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","refresh_token":"hayamis-refresh","expires_in":3600}`))
+	})
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+	<-done
+
+	again, err := claude.Read(store)
+	require.NoError(t, err)
+	assert.Equal(t, "hayamis-token", again.AccessToken)
+	assert.Equal(t, "hayamis-refresh", again.RefreshToken)
+}
+
+// Spec 077. A file that stays unreadable is not a reason to lose the tokens
+// just obtained: the refresh token spent may not be accepted again. They are
+// written over the copy read before the request.
+func TestARefreshKeepsItsTokensWhenTheFileStaysUnreadable(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o600))
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","refresh_token":"hayamis-refresh","expires_in":3600}`))
+	})
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+
+	again, err := claude.Read(store)
+	require.NoError(t, err)
+	assert.Equal(t, "hayamis-refresh", again.RefreshToken, "the new refresh token was lost")
+}

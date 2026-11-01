@@ -605,6 +605,10 @@ MIT. See
 - **Fix**: refreshing the Claude token works again. Its endpoint moved, and
   the old address redirected to a page that does not exist, so every refresh
   failed (#256).
+- **Fix**: refreshing the Claude token no longer overwrites what Claude Code
+  wrote to its credential file during the refresh. The file is read again
+  just before it is written; if Claude Code refreshed meanwhile, its tokens
+  stand (spec 077, #248).
 
 ### 0.11.12 (2026-11-01)
 
