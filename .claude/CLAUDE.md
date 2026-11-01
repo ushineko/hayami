@@ -73,8 +73,9 @@ the link is made by hand and is worth making.
 - The issue body links the spec path once it exists.
 - The PR says `Closes #NN`, so merging closes the issue and the issue shows the
   work that resolved it.
-- Labels: `bug`, `enhancement`, `chore`, `docs`. Keep it to those unless there
-  is a reason.
+- Labels: `bug`, `enhancement`, `chore`, `docs`, and `security` for a finding
+  at one of the threat model's boundaries (spec 073). Keep it to those unless
+  there is a reason.
 
 ---
 
