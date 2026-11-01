@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.9
+**Version**: 0.11.10
 
 *a chart you read at a glance*
 
@@ -584,15 +584,15 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.10 (2026-10-31)
 
-- **New**: on Linux, an opt-in network helper counts the network by process
+- **Added**: on Linux, an opt-in network helper counts the network by process
   for every protocol, every account and connections too short for two
   readings (spec 072, #238). It is a systemd service, started by its socket,
   that counts packets with eBPF and runs as a dynamic user with the three
   capabilities that takes. `sudo hayami-tui network-helper install --allow
   $USER` installs it; Linux 6.4 or later.
-- **New**: with the helper, the Peers breakdown lists traffic forwarded for
+- **Added**: with the helper, the Peers breakdown lists traffic forwarded for
   another interface (a virtual machine, a container, an exit node) by that
   interface, marks a tunnel daemon "(tunnel)" because its bytes are the
   tunnel interface's over again, and calls what is left "headers /
