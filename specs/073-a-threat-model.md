@@ -203,6 +203,11 @@ The first assessment, 2026-10-31, on `main` at 5fba846 (0.11.10):
     refuted).
   - B3: #246–#250, all low but #248 (medium-low).
 - The Linux helper and the Linux install paths held in both B1 and B2.
+- Follow-up: the B1 advisory was fixed in a temporary private fork, tested
+  on Windows 11, released in 0.11.11 and published as GHSA-94c3-mf55-vv8v.
+  Its impersonation part did not hold on Windows (a pipe server may
+  impersonate only after reading, and the panel never writes), and its
+  severity was lowered from medium to low before publication.
 
 ## E2E Test Plan
 

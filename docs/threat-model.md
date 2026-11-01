@@ -27,7 +27,7 @@ written here; it is a private advisory until the release that fixes it.
 
 | Boundary | What is at stake | Status |
 |---|---|---|
-| B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; findings open |
+| B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
 | B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; findings open |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; findings open |
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
@@ -78,9 +78,20 @@ from the panel's side.
   `internal/netcount/netcount_linux.go`).
 - Runs only while read, and lets the programs go when the last reader
   leaves (`serve`; `TestTheServerCountsOnlyWhileSomebodyReads`).
-- The panel bounds what it reads: a line is at most 16 MiB
-  (`helperStream.read`, `internal/core/nethelper.go`), and a protocol it
-  does not know is refused by name.
+- The Windows panel reads the pipe only when the process serving it is the
+  one the service manager started for `hayami-network`, and opens it
+  anonymously, so a program that took the pipe's name while the helper
+  was stopped is refused and cannot impersonate the panel
+  (`serverIsTheService`, `openPipe` in `internal/core/nethelper_windows.go`;
+  `TestAPipeHeldByAnotherProgramIsRefused`,
+  `TestTheServerCannotImpersonateThePanel`). GHSA-94c3-mf55-vv8v, fixed in
+  0.11.11.
+- The panel bounds what it reads: a line is at most 16 MiB, a stream keeps
+  only its own version's fields, each table is capped at the helper's own
+  size between readings, long strings are dropped, and the helper's error
+  text loses its control characters (`helperStream`, `printable` in
+  `internal/core/nethelper.go`). A protocol it does not know is refused by
+  name.
 
 **Accepted.**
 
@@ -88,10 +99,12 @@ from the panel's side.
   counts and which program holds them (Linux), or process IDs and byte
   counts (Windows). Installing the helper is agreeing to that, and the
   README says so.
+- A program holding the Windows pipe's name can still keep the helper from
+  starting while it holds it; the panel says which process that is.
 
-**Open findings** (first assessment, 2026-10-31): one private advisory
-(Windows). B2's #244 covers how the Windows helper's program is copied into
-place. The Linux helper held against every path tried; see "Checked".
+**Open findings.** None of its own since 0.11.11 (GHSA-94c3-mf55-vv8v,
+published). B2's #244 covers how the Windows helper's program is copied
+into place. The Linux helper held against every path tried; see "Checked".
 
 ## B2 Installing, upgrading and removing
 
@@ -286,7 +299,8 @@ the goal of a working proof of concept.
 
 | Date | Boundary | Tried | Found |
 |---|---|---|---|
-| 2026-10-31 | B1, B2, B3 | The first assessment (spec 073 R7): one reviewer per boundary given the code and the attacker, then a separate refutation pass for each. Read-only, no proof of concept on a machine. | Two private advisories (Windows); #244–#250. The Linux helper and install paths held. |
+| 2026-10-31 | B1, B2, B3 | The first assessment (spec 073 R7): one reviewer per boundary given the code and the attacker, then a separate refutation pass for each. Read-only, no proof of concept on a machine. | Two private advisories (Windows), the B1 one published and fixed in 0.11.11 as GHSA-94c3-mf55-vv8v; #244–#250. The Linux helper and install paths held. |
+| 2026-10-31 | B1 | Tests on Windows 11 (build 26200) of the fix for GHSA-94c3-mf55-vv8v: a squatted pipe, and a server impersonating the panel. | The assessment's impersonation claim did not hold: Windows lets a pipe server impersonate only after reading from the pipe, and the panel never writes. Recorded under "Checked". |
 
 ## Checked
 
@@ -317,6 +331,11 @@ stops each. A review starts by reading these.
   multi-attach links that do not displace systemd's own filters.
 - Starting or stopping the Windows service as the user: start and query
   only (`service_windows.go`).
+
+- Impersonating the panel from the Windows pipe: Windows allows it only
+  after the server has read from the pipe, and the panel never writes; it
+  also opens anonymously since 0.11.11 (`TestTheServerCannotImpersonateThePanel`,
+  with a control client that does give a token).
 
 ### B2, 2026-10-31
 
