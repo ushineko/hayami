@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.11
+**Version**: 0.11.12
 
 *a chart you read at a glance*
 
@@ -593,7 +593,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.12 (2026-11-01)
 
 - **Security**: on Windows, the LibreHardwareMonitor startup task that
   `install_windows.ps1 -WithSensors` and the installer's Sensors page set up
