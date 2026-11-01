@@ -57,6 +57,17 @@ paste the real command and its real output here
 
 </details>
 
+## Threat model
+
+See `docs/threat-model.md`. Tick one.
+
+- [ ] No boundary touched
+- [ ] Touches a boundary: which one (B1 helpers, B2 installing, B3 credentials, B4 parsing, B5 actions outside hayami, B6 what is shown or printed, B7 supply chain), what changed for the attacker, and the section of `docs/threat-model.md` updated in this PR:
+
+<!-- A change to B1, B2, B3 or B7 gets the adversarial review described in docs/threat-model.md before it is merged. -->
+
+- [ ] This PR changes `internal/netcount/netcount_bpfel.o` (a reviewer rebuilds it with `make bpf` and notes the difference)
+
 ## Checklist
 
 - [ ] One logical change; no drive-by reformatting of unrelated code

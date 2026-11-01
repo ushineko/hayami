@@ -164,6 +164,14 @@ the bookkeeping on merge.
   a new third-party module in a PR is a decision for the maintainers, not a
   detail of the change.
 
+- Report a vulnerability privately, through the repository's Security tab;
+  see `SECURITY.md`.
+- `docs/threat-model.md` is what hayami defends and against whom, by trust
+  boundary. A change at a boundary says so in its PR and updates the
+  document's section in the same PR; a change to the privileged helpers,
+  the install paths, the credentials or the release workflow gets the
+  adversarial review the document describes.
+
 ## Commit and PR conventions
 
 - Conventional-style subjects: `feat(...)`, `fix(...)`, `refactor(...)`,

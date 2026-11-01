@@ -105,6 +105,27 @@ This repository is **public**. The following hold without exception:
 
 ---
 
+## The threat model
+
+`docs/threat-model.md` is what hayami defends, against whom, and how, by
+trust boundary: the privileged helpers (B1), installing (B2), credentials
+(B3), what hayami parses (B4), what it does outside itself (B5), what it
+shows and prints (B6), and the supply chain (B7). Spec 073 set it up.
+
+- **A spec that touches a boundary carries a "Threat model delta" section**:
+  which boundary, what changed for the attacker, and the document's section
+  updated in the same PR. "No boundary touched" is an answer, and is given.
+- **A PR that touches B1, B2, B3 or B7 gets the document's adversarial
+  review**: a reviewer given the code and the attacker, not the author's
+  reasoning, asked for exploit paths; a separate pass that tries to refute
+  each. What survives is filed, labelled `security`: as a private advisory
+  when an attacker can use it across a boundary, as a public issue
+  otherwise. What is refuted goes under "Checked".
+- Ralph's per-change security pass still runs. It is a checklist; this is
+  the model it is checked against.
+
+---
+
 ## Architecture rules
 
 `docs/architecture.md` is the guide contributors are held to: the layers, the
