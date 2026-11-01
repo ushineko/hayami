@@ -164,6 +164,10 @@ type NetProcess struct {
 	// entries, because the interface is what the breakdown groups by.
 	Iface string    `json:"iface,omitempty"`
 	Peers []NetPeer `json:"peers,omitempty"`
+
+	// Tunnel reports a process that writes to a tunnel device: its UDP on a
+	// physical interface is the tunnel interface's traffic over again.
+	Tunnel bool `json:"tunnel,omitempty"`
 }
 
 // NetPeer is one far end of one process's sockets, in bytes per second.
@@ -195,6 +199,29 @@ type NetUse struct {
 
 	// Counts is what the list is made of, in a few words: "TCP only".
 	Counts string `json:"counts"`
+
+	// Complete reports a reader that counts every protocol and forwarded
+	// traffic, so what an interface moved beyond the list is headers and
+	// multicast, and not traffic the reader cannot see.
+	Complete bool `json:"complete,omitempty"`
+	// Forwarded is the traffic this machine passed between two of its
+	// interfaces, by interface, from a Complete reader.
+	Forwarded []NetForward `json:"forwarded,omitempty"`
+	// Interfaces is each interface's own rate over the same interval as
+	// the processes, received and sent, from a reader that reads them
+	// together. What the list does not account for is worked out against
+	// these: set against the card's own rate, taken over another second,
+	// a burst lands on one side and not the other.
+	Interfaces map[string][2]float64 `json:"interfaces,omitempty"`
+}
+
+// NetForward is the traffic an interface carried for another one, in bytes
+// per second: received to be sent on by Via, or sent on from Via.
+type NetForward struct {
+	Iface string  `json:"iface"`
+	Via   string  `json:"via"`
+	Rx    float64 `json:"rx"`
+	Tx    float64 `json:"tx"`
 }
 
 // NetReader reads the network by process. It keeps what it needs between

@@ -9,16 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Spec 061. The terminal program carries the network helper's command, and
-// asking after the helper changes nothing: it prints what is there. Off
-// Windows that is that none is needed.
+// Specs 061 and 072. The terminal program carries the network helper's
+// command, and asking after the helper changes nothing: it prints what is
+// there. Off Windows and Linux that is that none is needed.
 func TestTheHelpersCommandSaysWhatIsThere(t *testing.T) {
 	root := TUI("1.2.3")
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetArgs([]string{"network-helper", "status"})
 	require.NoError(t, root.Execute())
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
 		assert.Regexp(t, `^(not installed|installed: )`, out.String())
 	} else {
 		assert.Contains(t, out.String(), "not needed")

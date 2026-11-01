@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -483,4 +484,61 @@ func TestThePeripheralsOfferNoDetail(t *testing.T) {
 	p := panel.NewPeripheralsOn(fakeHost(), noScan, time.Now)
 
 	assert.False(t, panel.Offers(p, "anything"))
+}
+
+/*
+Spec 072. From a reader that sees everything, the breakdown names what is
+left: traffic forwarded for another interface is listed by that interface, a
+tunnel daemon is marked as carrying the tunnel's traffic again, and the
+remainder is headers and multicast rather than "unmeasured".
+*/
+func TestTheBreakdownFromTheHelperSaysWhatIsLeft(t *testing.T) {
+	reader := &netReader{use: core.NetUse{HasRate: true, Counts: "every protocol", Complete: true,
+		Processes: []core.NetProcess{
+			{PID: 7, Name: "browser", Iface: "eth0", Rx: 3000, Tx: 500},
+			{PID: 3, Name: "tailscaled", Iface: "eth0", Rx: 1000, Tx: 1000, Tunnel: true},
+		},
+		Forwarded: []core.NetForward{
+			{Iface: "eth0", Via: "vnet0", Rx: 3500, Tx: 200},
+			{Iface: "vnet0", Via: "eth0", Rx: 200, Tx: 3500},
+		},
+	}}
+	b := bandwidthWith(t, 8000, 2000, reader)
+
+	d, err := b.PollDetail(t.Context(), view.DetailPeers)
+
+	require.NoError(t, err)
+	require.Len(t, d.Parts, 1)
+	var names []string
+	for _, l := range d.Parts[0].Lines {
+		names = append(names, strings.TrimSpace(l.Name))
+	}
+	assert.Equal(t, []string{"all", "browser", "tailscaled (tunnel)", "forwarded", "↔ vnet0", "headers / multicast"}, names)
+	for _, l := range d.Parts[0].Lines {
+		assert.LessOrEqual(t, len([]rune(l.Name)), view.DetailNameWidth, "%q runs into its figures", l.Name)
+	}
+	rest := d.Parts[0].Lines[len(d.Parts[0].Lines)-1]
+	assert.Equal(t, view.PeerLine("", 1, 500, 300).Value, rest.Value,
+		"8000 received, less 3000 + 1000 by programs and 3500 forwarded; 2000 sent, less 500 + 1000 and 200")
+
+	// A reader that read the interfaces with the flows is the one the
+	// remainder is set against, not the card's rate from another second.
+	reader.use.Interfaces = map[string][2]float64{"eth0": {9000, 2500}}
+	reader.use.Forwarded[0].Via = "br-63e956e49aa1"
+	d, err = b.PollDetail(t.Context(), view.DetailPeers)
+	require.NoError(t, err)
+	lines := d.Parts[0].Lines
+	assert.Equal(t, view.PeerLine("", 0, 9000, 2500).Value, lines[0].Value)
+	assert.Equal(t, view.PeerLine("", 1, 1500, 800).Value, lines[len(lines)-1].Value)
+	for _, l := range lines {
+		assert.LessOrEqual(t, len([]rune(l.Name)), view.DetailNameWidth,
+			"%q runs into its figures: an interface's name is up to fifteen characters", l.Name)
+	}
+
+	partial := &netReader{use: core.NetUse{HasRate: true, Counts: "TCP only",
+		Processes: []core.NetProcess{{PID: 7, Name: "browser", Iface: "eth0", Rx: 3000, Tx: 500}}}}
+	d, err = bandwidthWith(t, 8000, 2000, partial).PollDetail(t.Context(), view.DetailPeers)
+	require.NoError(t, err)
+	last := d.Parts[0].Lines[len(d.Parts[0].Lines)-1]
+	assert.Equal(t, "unmeasured", strings.TrimSpace(last.Name), "a reader that cannot see everything still says so")
 }

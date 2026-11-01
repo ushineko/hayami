@@ -180,7 +180,11 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 	// The helper outlives an upgrade: its program is a copy in Program
 	// Files, and the page offers to bring it up to date. An uninstall takes
 	// it too, while the program that removes it is still here.
-	if !c.Upgrade() && probeNet(c).State.Installed {
+	if n := probeNet(c); !c.Upgrade() && n.State.Installed && !n.State.Offered {
+		// Linux's helper was installed with sudo and is removed the same
+		// way: the installer never becomes root.
+		c.Logf(extension.Warn, "The network helper stays installed. To remove it: sudo %s network-helper remove", n.State.Path)
+	} else if !c.Upgrade() && n.State.Installed {
 		c.Log(extension.Info, "Removing the network helper; Windows asks for an administrator")
 		if err := removeNet(ctx, c); err != nil {
 			c.Logf(extension.Warn, "The network helper was not removed: %v. "+

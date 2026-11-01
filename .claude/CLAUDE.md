@@ -170,6 +170,15 @@ place updates the guide's Status table in the same PR.
   pipe that one account may open. It is never installed unasked: the
   installer's Network page, `install_windows.ps1 -WithNetwork` and
   `hayami-tui network-helper install` are the opt-in routes.
+- **The network by process on Linux has a helper too** (spec 072), for what
+  `sock_diag` cannot give an unprivileged panel: UDP, connections shorter
+  than a reading, other accounts' programs, forwarded traffic. It is a
+  systemd service, `hayami-network`, started by its socket; it runs as a
+  dynamic user with `CAP_BPF`, `CAP_NET_ADMIN` and `CAP_PERFMON` and loads
+  the eBPF counter in `internal/netcount` only while a panel reads it. The
+  compiled object is committed so a build needs no clang; `make bpf`
+  rebuilds it and a test ties it to the source. It is installed only with
+  `sudo hayami-tui network-helper install`; hayami never runs sudo.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that

@@ -29,3 +29,6 @@ packaging/arch/*.pkg.tar.zst
 
 # The linter's per-checkout cache (Makefile lint target)
 /.cache/
+
+# The kernel header `make bpf` writes from the running kernel (spec 072).
+/internal/netcount/bpf/vmlinux.h

@@ -102,62 +102,98 @@ func (s *socketNet) Read(ctx context.Context) (NetUse, error) {
 	if err != nil {
 		owners = nil // every socket is then "other", which is true
 	}
+	rates := make([]socketRate, 0, len(now))
+	for key, c := range now {
+		before := was[key] // a new socket differences against nought
+		if c.Rx < before.Rx || c.Tx < before.Tx {
+			continue
+		}
+		rates = append(rates, socketRate{
+			pid: owners[key.inode], local: c.Local, peer: c.Peer,
+			localPort: c.LocalPort, peerPort: c.PeerPort,
+			rx: float64(c.Rx-before.Rx) / elapsed, tx: float64(c.Tx-before.Tx) / elapsed,
+		})
+	}
+	use.Processes = byProcess(rates, processNames(ctx, s.samples), s.ifaceTable(), s.listening)
+	return use, nil
+}
+
+// ifaceTable is the reader's interface table. A reader built without one
+// -- a test's, and any system that does not keep one -- puts every socket
+// under no interface rather than refusing to count it.
+func (s *socketNet) ifaceTable() map[string]string {
+	if s.ifaces == nil {
+		return map[string]string{}
+	}
+	return s.ifaces()
+}
+
+// processNames is every process's name by its ID, or none.
+func processNames(ctx context.Context, samples func(context.Context) ([]ProcessSample, error)) map[int]string {
 	names := map[int]string{}
-	if samples, err := s.samples(ctx); err == nil {
-		for _, p := range samples {
+	if samples == nil {
+		return names
+	}
+	if got, err := samples(ctx); err == nil {
+		for _, p := range got {
 			names[p.PID] = p.Name
 		}
 	}
+	return names
+}
 
-	// A reader built without an interface table -- a test's, and any
-	// system that does not keep one -- puts every socket under no
-	// interface rather than refusing to count it.
-	ifaces := map[string]string{}
-	if s.ifaces != nil {
-		ifaces = s.ifaces()
-	}
+// socketRate is one socket's rate, or one flow's, and the process using it.
+type socketRate struct {
+	pid                 int
+	local, peer         string
+	localPort, peerPort uint16
+	rx, tx              float64
+}
+
+/*
+byProcess groups rates by process and interface, then by peer. A process
+with no name is gone, or another user's, and its bytes are counted under no
+process, which the panel calls "other". ifaces maps a local address to its
+interface, and listening is the ports this machine answers on.
+*/
+func byProcess(rates []socketRate, names map[int]string, ifaces map[string]string, listening map[uint16]bool) []NetProcess {
 	type procKey struct {
 		pid   int
 		iface string
 	}
 	peers := map[procKey]map[string]*NetPeer{}
 	by := map[procKey]*NetProcess{}
-	for key, c := range now {
-		before := was[key] // a new socket differences against nought
-		if c.Rx < before.Rx || c.Tx < before.Tx {
-			continue
-		}
-		rx, tx := float64(c.Rx-before.Rx)/elapsed, float64(c.Tx-before.Tx)/elapsed
-		pid := owners[key.inode]
+	for _, c := range rates {
+		pid := c.pid
 		if _, named := names[pid]; !named {
 			pid = 0
 		}
-		k := procKey{pid, ifaces[c.Local]}
+		k := procKey{pid, ifaces[c.local]}
 		p, ok := by[k]
 		if !ok {
 			p = &NetProcess{PID: pid, Name: names[pid], Iface: k.iface}
 			by[k] = p
 			peers[k] = map[string]*NetPeer{}
 		}
-		p.Rx += rx
-		p.Tx += tx
+		p.Rx += c.rx
+		p.Tx += c.tx
 
 		// A socket whose near end is a listening port is one this process
 		// serves, so the far end is a client of ours and not a destination
 		// we chose. The two read differently and the list says which.
-		served := s.listening[c.LocalPort]
-		far, ok := peers[k][c.Peer]
+		served := listening[c.localPort]
+		far, ok := peers[k][c.peer]
 		if !ok {
-			far = &NetPeer{Addr: c.Peer, Served: served}
-			_ = far
-			peers[k][c.Peer] = far
+			far = &NetPeer{Addr: c.peer, Served: served}
+			peers[k][c.peer] = far
 		}
-		far.Rx += rx
-		far.Tx += tx
+		far.Rx += c.rx
+		far.Tx += c.tx
 		far.Sockets = append(far.Sockets, NetSocket{
-			LocalPort: c.LocalPort, PeerPort: c.PeerPort, Rx: rx, Tx: tx,
+			LocalPort: c.localPort, PeerPort: c.peerPort, Rx: c.rx, Tx: c.tx,
 		})
 	}
+	var out []NetProcess
 	for k, p := range by {
 		// "other" with nothing in it is not a line worth drawing.
 		if p.PID == 0 && p.Rx == 0 && p.Tx == 0 {
@@ -169,9 +205,9 @@ func (s *socketNet) Read(ctx context.Context) (NetUse, error) {
 		sort.Slice(p.Peers, func(i, j int) bool {
 			return p.Peers[i].Rx+p.Peers[i].Tx > p.Peers[j].Rx+p.Peers[j].Tx
 		})
-		use.Processes = append(use.Processes, *p)
+		out = append(out, *p)
 	}
-	return use, nil
+	return out
 }
 
 // Close has nothing to let go of.
@@ -249,14 +285,7 @@ func netUse(ctx context.Context, samples func(context.Context) ([]ProcessSample,
 		return use
 	}
 	use.HasRate = true
-	names := map[int]string{}
-	if samples != nil {
-		if got, err := samples(ctx); err == nil {
-			for _, p := range got {
-				names[p.PID] = p.Name
-			}
-		}
-	}
+	names := processNames(ctx, samples)
 	for pid, c := range counts {
 		p := NetProcess{PID: int(pid), Name: names[int(pid)],
 			Rx: float64(c[0]) / elapsed, Tx: float64(c[1]) / elapsed}

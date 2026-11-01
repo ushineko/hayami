@@ -24,16 +24,21 @@ UDEV_RULE="60-sanshoku.rules"
 
 DRY_RUN=0
 AUTOSTART=0
+WITH_NETWORK=0
 for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY_RUN=1 ;;
         --autostart) AUTOSTART=1 ;;
+        --with-network) WITH_NETWORK=1 ;;
         -h|--help)
             cat <<'USAGE'
-Usage: install.sh [--dry-run] [--autostart]
+Usage: install.sh [--dry-run] [--autostart] [--with-network]
 
-  --dry-run     Show what would be installed, change nothing
-  --autostart   Also start the panel when you log in
+  --dry-run       Show what would be installed, change nothing
+  --autostart     Also start the panel when you log in
+  --with-network  Also print the line that installs the network helper, which
+                  counts the network by process for every protocol (needs
+                  root, which this script never asks for)
 
 Installs:
   ~/.local/bin/hayami                                      the desktop panel
@@ -194,6 +199,15 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 udev_rule
+
+# The network helper needs root and this script never asks for it: it says
+# the one line, which installs a copy of the program just built.
+if [ "$WITH_NETWORK" -eq 1 ]; then
+    echo
+    echo "The network helper counts the network by process for every protocol."
+    echo "It is a systemd service that runs with three capabilities; to install it:"
+    echo "  sudo ${BIN_DIR}/hayami-tui network-helper install --allow ${USER}"
+fi
 
 echo
 echo "Done."

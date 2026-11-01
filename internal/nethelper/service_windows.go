@@ -39,6 +39,16 @@ func description(version string) string {
 
 var versionInDescription = regexp.MustCompile(`\(([^()]+)\)\.$`)
 
+// What the command line says of the helper here.
+const (
+	About = "On Windows it runs as Local Service and serves process IDs and byte counts and\n" +
+		"nothing else."
+	InstallSteps = "Copies this program to Program Files, registers the service hayami-network to\n" +
+		"run it as Local Service, and lets your account start it. It needs an\n" +
+		"administrator: run from a terminal that is not one, it asks Windows for one."
+	InstallNeeds = "Windows asks for an administrator"
+)
+
 // Dir is where the service's program is kept.
 func Dir() string {
 	return filepath.Join(os.Getenv("ProgramFiles"), "hayami")
@@ -46,7 +56,7 @@ func Dir() string {
 
 // Probe finds what there is of the helper. It needs no administrator.
 func Probe() State {
-	state := State{Applies: true}
+	state := State{Applies: true, Offered: true}
 	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
 		return state

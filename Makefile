@@ -107,6 +107,14 @@ check-no-binaries: ## Fail if a compiled binary is tracked in the repository
 	fi; \
 	echo "No compiled binaries are tracked."
 
+# The network helper's eBPF counter (spec 072): compiles
+# internal/netcount/bpf/netcount.bpf.c into the object that is committed, so
+# an ordinary build needs none of this. Needs clang, bpftool and libbpf's
+# headers, and a kernel with BTF to write vmlinux.h from.
+.PHONY: bpf
+bpf: ## Rebuild the network helper's eBPF counter (clang, bpftool, libbpf)
+	cd internal/netcount && go generate
+
 .PHONY: test
 test: ## Run the tests with the race detector
 	go test -race ./...

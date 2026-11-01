@@ -45,21 +45,6 @@ func newNetReader(samples func(context.Context) ([]ProcessSample, error)) NetRea
 	}
 }
 
-type chainNet struct{ helper, own NetReader }
-
-func (c *chainNet) Read(ctx context.Context) (NetUse, error) {
-	use, err := c.helper.Read(ctx)
-	if !errors.Is(err, errNoNetHelper) {
-		return use, err
-	}
-	return c.own.Read(ctx)
-}
-
-func (c *chainNet) Close() {
-	c.helper.Close()
-	c.own.Close()
-}
-
 var (
 	advapi32          = windows.NewLazySystemDLL("advapi32.dll")
 	procStartTrace    = advapi32.NewProc("StartTraceW")

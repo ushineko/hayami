@@ -241,13 +241,20 @@ func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
 			continue
 		}
 		part := view.Detail{Section: key, ID: view.DetailPeers, Title: r.Name}
-		part.Lines = append(part.Lines, view.PeerLine("all", 0, r.RxRate, r.TxRate))
+		// The interface's rate over the reader's own interval, where it
+		// gives one, so the remainder is not one second set against another.
+		allRx, allTx := r.RxRate, r.TxRate
+		if rate, ok := use.Interfaces[r.Name]; ok {
+			allRx, allTx = rate[0], rate[1]
+		}
+		part.Lines = append(part.Lines, view.PeerLine("all", 0, allRx, allTx))
 
 		// Summed by name, as the process list is (spec 060 R6): a browser
 		// is forty processes and a person asks about the browser.
 		type group struct {
 			rx, tx float64
 			peers  map[string]*core.NetPeer
+			tunnel bool
 		}
 		byName := map[string]*group{}
 		var order []string
@@ -264,6 +271,7 @@ func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
 			}
 			g.rx += p.Rx
 			g.tx += p.Tx
+			g.tunnel = g.tunnel || p.Tunnel
 			for _, far := range p.Peers {
 				f, ok := g.peers[far.Addr]
 				if !ok {
@@ -291,7 +299,12 @@ func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
 			if g.rx+g.tx < peerFloor {
 				continue
 			}
-			row := view.PeerLine(name, 1, g.rx, g.tx)
+			label := name
+			if g.tunnel {
+				// Its bytes here are a tunnel interface's over again.
+				label += " (tunnel)"
+			}
+			row := view.PeerLine(label, 1, g.rx, g.tx)
 			row.Open = view.DetailPeers + "/" + r.Name + "/" + name
 			part.Lines = append(part.Lines, row)
 			var fars []core.NetPeer
@@ -313,8 +326,36 @@ func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
 				part.Lines = append(part.Lines, line)
 			}
 		}
+		// Traffic this machine passed between two of its interfaces, which
+		// no process sent: a virtual machine's, a container's, an exit
+		// node's (spec 072).
+		// Grouped under one line, as peers are under a process: an
+		// interface's name is up to fifteen characters, and with a word in
+		// front of it a row would run into its figures.
+		var fwRx, fwTx float64
+		var vias []view.DetailLine
+		for _, fw := range use.Forwarded {
+			if fw.Iface != r.Name || fw.Rx+fw.Tx < peerFloor {
+				continue
+			}
+			fwRx += fw.Rx
+			fwTx += fw.Tx
+			vias = append(vias, view.PeerLine("\u2194 "+fw.Via, 3, fw.Rx, fw.Tx))
+		}
+		if len(vias) > 0 {
+			rx += fwRx
+			tx += fwTx
+			part.Lines = append(part.Lines, view.PeerLine("forwarded", 1, fwRx, fwTx))
+			part.Lines = append(part.Lines, vias...)
+		}
+		// What is left is traffic the reader cannot see, or, from one that
+		// sees everything, headers and multicast.
+		rest := "unmeasured"
+		if use.Complete {
+			rest = "headers / multicast"
+		}
 		part.Lines = append(part.Lines,
-			view.PeerLine("unmeasured", 1, max(0, r.RxRate-rx), max(0, r.TxRate-tx)))
+			view.PeerLine(rest, 1, max(0, allRx-rx), max(0, allTx-tx)))
 		d.Parts = append(d.Parts, part)
 	}
 	if len(d.Parts) == 0 {

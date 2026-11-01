@@ -213,7 +213,12 @@ adds a table, not a ladder.
   it, whose program is a copy in Program Files and whose pipe is one-way and
   open to one account. It is never installed unasked. A second reading that
   needs a right the panel lacks goes through the same helper, by a spec, and
-  not through a second service.
+  not through a second service. On Linux the same helper (spec 072) is a
+  systemd service started by its socket, running as a dynamic user with
+  `CAP_BPF`, `CAP_NET_ADMIN` and `CAP_PERFMON` and no others, that loads the
+  eBPF counter in `internal/netcount` while a panel reads it. Its program is
+  a copy under `/usr/lib/hayami` and its socket is open to one account. It is
+  installed by hand with sudo; hayami never asks to become root.
 - **No kernel driver of its own.** Where the OS needs one, as for the
   processor's temperature on Windows, hayami reads a program that has one
   (LibreHardwareMonitor) and never installs it unasked.
@@ -284,6 +289,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Details behind a reading, drawn in the window's drawer | 3 | In place | #191 |
 | A detail view in the terminal pane | 3 | Planned | |
 | The network helper: a reading that needs a right the panel lacks | 9 | In place | #194 |
+| The network helper on Linux: every protocol, by eBPF | 9 | In place | #238 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a
