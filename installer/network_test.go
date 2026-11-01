@@ -3,6 +3,7 @@ package installer
 import (
 	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -85,9 +86,19 @@ func TestTheNetworkCheckOffersOnlyWhatIsMissing(t *testing.T) {
 // Windows asks for an administrator, and that it stays until removed.
 func TestTheNetworkStepsSayWhatIsBeingAgreedTo(t *testing.T) {
 	steps := strings.Join(netMissing.Steps(), "\n")
-	assert.Contains(t, steps, "Program Files")
-	assert.Contains(t, steps, "Local Service")
-	assert.Contains(t, steps, "no other")
+	switch runtime.GOOS {
+	case "windows":
+		assert.Contains(t, steps, "Program Files")
+		assert.Contains(t, steps, "Local Service")
+		assert.Contains(t, steps, "no other")
+	case "linux":
+		// Spec 078: the same questions, Linux's answers.
+		assert.Contains(t, steps, "/usr/lib/hayami")
+		assert.Contains(t, steps, "three capabilities")
+		assert.Contains(t, steps, "only your account")
+	default:
+		t.Skip("no helper here")
+	}
 	assert.Contains(t, steps, "stops when it is closed")
 	assert.Contains(t, netMissing.Steps()[len(netMissing.Steps())-1], "asks for an administrator once")
 	assert.Contains(t, NetworkCaution, "stays until it is removed")
@@ -104,7 +115,7 @@ func TestTheNetworkPageAsksOnceAndTakesTheAnswer(t *testing.T) {
 		c := installNet(No, false, nil)
 		require.NoError(t, networkCLI(context.Background(), c, p))
 		require.Equal(t, []string{"Install the network helper?"}, p.asked)
-		assert.Contains(t, strings.Join(p.said, "\n"), "Local Service")
+		assert.Contains(t, strings.Join(p.said, "\n"), netMissing.Steps()[0], "the steps are said before the question")
 		want := No
 		if yes {
 			want = Yes
@@ -166,4 +177,23 @@ func TestAnUninstallRemovesTheHelperAndAnUpgradeLeavesIt(t *testing.T) {
 	var logged []string
 	require.NoError(t, beforeUninstall(context.Background(), installNet(No, false, &logged)), "a refused prompt failed the uninstall")
 	assert.Contains(t, strings.Join(logged, "\n"), "hayami-tui network-helper remove")
+}
+
+// Spec 078, #257. A system with a helper the installer cannot offer (Linux
+// with no pkexec) is not silent about it: the log says how to install it.
+// One that can offer it, or has it, says nothing extra.
+func TestAHelperThatCannotBeOfferedIsStillSaid(t *testing.T) {
+	helperCalls(t, nil)
+	answerNet(t, Network{State: nethelper.State{Applies: true}, Version: "0.0.0"})
+	var logged []string
+	require.NoError(t, afterInstall(context.Background(), installNet(No, false, &logged)))
+	assert.Contains(t, strings.Join(logged, "\n"), "network-helper install --allow")
+	assert.Contains(t, strings.Join(logged, "\n"), "sudo ")
+
+	for _, n := range []Network{netMissing, netCurrent, netNotWindows} {
+		answerNet(t, n)
+		logged = nil
+		require.NoError(t, afterInstall(context.Background(), installNet(No, false, &logged)))
+		assert.NotContains(t, strings.Join(logged, "\n"), "network-helper install")
+	}
 }

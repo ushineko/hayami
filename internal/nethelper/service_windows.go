@@ -39,6 +39,33 @@ func description(version string) string {
 
 var versionInDescription = regexp.MustCompile(`\(([^()]+)\)\.$`)
 
+// ProgramName is the terminal program's file name here.
+const ProgramName = "hayami-tui.exe"
+
+// RemoveFromCopy is false: Windows cannot delete a running program, so the
+// installed hayami-tui removes the helper's copy.
+const RemoveFromCopy = false
+
+// What the installer's Network page says of the helper here.
+const (
+	OfferWhy = "Windows gives the network by program only to an administrator, and the panel runs as you. " +
+		"The helper is a small Windows service that reads it and hands the panel program IDs and byte counts, and nothing else. Installing it:"
+	OfferWithout = "Without it the bandwidth card's list of programs says it needs the helper, and the rest of the panel is as it is."
+	OfferCaution = "It is a service, and stays until it is removed: uninstalling hayami removes it, and asks for an administrator to. " +
+		"The panel works without it, and you can install it later by running this installer again."
+)
+
+// OfferSteps are what installing it does, in order.
+func OfferSteps() []string {
+	return []string{
+		"copies hayami's terminal program to Program Files, where only an administrator can change it",
+		"registers the service hayami-network to run that copy as Local Service, which is not an administrator",
+		"lets your account, and no other, start the service and read what it serves",
+		"starts nothing: the service runs while a panel shows the list and stops when it is closed",
+		"Windows asks for an administrator once, for all of this",
+	}
+}
+
 // What the command line says of the helper here.
 const (
 	About = "On Windows it runs as Local Service and serves process IDs and byte counts and\n" +

@@ -46,3 +46,21 @@ func TestTheNetworkPageOffersACheckBoxThatStartsClear(t *testing.T) {
 	assert.False(t, page.detail.Visible())
 	assert.Contains(t, labels(content)[0], "nothing to do")
 }
+
+// Spec 078, #257. The wizard shows the network page wherever the helper can
+// be offered, Linux with pkexec included, and skips it where it cannot. It
+// once skipped it on every system but Windows, whatever the check said.
+func TestTheNetworkPageIsShownWhereverTheHelperIsOffered(t *testing.T) {
+	test.NewApp()
+	inline(t)
+	build, ok := gui.Lookup(PageNetwork)
+	require.True(t, ok)
+
+	answerNet(t, netMissing)
+	page, ok := build(installNet(No, false, nil)).(*offerPage)
+	require.True(t, ok)
+	assert.False(t, page.Skip(), "a helper that can be offered was skipped")
+
+	answerNet(t, netNotWindows)
+	assert.True(t, page.Skip(), "a helper that cannot be offered was shown")
+}

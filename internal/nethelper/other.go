@@ -31,3 +31,19 @@ const (
 	InstallSteps = About
 	InstallNeeds = "not on this system"
 )
+
+// ProgramName is the terminal program's file name.
+const ProgramName = "hayami-tui"
+
+// RemoveFromCopy has nothing to remove here.
+const RemoveFromCopy = false
+
+// The installer's Network page has nothing to offer here.
+const (
+	OfferWhy     = About
+	OfferWithout = About
+	OfferCaution = About
+)
+
+// OfferSteps is empty: there is nothing to install.
+func OfferSteps() []string { return nil }

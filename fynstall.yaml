@@ -10,7 +10,7 @@ app:
   id: io.ushineko.hayami
   name: hayami
   # VERSION's, and a test holds the two together.
-  version: 0.11.12
+  version: 0.11.13
   publisher: ushineko
   # Drawn from the panel's own SVG when the installer is built (spec 053).
   icon: dist/hayami.png
@@ -59,11 +59,11 @@ parameters:
     description: "yes installs and configures LibreHardwareMonitor, where the panel reads the processor's temperature on Windows"
     default: "no"
   # Set by the network page. On the command line: --network=yes. "no" unless
-  # a person says otherwise: the helper is a Windows service, and installing
-  # one takes an administrator.
+  # a person says otherwise: the helper is a system service (Windows, and
+  # Linux with polkit, spec 078), and installing one takes an administrator.
   - name: network
     label: Install the network helper
-    description: "yes installs hayami's network helper, the service the bandwidth card's list of programs is read from on Windows"
+    description: "yes installs hayami's network helper, the service the bandwidth card's list of programs is read from"
     default: "no"
 
 ui:
