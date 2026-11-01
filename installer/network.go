@@ -45,7 +45,7 @@ func (n Network) Found() string {
 		}
 		return fmt.Sprintf("The network helper is installed (%s), and this installer carries %s. The one installed goes on working.", was, n.Version)
 	default:
-		return "The network helper is not installed. Without it the bandwidth card's list of programs says it needs the helper, and the rest of the panel is as it is."
+		return "The network helper is not installed. " + nethelper.OfferWithout
 	}
 }
 
@@ -62,24 +62,15 @@ func (n Network) Offer() string {
 	}
 }
 
-// NetworkWhy is why the page exists at all, said once above the steps.
-const NetworkWhy = "Windows gives the network by program only to an administrator, and the panel runs as you. " +
-	"The helper is a small Windows service that reads it and hands the panel program IDs and byte counts, and nothing else. Installing it:"
+// NetworkWhy is why the page exists at all, said once above the steps: the
+// system's own account of it (Windows' service, Linux's, spec 078).
+const NetworkWhy = nethelper.OfferWhy
 
 // NetworkCaution is what a person should know before saying yes.
-const NetworkCaution = "It is a service, and stays until it is removed: uninstalling hayami removes it, and asks for an administrator to. " +
-	"The panel works without it, and you can install it later by running this installer again."
+const NetworkCaution = nethelper.OfferCaution
 
 // Steps are what installing it does, in order.
-func (n Network) Steps() []string {
-	return []string{
-		"copies hayami's terminal program to Program Files, where only an administrator can change it",
-		"registers the service hayami-network to run that copy as Local Service, which is not an administrator",
-		"lets your account, and no other, start the service and read what it serves",
-		"starts nothing: the service runs while a panel shows the list and stops when it is closed",
-		"Windows asks for an administrator once, for all of this",
-	}
-}
+func (n Network) Steps() []string { return nethelper.OfferSteps() }
 
 // probeNet finds what this machine has of the helper. A variable, so a test
 // answers for a machine it is not on.
@@ -97,7 +88,7 @@ var (
 // helperProgram is the installed terminal program, which is what installs
 // and removes the helper.
 func helperProgram(c *extension.Context) string {
-	return filepath.Join(c.Root(), "bin", "hayami-tui.exe")
+	return filepath.Join(c.Root(), "bin", nethelper.ProgramName)
 }
 
 /*

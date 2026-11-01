@@ -218,7 +218,10 @@ adds a table, not a ladder.
   `CAP_BPF`, `CAP_NET_ADMIN` and `CAP_PERFMON` and no others, that loads the
   eBPF counter in `internal/netcount` while a panel reads it. Its program is
   a copy under `/usr/lib/hayami` and its socket is open to one account. It is
-  installed by hand with sudo; hayami never asks to become root.
+  installed only when asked: the installer's Network page or `network-helper
+  install`, through polkit's prompt (spec 078), or by hand with sudo. hayami
+  asks to become root only for an action the person chose, through the
+  system's own prompt, and never runs sudo.
 - **No kernel driver of its own.** Where the OS needs one, as for the
   processor's temperature on Windows, hayami reads a program that has one
   (LibreHardwareMonitor) and never installs it unasked.

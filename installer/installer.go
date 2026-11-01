@@ -149,6 +149,12 @@ func afterInstall(ctx context.Context, c *extension.Context) error {
 			c.Logf(extension.Warn, "LibreHardwareMonitor was not set up, and hayami is installed without it: %v", err)
 		}
 	}
+	// A system with a helper the installer cannot offer (Linux without
+	// polkit's pkexec) is told how to install it rather than nothing.
+	if n := probeNet(c); n.State.Applies && !n.State.Offered && !n.State.Installed {
+		c.Logf(extension.Info, "The network helper counts the network by program for every protocol. To install it: sudo %s network-helper install --allow $USER",
+			helperProgram(c))
+	}
 	if c.Param(ParamNetwork) == Yes {
 		c.Log(extension.Info, "Installing the network helper, for the bandwidth card's list of programs")
 		if err := setUpNet(ctx, c); err != nil {

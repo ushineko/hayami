@@ -3,7 +3,9 @@ package nethelper
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,6 +20,7 @@ func installInto(t *testing.T) (string, *[]string) {
 	root := t.TempDir()
 	var asked []string
 	wasRoot, wasCtl := sysRoot, systemctl
+	noPkexec(t)
 	sysRoot = root
 	systemctl = func(_ context.Context, args ...string) error {
 		asked = append(asked, strings.Join(args, " "))
@@ -57,7 +60,9 @@ func TestInstallingWritesTheUnitsAndRemovingTakesThem(t *testing.T) {
 
 	state := Probe()
 	assert.True(t, state.Applies)
-	assert.False(t, state.Offered, "hayami's installer does not become root to install it")
+	assert.False(t, state.Offered, "with no pkexec the installer has no way to ask, and offers nothing")
+	fakePkexec(t, 0)
+	assert.True(t, Probe().Offered, "with pkexec the installer offers it")
 	assert.True(t, state.Installed)
 	assert.Equal(t, "1.2.3", state.Version)
 	assert.Equal(t, "1234", state.For)
@@ -91,8 +96,51 @@ func TestTheAccountIsNamedOrNumbered(t *testing.T) {
 
 // Without root, installing is refused with the command to run, and nothing
 // asks for a password.
-func TestInstallingWithoutRootSaysWhatToRun(t *testing.T) {
+func TestInstallingWithoutPkexecSaysWhatToRun(t *testing.T) {
+	noPkexec(t)
 	err := RunElevated(t.Context(), "/opt/hayami/bin/hayami-tui", "network-helper", "install", "--allow", "1000")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "`sudo /opt/hayami/bin/hayami-tui network-helper install --allow 1000`")
+}
+
+/*
+Spec 078. With pkexec, the program is run through it, with its arguments
+as they were given, so polkit asks the person; pkexec's own exit codes for a
+prompt dismissed or refused are said as that. The pkexec here is a script
+of the test's: no test asks this machine for an administrator.
+*/
+func TestInstallingAsksThroughPkexec(t *testing.T) {
+	record := fakePkexec(t, 0)
+	require.NoError(t, RunElevated(t.Context(), "/opt/hayami/bin/hayami-tui", "network-helper", "install", "--allow", "1000"))
+	got, err := os.ReadFile(record)
+	require.NoError(t, err)
+	assert.Equal(t, "/opt/hayami/bin/hayami-tui network-helper install --allow 1000\n", string(got))
+
+	fakePkexec(t, 126)
+	err = RunElevated(t.Context(), "/opt/hayami/bin/hayami-tui", "network-helper", "install")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dismissed or refused")
+}
+
+// noPkexec makes this machine one without pkexec for the length of a test.
+func noPkexec(t *testing.T) {
+	t.Helper()
+	was := lookPkexec
+	lookPkexec = func() (string, error) { return "", exec.ErrNotFound }
+	t.Cleanup(func() { lookPkexec = was })
+}
+
+// fakePkexec stands a script in for pkexec that writes its arguments to a
+// file and exits with code; it returns the file.
+func fakePkexec(t *testing.T, code int) string {
+	t.Helper()
+	dir := t.TempDir()
+	record := filepath.Join(dir, "args")
+	script := filepath.Join(dir, "pkexec")
+	body := "#!/bin/sh\necho \"$*\" > '" + record + "'\nexit " + strconv.Itoa(code) + "\n"
+	require.NoError(t, os.WriteFile(script, []byte(body), 0o700)) //nolint:gosec // a test's own script
+	was := lookPkexec
+	lookPkexec = func() (string, error) { return script, nil }
+	t.Cleanup(func() { lookPkexec = was })
+	return record
 }

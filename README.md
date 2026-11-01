@@ -467,8 +467,11 @@ forwards, by the two interfaces. It needs Linux 6.4 or later, with BTF
 sudo hayami-tui network-helper install --allow $USER
 ```
 
-hayami never runs sudo itself; `install.sh --with-network` prints that line.
-What it does:
+The installer's **Network** page offers it, as on Windows: tick the box
+and your desktop asks for an administrator once, through polkit. From a
+terminal, `hayami-tui network-helper install` asks the same way, and with
+sudo, as above, it asks nothing. `install.sh --with-network` prints the
+line; hayami never runs sudo itself. What it does:
 
 - copies `hayami-tui` to `/usr/lib/hayami/hayami-network`, where only root can
   change it;
@@ -609,6 +612,11 @@ MIT. See
   wrote to its credential file during the refresh. The file is read again
   just before it is written; if Claude Code refreshed meanwhile, its tokens
   stand (spec 077, #248).
+- **Added**: on Linux the installer's Network page offers the network
+  helper, as it does on Windows; ticking it asks for an administrator once
+  through polkit (spec 078, #257). Without polkit's `pkexec`, the install
+  log says the sudo line instead. `hayami-tui network-helper install` asks
+  through polkit too.
 
 ### 0.11.12 (2026-11-01)
 

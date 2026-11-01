@@ -28,6 +28,30 @@ const (
 	programName = "hayami-network"
 )
 
+// ProgramName is the terminal program's file name here.
+const ProgramName = "hayami-tui"
+
+// What the installer's Network page says of the helper here (spec 078).
+const (
+	OfferWhy = "Linux gives UDP, connections too short to be seen between two readings, and other accounts' programs only " +
+		"to a privileged program, and the panel runs as you. The helper is a small system service that counts them and hands " +
+		"the panel process IDs, the two ends of each connection and byte counts, and nothing else. Installing it:"
+	OfferWithout = "Without it the bandwidth card's list of programs counts TCP only, and the rest of the panel is as it is."
+	OfferCaution = "It is a system service, and stays until it is removed: uninstalling hayami removes it, and asks for an " +
+		"administrator to. The panel works without it, and you can install it later by running this installer again."
+)
+
+// OfferSteps are what installing it does, in order.
+func OfferSteps() []string {
+	return []string{
+		"copies hayami's terminal program to /usr/lib/hayami, where only root can change it",
+		"writes the systemd units hayami-network.socket and hayami-network.service, and starts the socket, which only your account may open",
+		"the service runs as an account made for the run, with the three capabilities eBPF needs and none of root's others",
+		"starts nothing: the service runs while a panel shows the list and stops when it is closed",
+		"your desktop asks for an administrator once, for all of this",
+	}
+}
+
 // What the command line says of the helper here.
 const (
 	About = "On Linux it is a systemd service, hayami-network, started by its socket. It runs\n" +
@@ -36,8 +60,9 @@ const (
 		"counts to the one account it was installed for."
 	InstallSteps = "Copies this program to /usr/lib/hayami, writes the units hayami-network.socket and\n" +
 		"hayami-network.service to /etc/systemd/system, and starts the socket, which only\n" +
-		"your account may open. It needs root, and does not ask for it: run it with sudo."
-	InstallNeeds = "run it with sudo"
+		"your account may open. It needs root: run as yourself, it asks for an administrator\n" +
+		"through polkit (pkexec); with sudo, it asks nothing."
+	InstallNeeds = "it asks for an administrator through polkit, or run it with sudo"
 )
 
 // sysRoot is the root the helper's files are written under, and systemctl
@@ -65,7 +90,8 @@ var installedBy = regexp.MustCompile(`^# Installed by hayami (\S+) for uid (\d+)
 // Probe finds the helper's units. It reads files and asks systemd whether
 // the service runs, and needs no privilege.
 func Probe() State {
-	state := State{Applies: true}
+	_, err := lookPkexec()
+	state := State{Applies: true, Offered: err == nil}
 	b, err := os.ReadFile(servicePath())
 	if err != nil {
 		return state
@@ -89,18 +115,45 @@ CurrentUser is the account the helper is for, as a user ID: the one sudo
 was run from when this runs under sudo, and this process's own otherwise.
 */
 func CurrentUser() (string, error) {
-	if uid := os.Getenv("SUDO_UID"); uid != "" && os.Geteuid() == 0 {
-		return uid, nil
+	if os.Geteuid() == 0 {
+		for _, from := range []string{"SUDO_UID", "PKEXEC_UID"} {
+			if uid := os.Getenv(from); uid != "" {
+				return uid, nil
+			}
+		}
 	}
 	return strconv.Itoa(os.Getuid()), nil
 }
 
-// RunElevated is refused with what to run: hayami never asks to become
-// root on Linux, and a password prompt from a panel's installer is not one
-// a person should learn to answer.
-func RunElevated(_ context.Context, program string, args ...string) error {
-	return fmt.Errorf("this needs root, and hayami does not ask for it: run `sudo %s %s`", //nolint:err113 // the command is the message
-		program, strings.Join(args, " "))
+// lookPkexec finds polkit's pkexec. A variable, so a test answers for a
+// machine with or without it.
+var lookPkexec = func() (string, error) { return exec.LookPath("pkexec") }
+
+/*
+RunElevated runs program as root through polkit (spec 078): the desktop asks
+for an administrator, or a terminal does, and the person approves or not.
+It is asked only when the person chose it: the installer's Network page, or
+`network-helper install` typed at a prompt. hayami never becomes root on its
+own. Without pkexec it says the sudo line to run instead.
+*/
+func RunElevated(ctx context.Context, program string, args ...string) error {
+	pkexec, err := lookPkexec()
+	if err != nil {
+		return fmt.Errorf("this needs root, and there is no pkexec to ask for it: run `sudo %s %s`", //nolint:err113 // the command is the message
+			program, strings.Join(args, " "))
+	}
+	cmd := exec.CommandContext(ctx, pkexec, append([]string{program}, args...)...) //nolint:gosec // the installed program, run as the person approved
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && (exit.ExitCode() == 126 || exit.ExitCode() == 127) {
+			// pkexec's own codes: the request was dismissed, or not
+			// authorised.
+			return errors.New("the administrator prompt was dismissed or refused") //nolint:err113 // said plainly
+		}
+		return fmt.Errorf("the elevated step: %w", err)
+	}
+	return nil
 }
 
 // uidOf is an account, by name or number, as its user ID.

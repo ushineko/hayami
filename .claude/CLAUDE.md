@@ -178,8 +178,12 @@ place updates the guide's Status table in the same PR.
   dynamic user with `CAP_BPF`, `CAP_NET_ADMIN` and `CAP_PERFMON` and loads
   the eBPF counter in `internal/netcount` only while a panel reads it. The
   compiled object is committed so a build needs no clang; `make bpf`
-  rebuilds it and a test ties it to the source. It is installed only with
-  `sudo hayami-tui network-helper install`; hayami never runs sudo.
+  rebuilds it and a test ties it to the source. It is installed only when
+  asked: the installer's Network page and `hayami-tui network-helper
+  install` ask for an administrator through polkit (`pkexec`, spec 078),
+  and `sudo hayami-tui network-helper install` asks nothing. hayami becomes
+  root only when the person chose an action that needs it, through the
+  system's own prompt; never unasked, and never by running sudo.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that
