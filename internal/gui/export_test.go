@@ -60,6 +60,22 @@ func ShownCells(p *Panel, key string) int {
 	return n
 }
 
+// CellLines is how many lines a card's shown cells are drawn on, counted by
+// where each one's top is.
+func CellLines(p *Panel, key string) int {
+	c, ok := p.cards[key]
+	if !ok {
+		return -1
+	}
+	tops := map[float32]bool{}
+	for _, cell := range c.cells {
+		if cell.Shown() {
+			tops[cell.Object().Position().Y] = true
+		}
+	}
+	return len(tops)
+}
+
 // CardMinSize is the smallest a card can be drawn, which is what decides
 // whether a change to it reflows the window.
 func CardMinSize(p *Panel, key string) fyne.Size {

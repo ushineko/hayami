@@ -117,6 +117,17 @@ var Cooler = Setting[CoolerSettings]{
 	},
 }
 
+// PeripheralsSettings are the peripherals section's: whether every device goes
+// on one line, so the card grows wider rather than taller (spec 071). The
+// window's alone; a pane cannot grow, and draws as it did.
+type PeripheralsSettings struct {
+	OneLine bool `json:"oneLine,omitempty"`
+}
+
+// Peripherals is the peripherals section's setting. It is newer than spec 046,
+// so there is no root field to read or write.
+var Peripherals = Setting[PeripheralsSettings]{Key: view.PeripheralsInfo.Key}
+
 // SettingKeys are the sections that declare a setting, for the test that
 // holds each to a section this build has.
-func SettingKeys() []string { return []string{Bandwidth.Key, Cooler.Key} }
+func SettingKeys() []string { return []string{Bandwidth.Key, Cooler.Key, Peripherals.Key} }
