@@ -1,5 +1,7 @@
 package view
 
+import "github.com/ushineko/hayami/internal/safetext"
+
 // Painter turns a piece of text and the view's verdict on it into text a shell
 // can draw.
 //
@@ -26,6 +28,10 @@ const Dim Status = -1
 // test, every pipe and every redirect to a file seeing exactly the text this
 // package built.
 func (p Painter) paint(text string, status Status) string {
+	// Every piece of text a section is drawn from passes here, painter or
+	// not: what hayami did not write itself reaches a terminal as words,
+	// before a painter adds escape codes of its own (spec 076).
+	text = safetext.Printable(text, 0)
 	if p == nil {
 		return text
 	}

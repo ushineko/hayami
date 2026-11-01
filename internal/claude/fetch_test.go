@@ -206,3 +206,22 @@ func TestATokenPastItsExpiryIsRefreshedBeforeItIsUsed(t *testing.T) {
 	assert.False(t, good.Expired(now))
 	assert.False(t, unknown.Expired(now), "a store that states no expiry is not guessed at")
 }
+
+// Spec 076. A Retry-After is honoured for an hour at most, as seconds or as
+// a date: the wait is written into the cache every viewer shares, and one of
+// years would stop usage for all of them.
+func TestARetryAfterIsHonouredForAnHourAtMost(t *testing.T) {
+	for _, header := range []string{
+		"9000000000",
+		time.Now().Add(100 * 365 * 24 * time.Hour).UTC().Format(http.TimeFormat),
+	} {
+		client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Retry-After", header)
+			w.WriteHeader(http.StatusTooManyRequests)
+		})
+		_, err := claude.Usage(t.Context(), client, fakeAccess)
+		var retry *claude.Retryable
+		require.ErrorAs(t, err, &retry)
+		assert.Equal(t, claude.MaxRetryAfter, retry.After, "Retry-After: %s", header)
+	}
+}

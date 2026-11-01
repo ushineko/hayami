@@ -19,6 +19,7 @@ import (
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/panel"
+	"github.com/ushineko/hayami/internal/safetext"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -197,7 +198,9 @@ func Readings(w io.Writer, sources []panel.Source, poll func(panel.Source) error
 	for _, s := range sources {
 		r := Reading{}
 		if err := poll(s); err != nil {
-			r.Error = err.Error()
+			// An error names its file, under the user's home; the JSON is
+			// pasted into bug reports (spec 076).
+			r.Error = safetext.WithoutHome(err.Error())
 			failures = append(failures, err)
 		} else {
 			answered = true

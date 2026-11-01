@@ -1,7 +1,10 @@
 package panel
 
 import (
+	"os"
+
 	"github.com/ushineko/hayami/internal/core"
+	"github.com/ushineko/hayami/internal/safetext"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -21,13 +24,32 @@ func reason(base view.Reason, err error) view.Reason {
 			base.Text = a.Text
 		}
 		if a.Detail != "" {
-			base.Detail = a.Detail
+			base.Detail = withoutHome(a.Detail)
 		}
 		base.Actionable = a.Actionable
 		return base
 	}
 	if base.Detail == "" && err != nil {
-		base.Detail = err.Error()
+		base.Detail = withoutHome(err.Error())
 	}
 	return base
 }
+
+/*
+withoutHome is an error's text with the user's home directory written as ~.
+
+An error from the filesystem names the file, and the file is under the
+user's home: `open /home/<user>/.claude/.credentials.json: permission
+denied`. A reason ends up in `doctor` and the readings JSON, which people
+paste into bug reports; the user's name does not go with it (spec 076).
+*/
+func withoutHome(text string) string {
+	home, err := userHome()
+	if err != nil {
+		return text
+	}
+	return safetext.WithoutHomeOf(text, home)
+}
+
+// userHome is os.UserHomeDir; a variable, so a test can name a home.
+var userHome = os.UserHomeDir

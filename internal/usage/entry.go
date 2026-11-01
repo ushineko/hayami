@@ -28,6 +28,27 @@ type Entry struct {
 
 	// Data is the last successful payload. A failed fetch never replaces it.
 	Data json.RawMessage `json:"data"`
+
+	// written is when the file was last written, from its modification
+	// time; zero for an entry that was not read from a file.
+	written time.Time
+}
+
+// MaxWait is the longest a gate read from the cache is kept, counted from
+// when the file was written, beyond the caller's own freshness window.
+// Another program shares the file and honours a server's Retry-After without
+// a limit; a reply that asked for years would otherwise stop hayami's usage
+// for as long (spec 076). hayami's own gate is never longer.
+const MaxWait = time.Hour
+
+// bound shortens a gate that runs past limit after the file was written.
+func (e *Entry) bound(limit time.Duration) {
+	if e == nil || e.written.IsZero() {
+		return
+	}
+	if latest := seconds(e.written.Add(limit)); e.NextAttemptAt > latest {
+		e.NextAttemptAt = latest
+	}
 }
 
 // Fetched is FetchedAt as a time, and whether there is one.
@@ -73,6 +94,9 @@ func Read(account, provider string) (*Entry, error) {
 		return nil, nil //nolint:nilerr // deliberate: unreadable cache means no cache
 	}
 	e.Data = payload(e.Data)
+	if info, err := os.Stat(path); err == nil {
+		e.written = info.ModTime()
+	}
 	return &e, nil
 }
 

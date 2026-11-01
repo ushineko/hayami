@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
 	"sync"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/ushineko/hayami/internal/safetext"
 )
 
 /*
@@ -164,7 +163,7 @@ func (s *helperStream) read(r io.Reader) error {
 			return fmt.Errorf("the network helper sent a line that is not one: %w", err)
 		}
 		if line.Error != "" {
-			return fmt.Errorf("the network helper: %s", printable(line.Error, maxHelperError)) //nolint:err113 // the helper's own words
+			return fmt.Errorf("the network helper: %s", safetext.Printable(line.Error, maxHelperError)) //nolint:err113 // the helper's own words
 		}
 		want := s.want
 		if want == 0 {
@@ -363,21 +362,4 @@ func flowUse(ctx context.Context, samples func(context.Context) ([]ProcessSample
 		return a.Rx+a.Tx > b.Rx+b.Tx
 	})
 	return use
-}
-
-// printable is text from outside with every control character taken out,
-// at most n bytes of it: what reaches a terminal is words, and no escape
-// sequence a terminal would act on.
-func printable(text string, n int) string {
-	var b strings.Builder
-	for _, r := range text {
-		if b.Len() >= n {
-			break
-		}
-		if unicode.IsControl(r) || r == utf8.RuneError {
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }

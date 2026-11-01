@@ -9,6 +9,8 @@ import (
 
 	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/view"
+
+	"github.com/ushineko/hayami/internal/safetext"
 )
 
 /*
@@ -246,7 +248,7 @@ func Report(w io.Writer, findings []Finding) error {
 			}
 		}
 		if f.Err != nil {
-			if err := line(w, "", "", "! "+f.Err.Error()); err != nil {
+			if err := line(w, "", "", "! "+safetext.WithoutHome(f.Err.Error())); err != nil {
 				return err
 			}
 		}
@@ -302,6 +304,9 @@ func line(w io.Writer, key, state, text string) error {
 	// Trimmed on the right: a state with no summary beside it would end the
 	// line in padding, and a report that is pasted into an issue should not
 	// carry trailing whitespace into it.
+	// What a section says can come from a device, a process or a provider's
+	// reply; it is written as words, not as escape sequences (spec 076).
+	key, state, text = safetext.Printable(key, 0), safetext.Printable(state, 0), safetext.Printable(text, 0)
 	row := strings.TrimRight(fmt.Sprintf("%-*s%-*s%s", keyColumn, key, stateColumn, state, text), " ")
 	if _, err := fmt.Fprintln(w, row); err != nil {
 		return fmt.Errorf("writing the report: %w", err)

@@ -53,6 +53,8 @@ func Cached(now time.Time, ttl time.Duration, account, provider string, force bo
 	if err != nil {
 		return Result{}, err
 	}
+	limit := max(ttl, MaxWait)
+	cached.bound(limit)
 	if !force && cached != nil && !cached.Open(now) {
 		return served(*cached), nil
 	}
@@ -66,6 +68,7 @@ func Cached(now time.Time, ttl time.Duration, account, provider string, force bo
 			if err != nil {
 				return err
 			}
+			again.bound(limit)
 			if again != nil {
 				out = served(*again)
 			}
@@ -76,6 +79,7 @@ func Cached(now time.Time, ttl time.Duration, account, provider string, force bo
 		if err != nil {
 			return err
 		}
+		again.bound(limit)
 		if !force && again != nil && !again.Open(now) {
 			out = served(*again)
 			return nil
