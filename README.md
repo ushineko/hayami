@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.10
+**Version**: 0.11.11
 
 *a chart you read at a glance*
 
@@ -583,6 +583,18 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.11.11 (2026-10-31)
+
+- **Security**: on Windows, the panel reads the network helper's pipe only
+  when the process serving it is the helper's own service, and opens it
+  anonymously. While the helper was stopped, any local account could take
+  the pipe's name, feed the panel invented rates, keep the helper from
+  starting, and, through a regression in 0.11.10, grow the panel's memory
+  without bound
+  ([GHSA-94c3-mf55-vv8v](https://github.com/ushineko/hayami/security/advisories/GHSA-94c3-mf55-vv8v)).
+  What the panel keeps of a helper's lines is now bounded on both systems,
+  and the helper's error text reaches a terminal without control characters.
 
 ### 0.11.10 (2026-10-31)
 
