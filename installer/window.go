@@ -20,11 +20,16 @@ import (
 func init() { //nolint:gochecknoinits // how fynstall is given a page's window
 	gui.Page(PageSensors, func(c *extension.Context) wizard.Page {
 		return &offerPage{c: c, title: "Sensors", param: ParamSensors, checking: Checking,
-			check: func(ctx context.Context) offering { return probe(ctx) }}
+			check: func(ctx context.Context) offering { return probe(ctx) },
+			// The kernel gives the processor's temperature off Windows.
+			shown: func() bool { return runtime.GOOS == "windows" }}
 	})
 	gui.Page(PageNetwork, func(c *extension.Context) wizard.Page {
 		return &offerPage{c: c, title: "Network", param: ParamNetwork, checking: CheckingNetwork,
-			check: func(context.Context) offering { return probeNet(c) }}
+			check: func(context.Context) offering { return probeNet(c) },
+			// Wherever the installer can offer it: Windows, and Linux with
+			// polkit's pkexec (spec 078).
+			shown: func() bool { return probeNet(c).applies() }}
 	})
 }
 
@@ -57,6 +62,9 @@ type offerPage struct {
 	param    string
 	checking string
 	check    func(context.Context) offering
+	// shown is whether the page has anything to say here; asked before the
+	// page is drawn, so it is quick.
+	shown func() bool
 
 	found  *widget.Label
 	offer  *widget.Check
@@ -65,10 +73,10 @@ type offerPage struct {
 
 func (p *offerPage) Title() string { return p.title }
 
-// Skip passes the page over off Windows, where there is nothing to offer:
-// the kernel gives the processor's temperature, and the network by process
-// to the process's owner.
-func (p *offerPage) Skip() bool { return runtime.GOOS != "windows" }
+// Skip passes the page over where it has nothing to offer. It was "off
+// Windows" for both pages, which skipped the network page on Linux whatever
+// its own check said (#257).
+func (p *offerPage) Skip() bool { return !p.shown() }
 
 func (p *offerPage) Build(*wizard.Wizard) fyne.CanvasObject {
 	p.found = wrapped(p.checking)

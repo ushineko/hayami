@@ -2,7 +2,7 @@
 
 **Issue**: #257
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -47,20 +47,23 @@ when the box is ticked.
 
 ## Acceptance Criteria
 
-- [ ] The installer's Network page on Linux, with `pkexec`, offers a clear
-      check box and says what installing does on Linux.
-- [ ] Ticking it and approving the prompt installs the helper (checked on
-      this desk with the GUI installer built from the branch).
-- [ ] Without `pkexec` the page is not offered and the log carries the sudo
+- [x] The installer's Network page on Linux, with `pkexec`, is shown and
+      offers a clear check box with Linux's text.
+      (`TestTheNetworkPageIsShownWhereverTheHelperIsOffered`, falsified;
+      `TestTheNetworkPageOffersACheckBoxThatStartsClear`; and the real
+      wizard on this desk, below.)
+- [x] Ticking it and approving the prompt installs the helper: the GUI
+      installer built from the branch, on this desk, as the person at it.
+- [x] Without `pkexec` the page is not offered and the log carries the sudo
       line. (`TestAHelperThatCannotBeOfferedIsStillSaid`, falsified.)
-- [ ] `RunElevated` runs the program through `pkexec` with its arguments, and
+- [x] `RunElevated` runs the program through `pkexec` with its arguments, and
       says a dismissed prompt as that. (`TestInstallingAsksThroughPkexec`,
       with a fake `pkexec`.)
-- [ ] Without `pkexec`, `RunElevated` says the sudo line.
+- [x] Without `pkexec`, `RunElevated` says the sudo line.
       (`TestInstallingWithoutPkexecSaysWhatToRun`.)
-- [ ] The Windows page and its tests are unchanged.
-- [ ] `make test` and `make lint` pass.
-- [ ] The docs of R6 are updated.
+- [x] The Windows page and its tests are unchanged in what they check.
+- [x] `make test` and `make lint` pass.
+- [x] The docs of R6 are updated.
 
 ## Threat model delta
 
@@ -80,6 +83,24 @@ the same as with the sudo line it replaces. polkit's prompt names the program.
   for a password through polkit's text agent where it used to print the sudo
   line.
 - Rollback: revert the commit; installs already made are unaffected.
+
+## Verification
+
+On this desk (CachyOS, KDE Plasma 6, polkit with KDE's agent), with GUI
+installers built from the branch under test version numbers:
+
+- The first build skipped the Network page in the real wizard ("skipped" in
+  its list of pages). The page's own check and the headless tests were
+  right; the wizard's `Skip` was "off Windows" for every offer page, ahead
+  of the check. Fixed by giving each page its own answer, and a test of the
+  wizard's question that fails with the old rule.
+- The second build showed the page; the box ticked and the prompt approved,
+  `hayami-tui network-helper` said `installed: 0.11.13-test.2 ... for
+  nverenin`, the socket was active, and `hayami-tui detail bandwidth` said
+  "every protocol".
+- Not exercised by hand: the uninstaller's removal through `pkexec` (R3),
+  which runs the same `RunElevated` and is covered by the existing removal
+  tests with the call replaced.
 
 ## E2E Test Plan
 
