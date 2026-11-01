@@ -11,9 +11,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// newNetReader is Linux's network by process: every TCP socket's counters
-// from sock_diag, each put to the process that holds it.
+/*
+newNetReader is Linux's network by process: the helper where one is
+installed (spec 072), which counts every protocol and forwarded traffic, and
+where it is not, every TCP socket's counters from sock_diag, each put to the
+process that holds it. The helper is asked first on every reading, so one
+installed while the panel runs is found without a restart.
+*/
 func newNetReader(samples func(context.Context) ([]ProcessSample, error)) NetReader {
+	return &chainNet{helper: newHelperNet(samples), own: newSocketNet(samples)}
+}
+
+// newSocketNet is the reader this process can be on its own.
+func newSocketNet(samples func(context.Context) ([]ProcessSample, error)) NetReader {
 	return &socketNet{
 		sockets:   tcpSockets,
 		owners:    ProcSocketOwners(ProcPath),

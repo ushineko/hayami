@@ -94,6 +94,15 @@ elif [ -f "${rule}" ]; then
     echo "Left ${rule} alone: it is not the copy install.sh wrote."
 fi
 
+# The network helper was installed with sudo, and is removed the same way.
+# Its program is a copy of its own, so it outlives the one removed above.
+if [ -f /etc/systemd/system/hayami-network.service ]; then
+    echo
+    echo "The network helper is root's to remove:"
+    echo
+    echo "  sudo /usr/lib/hayami/hayami-network network-helper remove"
+fi
+
 if [ "$DRY_RUN" -eq 0 ]; then
     command -v update-desktop-database >/dev/null 2>&1 && \
         update-desktop-database "${APP_DIR}" >/dev/null 2>&1 || true

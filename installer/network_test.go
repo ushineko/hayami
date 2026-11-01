@@ -18,9 +18,9 @@ import (
 // these tests carries hayami 0.0.0.
 var (
 	netNotWindows = Network{Version: "0.0.0"}
-	netMissing    = Network{State: nethelper.State{Applies: true}, Version: "0.0.0"}
-	netOlder      = Network{State: nethelper.State{Applies: true, Installed: true, Version: "0.0.0-older"}, Version: "0.0.0"}
-	netCurrent    = Network{State: nethelper.State{Applies: true, Installed: true, Version: "0.0.0"}, Version: "0.0.0"}
+	netMissing    = Network{State: nethelper.State{Applies: true, Offered: true}, Version: "0.0.0"}
+	netOlder      = Network{State: nethelper.State{Applies: true, Offered: true, Installed: true, Version: "0.0.0-older"}, Version: "0.0.0"}
+	netCurrent    = Network{State: nethelper.State{Applies: true, Offered: true, Installed: true, Version: "0.0.0"}, Version: "0.0.0"}
 )
 
 // answerNet makes the network check find n for the length of a test.

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package nethelper
 
@@ -24,3 +24,10 @@ func CurrentUser() (string, error) { return "", ErrNotWindows }
 
 // RunElevated is refused.
 func RunElevated(context.Context, string, ...string) error { return ErrNotWindows }
+
+// What the command line says of the helper here.
+const (
+	About        = "There is no helper on this system."
+	InstallSteps = About
+	InstallNeeds = "not on this system"
+)

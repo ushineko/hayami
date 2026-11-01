@@ -23,7 +23,7 @@ type Network struct {
 	Version string
 }
 
-func (n Network) applies() bool   { return n.State.Applies }
+func (n Network) applies() bool   { return n.State.Offered }
 func (n Network) why() string     { return NetworkWhy }
 func (n Network) caution() string { return NetworkCaution }
 
@@ -34,8 +34,8 @@ func (n Network) Current() bool { return n.State.Installed && n.State.Version ==
 // Found says what the check found.
 func (n Network) Found() string {
 	switch {
-	case !n.State.Applies:
-		return "This system gives hayami the network by program itself. There is nothing to set up."
+	case !n.State.Offered:
+		return "This installer does not set up a network helper on this system. There is nothing to set up."
 	case n.Current():
 		return fmt.Sprintf("The network helper is installed (%s): the bandwidth card's list of programs is read from it. There is nothing to do.", n.Version)
 	case n.State.Installed:
@@ -53,7 +53,7 @@ func (n Network) Found() string {
 // offer.
 func (n Network) Offer() string {
 	switch {
-	case !n.State.Applies || n.Current():
+	case !n.State.Offered || n.Current():
 		return ""
 	case n.State.Installed:
 		return "Update the network helper"

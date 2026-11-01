@@ -89,10 +89,13 @@ on; Preferences, Window can name a side.
 
 The network list is partial and says so under the list:
 
-- **Linux** counts TCP only. UDP and QUIC have no per-socket counters without
-  privileges hayami does not ask for, so video calls and much of a browser's
-  traffic are missing. A socket whose program your user cannot see is counted
-  under "other".
+- **Linux** counts TCP only on its own. UDP and QUIC have no per-socket
+  counters, so video calls and much of a browser's traffic are missing, and a
+  socket whose program your user cannot see is counted under "other". With
+  hayami's network helper (see [The Linux network helper](#the-linux-network-helper))
+  the list counts every protocol and every account's programs, and the Peers
+  breakdown lists traffic forwarded for a virtual machine, a container or a
+  Tailscale exit node by interface, so what is left is headers and multicast.
 - **Windows** gives the network by program only to an administrator, and the
   panel runs as you. The list is read from hayami's network helper, a service
   the installer sets up when asked (see
@@ -258,7 +261,7 @@ hayami-tui readings                       # the readings as JSON, no display nee
 hayami-tui doctor                         # what each section found, and why not
 hayami-tui detail cooler/cpu              # what is behind a reading: programs by processor
 hayami-tui detail bandwidth --json        # ... by network use, as JSON
-hayami-tui network-helper                 # Windows: whether the network helper is installed
+hayami-tui network-helper                 # whether the network helper is installed
 hayami-tui arrangements                   # the values --arrangement takes
 ```
 
@@ -438,6 +441,52 @@ account on the same computer moves it to that account.
 
 ### Linux
 
+#### The Linux network helper
+
+Linux keeps no byte counters for a UDP socket, and the TCP counters hayami
+reads are lost when a connection closes between two readings; seeing either,
+or another account's programs, takes a privileged program. The helper is
+that program, and it is optional. Without it the list is TCP only, as
+above.
+
+It counts packets with eBPF as they reach or leave each socket, by the
+process using the socket and the two ends, and the packets the machine
+forwards, by the two interfaces. It needs Linux 6.4 or later, with BTF
+(`/sys/kernel/btf/vmlinux`, on by default on most distributions).
+
+```
+sudo hayami-tui network-helper install --allow $USER
+```
+
+hayami never runs sudo itself; `install.sh --with-network` prints that line.
+What it does:
+
+- copies `hayami-tui` to `/usr/lib/hayami/hayami-network`, where only root can
+  change it;
+- writes `hayami-network.socket` and `hayami-network.service` to
+  `/etc/systemd/system` and starts the socket, `/run/hayami-network.sock`,
+  which only your account may open;
+- the service runs that copy as an account systemd makes for the run, with
+  the three capabilities loading eBPF programs needs (`CAP_BPF`,
+  `CAP_NET_ADMIN`, `CAP_PERFMON`) and none of root's others.
+
+The service starts when a panel opens the list and exits about fifteen
+seconds after the drawer closes; the programs are attached only while it
+runs. It sends process IDs, the two ends of each connection and byte counts
+down the socket and reads nothing back. Any account can already see the
+connections with `ss`; what is new to yours is the byte counts and which
+program of another account's holds each one.
+
+```
+hayami-tui network-helper                       # installed or not, which version, running or not
+sudo hayami-tui network-helper install --allow $USER   # install it, or put this version in its place
+sudo hayami-tui network-helper remove           # stop it, remove its units and its program
+```
+
+An upgrade leaves it working; run the install line again to bring it up to
+the new version. Uninstalling hayami leaves it, and says the line that
+removes it.
+
 #### The udev rule
 
 hayami opens the receivers, headset base stations and cooler on your desk
@@ -534,6 +583,20 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **New**: on Linux, an opt-in network helper counts the network by process
+  for every protocol, every account and connections too short for two
+  readings (spec 072, #238). It is a systemd service, started by its socket,
+  that counts packets with eBPF and runs as a dynamic user with the three
+  capabilities that takes. `sudo hayami-tui network-helper install --allow
+  $USER` installs it; Linux 6.4 or later.
+- **New**: with the helper, the Peers breakdown lists traffic forwarded for
+  another interface (a virtual machine, a container, an exit node) by that
+  interface, marks a tunnel daemon "(tunnel)" because its bytes are the
+  tunnel interface's over again, and calls what is left "headers /
+  multicast" in place of "unmeasured".
 
 ### 0.11.9 (2026-10-31)
 
