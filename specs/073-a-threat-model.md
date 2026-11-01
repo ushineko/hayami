@@ -105,9 +105,11 @@ parses (B4), and 075 hardens the supply chain and releases (B7).
     what the attacker gains. A worry without a path is not a finding.
   - A second, separate pass tries to refute each path against the code. A
     path that survives is a finding; one refuted is recorded as checked.
-  - Every finding becomes an issue labelled `security` (a private advisory
-    while it is unfixed) and, once fixed, a regression test that fails when
-    the fix is broken.
+  - Every finding is filed, labelled `security`: one an attacker can use
+    across a boundary (another account, an elevation, a privilege the
+    helper holds) as a private advisory until the release that fixes it,
+    the rest as public issues. Once fixed, each gets a regression test that
+    fails when the fix is broken.
   This runs alongside Ralph's per-change security pass, which stays.
 - R6 **A red-team exercise each release cycle that ships a change to B1,
   B2 or B7**, and at least once a quarter otherwise: one boundary, a fresh
@@ -125,19 +127,27 @@ parses (B4), and 075 hardens the supply chain and releases (B7).
 
 ## Acceptance Criteria
 
-- [ ] `docs/threat-model.md` exists with the stance, the boundary table and
+- [x] `docs/threat-model.md` exists with the stance, the boundary table and
       a section for each of B1–B7 carrying every heading of R1, and every
-      defence it names points at a file that exists.
+      defence it names points at a file that exists. (Each reference
+      checked with grep.)
 - [ ] `SECURITY.md` exists, private vulnerability reporting is on, and a
-      test report filed through it reaches the maintainer.
-- [ ] `.claude/CLAUDE.md`, `CONTRIBUTING.md` and the PR template carry the
-      gate of R4.
-- [ ] The procedure of R5 is in the document, and the first assessment of
+      test report filed through it reaches the maintainer. (`SECURITY.md`
+      written; reporting enabled, `{"enabled":true}`; the two advisories of
+      the first assessment were drafted through the same mechanism. A test
+      report from an account that is not the maintainer's is still to do.)
+- [x] `.claude/CLAUDE.md`, `CONTRIBUTING.md` and the PR template carry the
+      gate of R4. (The PR template and `CONTRIBUTING.md` are rendered from
+      the shared contributing policy; it gained optional per-project
+      `pr.md` and `security.md` fragments, and every other project renders
+      as before.)
+- [x] The procedure of R5 is in the document, and the first assessment of
       R7 is run: its findings filed as issues, its refuted paths recorded
       as checked, each with the boundary and the code it was tried against.
-- [ ] The red-team log of R6 exists, with the first assessment as its first
+      (Two private advisories; #244–#250; "Checked" for B1–B3.)
+- [x] The red-team log of R6 exists, with the first assessment as its first
       entry.
-- [ ] B4's and B7's sections name specs 074 and 075 as where their
+- [x] B4's and B7's sections name specs 074 and 075 as where their
       defences are being added.
 
 ## Threat model delta
@@ -170,6 +180,29 @@ assessment brings, each its own issue.
   (2026-10-31); `.claude/CLAUDE.md`'s label list names it.
 - **Split in three.** Fuzzing is spec 074 (#241) and the supply chain spec
   075 (#242); this spec keeps the model and the first assessment.
+
+## Verification
+
+The first assessment, 2026-10-31, on `main` at 5fba846 (0.11.10):
+
+- Three reviewers, one each for B1, B2 and B3, each given the boundary's
+  code and attacker and told not to read `specs/`, `docs/` or `.claude/`.
+  Each returned exploit paths and the paths it tried that failed.
+- Three separate refutation passes, one per boundary, checked every path
+  against the code, the Go standard library and documented Windows
+  behaviour; the B3 pass reproduced the redirect finding with a local test
+  server, and the B1 pass measured the memory finding (4,000,000 flows,
+  766 MiB from 120 MB of input).
+- What survived, with its severity after refutation:
+  - B1: pipe squatting and client impersonation on Windows, with memory
+    exhaustion and escape injection behind it (medium; a private advisory).
+    The memory part is a regression from spec 072.
+  - B2: the LibreHardwareMonitor logon task (low-medium; a private
+    advisory); Windows elevated steps trusting user-writable paths (#244,
+    low); the udev rule's parent match (#245, low; raw block access was
+    refuted).
+  - B3: #246–#250, all low but #248 (medium-low).
+- The Linux helper and the Linux install paths held in both B1 and B2.
 
 ## E2E Test Plan
 

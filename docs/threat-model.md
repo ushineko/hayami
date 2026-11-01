@@ -1,0 +1,360 @@
+# hayami's threat model
+
+This is what hayami defends, against whom, and how: the guide a change at
+one of its boundaries is held to, as `docs/architecture.md` is for its
+structure (spec 073). A defence named here points at the file that makes
+it, so a reader can check it is still there. A finding not yet fixed is not
+written here; it is a private advisory until the release that fixes it.
+
+## Stance
+
+- **The panel runs as the person at the desk and asks for nothing more.**
+  It never runs elevated and never asks to. A reading that needs a right
+  the panel lacks comes from the network helper, and from nowhere else.
+- **A privileged component does one thing, for one account, while it is
+  read.** The helpers count network traffic and serve it to the account
+  they were installed for; they read nothing a panel sends; they run only
+  while a panel reads them.
+- **hayami never becomes root on Linux.** A step that needs root is a line
+  the person runs with sudo, printed and never executed for them.
+- **Credentials are the tools' own.** hayami reads the Claude and Codex
+  tokens from their stores and never copies, logs or prints them.
+- **What hayami shows about other accounts is said.** The network by
+  process for every account is the helper's, installed by choice, with
+  what it exposes stated where it is offered.
+
+## Boundaries
+
+| Boundary | What is at stake | Status |
+|---|---|---|
+| B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; findings open |
+| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; findings open |
+| B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; findings open |
+| B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
+| B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
+| B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
+| B7 Supply chain and releases | A tampered binary installed with administrator or root rights | Modelled; hardening is spec 075 |
+
+---
+
+## B1 Privileged helpers
+
+**Assets.** The rights the helpers hold: on Windows, Local Service and the
+kernel network provider's events; on Linux, `CAP_BPF`, `CAP_NET_ADMIN` and
+`CAP_PERFMON`, and programs attached to every socket on the machine and to
+the forward hook. The traffic of every account. The panel's availability,
+which reads what the helper sends.
+
+**Attackers.** Another local account. Malware running as the installed
+user, after more than that user has. A helper that sends something hostile,
+from the panel's side.
+
+**Assumptions.**
+
+- Only an administrator or root can write `%ProgramFiles%`, `/usr/lib`,
+  `/etc/systemd/system` and `/run`.
+- The kernel vouches for the peer of a Unix socket (`SO_PEERCRED`) and for
+  the account a named pipe's access list names.
+- systemd hands the socket only to the service it starts.
+
+**Defences.**
+
+- The program the service runs is a copy the user cannot write:
+  `copyProgram` into `/usr/lib/hayami` (`internal/nethelper/service_linux.go`);
+  the copy into Program Files (`internal/nethelper/service_windows.go`).
+- One account may read: on Linux the socket is that account's, mode `0600`
+  (`SocketUnit`), and each peer's credentials are checked again
+  (`accept`, `peerUID` in `internal/nethelper/server_linux.go`); on Windows
+  the pipe's access list names the account (`Run` in
+  `internal/nethelper/service_windows.go`) and remote clients are refused
+  (`PIPE_REJECT_REMOTE_CLIENTS` in `server_windows.go`).
+- One way: neither server reads from a reader (`serve` in both server
+  files).
+- Least rights on Linux: a dynamic user with three capabilities and the
+  hardening in `ServiceUnit` (`systemd-analyze security`: 1.9, spec 072).
+- Counting only: every BPF program returns "pass" and the netfilter one
+  `NF_ACCEPT` (`internal/netcount/bpf/netcount.bpf.c`); nothing is pinned,
+  so a helper that dies leaves nothing attached (`Counter.Close`,
+  `internal/netcount/netcount_linux.go`).
+- Runs only while read, and lets the programs go when the last reader
+  leaves (`serve`; `TestTheServerCountsOnlyWhileSomebodyReads`).
+- The panel bounds what it reads: a line is at most 16 MiB
+  (`helperStream.read`, `internal/core/nethelper.go`), and a protocol it
+  does not know is refused by name.
+
+**Accepted.**
+
+- The installed account sees every account's connections, their byte
+  counts and which program holds them (Linux), or process IDs and byte
+  counts (Windows). Installing the helper is agreeing to that, and the
+  README says so.
+
+**Open findings** (first assessment, 2026-10-31): one private advisory
+(Windows). B2's #244 covers how the Windows helper's program is copied into
+place. The Linux helper held against every path tried; see "Checked".
+
+## B2 Installing, upgrading and removing
+
+**Assets.** The administrator, SYSTEM or root rights an install step runs
+with, and the files it leaves that later run with them.
+
+**Attackers.** A local user or malware running as the installing user,
+planting files, links or directories before an elevated step, or racing
+it. Whoever sets the environment or working directory of that step.
+
+**Assumptions.** A person who runs the sudo line or accepts the
+administrator prompt means to install hayami's helper from the binary they
+name.
+
+**Defences.**
+
+- Linux installs per user into `~/.local` and never asks for root
+  (`install.sh`, `installer/rule_linux.go`); what needs root is printed.
+- The helper's copy is written as `.new` in a root-owned directory and
+  renamed into place (`copyProgram`, `internal/nethelper/service_linux.go`).
+- The udev rule grants the logged-in user (`uaccess`) the devices hayami
+  reads, matched by vendor (`packaging/60-sanshoku.rules`).
+- An uninstall removes the udev rule only when it is the copy the install
+  wrote (`uninstall.sh`, `installer/rule_linux.go`).
+
+**Accepted.** `sudo hayami-tui network-helper install` copies the binary
+sudo was run on, which the user can write: the person who can run sudo is
+trusted to name it.
+
+**Open findings** (first assessment, 2026-10-31): one private advisory;
+#244 (Windows elevated steps trust paths the user can write); #245 (the udev
+rule matches parent devices). The Linux install paths held; see "Checked".
+
+## B3 Credentials
+
+**Assets.** The Claude and Codex OAuth tokens and refresh tokens; the
+usage cache, which other programs read and write.
+
+**Attackers.** Malware running as the user; another program writing the
+cache; another account; anyone who sees hayami's output; a network attacker
+or a hostile API response.
+
+**Assumptions.** The tools' own stores protect the tokens at rest; the
+providers' APIs are reached over TLS.
+
+**Defences.**
+
+- Responses are bounded: `io.LimitReader` on the usage and refresh
+  responses (`internal/claude/fetch.go`, `internal/claude/refresh.go`) and
+  a ten-second timeout.
+- One upstream read per freshness window, under a non-blocking `flock`
+  (`internal/usage/lock_unix.go`), shared with the Python tools.
+
+**Open findings** (first assessment, 2026-10-31): #246 (a home path in
+`doctor`), #247 (an unbounded Retry-After), #248 (refresh can overwrite
+Claude Code's writes), #249 (control sequences reach the terminal), #250
+(redirects carry the refresh token). No path gave another account anything
+or put a token into output; see "Checked".
+
+## B4 What hayami parses
+
+**Assets.** The panel's availability; for the helper protocol, the
+boundary between a privileged process and the panel.
+
+**Attackers.** Whoever controls a source: a program answering on
+LibreHardwareMonitor's port, a process writing the usage cache, a device
+sending reports, a helper sending lines, a provider's API.
+
+**Defences.**
+
+- LibreHardwareMonitor's tree is read with a size bound and a timeout
+  (`lhmMaxBody`, `LHMTimeout` in `internal/core/lhm.go`), and only ever with
+  GET: the same server takes requests that set fan speeds.
+- `/proc/net/dev` lines that do not parse are skipped (`ParseNetDev`,
+  `internal/core/netdev.go`); `sock_diag` replies are length-checked before
+  each field (`parseInetDiag`, `internal/core/netprocs_linux.go`).
+- The helper's lines are bounded (B1).
+
+**Accepted.** LibreHardwareMonitor's address can be set to another URL in
+the settings, which are the user's own; hayami then fetches that URL.
+
+**Not yet known.** No parser is fuzzed; spec 074 adds it. HID decoders are
+sanshoku's.
+
+## B5 What hayami does outside itself
+
+**Assets.** Other processes; the compositor; the device nodes the udev
+rule opens.
+
+**Attackers.** A process that can make a name, a PID or a path mean
+something else between hayami reading it and acting on it.
+
+**Defences.**
+
+- Ending processes signals PIDs the person drilled into, TERM before KILL,
+  behind two presses, and counts what was refused rather than claiming
+  (`endAll`, `internal/gui/kill_unix.go`; `internal/gui/kill_windows.go`).
+  The kernel refuses another account's processes.
+- The KWin script is written to a new file with mode `0600` before KWin is
+  told its path (`writeScript`, `internal/desktop/script.go`).
+- hayami runs one program to read: `nvidia-smi`, with a timeout
+  (`internal/core/processors.go`, `internal/core/gpuprocs.go`), found on the
+  user's `PATH`, as the user.
+
+**Accepted.** A PID can be reused between the drill and the press; the
+window between them is a person's reaction time, and the signal is the
+user's own to send.
+
+## B6 What hayami shows and prints
+
+**Assets.** Host names and addresses of peers; process and account names;
+usage figures; the machine's devices and interfaces.
+
+**Attackers.** Anyone who sees the screen or a shared terminal, or reads a
+bug report someone pasted `doctor` or `readings --json` into.
+
+**Defences.**
+
+- Network names (SSID, BSSID) are never read (`docs/architecture.md`,
+  rule 9).
+- `tools/screenshot.sh` runs the panel from a throwaway copy of the
+  settings, so no path of the user's is shown.
+- Tokens are never printed (B3).
+
+**Accepted.** The panel shows what it reads, to whoever sees the screen.
+Peer host names come from reverse DNS and are names on the network the
+desk is on.
+
+**Open findings.** #246: a failed credential or cache read prints the home
+path into `doctor` and the readings JSON. #249: text from outside hayami
+reaches the terminal with control sequences intact. The rest of `doctor`
+and the JSON outputs has not been audited for identifiers.
+
+## B7 Supply chain and releases
+
+**Assets.** The binaries and installers people run with administrator or
+root rights.
+
+**Attackers.** A compromised Go module, GitHub Action or maintainer
+account.
+
+**Defences.**
+
+- `make vuln` (govulncheck) before every tagged release.
+- SHA256SUMS on every release.
+- The committed BPF object is tied to its source by
+  `TestTheObjectWasBuiltFromThisSource` (`internal/netcount/netcount_test.go`).
+
+**Not yet known.** Actions are pinned by tag, releases carry no
+provenance, no secret scanner runs, and builds are not reproducible. Spec
+075 takes the first three.
+
+---
+
+## Keeping it true
+
+### The gate
+
+A spec that touches a boundary above carries a section "Threat model
+delta": which boundary, what changed for the attacker, and the section of
+this document updated in the same PR. "No boundary touched" is an answer
+and is given. The PR template asks it.
+
+### Adversarial review
+
+For a PR that touches B1, B2, B3 or B7:
+
+1. **A reviewer is given the changed code and the boundary's attacker** from
+   this document, and not the author's reasoning, the spec's Risks section
+   or this document's Defences. The review is not to be anchored on what
+   the author believes is defended.
+2. **The reviewer is asked for exploit paths**: preconditions, steps and
+   what the attacker gains, each step with the line of code it depends on.
+   A worry without a path is not a finding. The reviewer also lists what
+   was tried and found not to work.
+3. **A second, separate pass tries to refute each path** against the code.
+   A path that survives is a finding; one refuted is added to "Checked"
+   below with what stops it, so the next review does not try it again.
+4. **A finding is filed, labelled `security`.** One an attacker can use
+   across a boundary (another account, an elevation, a privilege the
+   helper holds) is a private advisory until the release that fixes it;
+   the rest are public issues. Once fixed, each gets a regression test
+   that fails when the fix is broken.
+
+This runs alongside Ralph's per-change security pass, which stays.
+
+### Red-team exercises
+
+Each release cycle that ships a change to B1, B2 or B7, and at least once a
+quarter otherwise: one boundary, a fresh checkout, a virtual machine, and
+the goal of a working proof of concept.
+
+| Date | Boundary | Tried | Found |
+|---|---|---|---|
+| 2026-10-31 | B1, B2, B3 | The first assessment (spec 073 R7): one reviewer per boundary given the code and the attacker, then a separate refutation pass for each. Read-only, no proof of concept on a machine. | Two private advisories (Windows); #244–#250. The Linux helper and install paths held. |
+
+## Checked
+
+Paths that were tried against the code and found not to work, with what
+stops each. A review starts by reading these.
+
+### B1, 2026-10-31
+
+- Another account connecting to the Linux helper: the socket is the
+  installed account's, mode `0600` (`SocketUnit`), and `SO_PEERCRED` admits
+  only that account or root even if the mode is loosened (`accept`,
+  `peerUID`, `internal/nethelper/server_linux.go`).
+- Squatting the Linux socket path: it is in `/run`, which only root writes.
+- The hand-run listener's chown race: between listen and chmod the socket
+  is root's and `0755`, which nobody else can connect to, and the peer
+  check still applies (`listen`, `internal/nethelper/service_linux.go`).
+- Spoofed `LISTEN_PID`/`LISTEN_FDS`: the PID must match this process
+  (`activated`), sudo resets the environment, and a handed-in listener
+  still goes through the peer check.
+- Feeding either helper input: the Linux server never reads a connection;
+  the Windows pipe is outbound only, refuses remote clients, and gives the
+  user read only (`server_windows.go`, `Run` in `service_windows.go`).
+- Making the Linux service run attacker code: a fixed root-owned
+  `ExecStart`, root-written units, a numeric account (no name lookup), and
+  the BPF object embedded in the binary.
+- The BPF programs changing packets: every program returns pass or
+  `NF_ACCEPT`, reads with `bpf_skb_load_bytes` only, and is attached with
+  multi-attach links that do not displace systemd's own filters.
+- Starting or stopping the Windows service as the user: start and query
+  only (`service_windows.go`).
+
+### B2, 2026-10-31
+
+- The Linux helper's binary or units in a user-writable place: `sysRoot`
+  is `/`, and `/usr/lib/hayami` and `/etc/systemd/system` are root's.
+- Swapping `~/.local/bin/hayami-tui` after `sudo ... install` on Linux:
+  it works, but the person runs sudo on a file they can write, so code as
+  that user gains nothing it could not by swapping before.
+- Environment influence on the sudo step: `SUDO_UID` is read only as root;
+  `systemctl` is found on sudo's `secure_path`.
+- The installer's udev write: only when `/etc/udev/rules.d` is already
+  writable; `udevadm` runs unprivileged.
+- Uninstall deleting more than intended: fixed paths, and the udev rule
+  only on a byte-for-byte match (`installer/rule_linux.go`, `uninstall.sh`).
+- Reconfiguring the Windows service: the user's access is query, start,
+  interrogate and read.
+- An unquoted service path, or a DLL planted beside the Go program: paths
+  are quoted, and Go loads system DLLs from system32 only.
+- Raw block access through the udev rule: `SUBSYSTEM=="usb"` never matches
+  a block device.
+
+### B3, 2026-10-31
+
+- A token in error text: errors carry status codes; URLs carry no token.
+- Redirecting the API addresses: `UsageURL` and `TokenURL` are constants;
+  no environment or setting changes them.
+- TLS: the default transport and system roots; no `InsecureSkipVerify`.
+- Response size: capped at 1 MiB (`internal/claude/fetch.go`,
+  `refresh.go`); Codex lines likewise (`internal/codex/codex.go`).
+- File modes: the cache's temporary file is `0600` and renamed into place
+  (`internal/usage/entry.go`); the credential file is written `0600` in a
+  `0700` directory (`internal/claude/refresh.go`).
+- Another account planting files or links: the cache, lock and credential
+  directories are all inside the user's home.
+- Path traversal through account names: names are sanitised before a path
+  is built (`internal/usage/path.go`), and symlinked profile directories
+  are skipped (`internal/claude/store.go`).
+- A poisoned cache used as a URL or path: the payload is decoded into
+  numbers and labels only, and an unreadable cache is no cache.
+- Corrupting the credential store with a bad refresh reply: a store that
+  does not parse is never written, and an empty token is refused.
