@@ -49,7 +49,13 @@ type refreshed struct {
 // it came from, every other key is put back exactly as it was, and the write
 // is a temporary file and a rename. A store that did not parse never reaches
 // here, because Read refuses it.
+//
+// **And the file is read again just before it is written** (spec 077). The
+// request takes up to ten seconds, and Claude Code writes the same file: it
+// refreshes on expiry too, and keeps other keys there. Writing what was read
+// before the request would put back what Claude Code wrote meanwhile.
 func Refresh(ctx context.Context, client *http.Client, s Store, c *Credentials) error {
+	used := c.RefreshToken
 	body, err := json.Marshal(map[string]string{
 		"grant_type":    "refresh_token",
 		"refresh_token": c.RefreshToken,
@@ -99,6 +105,31 @@ func Refresh(ctx context.Context, client *http.Client, s Store, c *Credentials) 
 	if got.ExpiresIn > 0 {
 		c.ExpiresAt = time.Now().Add(time.Duration(got.ExpiresIn) * time.Second).UnixMilli()
 	}
+	return writeBack(s, c, used)
+}
+
+/*
+writeBack puts refreshed tokens into the store as it is now, not as it was
+when the refresh began.
+
+A refresh token in the file other than the one this refresh used means
+another program refreshed meanwhile: its tokens are in the file and in use,
+so the file is left as it is and c takes them. Otherwise the three token
+fields are set into what the file holds now, and every key another program
+added in the meantime is kept. A store that is gone, or no longer parses,
+is not written: a credential file hayami recreated would be one nobody
+asked for.
+*/
+func writeBack(s Store, c *Credentials, used string) error {
+	now, err := Read(s)
+	if err != nil {
+		return fmt.Errorf("reading the credential store again before writing it: %w", err)
+	}
+	if now.RefreshToken != used {
+		*c = *now
+		return nil
+	}
+	c.raw = now.raw
 	return write(s, c)
 }
 
