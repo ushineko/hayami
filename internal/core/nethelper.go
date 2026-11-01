@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 /*
@@ -161,14 +164,14 @@ func (s *helperStream) read(r io.Reader) error {
 			return fmt.Errorf("the network helper sent a line that is not one: %w", err)
 		}
 		if line.Error != "" {
-			return fmt.Errorf("the network helper: %s", line.Error) //nolint:err113 // the helper's own words
+			return fmt.Errorf("the network helper: %s", printable(line.Error, maxHelperError)) //nolint:err113 // the helper's own words
+		}
+		want := s.want
+		if want == 0 {
+			want = NetHelperProtocol
 		}
 		if first {
 			first = false
-			want := s.want
-			if want == 0 {
-				want = NetHelperProtocol
-			}
 			if line.V != want {
 				return fmt.Errorf("the network helper speaks version %d of its protocol and this panel version %d: "+ //nolint:err113 // both numbers are the message
 					"install the helper again from this version's installer", line.V, want)
@@ -178,17 +181,14 @@ func (s *helperStream) read(r io.Reader) error {
 			s.mu.Unlock()
 			continue
 		}
+		// Each version's fields and no others: what a version does not use
+		// is never taken, and would be kept for as long as the pipe is open.
 		s.mu.Lock()
-		if s.counts == nil {
-			s.counts = map[uint32][2]uint64{}
+		if want == NetHelperProtocol {
+			s.addCounts(line)
+		} else {
+			s.flows.add(line)
 		}
-		for _, p := range line.P {
-			c := s.counts[uint32(p[0])] //nolint:gosec // a process ID
-			c[0] += p[1]
-			c[1] += p[2]
-			s.counts[uint32(p[0])] = c //nolint:gosec // a process ID
-		}
-		s.flows.add(line)
 		s.mu.Unlock()
 	}
 	if err := lines.Err(); err != nil {
@@ -208,6 +208,37 @@ func (s *helperStream) take() (map[uint32][2]uint64, string, error) {
 	counts := s.counts
 	s.counts = nil
 	return counts, s.hello.Counts, nil
+}
+
+/*
+What the panel keeps of a helper's lines between two readings is bounded:
+the helper's own tables are no larger, so more than this is not a helper's.
+The process serving the pipe is checked before it is read (Windows) or is
+root's (Linux); the bounds are what holds if a check is ever wrong.
+*/
+const (
+	maxHelperEntries = 65536 // processes, or flows: the helper's table size
+	maxHelperHops    = 1024
+	maxHelperTunnels = 256
+	maxHelperText    = 64  // an address or an interface name
+	maxHelperError   = 512 // the helper's account of why it stopped
+)
+
+// addCounts adds version 1's bytes by process. The caller holds the lock.
+func (s *helperStream) addCounts(line NetHelperLine) {
+	if s.counts == nil {
+		s.counts = map[uint32][2]uint64{}
+	}
+	for _, p := range line.P {
+		pid := uint32(p[0]) //nolint:gosec // a process ID
+		c, held := s.counts[pid]
+		if !held && len(s.counts) >= maxHelperEntries {
+			continue
+		}
+		c[0] += p[1]
+		c[1] += p[2]
+		s.counts[pid] = c
+	}
 }
 
 // takeFlows is version 2's bytes since the previous call, or why the stream
@@ -231,15 +262,33 @@ func (f *helperFlows) add(line NetHelperLine) {
 		f.tunnels = map[uint32]bool{}
 	}
 	for _, fl := range line.F {
-		c := f.flows[fl.key()]
+		if len(fl.Local) > maxHelperText || len(fl.Peer) > maxHelperText {
+			continue
+		}
+		k := fl.key()
+		c, held := f.flows[k]
+		if !held && len(f.flows) >= maxHelperEntries {
+			f.full = true
+			continue
+		}
 		c[0] += fl.Rx
 		c[1] += fl.Tx
-		f.flows[fl.key()] = c
+		f.flows[k] = c
 	}
 	for _, h := range line.H {
-		f.hops[[2]string{h.In, h.Out}] += h.Bytes
+		if len(h.In) > maxHelperText || len(h.Out) > maxHelperText {
+			continue
+		}
+		k := [2]string{h.In, h.Out}
+		if _, held := f.hops[k]; !held && len(f.hops) >= maxHelperHops {
+			continue
+		}
+		f.hops[k] += h.Bytes
 	}
 	for _, pid := range line.T {
+		if !f.tunnels[pid] && len(f.tunnels) >= maxHelperTunnels {
+			continue
+		}
 		f.tunnels[pid] = true
 	}
 	f.full = f.full || line.Full
@@ -314,4 +363,21 @@ func flowUse(ctx context.Context, samples func(context.Context) ([]ProcessSample
 		return a.Rx+a.Tx > b.Rx+b.Tx
 	})
 	return use
+}
+
+// printable is text from outside with every control character taken out,
+// at most n bytes of it: what reaches a terminal is words, and no escape
+// sequence a terminal would act on.
+func printable(text string, n int) string {
+	var b strings.Builder
+	for _, r := range text {
+		if b.Len() >= n {
+			break
+		}
+		if unicode.IsControl(r) || r == utf8.RuneError {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -241,3 +244,99 @@ func (f *fakeNet) Read(context.Context) (NetUse, error) {
 }
 
 func (f *fakeNet) Close() {}
+
+// GHSA-94c3-mf55-vv8v. A stream keeps each version's fields and no others:
+// what a version does not use is never taken, and a server that sends it
+// anyway would otherwise grow the panel for as long as the pipe is open.
+func TestAStreamKeepsOnlyItsOwnVersionsFields(t *testing.T) {
+	flow := NetHelperFlow{PID: 7, Proto: 17, Local: "192.0.2.1", Peer: "198.51.100.9", Rx: 1, Tx: 1}
+	foreign := NetHelperLine{
+		P: [][3]uint64{{7, 10, 1}},
+		F: []NetHelperFlow{flow}, H: []NetHelperHop{{In: "a", Out: "b", Bytes: 1}}, T: []uint32{3},
+	}
+
+	v1 := &helperStream{}
+	require.NoError(t, feed(t, v1, helperHello, foreign))
+	assert.Len(t, v1.counts, 1)
+	assert.Empty(t, v1.flows.flows, "a version 1 stream keeps no flows")
+	assert.Empty(t, v1.flows.hops)
+	assert.Empty(t, v1.flows.tunnels)
+
+	v2 := &helperStream{want: NetHelperFlowsProtocol}
+	require.NoError(t, feed(t, v2, flowHello, foreign))
+	assert.Empty(t, v2.counts, "a version 2 stream keeps no counts by process")
+	assert.Len(t, v2.flows.flows, 1)
+}
+
+// What is kept between two readings is bounded by the helper's own table
+// sizes, and text longer than an address or an interface name is not kept.
+func TestWhatIsKeptBetweenReadingsIsBounded(t *testing.T) {
+	many := NetHelperLine{}
+	for pid := range maxHelperEntries + 100 {
+		many.P = append(many.P, [3]uint64{uint64(pid), 1, 1})
+	}
+	v1 := &helperStream{}
+	require.NoError(t, feed(t, v1, helperHello, many))
+	assert.Len(t, v1.counts, maxHelperEntries)
+
+	flows := NetHelperLine{}
+	for port := range maxHelperEntries + 100 {
+		flows.F = append(flows.F, NetHelperFlow{PID: 1, Local: "192.0.2.1", LocalPort: uint16(port % 65536), //nolint:gosec // a port
+			Peer: "198.51.100.9", PeerPort: uint16(port / 65536), Rx: 1}) //nolint:gosec // a port
+	}
+	long := strings.Repeat("x", maxHelperText+1)
+	flows.F = append(flows.F, NetHelperFlow{PID: 1, Local: long, Peer: "198.51.100.9"})
+	for i := range maxHelperHops + 10 {
+		flows.H = append(flows.H, NetHelperHop{In: "eth0", Out: fmt.Sprintf("veth%d", i), Bytes: 1})
+	}
+	flows.H = append(flows.H, NetHelperHop{In: long, Out: "eth0", Bytes: 1})
+	for pid := range maxHelperTunnels + 10 {
+		flows.T = append(flows.T, uint32(pid)) //nolint:gosec // a process ID
+	}
+	v2 := &helperStream{want: NetHelperFlowsProtocol}
+	require.NoError(t, feed(t, v2, flowHello, flows))
+	assert.Len(t, v2.flows.flows, maxHelperEntries)
+	assert.True(t, v2.flows.full, "a table at its bound says some bytes were lost")
+	assert.Len(t, v2.flows.hops, maxHelperHops)
+	assert.Len(t, v2.flows.tunnels, maxHelperTunnels)
+	for k := range v2.flows.flows {
+		assert.NotEqual(t, long, k.Local)
+	}
+}
+
+// The helper's account of why it stopped reaches a terminal as words: no
+// control character survives, so no escape sequence a terminal would act on.
+func TestTheHelpersErrorReachesTheTerminalAsWords(t *testing.T) {
+	s := &helperStream{}
+	s.run(helperLines(t, helperHello,
+		NetHelperLine{Error: "boom\x1b]52;c;aGVsbG8=\x07\x1b[2J\u009b31m done" + strings.Repeat("y", 2*maxHelperError)}))
+	_, _, err := s.take()
+	require.Error(t, err)
+	msg := err.Error()
+	for _, r := range msg {
+		assert.False(t, unicode.IsControl(r), "control character %U in %q", r, msg)
+	}
+	assert.Contains(t, msg, "boom]52;c;aGVsbG8=[2J31m done")
+	assert.LessOrEqual(t, len(msg), len("the network helper: ")+maxHelperError+utf8.UTFMax)
+}
+
+// feed runs the stream over lines to the pipe's end, so what was kept can be
+// looked at: an ended stream's tables are left as they were.
+func feed(t *testing.T, s *helperStream, lines ...NetHelperLine) error {
+	t.Helper()
+	r, w := io.Pipe()
+	go s.run(r)
+	enc := json.NewEncoder(w)
+	for _, l := range lines {
+		if err := enc.Encode(l); err != nil {
+			return err
+		}
+	}
+	_ = w.Close()
+	require.Eventually(t, func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.done
+	}, 5*time.Second, time.Millisecond)
+	return nil
+}

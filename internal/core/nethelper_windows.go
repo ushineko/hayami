@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -36,7 +37,10 @@ const helperStartWait = 5 * time.Second
 
 // newHelperNet is the network by process as the helper reports it.
 func newHelperNet(samples func(context.Context) ([]ProcessSample, error)) NetReader {
-	return &helperNet{samples: samples, pipe: NetHelperPipe, start: startNetHelper, now: time.Now}
+	return &helperNet{
+		samples: samples, pipe: NetHelperPipe, start: startNetHelper, now: time.Now,
+		verify: serverIsTheService,
+	}
 }
 
 /*
@@ -45,7 +49,7 @@ is how the helper's own tests read a server they started, with no service
 and no administrator.
 */
 func NewNetHelperReader(pipe string, start func() error, samples func(context.Context) ([]ProcessSample, error)) NetReader {
-	return &helperNet{samples: samples, pipe: pipe, start: start, now: time.Now}
+	return &helperNet{samples: samples, pipe: pipe, start: start, now: time.Now, verify: serverIsThisProcess}
 }
 
 type helperNet struct {
@@ -54,6 +58,10 @@ type helperNet struct {
 	// start starts the service, or says errNoNetHelper where there is none.
 	start func() error
 	now   func() time.Time
+	// verify says whether the process serving the pipe is the helper. A
+	// pipe's name is anybody's to take while the helper is stopped, which
+	// is most of the time.
+	verify func(serverPID uint32) error
 
 	mu     sync.Mutex
 	handle windows.Handle
@@ -112,6 +120,15 @@ func (h *helperNet) connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("opening the network helper's pipe: %w", err)
 	}
+	var server uint32
+	if err := windows.GetNamedPipeServerProcessId(handle, &server); err != nil {
+		_ = windows.CloseHandle(handle)
+		return fmt.Errorf("asking who serves the network helper's pipe: %w", err)
+	}
+	if err := h.verify(server); err != nil {
+		_ = windows.CloseHandle(handle)
+		return err
+	}
 	h.handle, h.stream = handle, &helperStream{}
 	go h.stream.run(pipeReader(handle))
 	return nil
@@ -124,8 +141,12 @@ func openPipe(name string) (windows.Handle, error) {
 	if err != nil {
 		return 0, err //nolint:wrapcheck // a name with a NUL in it
 	}
+	// Anonymous: the server may not impersonate the panel's user, at any
+	// level. Without SECURITY_SQOS_PRESENT a pipe client lets its server
+	// impersonate it in full, and whoever holds the name is that server.
+	flags := uint32(windows.SECURITY_SQOS_PRESENT | windows.SECURITY_ANONYMOUS)
 	for range 3 {
-		handle, err := windows.CreateFile(path, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, 0, 0)
+		handle, err := windows.CreateFile(path, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, flags, 0)
 		if err == nil {
 			return handle, nil
 		}
@@ -195,4 +216,49 @@ func startNetHelper() error {
 		return fmt.Errorf("starting the network helper: %w", err)
 	}
 	return nil
+}
+
+/*
+serverIsTheService checks that the process serving the pipe is the one the
+service manager started for hayami-network. Only the service manager can
+make the two numbers agree, so a program that took the pipe's name while
+the helper was stopped is refused before a byte of it is read. Asking the
+service's state is a right the installed account has.
+*/
+func serverIsTheService(server uint32) error {
+	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return fmt.Errorf("asking the service manager: %w", err)
+	}
+	defer func() { _ = windows.CloseServiceHandle(manager) }()
+	name, _ := windows.UTF16PtrFromString(NetHelperService)
+	service, err := windows.OpenService(manager, name, windows.SERVICE_QUERY_STATUS)
+	if err != nil {
+		return fmt.Errorf("asking after the network helper's service: %w", err)
+	}
+	defer func() { _ = windows.CloseServiceHandle(service) }()
+	var status windows.SERVICE_STATUS_PROCESS
+	var needed uint32
+	if err := windows.QueryServiceStatusEx(service, windows.SC_STATUS_PROCESS_INFO,
+		(*byte)(unsafe.Pointer(&status)), uint32(unsafe.Sizeof(status)), &needed); err != nil {
+		return fmt.Errorf("asking after the network helper's service: %w", err)
+	}
+	return serverMatches(server, status.ProcessId)
+}
+
+// serverIsThisProcess is the check for a server a test runs in its own
+// process.
+func serverIsThisProcess(server uint32) error {
+	return serverMatches(server, windows.GetCurrentProcessId())
+}
+
+// serverMatches refuses a pipe served by any process but want, which is
+// zero when the service is not running.
+func serverMatches(server, want uint32) error {
+	if server != 0 && server == want {
+		return nil
+	}
+	return &Absence{Code: AbsenceNetProcessesDenied, Text: "helper's pipe is taken",
+		Detail: fmt.Sprintf("the pipe %s is held by process %d, which is not hayami's network helper; "+
+			"the list is not read from it. Ending that process lets the helper start", NetHelperPipe, server)}
 }
