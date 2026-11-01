@@ -28,8 +28,8 @@ written here; it is a private advisory until the release that fixes it.
 | Boundary | What is at stake | Status |
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
-| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244, #245 open |
-| B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; findings open |
+| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244, #245, #259 open |
+| B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
@@ -121,8 +121,16 @@ name.
 
 **Defences.**
 
-- Linux installs per user into `~/.local` and never asks for root
-  (`install.sh`, `installer/rule_linux.go`); what needs root is printed.
+- Linux installs per user into `~/.local`. It asks for root only for the
+  network helper, only when the person ticks the Network page's box or runs
+  `network-helper install`, through polkit's prompt, and only through
+  root's setuid `pkexec` (`trustedPkexec`, `RunElevated` in
+  `internal/nethelper/service_linux.go`; spec 078). Without `pkexec` the
+  install log says the sudo line. The udev rule is printed, never asked for
+  (`install.sh`, `installer/rule_linux.go`).
+- The Linux helper is removed by its own root-owned copy in
+  `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
+  (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
 - The helper's copy is written as `.new` in a root-owned directory and
   renamed into place (`copyProgram`, `internal/nethelper/service_linux.go`).
 - The udev rule grants the logged-in user (`uaccess`) the devices hayami
@@ -137,14 +145,18 @@ name.
   `TestTheStartupTaskRunsACopyOnlyAnAdministratorCanChange`).
   GHSA-32hh-7v39-jrjg, fixed in 0.11.12.
 
-**Accepted.** `sudo hayami-tui network-helper install` copies the binary
-sudo was run on, which the user can write: the person who can run sudo is
-trusted to name it.
+**Accepted.** Installing the Linux helper elevates the installed
+`hayami-tui`, which the user can write, through `pkexec` or `sudo`; code
+already running as the user could replace it before the prompt. polkit's
+prompt names the program, and the person who approves it is trusted to
+mean it.
 
-**Open findings** (first assessment, 2026-10-31): #244 (Windows elevated
-steps trust paths the user can write); #245 (the udev rule matches parent
-devices). Its advisory is fixed in 0.11.12 (GHSA-32hh-7v39-jrjg). The
-Linux install paths held; see "Checked".
+**Open findings.** #244 (Windows elevated steps trust paths the user can
+write); #245 (the udev rule matches parent devices); #259 (an upgrade
+replays a remembered `network=yes` and asks for an administrator unasked).
+Its advisory is fixed in 0.11.12 (GHSA-32hh-7v39-jrjg). The Linux install
+paths held in the first assessment, and the polkit route in its own review
+(spec 078); see "Checked".
 
 ## B3 Credentials
 
@@ -165,12 +177,24 @@ providers' APIs are reached over TLS.
   a ten-second timeout.
 - One upstream read per freshness window, under a non-blocking `flock`
   (`internal/usage/lock_unix.go`), shared with the Python tools.
+- The HTTP client follows no redirect, so none can carry a token elsewhere
+  (`refuseRedirects`, `internal/panel/http.go`; spec 076).
+- A server's Retry-After is honoured for an hour at most, and a gate another
+  program wrote into the shared cache holds for at most an hour past the
+  file's writing (`MaxRetryAfter`, `internal/claude/fetch.go`; `bound`,
+  `internal/usage/entry.go`; spec 076).
+- A refresh reads Claude Code's credential file again just before writing
+  it, leaves it alone if Claude Code refreshed meanwhile, and keeps every key
+  written meanwhile (`writeBack`, `internal/claude/refresh.go`; spec 077).
 
-**Open findings** (first assessment, 2026-10-31): #246 (a home path in
-`doctor`), #247 (an unbounded Retry-After), #248 (refresh can overwrite
-Claude Code's writes), #249 (control sequences reach the terminal), #250
-(redirects carry the refresh token). No path gave another account anything
-or put a token into output; see "Checked".
+**Accepted.** A write by Claude Code between hayami's second read and its
+rename can still be lost: milliseconds, where it was a network round trip.
+Closing it would mean taking Claude Code's undocumented lock.
+
+**Open findings.** None from the first assessment: #246–#250 and #248 were
+fixed in 0.11.13 (specs 076, 077), as was #256 (the token endpoint had
+moved, and every refresh failed). No path gave another account anything or
+put a token into output; see "Checked".
 
 ## B4 What hayami parses
 
@@ -236,15 +260,24 @@ bug report someone pasted `doctor` or `readings --json` into.
 - `tools/screenshot.sh` runs the panel from a throwaway copy of the
   settings, so no path of the user's is shown.
 - Tokens are never printed (B3).
+- What the pane, `doctor` and `detail` write has its control characters
+  taken out, in the one place every section passes on its way out, before
+  the pane adds colours of its own (`safetext.Printable`;
+  `view.Painter.paint`, `view.Detail.Text`, `line` in
+  `internal/cli/doctor.go`; spec 076).
+- An error's text in `doctor` and the readings JSON writes the user's home
+  as `~`, matched only as a whole path (`safetext.WithoutHome`; spec 076).
 
 **Accepted.** The panel shows what it reads, to whoever sees the screen.
 Peer host names come from reverse DNS and are names on the network the
 desk is on.
 
-**Open findings.** #246: a failed credential or cache read prints the home
-path into `doctor` and the readings JSON. #249: text from outside hayami
-reaches the terminal with control sequences intact. The rest of `doctor`
-and the JSON outputs has not been audited for identifiers.
+**Accepted.** JSON output passes C1 characters as UTF-8, as
+`encoding/json` does: JSON is for programs. Bidirectional characters are
+not stripped: they can reorder a pasted report, not drive a terminal.
+
+**Not yet known.** The rest of `doctor` and the JSON outputs has not been
+audited for identifiers other than the home path.
 
 ## B7 Supply chain and releases
 
@@ -309,6 +342,8 @@ the goal of a working proof of concept.
 |---|---|---|---|
 | 2026-10-31 | B1, B2, B3 | The first assessment (spec 073 R7): one reviewer per boundary given the code and the attacker, then a separate refutation pass for each. Read-only, no proof of concept on a machine. | Two private advisories (Windows), the B1 one fixed in 0.11.11 (GHSA-94c3-mf55-vv8v) and the B2 one in 0.11.12 (GHSA-32hh-7v39-jrjg); #244–#250. The Linux helper and install paths held. |
 | 2026-10-31 | B1 | Tests on Windows 11 (build 26200) of the fix for GHSA-94c3-mf55-vv8v: a squatted pipe, and a server impersonating the panel. | The assessment's impersonation claim did not hold: Windows lets a pipe server impersonate only after reading from the pipe, and the panel never writes. Recorded under "Checked". |
+| 2026-11-01 | B3, B6 | Review of specs 076 and 077 (one reviewer, findings checked against the code). | Poll errors bypassing the home redaction; substring matches in it; the shared cache bypassing the Retry-After cap; a failed re-read losing refreshed tokens; and, from its question about redirects, the token endpoint having moved (#256). All fixed before 0.11.13. |
+| 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
 
 ## Checked
 
