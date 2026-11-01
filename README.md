@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.8
+**Version**: 0.11.9
 
 *a chart you read at a glance*
 
@@ -277,7 +277,9 @@ Right-click it for Preferences, Opacity and Quit.
 The preferences window has four pages:
 
 - **Sections**: which sections show, their order (the panel follows at once),
-  the arrangement, and which network interfaces the bandwidth section watches.
+  the arrangement, which network interfaces the bandwidth section watches,
+  and whether every peripheral goes on one line, so the panel grows wider
+  instead of taller past two devices (the window's; a pane wraps).
 - **Window**: the panel's fonts and text size, how opaque its cards are, the
   KWin rule on Linux, the side the detail drawer opens on, and on Windows
   whether it hides for a full-screen app.
@@ -533,8 +535,14 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.9 (2026-10-31)
 
+- **Added**: "Every device on one line" on the Sections page of the
+  preferences. With it on, the peripherals card puts every device on one line
+  and the panel grows wider instead of taller; off, the default, it wraps as
+  before. The window's alone, in stack and grid; row is still one device per
+  line, and a terminal pane wraps to its width (spec 071, #236). Needs
+  fynedesygn 0.1.108's `CellGrid.SetOneLine`.
 - **Fixed**: an Ultra account is called "CC ultra" with a U badge, not "CC
   max" with an M. Its credential store still says "max"; the plan's name is
   read from Claude Code's account record, and only when the record's tier is

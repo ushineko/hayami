@@ -98,3 +98,18 @@ func TestEverySettingBelongsToASection(t *testing.T) {
 		assert.True(t, ok, "a setting for %q, which is no section", key)
 	}
 }
+
+// Spec 071 R1. Every device on one line is saved under the peripherals
+// section and read back; a file without it is off, so an existing file draws
+// what it drew.
+func TestEveryDeviceOnOneLineIsSavedAndOffByDefault(t *testing.T) {
+	s, path := open(t, "")
+	assert.False(t, config.Peripherals.Get(s.Config()).OneLine, "a file without the setting should be off")
+
+	require.NoError(t, s.SetConfig(config.Peripherals.Set(s.Config(), config.PeripheralsSettings{OneLine: true})))
+	require.NoError(t, s.Flush())
+
+	reopened, err := config.Open(path)
+	require.NoError(t, err)
+	assert.True(t, config.Peripherals.Get(reopened.Config()).OneLine)
+}

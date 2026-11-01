@@ -391,7 +391,13 @@ func (p *Panel) Apply(c config.Config) {
 			p.rebuild(card, flatten(card.lines, !row))
 		}
 	}
+	oneLine := p.setOneLine(config.Peripherals.Get(c).OneLine)
 	p.win.Panel().SetArrangement(arr)
+	if oneLine {
+		// The arrangement resizes only when it changed, and a fixed-size
+		// window grows on its own but shrinks only when asked (quirk 34).
+		p.win.Panel().Resize()
+	}
 	p.win.SetHideForFullscreen(c.HidesForFullscreen())
 	p.applyDrawer(c)
 
@@ -410,6 +416,23 @@ func (p *Panel) Apply(c config.Config) {
 			b.SetInterfaces(config.Bandwidth.Get(c).Interfaces)
 		}
 	}
+}
+
+/*
+setOneLine puts every device on the peripherals card on one line, or as many
+as fit (spec 071), and reports whether that changed anything.
+
+The window's alone: a pane cannot grow wider, and already puts every cell on
+one line when it is wide enough. In row the library's Lines wins, so the
+setting waits there for the window to leave it.
+*/
+func (p *Panel) setOneLine(on bool) bool {
+	c, ok := p.cards[view.PeripheralsInfo.Key]
+	if !ok || c.grid == nil || c.grid.OneLine() == on {
+		return false
+	}
+	c.grid.SetOneLine(on)
+	return true
 }
 
 // Draw brings a section's card up to date. It is called on the UI thread.
