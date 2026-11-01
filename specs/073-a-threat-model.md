@@ -208,6 +208,9 @@ The first assessment, 2026-10-31, on `main` at 5fba846 (0.11.10):
   Its impersonation part did not hold on Windows (a pipe server may
   impersonate only after reading, and the panel never writes), and its
   severity was lowered from medium to low before publication.
+- The B2 advisory was fixed the same way, tested on Windows 11 with real
+  runs of the installer (a fresh machine, and a set-up from an earlier
+  version), and released in 0.11.12 as GHSA-32hh-7v39-jrjg.
 
 ## E2E Test Plan
 

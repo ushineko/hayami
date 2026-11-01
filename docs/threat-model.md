@@ -28,7 +28,7 @@ written here; it is a private advisory until the release that fixes it.
 | Boundary | What is at stake | Status |
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
-| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; findings open |
+| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244, #245 open |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; findings open |
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
@@ -129,14 +129,22 @@ name.
   reads, matched by vendor (`packaging/60-sanshoku.rules`).
 - An uninstall removes the udev rule only when it is the copy the install
   wrote (`uninstall.sh`, `installer/rule_linux.go`).
+- The LibreHardwareMonitor startup task, which runs with the user's full
+  administrator token at every logon, runs a copy in Program Files that
+  only an administrator can change, not winget's copy under
+  `%LOCALAPPDATA%`; the folder is the known folder, not `%ProgramFiles%`
+  from the environment (`Install-Sensors`, `scripts/install_windows.ps1`;
+  `TestTheStartupTaskRunsACopyOnlyAnAdministratorCanChange`).
+  GHSA-32hh-7v39-jrjg, fixed in 0.11.12.
 
 **Accepted.** `sudo hayami-tui network-helper install` copies the binary
 sudo was run on, which the user can write: the person who can run sudo is
 trusted to name it.
 
-**Open findings** (first assessment, 2026-10-31): one private advisory;
-#244 (Windows elevated steps trust paths the user can write); #245 (the udev
-rule matches parent devices). The Linux install paths held; see "Checked".
+**Open findings** (first assessment, 2026-10-31): #244 (Windows elevated
+steps trust paths the user can write); #245 (the udev rule matches parent
+devices). Its advisory is fixed in 0.11.12 (GHSA-32hh-7v39-jrjg). The
+Linux install paths held; see "Checked".
 
 ## B3 Credentials
 
@@ -299,7 +307,7 @@ the goal of a working proof of concept.
 
 | Date | Boundary | Tried | Found |
 |---|---|---|---|
-| 2026-10-31 | B1, B2, B3 | The first assessment (spec 073 R7): one reviewer per boundary given the code and the attacker, then a separate refutation pass for each. Read-only, no proof of concept on a machine. | Two private advisories (Windows), the B1 one published and fixed in 0.11.11 as GHSA-94c3-mf55-vv8v; #244–#250. The Linux helper and install paths held. |
+| 2026-10-31 | B1, B2, B3 | The first assessment (spec 073 R7): one reviewer per boundary given the code and the attacker, then a separate refutation pass for each. Read-only, no proof of concept on a machine. | Two private advisories (Windows), the B1 one fixed in 0.11.11 (GHSA-94c3-mf55-vv8v) and the B2 one in 0.11.12 (GHSA-32hh-7v39-jrjg); #244–#250. The Linux helper and install paths held. |
 | 2026-10-31 | B1 | Tests on Windows 11 (build 26200) of the fix for GHSA-94c3-mf55-vv8v: a squatted pipe, and a server impersonating the panel. | The assessment's impersonation claim did not hold: Windows lets a pipe server impersonate only after reading from the pipe, and the panel never writes. Recorded under "Checked". |
 
 ## Checked
