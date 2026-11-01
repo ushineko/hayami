@@ -97,6 +97,12 @@ func Usage(ctx context.Context, client *http.Client, accessToken string) (json.R
 // is a few kilobytes; a megabyte is a generous ceiling and a bounded one.
 const maxBody = 1 << 20
 
+// MaxRetryAfter is the longest a server's Retry-After is honoured. The wait is
+// written into the cache every viewer shares, and nothing clears it early:
+// a reply that asked for years would stop usage for every program reading
+// the cache until someone deleted the file (spec 076).
+const MaxRetryAfter = time.Hour
+
 // retryAfter reads the header, in seconds. A header that is a date rather than
 // a number, or missing, yields nothing and the caller's own interval applies.
 func retryAfter(v string) time.Duration {
@@ -104,11 +110,11 @@ func retryAfter(v string) time.Duration {
 		return 0
 	}
 	if n, err := strconv.Atoi(v); err == nil && n > 0 {
-		return time.Duration(n) * time.Second
+		return time.Duration(min(n, int(MaxRetryAfter/time.Second))) * time.Second
 	}
 	if t, err := http.ParseTime(v); err == nil {
 		if d := time.Until(t); d > 0 {
-			return d
+			return min(d, MaxRetryAfter)
 		}
 	}
 	return 0

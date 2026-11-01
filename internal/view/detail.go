@@ -3,6 +3,8 @@ package view
 import (
 	"sort"
 	"strings"
+
+	"github.com/ushineko/hayami/internal/safetext"
 )
 
 /*
@@ -135,10 +137,38 @@ func (d Detail) Quiet() bool {
 	return len(d.Lines) == 0 && len(d.Meters) == 0 && len(d.Reasons) == 0 && d.Note == "" && len(d.Parts) == 0
 }
 
+// printable is the detail with every string a terminal would act on made
+// safe: the names in a detail are processes', peers' and providers', which
+// hayami does not choose (spec 076).
+func (d Detail) printable() Detail {
+	p := func(s string) string { return safetext.Printable(s, 0) }
+	d.Title, d.Note = p(d.Title), p(d.Note)
+	meters := make([]Meter, len(d.Meters))
+	for i, m := range d.Meters {
+		m.Label, m.Caption, m.Reset = p(m.Label), p(m.Caption), p(m.Reset)
+		meters[i] = m
+	}
+	d.Meters = meters
+	lines := make([]DetailLine, len(d.Lines))
+	for i, l := range d.Lines {
+		l.Name, l.Value, l.Unit = p(l.Name), p(l.Value), p(l.Unit)
+		lines[i] = l
+	}
+	d.Lines = lines
+	reasons := make([]Reason, len(d.Reasons))
+	for i, r := range d.Reasons {
+		r.Label, r.Text, r.Detail = p(r.Label), p(r.Text), p(r.Detail)
+		reasons[i] = r
+	}
+	d.Reasons = reasons
+	return d
+}
+
 // Text is the detail as plain lines, for the command line: the heading, the
 // meters, the lines, the note, and each reason with its detail, then each
 // part the same way under a blank line.
 func (d Detail) Text() string {
+	d = d.printable()
 	var b strings.Builder
 	b.WriteString(d.Title + "\n")
 	for _, m := range d.Meters {

@@ -593,6 +593,16 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Security**: what the terminal pane, `doctor` and `detail` write has its
+  control characters taken out, so a process, device, peer or provider can no
+  longer send the terminal an escape sequence (spec 076, #249). An error's
+  text in `doctor` and the readings JSON writes your home directory as `~`
+  (#246). The HTTP client follows no redirect, so none can carry a token
+  elsewhere (#250), and a server's Retry-After is honoured for an hour at
+  most (#247).
+
 ### 0.11.12 (2026-11-01)
 
 - **Security**: on Windows, the LibreHardwareMonitor startup task that
