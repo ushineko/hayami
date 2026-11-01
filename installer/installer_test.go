@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fynconfig "github.com/ushineko/fynstall/config"
 	"github.com/ushineko/fynstall/extension"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/ushineko/hayami/internal/core"
 )
@@ -173,6 +175,24 @@ func TestTheExtensionKeepsFynstallsRules(t *testing.T) {
 	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork}))
 	require.NotNil(t, Extension.AfterInstall)
 	require.NotNil(t, Extension.BeforeUninstall)
+}
+
+/*
+#259. The sensors and network parameters ask for an action, not a setting,
+so an upgrade does not carry them (fynstall's once, spec 009): carried, a
+--yes upgrade ran the helper's install and asked for an administrator
+nobody had asked for. Decoded into fynstall's own Config, whose Once is the field the
+installer reads.
+*/
+func TestTheActionsAreNotCarriedIntoAnUpgrade(t *testing.T) {
+	var cfg fynconfig.Config
+	require.NoError(t, yaml.Unmarshal([]byte(readRoot(t, "fynstall.yaml")), &cfg))
+	once := map[string]bool{}
+	for _, p := range cfg.Parameters {
+		once[p.Name] = p.Once
+	}
+	assert.True(t, once[ParamSensors], "sensors is carried into an upgrade")
+	assert.True(t, once[ParamNetwork], "network is carried into an upgrade")
 }
 
 // The installer starts the panel when it is done unless a person says no:

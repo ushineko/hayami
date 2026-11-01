@@ -28,7 +28,7 @@ written here; it is a private advisory until the release that fixes it.
 | Boundary | What is at stake | Status |
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
-| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244, #245, #259 open |
+| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244, #245 open |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
@@ -128,6 +128,10 @@ name.
   `internal/nethelper/service_linux.go`; spec 078). Without `pkexec` the
   install log says the sudo line. The udev rule is printed, never asked for
   (`install.sh`, `installer/rule_linux.go`).
+- An upgrade does not carry the installer's actions: `sensors` and
+  `network` are fynstall `once` parameters, so a choice made at one install
+  is never made again, and no administrator asked for, unless the person
+  makes it again (`fynstall.yaml`; #259, fynstall spec 009).
 - The Linux helper is removed by its own root-owned copy in
   `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
@@ -152,8 +156,7 @@ prompt names the program, and the person who approves it is trusted to
 mean it.
 
 **Open findings.** #244 (Windows elevated steps trust paths the user can
-write); #245 (the udev rule matches parent devices); #259 (an upgrade
-replays a remembered `network=yes` and asks for an administrator unasked).
+write); #245 (the udev rule matches parent devices).
 Its advisory is fixed in 0.11.12 (GHSA-32hh-7v39-jrjg). The Linux install
 paths held in the first assessment, and the polkit route in its own review
 (spec 078); see "Checked".

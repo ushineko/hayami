@@ -596,6 +596,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fix**: an upgrade no longer installs the network helper, or sets up
+  LibreHardwareMonitor, again because an earlier install was told to. Both
+  are now decided at each install, so an unattended `--yes` upgrade asks for
+  no administrator (#259, fynstall 0.2.6).
+
 ### 0.11.13 (2026-11-01)
 
 - **Security**: what the terminal pane, `doctor` and `detail` write has its
