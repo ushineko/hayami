@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.12
+**Version**: 0.11.13
 
 *a chart you read at a glance*
 
@@ -596,7 +596,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.13 (2026-11-01)
 
 - **Security**: what the terminal pane, `doctor` and `detail` write has its
   control characters taken out, so a process, device, peer or provider can no
