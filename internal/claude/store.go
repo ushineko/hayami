@@ -63,6 +63,12 @@ type Credentials struct {
 	// still be labelled correctly.
 	Plan string
 
+	// RecordedPlan is the plan as Claude Code's account record names it, in
+	// lower case ("ultra"), when that record is this store's account; empty
+	// otherwise. It is newer than Plan, which an Ultra store still gives as
+	// "max".
+	RecordedPlan string
+
 	// raw is the whole file as it was read, so a write preserves every key
 	// this build has never heard of. The file is Claude Code's.
 	raw map[string]json.RawMessage
@@ -75,6 +81,7 @@ type oauth struct {
 	ExpiresAt    int64  `json:"expiresAt"`
 
 	SubscriptionType string `json:"subscriptionType"`
+	RateLimitTier    string `json:"rateLimitTier"`
 }
 
 // oauthKey is the one key this package reads and writes.
@@ -175,18 +182,21 @@ func Read(s Store) (*Credentials, error) {
 		RefreshToken: o.RefreshToken,
 		ExpiresAt:    o.ExpiresAt,
 		Plan:         o.SubscriptionType,
+		RecordedPlan: recordedPlan(o.RateLimitTier),
 		raw:          raw,
 	}, nil
 }
 
-// Badge is the one letter a panel puts beside an account's name: M for Max, E
-// for Enterprise, P for Pro, T for Team. An unknown plan has no badge rather
-// than a wrong one.
+// Badge is the one letter a panel puts beside an account's name: U for Ultra,
+// M for Max, E for Enterprise, P for Pro, T for Team. An unknown plan has no
+// badge rather than a wrong one.
 func (c *Credentials) Badge() string {
 	if c == nil {
 		return ""
 	}
-	switch c.Plan {
+	switch first(c.RecordedPlan, c.Plan) {
+	case "ultra":
+		return "U"
 	case "max":
 		return "M"
 	case "enterprise":
@@ -198,4 +208,14 @@ func (c *Credentials) Badge() string {
 	default:
 		return ""
 	}
+}
+
+// first is the first of its arguments that is not empty.
+func first(s ...string) string {
+	for _, v := range s {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

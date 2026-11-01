@@ -47,6 +47,7 @@ func profiles(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv(claude.ProfileRootEnv, root)
+	t.Setenv(claude.AccountFileEnv, filepath.Join(root, "no-account-record.json"))
 	return root
 }
 
