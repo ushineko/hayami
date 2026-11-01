@@ -223,13 +223,16 @@ func TestTheStartupTaskRunsACopyOnlyAnAdministratorCanChange(t *testing.T) {
 	programFiles, err := windowsKnownProgramFiles()
 	require.NoError(t, err)
 	target := filepath.Join(programFiles, "LibreHardwareMonitor", "LibreHardwareMonitor.exe")
-	assert.Contains(t, text, "would copy it from "+pkg+" to "+filepath.Dir(target))
+	// The temporary directory may be printed long or short (RUNNER~1), so
+	// winget's folder is matched by its own name.
+	wingetDir := `\Microsoft\WinGet\Packages\` + filepath.Base(pkg)
+	assert.Regexp(t, `would copy it from [^\n]*`+regexp.QuoteMeta(wingetDir)+` to `+regexp.QuoteMeta(filepath.Dir(target)), text)
 	// A machine whose task already runs the copy says so; any other would
 	// register it for the copy.
 	if !strings.Contains(text, "[ok]   startup task 'LibreHardwareMonitor' at highest privileges") {
 		assert.Contains(t, text, "startup task 'LibreHardwareMonitor': not registered for "+target)
 	}
-	assert.NotContains(t, text, "registered for "+userExe, "the task is never registered for winget's copy")
+	assert.NotRegexp(t, `registered for [^\n]*\\WinGet\\Packages\\`, text, "the task is never registered for winget's copy")
 	assert.NotContains(t, text, filepath.Join(dir, "elsewhere"), "%ProgramFiles% from the environment is not where it goes")
 }
 
