@@ -537,12 +537,12 @@ MIT. See
 
 ### Unreleased
 
-- **Added**: Preferences → Sections → "Every device on one line". With it on,
-  the peripherals card puts every device on one line and the panel grows
-  wider instead of taller; off, the default, it wraps as before. The window's
-  alone, in stack and grid; row is still one device per line, and a terminal
-  pane wraps to its width (spec 071, #236). Needs fynedesygn 0.1.108's
-  `CellGrid.SetOneLine`.
+- **Added**: "Every device on one line" on the Sections page of the
+  preferences. With it on, the peripherals card puts every device on one line
+  and the panel grows wider instead of taller; off, the default, it wraps as
+  before. The window's alone, in stack and grid; row is still one device per
+  line, and a terminal pane wraps to its width (spec 071, #236). Needs
+  fynedesygn 0.1.108's `CellGrid.SetOneLine`.
 - **Fixed**: an Ultra account is called "CC ultra" with a U badge, not "CC
   max" with an M. Its credential store still says "max"; the plan's name is
   read from Claude Code's account record, and only when the record's tier is

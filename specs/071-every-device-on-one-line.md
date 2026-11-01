@@ -2,7 +2,15 @@
 
 **Issue**: #236
 
-## Status: INCOMPLETE
+## Status: COMPLETE
+
+## Executive Summary
+
+A check on the Sections page, "Every device on one line", puts every
+peripheral on one line so the panel grows wider instead of taller; off, the
+default, the card wraps as before. Window only. It rests on fynedesygn
+0.1.108's `CellGrid.SetOneLine` (spec 075 there). Reviewers should look first
+at `Panel.setOneLine` and its call in `Panel.Apply` (`internal/gui/gui.go`).
 
 ## Context
 
@@ -76,7 +84,9 @@ and the window growing wider. The decisions made with the operator:
       desk's own). `tools/screenshot.sh --what panel`, 2026-10-31, three
       devices: off 371×867 px, two cells then one; on 434×764 px, three
       cells on one line. Built against fynedesygn's branch.
-- [ ] `make test`, `make lint`, `make build` pass.
+- [x] `make test`, `make lint`, `make build` pass, against fynedesygn
+      v0.1.108 as released (no workspace override); `make vuln` reports
+      nothing this code calls.
 
 ## Risks & Assumptions
 
