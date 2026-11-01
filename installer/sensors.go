@@ -95,7 +95,8 @@ func (s Sensors) Steps() []string {
 	return append(steps,
 		"turns its web server on, with no password, on the port hayami asks; Windows Firewall's default keeps it off your network",
 		"makes it start minimized, and hide in the notification area when its window is closed",
-		"registers it to start with Windows, as an administrator",
+		"copies it to Program Files, where only an administrator can change it",
+		"registers that copy to start with Windows, as an administrator",
 		"starts it; on its first start it offers its PawnIO driver, which is what reads the temperature",
 		"Windows asks for an administrator once, for all of this",
 	)

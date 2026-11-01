@@ -196,6 +196,24 @@ function Find-Sensors {
         Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 
+# Where the startup task runs LibreHardwareMonitor from: a copy in Program
+# Files, which only an administrator can change. The task runs it with the
+# user's full administrator token at every logon, with no prompt, so its
+# program must not be one the user, or anything running as the user, can
+# replace; winget's portable install, under %LOCALAPPDATA%, is (spec 073,
+# GHSA-32hh-7v39-jrjg). The folder is the known folder's, not
+# %ProgramFiles%'s, which the user's environment can change.
+function Get-SensorsHome {
+    return Join-Path ([Environment]::GetFolderPath('ProgramFiles')) "LibreHardwareMonitor"
+}
+
+# Whether the copy in Program Files is missing or another version than
+# winget's, which is where an update arrives.
+function Test-SensorsCopyStale($source, $target) {
+    if (-not (Test-Path $target)) { return $true }
+    return (Get-Item $source).VersionInfo.FileVersion -ne (Get-Item $target).VersionInfo.FileVersion
+}
+
 # The startup task's name: the one LibreHardwareMonitor's own Options -> Run On
 # Windows Startup gives it, so that menu shows it as on.
 $SensorsTask = "LibreHardwareMonitor"
@@ -297,9 +315,12 @@ function Install-Sensors {
     $port = Get-SensorsPort
     $url = "http://127.0.0.1:$port/data.json"
     $settingsScript = Join-Path $PSScriptRoot "lhm_settings.ps1"
+    $sensorsHome = Get-SensorsHome
+    $target = Join-Path $sensorsHome "LibreHardwareMonitor.exe"
 
     if (-not $exe) {
         # A dry run on a machine without it: say every step, check nothing.
+        Write-Note "would copy it to $sensorsHome, which is what the startup task runs"
         Write-Note "would set its settings (stopped first): web server on, port $port, no password,"
         Write-Note "start minimized, closing the window hides it in the notification area"
         Write-Note "would register the startup task '$SensorsTask': at logon, highest privileges"
@@ -308,24 +329,35 @@ function Install-Sensors {
         return
     }
 
-    $config = [IO.Path]::ChangeExtension($exe, ".config")
-    $pending = & $settingsScript -Path $config -Port $port -DryRun
+    $copyStale = Test-SensorsCopyStale $exe $target
+    # The settings that will be in effect: the copy's, or, before there is a
+    # copy, the ones it will be made with.
+    $config = [IO.Path]::ChangeExtension($target, ".config")
+    $configNow = if (Test-Path $config) { $config } else { [IO.Path]::ChangeExtension($exe, ".config") }
+    $pending = & $settingsScript -Path $configNow -Port $port -DryRun
     $settingsChange = -not ($pending -contains "unchanged")
-    $taskReady = Test-SensorsTask $exe
-    $running = [bool](Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)
+    $taskReady = Test-SensorsTask $target
+    $processes = @(Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue)
+    # One running from anywhere but the copy (winget's, from an earlier
+    # install) is stopped and the copy started in its place.
+    $runningElsewhere = [bool]($processes | Where-Object { $_.Path -and ($_.Path -ine $target) })
+    $running = [bool]($processes | Where-Object { $_.Path -ieq $target })
 
-    Write-Step "Its settings, its startup task, running"
+    Write-Step "Its copy, its settings, its startup task, running"
+    if ($copyStale) { Write-Note "copy: $target is missing or another version than $exe" } else { Write-Ok "copy: $target" }
     if ($settingsChange) {
         foreach ($line in $pending) { if ($line -like "would set *") { Write-Note "settings: $line" } }
     } else {
         Write-Ok "settings: web server on port $port, no password, starts minimized, closing hides it"
     }
-    if ($taskReady) { Write-Ok "startup task '$SensorsTask' at highest privileges" } else { Write-Note "startup task '$SensorsTask': not registered for $exe" }
-    if ($running) { Write-Ok "running" } else { Write-Note "not running" }
+    if ($taskReady) { Write-Ok "startup task '$SensorsTask' at highest privileges" } else { Write-Note "startup task '$SensorsTask': not registered for $target" }
+    if ($running) { Write-Ok "running" } elseif ($runningElsewhere) { Write-Note "running from somewhere other than $target" } else { Write-Note "not running" }
 
-    if ($settingsChange -or -not $taskReady -or -not $running) {
+    $stop = $runningElsewhere -or (($settingsChange -or $copyStale) -and $running)
+    if ($copyStale -or $settingsChange -or -not $taskReady -or -not $running) {
         $steps = @()
-        if ($settingsChange -and $running) { $steps += "stop it (it rewrites its settings when it exits)" }
+        if ($stop) { $steps += "stop it (it rewrites its settings when it exits)" }
+        if ($copyStale) { $steps += "copy it from $(Split-Path -Parent $exe) to $sensorsHome, keeping the copy's settings" }
         if ($settingsChange) { $steps += "set its settings, keeping a backup ($config.bak-hayami)" }
         if (-not $taskReady) { $steps += "register the startup task '$SensorsTask': at logon, highest privileges" }
         $steps += "start it through the task"
@@ -338,12 +370,30 @@ function Install-Sensors {
             $user = "$env:USERDOMAIN\$env:USERNAME"
             $elevated = @"
 `$ErrorActionPreference = 'Stop'
-`$exe = '$($exe -replace "'", "''")'
-`$dir = Split-Path -Parent `$exe
-if (`$$settingsChange) {
+`$source = Split-Path -Parent '$($exe -replace "'", "''")'
+`$dir = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'LibreHardwareMonitor'
+`$exe = Join-Path `$dir 'LibreHardwareMonitor.exe'
+`$config = [IO.Path]::ChangeExtension(`$exe, '.config')
+if (`$$stop) {
     Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue | Stop-Process -Force
     Get-Process LibreHardwareMonitor -ErrorAction SilentlyContinue | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
-    & '$($settingsScript -replace "'", "''")' -Path '$($config -replace "'", "''")' -Port $port | Out-Null
+}
+if (`$$copyStale) {
+    # Program Files' own access list: administrators write, users read. The
+    # copy's settings are its own once it has them; a first copy starts from
+    # winget's.
+    New-Item -ItemType Directory -Force -Path `$dir | Out-Null
+    `$keep = Test-Path `$config
+    Get-ChildItem -LiteralPath `$source -Recurse -File | Where-Object {
+        -not (`$keep -and (`$_.Name -like 'LibreHardwareMonitor.config*'))
+    } | ForEach-Object {
+        `$to = Join-Path `$dir `$_.FullName.Substring(`$source.Length).TrimStart('\')
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent `$to) | Out-Null
+        Copy-Item -LiteralPath `$_.FullName -Destination `$to -Force
+    }
+}
+if (`$$settingsChange -or (`$$copyStale -and -not (Test-Path `$config))) {
+    & '$($settingsScript -replace "'", "''")' -Path `$config -Port $port | Out-Null
 }
 if (-not `$$taskReady) {
     `$a = New-ScheduledTaskAction -Execute `$exe -WorkingDirectory `$dir
