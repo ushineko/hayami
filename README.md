@@ -598,6 +598,12 @@ MIT. See
 
 ### Unreleased
 
+- **Security**: the udev rule matches each device itself, not a parent
+  device, so a device plugged into a Logitech, Razer, SteelSeries or NZXT hub
+  or dock is no longer opened to the person at the desk; the NZXT rule gave
+  raw USB access to anything behind an NZXT hub (#245, sanshoku 0.1.18).
+  Copy the rule into `/etc/udev/rules.d` again (`install.sh` and the
+  installer do, where they may).
 - **Fix**: an upgrade no longer installs the network helper, or sets up
   LibreHardwareMonitor, again because an earlier install was told to. Both
   are now decided at each install, so an unattended `--yes` upgrade asks for
