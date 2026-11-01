@@ -33,7 +33,7 @@ written here; it is a private advisory until the release that fixes it.
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
-| B7 Supply chain and releases | A tampered binary installed with administrator or root rights | Modelled; hardening is spec 075 |
+| B7 Supply chain and releases | A tampered binary installed with administrator or root rights | Pinned Actions, provenance, secret scanning (spec 075) |
 
 ---
 
@@ -296,12 +296,28 @@ account.
 
 - `make vuln` (govulncheck) before every tagged release.
 - SHA256SUMS on every release.
+- Build provenance on every file a release publishes
+  (`actions/attest-build-provenance`, spec 075): `gh attestation verify
+  <file> -R ushineko/hayami` says this repository's release workflow built
+  it from the tagged commit. The README says how.
+- Every Action is pinned by full commit SHA, and the `pinned` job in
+  `.github/workflows/security.yml` fails a workflow that pins one by tag.
+  Dependabot proposes the next commit, and the Go modules, weekly.
+- Each job declares its own `permissions` and the workflows' default is
+  none. Only the release job writes contents, and only it may mint an
+  OIDC token and write attestations; Scorecard writes security events.
+- gitleaks scans every PR's commits and `main`; its allow-list
+  (`.gitleaks.toml`) is by pattern and path, never by turning a rule off.
 - The committed BPF object is tied to its source by
-  `TestTheObjectWasBuiltFromThisSource` (`internal/netcount/netcount_test.go`).
+  `TestTheObjectWasBuiltFromThisSource` (`internal/netcount/netcount_test.go`);
+  the PR template asks about a changed object, and CI warns on a PR that
+  changes the object without its source.
+- OpenSSF Scorecard runs weekly and on `main`, and publishes its result.
 
-**Not yet known.** Actions are pinned by tag, releases carry no
-provenance, no secret scanner runs, and builds are not reproducible. Spec
-075 takes the first three.
+**Not yet known.** Builds are not reproducible, so provenance says which
+workflow built a file, not that the same source always builds the same
+file. Provenance proves where a file came from, not that its code is sound.
+A maintainer account that can push a tag can still publish a release.
 
 ---
 

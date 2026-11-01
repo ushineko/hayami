@@ -1,0 +1,101 @@
+name: Security
+
+# The supply-chain checks of spec 075, apart from the tests: what a release is
+# built with, and what a pull request may carry. docs/threat-model.md, B7.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # A tag can be moved to other code by whoever controls an Action's
+  # repository; a commit cannot. Every `uses:` names a full commit, with its
+  # version in a comment, and Dependabot proposes the next one.
+  pinned:
+    name: Actions are pinned by commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Every Action is pinned by commit
+        run: |
+          bad=$(grep -nE '^\s*-?\s*uses:\s*[^@[:space:]]+@' .github/workflows/*.yml \
+            | grep -vE 'uses:\s*\./|@[0-9a-f]{40}([[:space:]]|$)' || true)
+          if [ -n "$bad" ]; then
+            echo "Pin these by full commit SHA, with the version in a comment:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "Every Action is pinned by commit."
+
+  # No credential reaches the repository. The allow-list (.gitleaks.toml) is
+  # by path and pattern, for the invented values the tests use.
+  secrets:
+    name: No secrets in the commits
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+          GITLEAKS_ENABLE_SUMMARY: true
+          GITLEAKS_ENABLE_COMMENTS: false
+
+  # The compiled eBPF object is committed so a build needs no clang. A PR
+  # that changes it without its source is said, so a reviewer rebuilds it
+  # with `make bpf` and compares (spec 072 R3, spec 075 R7).
+  bpf:
+    name: The BPF object changes with its source
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: Compare the object with its source
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE"...HEAD)
+          if echo "$changed" | grep -qx 'internal/netcount/netcount_bpfel.o' \
+            && ! echo "$changed" | grep -qx 'internal/netcount/bpf/netcount.bpf.c'; then
+            echo "::warning file=internal/netcount/netcount_bpfel.o::The compiled BPF object changed without its source. A reviewer rebuilds it with make bpf and compares."
+          fi
+
+  # OpenSSF Scorecard: how the repository's own practices read from outside.
+  # Weekly and on main; its result is public and the README links it.
+  scorecard:
+    name: Scorecard
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: results.sarif

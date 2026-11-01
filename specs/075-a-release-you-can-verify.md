@@ -63,7 +63,7 @@ Measured on `main` at ac5caf3:
       one by tag.
 - [ ] Dependabot is configured for Actions and Go modules, and has opened
       its first PR.
-- [ ] Every job declares `permissions`, the default is none, and only the
+- [x] Every job declares `permissions`, the default is none, and only the
       release job writes.
 - [ ] A pre-release tagged from the branch carries attestations that
       `gh attestation verify` accepts for each artifact, and the README
@@ -73,7 +73,21 @@ Measured on `main` at ac5caf3:
       result.
 - [ ] The PR template asks about the BPF object, and CI warns on an object
       changed without its source.
-- [ ] B7's section of the threat model records the defences.
+- [x] B7's section of the threat model records the defences.
+
+## Verification
+
+- Pins: every `uses:` in both workflows names a 40-hex commit with its
+  version in a comment. The `pinned` job's check, run locally, prints
+  nothing on the branch and catches a planted `actions/checkout@v5`.
+- Permissions: both workflows declare `permissions: {}`; every job
+  declares its own. Contents are written only by `release`, which alone
+  holds `id-token` and `attestations`; `scorecard` writes security events
+  (and needs an OIDC token to publish). `secrets` reads pull requests,
+  which gitleaks needs to list a PR's commits.
+- The PR template already asks about the BPF object (spec 072);
+  the `bpf` job adds the warning.
+- B7 in `docs/threat-model.md` lists the defences and what stays open.
 
 ## Threat model delta
 

@@ -1,0 +1,16 @@
+# gitleaks' rules, with an allow-list for what this repository's tests and
+# docs carry on purpose (spec 075): invented tokens and the documentation
+# address ranges. By pattern and path, never by turning a rule off.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "invented values in tests, fixtures and docs"
+regexes = [
+  '''not-a-real-(access|refresh)-token''',
+  '''invented[-_a-z]*''',
+  '''example-not-a-credential''',
+]
+paths = [
+  '''internal/netcount/netcount_bpfel\.o''',
+]
