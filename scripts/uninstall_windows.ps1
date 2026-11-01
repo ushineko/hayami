@@ -79,5 +79,6 @@ Write-Host "  LibreHardwareMonitor and PawnIO, if -WithSensors set them up: othe
 Write-Host "  may have other uses, and LibreHardwareMonitor's startup task. To remove them too, as"
 Write-Host "  administrator:"
 Write-Host "    Unregister-ScheduledTask -TaskName LibreHardwareMonitor"
+Write-Host "    Remove-Item -Recurse `"$([Environment]::GetFolderPath('ProgramFiles'))\LibreHardwareMonitor`""
 Write-Host "    winget uninstall --id LibreHardwareMonitor.LibreHardwareMonitor"
 Write-Host "  and PawnIO from Settings, Apps."

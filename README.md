@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.11
+**Version**: 0.11.12
 
 *a chart you read at a glance*
 
@@ -370,18 +370,27 @@ Without it the processor's row shows the load only, and the hover note and
 
 `install_windows.ps1 -WithSensors` installs and configures it, skipping any
 step already done, and then checks that a temperature is served. Windows asks
-for administrator rights once. To do the same by hand:
+for administrator rights once. It runs LibreHardwareMonitor from a copy in
+`%ProgramFiles%\LibreHardwareMonitor`, not from where winget puts it: the
+startup task runs it with administrator rights at every logon and no prompt,
+and winget's folder, under `%LOCALAPPDATA%`, is one any program you run can
+change. Running the script again after winget updates it refreshes the copy.
+To do the same by hand:
 
-1. `winget install --id LibreHardwareMonitor.LibreHardwareMonitor -e`
-2. Run it as administrator and accept the PawnIO driver it offers on first
-   start.
+1. `winget install --id LibreHardwareMonitor.LibreHardwareMonitor -e`, then,
+   as administrator, copy its folder (under
+   `%LOCALAPPDATA%\Microsoft\WinGet\Packages`) to
+   `%ProgramFiles%\LibreHardwareMonitor`.
+2. Run that copy as administrator and accept the PawnIO driver it offers on
+   first start. Do every step below in that copy.
 3. **Options > Remote Web Server > Run**, port 8085, no authentication
    (hayami sends no password).
 4. **Options > Minimize On Close**, **Start Minimized** and **Minimize To
    Tray**. Without Minimize On Close, closing its window quits it and the
    temperature goes with it.
 5. **Options > Run On Windows Startup**, which starts it at logon with
-   administrator rights and no UAC prompt.
+   administrator rights and no UAC prompt. It registers the copy it is run
+   from, which is why that copy belongs in Program Files.
 
 The script changes only these settings, and keeps the original file as
 `LibreHardwareMonitor.config.bak-hayami`. `uninstall_windows.ps1` leaves
@@ -583,6 +592,18 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.11.12 (2026-11-01)
+
+- **Security**: on Windows, the LibreHardwareMonitor startup task that
+  `install_windows.ps1 -WithSensors` and the installer's Sensors page set up
+  runs a copy in `%ProgramFiles%\LibreHardwareMonitor`, not winget's copy
+  under `%LOCALAPPDATA%`. The task runs it with administrator rights at every
+  logon and no prompt, and any program running as the user could replace
+  winget's copy
+  ([GHSA-32hh-7v39-jrjg](https://github.com/ushineko/hayami/security/advisories/GHSA-32hh-7v39-jrjg)).
+  Run the installer's Sensors page or `install_windows.ps1 -WithSensors`
+  again to move an existing set-up; it stops the old copy and moves the task.
 
 ### 0.11.11 (2026-10-31)
 

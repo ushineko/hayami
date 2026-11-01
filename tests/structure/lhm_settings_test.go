@@ -170,6 +170,7 @@ func TestADryRunOnAFreshMachineSaysEverySensorsStep(t *testing.T) {
 
 	for _, step := range []string{
 		"would run: winget install --id LibreHardwareMonitor.LibreHardwareMonitor --exact",
+		`\LibreHardwareMonitor, which is what the startup task runs`,
 		"would set its settings (stopped first): web server on, port 8085, no password,",
 		"closing the window hides it in the notification area",
 		"would register the startup task 'LibreHardwareMonitor': at logon, highest privileges",
@@ -183,6 +184,56 @@ func TestADryRunOnAFreshMachineSaysEverySensorsStep(t *testing.T) {
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "a dry run wrote something")
+}
+
+/*
+GHSA-32hh-7v39-jrjg. The startup task runs LibreHardwareMonitor with the
+user's full administrator token at every logon, so what it runs is a copy in
+Program Files, never winget's portable install under %LOCALAPPDATA%, which
+the user can write. A dry run on a machine with winget's copy says it would
+copy it and register the task for the copy.
+*/
+func TestTheStartupTaskRunsACopyOnlyAnAdministratorCanChange(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("install_windows.ps1 installs for Windows")
+	}
+	powershell, err := exec.LookPath("powershell.exe")
+	if err != nil {
+		t.Skip("no Windows PowerShell")
+	}
+	dir := t.TempDir()
+	local := filepath.Join(dir, "local")
+	pkg := filepath.Join(local, "Microsoft", "WinGet", "Packages", "LibreHardwareMonitor.LibreHardwareMonitor_Microsoft.Winget.Source_8wekyb3d8bbwe")
+	require.NoError(t, os.MkdirAll(pkg, 0o700))
+	userExe := filepath.Join(pkg, "LibreHardwareMonitor.exe")
+	require.NoError(t, os.WriteFile(userExe, []byte("not a program"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(pkg, "LibreHardwareMonitor.config"), []byte(lhmSettings), 0o600))
+
+	cmd := exec.CommandContext(t.Context(), powershell, "-NoProfile", "-ExecutionPolicy", "Bypass",
+		"-File", filepath.Join(repoRoot(t), "scripts", "install_windows.ps1"),
+		"-DryRun", "-SensorsOnly")
+	cmd.Env = append(os.Environ(), "LOCALAPPDATA="+local, "APPDATA="+filepath.Join(dir, "roaming"),
+		// The user's environment may say anything here; the copy goes to the
+		// known folder all the same.
+		"ProgramFiles="+filepath.Join(dir, "elsewhere"))
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	text := string(out)
+
+	programFiles, err := windowsKnownProgramFiles()
+	require.NoError(t, err)
+	target := filepath.Join(programFiles, "LibreHardwareMonitor", "LibreHardwareMonitor.exe")
+	// The temporary directory may be printed long or short (RUNNER~1), so
+	// winget's folder is matched by its own name.
+	wingetDir := `\Microsoft\WinGet\Packages\` + filepath.Base(pkg)
+	assert.Regexp(t, `would copy it from [^\n]*`+regexp.QuoteMeta(wingetDir)+` to `+regexp.QuoteMeta(filepath.Dir(target)), text)
+	// A machine whose task already runs the copy says so; any other would
+	// register it for the copy.
+	if !strings.Contains(text, "[ok]   startup task 'LibreHardwareMonitor' at highest privileges") {
+		assert.Contains(t, text, "startup task 'LibreHardwareMonitor': not registered for "+target)
+	}
+	assert.NotRegexp(t, `registered for [^\n]*\\WinGet\\Packages\\`, text, "the task is never registered for winget's copy")
+	assert.NotContains(t, text, filepath.Join(dir, "elsewhere"), "%ProgramFiles% from the environment is not where it goes")
 }
 
 // Spec 042. The installer's check reads the processor temperature by the
