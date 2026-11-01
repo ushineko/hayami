@@ -34,8 +34,13 @@ owns the project chose to re-read and compare.
 - R3 Otherwise the access token, refresh token and expiry are set into the
   store as it is now, keeping every key in it, including any written during
   the request.
-- R4 A store that is gone or no longer parses when read again is not
-  written, and the refresh is an error.
+- R4 A store that is gone when read again is not written, and the refresh
+  is an error. A store that cannot be read or parsed is read again, up to
+  five times twenty milliseconds apart (another program part-way through
+  writing it); if it still cannot be, the refreshed tokens are written over
+  the copy read before the request, as every earlier version did. They are
+  the only usable ones: the refresh token just spent may not be accepted
+  again.
 
 ## Acceptance Criteria
 
@@ -46,7 +51,15 @@ owns the project chose to re-read and compare.
       refreshed tokens are written. (`TestARefreshKeepsWhatWasWrittenMeanwhile`.)
 - [x] A store removed during the request is not recreated.
       (`TestARefreshDoesNotRecreateARemovedStore`.)
-- [x] The three tests fail with the write from the earlier copy put back.
+- [x] A store emptied during the request and whole again thirty
+      milliseconds later gets the refreshed tokens.
+      (`TestARefreshWaitsOutAWriteInProgress`.)
+- [x] A store that stays unparseable still gets the refreshed tokens, so the
+      new refresh token is not lost.
+      (`TestARefreshKeepsItsTokensWhenTheFileStaysUnreadable`.)
+- [x] The tests fail with their part of the fix taken out: the first three
+      with the write from the earlier copy put back, the fourth without the
+      retry, the fifth with an unreadable store not written.
 - [x] The existing refresh tests pass: the new token is written, every key
       is kept, a failed refresh leaves the file byte for byte.
 - [x] `make test` and `make lint` pass.
@@ -72,6 +85,13 @@ once it is on `main` (#252).
   access token and kept the refresh token is not detected, and its access
   token is replaced with a newer one from the same refresh token. Nothing
   known writes the file that way.
+- **Review of this change** (spec 073's procedure, one reviewer, findings
+  checked against the code by the author). Fixed here: a second read that
+  failed threw the refreshed tokens away, which with single-use refresh
+  tokens logs the account out (R4 as it now stands). Accepted: the
+  read-to-rename window (above); and that a different refresh token in the
+  file is trusted, even if it is stale or another account's, since the file
+  is the user's and Claude Code's to change.
 - Rollback: revert the commit; the file format is unchanged.
 
 ## Alternatives Considered

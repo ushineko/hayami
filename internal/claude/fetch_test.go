@@ -313,3 +313,55 @@ func TestARefreshDoesNotRecreateARemovedStore(t *testing.T) {
 	require.Error(t, claude.Refresh(t.Context(), client, store, creds))
 	assert.NoFileExists(t, path)
 }
+
+// Spec 077. Claude Code is part-way through writing the file when hayami
+// reads it again: empty for a moment, then whole. hayami waits for it, and
+// its tokens go into the file as Claude Code left it.
+func TestARefreshWaitsOutAWriteInProgress(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+	whole, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, os.WriteFile(path, nil, 0o600))
+		go func() {
+			defer close(done)
+			time.Sleep(30 * time.Millisecond)
+			_ = os.WriteFile(path, whole, 0o600)
+		}()
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","refresh_token":"hayamis-refresh","expires_in":3600}`))
+	})
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+	<-done
+
+	again, err := claude.Read(store)
+	require.NoError(t, err)
+	assert.Equal(t, "hayamis-token", again.AccessToken)
+	assert.Equal(t, "hayamis-refresh", again.RefreshToken)
+}
+
+// Spec 077. A file that stays unreadable is not a reason to lose the tokens
+// just obtained: the refresh token spent may not be accepted again. They are
+// written over the copy read before the request.
+func TestARefreshKeepsItsTokensWhenTheFileStaysUnreadable(t *testing.T) {
+	root := profiles(t)
+	path := storeFile(t, filepath.Join(root, "work"), "enterprise")
+	store := claude.Store{Name: "work", Path: path}
+	creds, err := claude.Read(store)
+	require.NoError(t, err)
+
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o600))
+		_, _ = w.Write([]byte(`{"access_token":"hayamis-token","refresh_token":"hayamis-refresh","expires_in":3600}`))
+	})
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+
+	again, err := claude.Read(store)
+	require.NoError(t, err)
+	assert.Equal(t, "hayamis-refresh", again.RefreshToken, "the new refresh token was lost")
+}
