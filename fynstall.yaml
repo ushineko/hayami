@@ -58,6 +58,9 @@ parameters:
     label: Set up LibreHardwareMonitor
     description: "yes installs and configures LibreHardwareMonitor, where the panel reads the processor's temperature on Windows"
     default: "no"
+    # An action for this install, not a setting: an upgrade does not carry
+    # it, so it is never done again unasked (fynstall 0.2.6, #259).
+    once: true
   # Set by the network page. On the command line: --network=yes. "no" unless
   # a person says otherwise: the helper is a system service (Windows, and
   # Linux with polkit, spec 078), and installing one takes an administrator.
@@ -65,6 +68,9 @@ parameters:
     label: Install the network helper
     description: "yes installs hayami's network helper, the service the bandwidth card's list of programs is read from"
     default: "no"
+    # Likewise: carried, a --yes upgrade ran the helper's install and asked
+    # for an administrator nobody had asked for (#259).
+    once: true
 
 ui:
   launch: bin/hayami{exe}
