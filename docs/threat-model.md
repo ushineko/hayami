@@ -28,7 +28,7 @@ written here; it is a private advisory until the release that fixes it.
 | Boundary | What is at stake | Status |
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
-| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244, #245 open |
+| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244 open |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
@@ -138,7 +138,9 @@ name.
 - The helper's copy is written as `.new` in a root-owned directory and
   renamed into place (`copyProgram`, `internal/nethelper/service_linux.go`).
 - The udev rule grants the logged-in user (`uaccess`) the devices hayami
-  reads, matched by vendor (`packaging/60-sanshoku.rules`).
+  reads, matched by vendor on the device itself and never on a parent, so
+  nothing plugged into one of those vendors' hubs or docks is opened up
+  (`packaging/60-sanshoku.rules`, sanshoku 0.1.18; #245).
 - An uninstall removes the udev rule only when it is the copy the install
   wrote (`uninstall.sh`, `installer/rule_linux.go`).
 - The LibreHardwareMonitor startup task, which runs with the user's full
@@ -156,7 +158,7 @@ prompt names the program, and the person who approves it is trusted to
 mean it.
 
 **Open findings.** #244 (Windows elevated steps trust paths the user can
-write); #245 (the udev rule matches parent devices).
+write).
 Its advisory is fixed in 0.11.12 (GHSA-32hh-7v39-jrjg). The Linux install
 paths held in the first assessment, and the polkit route in its own review
 (spec 078); see "Checked".
