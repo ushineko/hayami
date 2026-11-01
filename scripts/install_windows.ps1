@@ -367,7 +367,10 @@ function Install-Sensors {
         } else {
             Write-Note "as administrator, in one step (Windows asks once):"
             foreach ($s in $steps) { Write-Note "  $s" }
-            $user = "$env:USERDOMAIN\$env:USERNAME"
+            # The account as Windows names it: %USERDOMAIN% is WORKGROUP in a remote
+            # session, where the task's user would not resolve.
+            $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+            $settingsCode = [Convert]::ToBase64String([IO.File]::ReadAllBytes($settingsScript))
             $elevated = @"
 `$ErrorActionPreference = 'Stop'
 `$source = Split-Path -Parent '$($exe -replace "'", "''")'
@@ -393,7 +396,10 @@ if (`$$copyStale) {
     }
 }
 if (`$$settingsChange -or (`$$copyStale -and -not (Test-Path `$config))) {
-    & '$($settingsScript -replace "'", "''")' -Path `$config -Port $port | Out-Null
+    # lhm_settings.ps1's text, carried in this command rather than run from
+    # its file, which is in a directory the user can write (#244).
+    `$settings = [scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$settingsCode')).TrimStart([char]0xFEFF))
+    & `$settings -Path `$config -Port $port | Out-Null
 }
 if (-not `$$taskReady) {
     `$a = New-ScheduledTaskAction -Execute `$exe -WorkingDirectory `$dir

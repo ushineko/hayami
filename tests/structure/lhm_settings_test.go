@@ -251,3 +251,19 @@ func TestTheInstallersCheckReadsThePanelsLabels(t *testing.T) {
 	}
 	assert.Equal(t, core.LHMCPULabels, labels)
 }
+
+// #244. The elevated step carries lhm_settings.ps1's text rather than running
+// the file, which is in a directory the user can write: the command it builds
+// names no script path.
+func TestTheElevatedStepRunsNoScriptByPath(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join(repoRoot(t), "scripts", "install_windows.ps1"))
+	require.NoError(t, err)
+	text := string(body)
+	start := strings.Index(text, "$elevated = @\"")
+	require.Positive(t, start, "the elevated block")
+	end := strings.Index(text[start:], "\"@")
+	require.Positive(t, end)
+	block := text[start : start+end]
+	assert.NotContains(t, block, "$settingsScript", "the elevated block runs a script by its path")
+	assert.Contains(t, block, "FromBase64String('$settingsCode')")
+}
