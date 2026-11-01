@@ -601,7 +601,10 @@ MIT. See
   text in `doctor` and the readings JSON writes your home directory as `~`
   (#246). The HTTP client follows no redirect, so none can carry a token
   elsewhere (#250), and a server's Retry-After is honoured for an hour at
-  most (#247).
+  most, including one another program wrote into the shared cache (#247).
+- **Fix**: refreshing the Claude token works again. Its endpoint moved, and
+  the old address redirected to a page that does not exist, so every refresh
+  failed (#256).
 
 ### 0.11.12 (2026-11-01)
 

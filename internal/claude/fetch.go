@@ -22,7 +22,11 @@ const (
 	// TokenURL is where a refresh is asked for. It is an address, not a
 	// secret: the client id below is Claude Code's own and is published in
 	// every copy of it.
-	TokenURL = "https://console.anthropic.com/api/oauth/token" //nolint:gosec // an endpoint, not a credential
+	//
+	// It moved: console.anthropic.com/api/oauth/token now answers 301 to an
+	// address that is 404, so every refresh failed (#256). /v1/oauth/token is
+	// served on the new host, where the old address's redirect points.
+	TokenURL = "https://platform.claude.com/v1/oauth/token" //nolint:gosec // an endpoint, not a credential
 
 	// ClientID is Claude Code's own OAuth client. The refresh is the one
 	// Claude Code would make; presenting a different client would be asking

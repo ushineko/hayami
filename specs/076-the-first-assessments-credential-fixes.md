@@ -1,6 +1,6 @@
 # 076 — the first assessment's credential fixes
 
-**Issue**: #246, #247, #249, #250
+**Issue**: #246, #247, #249, #250, #256
 
 ## Status: COMPLETE
 
@@ -53,8 +53,22 @@ spec 077.
   field through it; `doctor`'s `line` passes its three columns through it.
   The network helper's error text, cleaned on its own since 0.11.11, uses
   the same function.
-- R5 JSON output is unchanged: `encoding/json` already escapes control
+- R5 JSON output is unchanged: `encoding/json` already escapes C0 control
   characters.
+- R6 `safetext.WithoutHome` writes the home as `~` only where it is a whole
+  path (followed by a separator, the end, or punctuation that ends a path),
+  so a home of `/home/al` leaves `/home/alice`; a home of `/` or of one
+  character is left alone; on Windows it ignores case and either slash.
+  `panel.reason`, the error `doctor` prints for a source that failed to
+  poll, and the readings JSON's `error` all use it.
+- R7 A gate read from the shared cache holds for at most the larger of the
+  caller's freshness window and an hour (`usage.MaxWait`), counted from the
+  file's modification time. Another program writes the same file and
+  honours a server's Retry-After without a limit.
+- R8 The token endpoint is `https://platform.claude.com/v1/oauth/token`
+  (#256). The old address now answers 301 to a 404, which a client that
+  follows no redirect reports as the 301 and one that does reports as the
+  404: refresh failed in every released version.
 
 ## Acceptance Criteria
 
@@ -72,6 +86,18 @@ spec 077.
       painter's own colour survives. (`TestASectionCarriesNoEscapeItWasGiven`.)
 - [x] A detail and a `doctor` line likewise.
       (`TestADetailCarriesNoEscapeItWasGiven`, `TestADoctorLineCarriesNoEscape`.)
+- [x] A home of `/home/al` leaves `/home/alice` alone, `/` and one-character
+      homes are not replaced, and a quoted or trailing home is.
+      (`TestTheHomeIsReplacedOnlyAsAWholePath`.)
+- [x] A source's poll error names `~` and not the home in `doctor`'s report
+      and the readings JSON. (`TestAPollErrorDoesNotNameTheUsersHome`.)
+- [x] A gate another program wrote a century ahead holds inside the hour
+      after the file was written and lets hayami fetch after it.
+      (`TestAGateFromAnotherProgramHoldsForAnHourAtMost`.)
+- [x] The token endpoint is the one Anthropic serves: checked with an
+      unauthenticated request that `/v1/oauth/token` answers on
+      `platform.claude.com` and the old address redirects to a 404. A real
+      refresh is not tried, as it would spend the desk's refresh token.
 - [x] Each test above was seen to fail with its fix taken out.
 - [x] `make test` and `make lint` pass; `go vet` passes for Windows on the
       changed packages.
@@ -95,6 +121,20 @@ moves #246, #247, #249 and #250 from open findings to defences once it is on
   control character in it.
 - **`~` is the user's home only.** A path under another account's home is
   shown as it is; hayami reads no other account's files.
+- **Review of this change** (spec 073's procedure, one reviewer, findings
+  checked against the code by the author). Fixed here: poll errors that
+  bypassed the redaction; substring matches in the redaction; the shared
+  cache bypassing the Retry-After cap; and the token endpoint, which the
+  review's question about redirects uncovered (#256). Accepted:
+  - JSON output passes C1 characters (U+0080–U+009F) as UTF-8, as
+    `encoding/json` does. JSON is for programs; a terminal in UTF-8 mode
+    acts on the 8-bit forms only in xterm's non-default settings.
+  - `Detail.printable` does not clean a meter's badge or window, which in a
+    detail are hayami's own letters.
+  - Bidirectional and format characters (U+202E) are not stripped: they can
+    reorder what a pasted report shows, not drive the terminal.
+- **The new token endpoint is not exercised by a real refresh here**: after
+  release, daily use on this desk is the check.
 - Rollback: revert the commit; nothing is stored differently.
 
 ## E2E Test Plan

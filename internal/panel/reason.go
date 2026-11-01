@@ -2,9 +2,9 @@ package panel
 
 import (
 	"os"
-	"strings"
 
 	"github.com/ushineko/hayami/internal/core"
+	"github.com/ushineko/hayami/internal/safetext"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -45,10 +45,10 @@ paste into bug reports; the user's name does not go with it (spec 076).
 */
 func withoutHome(text string) string {
 	home, err := userHome()
-	if err != nil || len(home) < 2 {
+	if err != nil {
 		return text
 	}
-	return strings.ReplaceAll(text, home, "~")
+	return safetext.WithoutHomeOf(text, home)
 }
 
 // userHome is os.UserHomeDir; a variable, so a test can name a home.

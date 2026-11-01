@@ -248,7 +248,7 @@ func Report(w io.Writer, findings []Finding) error {
 			}
 		}
 		if f.Err != nil {
-			if err := line(w, "", "", "! "+f.Err.Error()); err != nil {
+			if err := line(w, "", "", "! "+safetext.WithoutHome(f.Err.Error())); err != nil {
 				return err
 			}
 		}

@@ -31,3 +31,20 @@ func TestALimitCutsBetweenCharacters(t *testing.T) {
 	assert.Equal(t, "a", safetext.Printable("aé", 2), "é is two bytes and does not fit after a")
 	assert.Equal(t, "abcdef", safetext.Printable("abcdef", 0))
 }
+
+// Spec 076. The home is written as ~ only where it is a whole path: a longer
+// name that begins with it is another directory, and a home of / or of one
+// character would rewrite everything.
+func TestTheHomeIsReplacedOnlyAsAWholePath(t *testing.T) {
+	for _, c := range []struct{ home, in, want string }{
+		{"/home/al", "open /home/al/.claude/x: permission denied", "open ~/.claude/x: permission denied"},
+		{"/home/al", "open /home/alice/x: denied", "open /home/alice/x: denied"},
+		{"/home/al/", "open /home/al/.cache: denied", "open ~/.cache: denied"},
+		{"/home/al", "in /home/al", "in ~"},
+		{"/home/al", "'/home/al' and /home/al: twice", "'~' and ~: twice"},
+		{"/", "open /etc/x: denied", "open /etc/x: denied"},
+		{"/h", "open /h/x", "open /h/x"},
+	} {
+		assert.Equal(t, c.want, safetext.WithoutHomeOf(c.in, c.home), "home %q in %q", c.home, c.in)
+	}
+}

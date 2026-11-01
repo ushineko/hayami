@@ -12,6 +12,8 @@ Printable on its way out, before the pane adds colours of its own.
 package safetext
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -41,5 +43,67 @@ func Printable(text string, n int) string {
 		}
 		b.WriteRune(r)
 	}
+	return b.String()
+}
+
+/*
+WithoutHome is text with the user's home directory written as ~ wherever it
+appears as a path: an error from the filesystem names its file, the file is
+under the home, and the home names the user. What doctor prints and the
+readings JSON carries is pasted into bug reports (spec 076).
+*/
+func WithoutHome(text string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return text
+	}
+	return WithoutHomeOf(text, home)
+}
+
+/*
+WithoutHomeOf is WithoutHome for a given home. The home is replaced only
+where it is a whole path, followed by a separator or by the end of a word: a
+home of /home/al leaves /home/alice alone. A home of fewer than two
+characters below the root is not replaced at all. On Windows the comparison
+ignores case and either slash.
+*/
+func WithoutHomeOf(text, home string) string {
+	home = strings.TrimRight(filepath.Clean(home), `/\`)
+	if len(strings.Trim(home, `/\:`)) < 2 {
+		return text
+	}
+	forms := []string{home}
+	if filepath.Separator == '\\' {
+		forms = append(forms, filepath.ToSlash(home))
+	}
+	for _, form := range forms {
+		text = replacePath(text, form, filepath.Separator == '\\')
+	}
+	return text
+}
+
+// replacePath writes ~ for every occurrence of home in text that ends at a
+// path boundary.
+func replacePath(text, home string, fold bool) string {
+	hay, needle := text, home
+	if fold {
+		hay, needle = strings.ToLower(text), strings.ToLower(home)
+	}
+	var b strings.Builder
+	last := 0
+	for i := 0; ; {
+		j := strings.Index(hay[i:], needle)
+		if j < 0 {
+			break
+		}
+		start, end := i+j, i+j+len(needle)
+		if end == len(text) || strings.ContainsRune(`/\ :'"`+"`"+`)]},;`, rune(text[end])) {
+			b.WriteString(text[last:start])
+			b.WriteString("~")
+			last = end
+		}
+		i = end
+	}
+	b.WriteString(text[last:])
 	return b.String()
 }
