@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,6 +20,9 @@ import (
 // The error is the filesystem's own, from a real file this account may not
 // read.
 func TestAReasonDoesNotNameTheUsersHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not deny a file by its mode")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root reads any file")
 	}
