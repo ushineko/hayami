@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.8
+**Version**: 0.11.9
 
 *a chart you read at a glance*
 
@@ -535,7 +535,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.9 (2026-10-31)
 
 - **Added**: "Every device on one line" on the Sections page of the
   preferences. With it on, the peripherals card puts every device on one line
