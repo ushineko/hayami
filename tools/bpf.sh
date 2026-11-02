@@ -12,7 +12,8 @@
 # image because the same tools outside it give other bytes on another machine:
 # the same program, with its type names in another order.
 #
-# Needs docker. Set BPF_TOOLS to a directory to keep the download between runs.
+# Needs docker. Set BPF_TOOLS to a directory to keep the download between runs;
+# what is already in it is not checked again, so it is for a desk, not for CI.
 
 set -euo pipefail
 
@@ -21,6 +22,12 @@ LLVM_VERSION=23.1.4
 LLVM_SHA256=25d814fda50d5fb0084b42be09605d8b1595d49d5e2e03a3345d7e112ff6f9f3
 LIBBPF_VERSION=1.7.0
 LIBBPF_SHA256=7ab5feffbf78557f626f2e3e3204788528394494715a30fc2070fcddc2051b7b
+
+OUTPUTS=(
+    internal/netcount/netcount_bpfel.o
+    internal/netcount/netcount_bpfel.go
+    internal/netcount/source_hash.go
+)
 
 ME="$(basename "$0")"
 die() { echo "$ME: $*" >&2; exit 1; }
@@ -62,18 +69,31 @@ if [[ ! -f "$TOOLS/libbpf/src/bpf_helpers.h" ]]; then
     rm -f "$TOOLS/libbpf.tar.gz"
 fi
 
+# Removed first, so a build that writes nothing cannot pass on what was there.
+rm -f "${OUTPUTS[@]}"
+
 docker run --rm --user "$(id -u):$(id -g)" \
     -v "$REPO:/src" \
     -v "$TOOLS/llvm:/tools/llvm:ro" \
     -v "$TOOLS/libbpf/src:/usr/include/bpf:ro" \
     -e HOME=/tmp -e GOCACHE=/tmp/cache -e GOPATH=/tmp/go -e GOTOOLCHAIN=local \
     -e BPF2GO_CC=/tools/llvm/bin/clang -e BPF2GO_STRIP=/tools/llvm/bin/llvm-strip \
-    -w /src/internal/netcount "$IMAGE" go generate
+    -w /src/internal/netcount "$IMAGE" go generate generate.go
+
+for output in "${OUTPUTS[@]}"; do
+    [[ -s "$output" ]] || die "the build did not write $output"
+done
 
 [[ "$MODE" == check ]] || exit 0
 
+# Byte for byte against what is committed. git status would see through a
+# .gitattributes that rewrites the file.
+for output in "${OUTPUTS[@]}"; do
+    git cat-file blob "HEAD:$output" | cmp - "$output" \
+        || die "$output is not what its source builds: run make bpf, or find out why"
+done
 if [[ -n "$(git status --porcelain -- internal/netcount)" ]]; then
     git status --short -- internal/netcount >&2
-    die "the committed BPF object is not what its source builds: run make bpf, or find out why"
+    die "the build changed something else in internal/netcount"
 fi
 echo "The committed BPF object is what its source builds."

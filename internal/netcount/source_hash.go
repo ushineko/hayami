@@ -3,4 +3,4 @@
 package netcount
 
 // sourceHash is the SHA-256 of bpf/netcount.bpf.c when netcount_bpfel.o was built from it.
-const sourceHash = "6147aaee73ef21ef7c39857689ed0c3ce63b86c03f7e7f0dbadfcc7654889b6b"
+const sourceHash = "4b8178a1bad8e6ebdb28740bde277db205a22b991048cf6b0548e7e91017a417"

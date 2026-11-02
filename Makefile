@@ -104,7 +104,7 @@ check-no-binaries: ## Fail if a compiled binary is tracked in the repository
 	file -b internal/netcount/netcount_bpfel.o | grep -q eBPF \
 	    || { echo "internal/netcount/netcount_bpfel.o is not an eBPF object" >&2; exit 1; }; \
 	found=$$( { git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
-	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff|mach-binary)|vnd\.microsoft\.portable-executable)' \
+	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff|mach-binary|xz|bzip2)|gzip|zip|zstd|vnd\.microsoft\.portable-executable)' \
 	    | cut -d: -f1; git ls-files '*.o' '*.a' '*.so' '*.syso'; } \
 	    | sort -u | grep -vxF 'internal/netcount/netcount_bpfel.o'); \
 	if [ -n "$$found" ]; then \
@@ -133,7 +133,8 @@ bpf-check: ## Fail if the committed eBPF object is not what its source builds
 # depends on them; changing them changes the object. Needs bpftool.
 .PHONY: bpf-vmlinux
 bpf-vmlinux: ## Write vmlinux.h again from the running kernel (bpftool)
-	bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/netcount/bpf/vmlinux.h
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/netcount/bpf/vmlinux.h.new
+	mv internal/netcount/bpf/vmlinux.h.new internal/netcount/bpf/vmlinux.h
 
 .PHONY: test
 test: ## Run the tests with the race detector

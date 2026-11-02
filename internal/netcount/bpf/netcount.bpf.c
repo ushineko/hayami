@@ -6,9 +6,9 @@
 // interfaces. `make bpf` compiles this into netcount_bpfel.o, which is
 // committed; building hayami needs no clang.
 //
-// vmlinux.h is not committed: `make bpf` writes it from the running kernel's
-// BTF. Every kernel structure here is read through CO-RE, so the object runs
-// on kernels other than the one it was built on.
+// vmlinux.h is committed, because the object depends on it: `make bpf-vmlinux`
+// writes it from the running kernel's BTF. Every kernel structure here is read
+// through CO-RE, so the object runs on other kernels than the one it came from.
 
 #include "vmlinux.h"
 #include <bpf/bpf_core_read.h>

@@ -22,6 +22,7 @@ type workflowStep struct {
 
 type workflowJob struct {
 	Uses        string            `yaml:"uses"`
+	Needs       []string          `yaml:"needs"`
 	Permissions map[string]string `yaml:"permissions"`
 	Steps       []workflowStep    `yaml:"steps"`
 }
@@ -148,6 +149,9 @@ func releaseWorkflowFaults(wf workflow) []string {
 	if len(builders) == 0 {
 		faults = append(faults, "the publishing job takes no artifacts")
 	}
+	if !slices.Contains(wf.Jobs["release"].Needs, "bpf-rebuilt") {
+		faults = append(faults, "the release does not wait for the BPF object to be compared")
+	}
 	if !checksMain {
 		faults = append(faults, "nothing checks that a release is a commit on refs/remotes/origin/main")
 	}
@@ -201,6 +205,7 @@ jobs:
       - run: make release
       - uses: actions/upload-artifact@abc
   release:
+    needs: [bpf-rebuilt]
     permissions: {contents: write}
     steps:
       - uses: actions/checkout@abc
@@ -213,30 +218,31 @@ jobs:
 	publish := `gh release create "$TAG" dist/*.exe`
 	read := `permissions: {contents: read}`
 	cases := map[string]struct{ from, to, want string }{
-		"the publishing job builds":   {publish, `make release`, "runs: make"},
-		"it runs make, last":          {publish, "echo x; make", "runs: make"},
-		"it runs Go":                  {publish, `go run ./tools/x`, "runs: go"},
-		"it runs what it was handed":  {publish, `./dist/hayami --version`, "runs: ./dist/hayami"},
-		"it runs it under sudo":       {publish, `sudo ./dist/x`, "runs: sudo"},
-		"it runs it from a pipe":      {publish, `curl x | bash`, "runs: curl"},
-		"it sources a file":           {publish, `source ./x`, "runs: source"},
-		"it branches on a program":    {publish, `if ./x; then echo; fi`, "runs: if"},
-		"it hides in a substitution":  {publish, `echo "$(./x)"`, "runs: ./x"},
-		"it uses another Action":      {`actions/download-artifact@abc`, `softprops/action-gh-release@abc`, "uses softprops"},
-		"the build can write":         {read, `permissions: {contents: write}`, "job build holds write rights"},
-		"the build inherits rights":   {read, ``, "job build holds write rights"},
-		"the build reads a cache":     {`{cache: "false"}`, `{cache: "true"}`, "from a cache"},
-		"it spells the Action oddly":  {"uses: actions/setup-go@abc\n        with: {cache: \"false\"}", "uses: Actions/Setup-Go@abc", "from a cache"},
-		"the build keeps a cache":     {`      - run: make release`, "      - uses: actions/cache@abc\n      - run: make release", "from a cache"},
-		"the build takes other files": {`      - run: make release`, "      - uses: actions/download-artifact@abc\n      - run: make release", "another job's files"},
-		"the build runs tests":        {`make release`, `go  test ./...`, "runs tests"},
-		"the build lints":             {`make release`, `make lint`, "runs tests or the linter"},
-		"it takes a file by name":     {`{artifact-ids: "${{ needs.build.outputs.artifact-id }}"}`, `{name: out}`, "not by its job's ID"},
-		"nothing checks main":         {`git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main`, `echo fine`, "refs/remotes/origin/main"},
-		"a short name checks main":    {`refs/remotes/origin/main`, `origin/main`, "refs/remotes/origin/main"},
-		"a job is another workflow":   {"jobs:\n", "jobs:\n  other:\n    uses: a/b/.github/workflows/c.yml@abc\n    permissions: {contents: read}\n", "is another workflow"},
-		"the build keeps its token":   {read + "\n    steps:\n      - uses: actions/checkout@abc\n        with: {persist-credentials: \"false\"}", read + "\n    steps:\n      - uses: actions/checkout@abc", "builds the release and keeps its token"},
-		"the publisher keeps a token": {"permissions: {contents: write}\n    steps:\n      - uses: actions/checkout@abc\n        with: {persist-credentials: \"false\"}", "permissions: {contents: write}\n    steps:\n      - uses: actions/checkout@abc", "keeps its token after checkout"},
+		"the publishing job builds":     {publish, `make release`, "runs: make"},
+		"it runs make, last":            {publish, "echo x; make", "runs: make"},
+		"it runs Go":                    {publish, `go run ./tools/x`, "runs: go"},
+		"it runs what it was handed":    {publish, `./dist/hayami --version`, "runs: ./dist/hayami"},
+		"it runs it under sudo":         {publish, `sudo ./dist/x`, "runs: sudo"},
+		"it runs it from a pipe":        {publish, `curl x | bash`, "runs: curl"},
+		"it sources a file":             {publish, `source ./x`, "runs: source"},
+		"it branches on a program":      {publish, `if ./x; then echo; fi`, "runs: if"},
+		"it hides in a substitution":    {publish, `echo "$(./x)"`, "runs: ./x"},
+		"it uses another Action":        {`actions/download-artifact@abc`, `softprops/action-gh-release@abc`, "uses softprops"},
+		"the build can write":           {read, `permissions: {contents: write}`, "job build holds write rights"},
+		"the build inherits rights":     {read, ``, "job build holds write rights"},
+		"the build reads a cache":       {`{cache: "false"}`, `{cache: "true"}`, "from a cache"},
+		"it spells the Action oddly":    {"uses: actions/setup-go@abc\n        with: {cache: \"false\"}", "uses: Actions/Setup-Go@abc", "from a cache"},
+		"the build keeps a cache":       {`      - run: make release`, "      - uses: actions/cache@abc\n      - run: make release", "from a cache"},
+		"the build takes other files":   {`      - run: make release`, "      - uses: actions/download-artifact@abc\n      - run: make release", "another job's files"},
+		"the build runs tests":          {`make release`, `go  test ./...`, "runs tests"},
+		"the build lints":               {`make release`, `make lint`, "runs tests or the linter"},
+		"it takes a file by name":       {`{artifact-ids: "${{ needs.build.outputs.artifact-id }}"}`, `{name: out}`, "not by its job's ID"},
+		"nothing checks main":           {`git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main`, `echo fine`, "refs/remotes/origin/main"},
+		"a short name checks main":      {`refs/remotes/origin/main`, `origin/main`, "refs/remotes/origin/main"},
+		"a release skips the BPF check": {`needs: [bpf-rebuilt]`, `needs: []`, "BPF object"},
+		"a job is another workflow":     {"jobs:\n", "jobs:\n  other:\n    uses: a/b/.github/workflows/c.yml@abc\n    permissions: {contents: read}\n", "is another workflow"},
+		"the build keeps its token":     {read + "\n    steps:\n      - uses: actions/checkout@abc\n        with: {persist-credentials: \"false\"}", read + "\n    steps:\n      - uses: actions/checkout@abc", "builds the release and keeps its token"},
+		"the publisher keeps a token":   {"permissions: {contents: write}\n    steps:\n      - uses: actions/checkout@abc\n        with: {persist-credentials: \"false\"}", "permissions: {contents: write}\n    steps:\n      - uses: actions/checkout@abc", "keeps its token after checkout"},
 	}
 
 	parse := func(src string) workflow {

@@ -31,6 +31,13 @@ runs in a pinned image, on a desk and in CI, and the object it gives is committe
 - R4 `make bpf` no longer depends on the running kernel. `make bpf-vmlinux`
   writes the header again when that is wanted.
 - R5 B7 records the check and what it trusts.
+- R6 A release waits for the check: the job is in the workflow a tag runs, and
+  `release` and the build jobs need it.
+- R7 The build names `generate.go`, removes what it writes first, requires it
+  written, and compares bytes against the committed blobs, so a stray directive,
+  a build tag or a `.gitattributes` cannot make it pass.
+- R8 `vmlinux.h` may hold only what bpftool writes, and `bpf/` only that and the
+  source, enforced by a test.
 
 ## Acceptance Criteria
 
@@ -48,6 +55,12 @@ runs in a pinned image, on a desk and in CI, and the object it gives is committe
       unchanged.
 - [x] R5: B7 records it.
 - [ ] R3: the job is a required check.
+- [x] R6: `TestTheReleaseIsBuiltApartFromWhatPublishesIt` fails a release that
+      does not need the job.
+- [x] R7: on a clean tree `tools/bpf.sh check` passes; planted cases are on the
+      throwaway PR.
+- [x] R8: `TestVmlinuxHoldsOnlyTypes` passes, and `TestVmlinuxFaultsAreFound` finds
+      a macro, an include, asm, a function, and the spellings around them.
 
 ## Threat model delta
 

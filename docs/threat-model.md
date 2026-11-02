@@ -361,10 +361,12 @@ account.
   one; the secrets and BPF checks are required on `main`; Dependabot alerts and
   security updates are on (specs 079, 080).
 
-**Not yet known.** The BPF comparison trusts its inputs: a PR can change the
-script's pins and `vmlinux.h` along with the object, and a reviewer reading a
-3 MB header's diff is the check on that. A change to `.github/` or `tools/` in
-such a PR is the thing to look for.
+**Not yet known.** The BPF comparison is about the object, not the process that
+loads it: Go code in the helper can replace the bytes before loading them, and any
+module linked into it runs with its capabilities. A PR can change the script, the
+job or the test along with the object, so a change to `.github/`, `tools/` or those
+tests in such a PR is the thing to look for; there is one maintainer and no second
+pair of eyes to require.
 Some inputs sit unpinned behind pinned Actions: Scorecard's container is a
 mutable tag, the test jobs' `setup-go` reads its manifest from a branch, and
 `gitleaks-action` downloads its binary with no checksum check found. Those run

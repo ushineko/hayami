@@ -167,6 +167,21 @@ jobs:
           "dist/hayami-$v-windows-amd64-cli-installer.exe" --dry-run --yes
           "dist/hayami-$v-windows-amd64-installer.exe" --version | grep -F "hayami $v installer"
 
+  # A warning is for a mistake. This is for intent: the object the network helper
+  # loads is rebuilt from its source with pinned tools, in a pinned image, and has
+  # to come out the same (spec 081). In this workflow so a tag cannot skip it.
+  bpf-rebuilt:
+    name: The BPF object is what its source builds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rebuild the object and compare it
+        run: tools/bpf.sh check
+
   # What a release publishes is built by the two jobs below and published by
   # the one after them (spec 079). Tests, the linter and the fuzzer run code
   # the release does not ship, and the jobs above may share a cache; neither
@@ -179,7 +194,7 @@ jobs:
   # reported, not by a name another job could reuse.
   build-linux:
     name: Build the Linux release
-    needs: [test, fuzz, windows]
+    needs: [test, fuzz, windows, bpf-rebuilt]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     outputs:
@@ -241,7 +256,7 @@ jobs:
 
   build-windows:
     name: Build the Windows release
-    needs: [test, fuzz, windows]
+    needs: [test, fuzz, windows, bpf-rebuilt]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     outputs:
@@ -308,7 +323,7 @@ jobs:
   # the AUR and the other architectures are a later problem.
   release:
     name: Release
-    needs: [test, fuzz, windows, build-linux, build-windows]
+    needs: [test, fuzz, windows, bpf-rebuilt, build-linux, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Writes the release; id-token and attestations sign what it publishes.
