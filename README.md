@@ -140,13 +140,16 @@ it was built by this repository's release workflow, from the tagged
 commit. Check one before running it, with the GitHub CLI:
 
 ```
-gh attestation verify hayami-<version>-linux-amd64-installer -R ushineko/hayami
+gh attestation verify hayami-<version>-linux-amd64-installer -R ushineko/hayami \
+  --signer-workflow ushineko/hayami/.github/workflows/build.yml \
+  --source-ref refs/tags/v<version>
 ```
 
-A file changed after the build, or built anywhere else, fails.
-A version with a hyphen (`0.11.14-rc.1`) is a pre-release, whatever the
-release page says of it: it may be built from a branch, and is not for
-installing unless you are trying it on purpose.
+A file changed after the build, built anywhere else, or from another tag
+fails. The check says nothing about the file's name, so use the version you
+meant to install. A version with a hyphen (`0.11.14-rc.1`) is a pre-release,
+whatever the release page says of it: it may be built from a branch, and is
+not for installing unless you are trying it on purpose.
 `SHA256SUMS` in the same release says a download is whole; the attestation
 says who built it. How the repository's practices read from outside is its
 [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/ushineko/hayami).
@@ -621,10 +624,13 @@ MIT. See
   jobs run no tests, read no cache and can write nothing; the job that signs
   and publishes runs no code from the repository or its modules. A release
   without a suffix must be a commit on `main` (spec 079, #268).
+- **Security**: the pin check parses the workflows and is part of the required
+  tests, a tracked object or `.syso` file fails the build, and Dependabot waits
+  a week before proposing a version (spec 080, #270, #271, #272). The README's
+  attestation command checks the workflow and the tag as well (#269).
 - **Security**: every file a release publishes carries build provenance,
-  checked with `gh attestation verify <file> -R ushineko/hayami` (spec 075,
-  #242). The workflows' Actions are pinned by commit and kept current by
-  Dependabot, each job has only the permissions it needs, and every pull
+  checked with `gh attestation verify` as Installing says (spec 075, #242).
+  The workflows' Actions are pinned by commit and kept current by Dependabot, each job has only the permissions it needs, and every pull
   request is scanned for secrets.
 - **Security**: the udev rule matches each device itself, not a parent
   device, so a device plugged into a Logitech, Razer, SteelSeries or NZXT hub

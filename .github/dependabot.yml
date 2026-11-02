@@ -1,12 +1,16 @@
 # Keeps the pinned Actions and the Go modules current (spec 075). Weekly, and
 # grouped, so a week's updates are one pull request per ecosystem, reviewed
-# and merged like any other.
+# and merged like any other. A version is a week old before it is proposed: a
+# bad release is usually found and pulled by then (spec 080). Security updates
+# do not wait.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -17,6 +21,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       modules:
         patterns: ["*"]

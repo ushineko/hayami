@@ -9,8 +9,8 @@ on:
 
 # Nothing by default; each job says what it needs (spec 075). Actions are
 # pinned by commit, not by tag, which whoever controls an Action's repository
-# can move; Dependabot keeps the pins current, and security.yml fails a
-# workflow that names one by tag.
+# can move; Dependabot keeps the pins current, and
+# tests/structure/actions_pinned_test.go fails a workflow that names one by tag.
 permissions: {}
 
 # The Go every job builds with: the newest patch release of this line, looked

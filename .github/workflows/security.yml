@@ -14,27 +14,6 @@ on:
 permissions: {}
 
 jobs:
-  # A tag can be moved to other code by whoever controls an Action's
-  # repository; a commit cannot. Every `uses:` names a full commit, with its
-  # version in a comment, and Dependabot proposes the next one.
-  pinned:
-    name: Actions are pinned by commit
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Every Action is pinned by commit
-        run: |
-          bad=$(grep -nE '^\s*-?\s*uses:\s*[^@[:space:]]+@' .github/workflows/*.yml \
-            | grep -vE 'uses:\s*\./|@[0-9a-f]{40}([[:space:]]|$)' || true)
-          if [ -n "$bad" ]; then
-            echo "Pin these by full commit SHA, with the version in a comment:"
-            echo "$bad"
-            exit 1
-          fi
-          echo "Every Action is pinned by commit."
-
   # No credential reaches the repository. The allow-list (.gitleaks.toml) is
   # by path and pattern, for the invented values the tests use.
   secrets:

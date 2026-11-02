@@ -45,6 +45,10 @@ LINT_PROGRAM=$(LINT_NAME)-$(LINT_VERSION)
 # Release asset coordinates for the pinned linter version.
 # (The upstream install.sh is not used: its checksum extraction matches the
 # .sbom.json asset line and fails verification on recent releases.)
+# The checksums come from the same release as the tarball, so the checksums
+# file is pinned here: a release replaced after this line was written fails.
+# Dependabot does not track this; a new LINT_VERSION needs a new hash.
+LINT_CHECKSUMS_SHA256=9accc7943a5b4be44416a7d4efa7efb3d18c7f1919d6581cc3536e185301a2d4
 LINT_VERSION_NUM=$(LINT_VERSION:v%=%)
 LINT_BASE_URL=https://github.com/golangci/golangci-lint/releases/download/$(LINT_VERSION)
 
@@ -61,6 +65,8 @@ $(BINDIR)/bin/$(LINT_PROGRAM):
 	tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	curl -fsSL "$(LINT_BASE_URL)/$$dist.tar.gz" -o "$$tmp/$$dist.tar.gz"; \
 	curl -fsSL "$(LINT_BASE_URL)/$(LINT_NAME)-$(LINT_VERSION_NUM)-checksums.txt" -o "$$tmp/checksums.txt"; \
+	sums=$$( (sha256sum "$$tmp/checksums.txt" 2>/dev/null || shasum -a 256 "$$tmp/checksums.txt") | awk '{print $$1}'); \
+	if [ "$$sums" != "$(LINT_CHECKSUMS_SHA256)" ]; then echo "checksums file mismatch: want '$(LINT_CHECKSUMS_SHA256)' got '$$sums'"; exit 1; fi; \
 	want=$$(awk -v f="$$dist.tar.gz" '$$2 == f {print $$1}' "$$tmp/checksums.txt"); \
 	got=$$( (sha256sum "$$tmp/$$dist.tar.gz" 2>/dev/null || shasum -a 256 "$$tmp/$$dist.tar.gz") | awk '{print $$1}'); \
 	if [ -z "$$want" ] || [ "$$want" != "$$got" ]; then echo "checksum mismatch for $$dist.tar.gz: want '$$want' got '$$got'"; exit 1; fi; \
@@ -94,9 +100,13 @@ lint: install-lint ## Lint files
 # tests skip where no sound server is listening.
 .PHONY: check-no-binaries
 check-no-binaries: ## Fail if a compiled binary is tracked in the repository
-	@found=$$(git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
-	    | grep -E 'application/x-(executable|sharedlib|pie-executable|archive)' \
-	    | cut -d: -f1); \
+	@command -v file >/dev/null || { echo "check-no-binaries needs file(1)" >&2; exit 1; }; \
+	file -b internal/netcount/netcount_bpfel.o | grep -q eBPF \
+	    || { echo "internal/netcount/netcount_bpfel.o is not an eBPF object" >&2; exit 1; }; \
+	found=$$( { git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
+	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff|mach-binary)|vnd\.microsoft\.portable-executable)' \
+	    | cut -d: -f1; git ls-files '*.o' '*.a' '*.so' '*.syso'; } \
+	    | sort -u | grep -vxF 'internal/netcount/netcount_bpfel.o'); \
 	if [ -n "$$found" ]; then \
 	    echo "Compiled binaries are tracked in this repository:" >&2; \
 	    echo "$$found" | sed 's/^/  /' >&2; \
