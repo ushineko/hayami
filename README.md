@@ -618,7 +618,7 @@ MIT. See
 
 ## Changelog
 
-### 0.11.14
+### 0.11.14 (2026-11-01)
 
 - **Security**: a release is built apart from what publishes it. The build
   jobs run no tests, read no cache and can write nothing; the job that signs
