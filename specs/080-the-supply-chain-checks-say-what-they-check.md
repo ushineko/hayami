@@ -2,7 +2,7 @@
 
 **Issue**: #269, #270, #271, #272
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -45,7 +45,7 @@ that passed objects, and a dependency flow with no delay.
 - [x] R7: `cooldown` is set for both ecosystems.
 - [x] R8: `make install-lint` installs with the pinned hash and fails with
       another.
-- [ ] R9: the settings are on, and a Dependabot PR and this repository's
+- [x] R9: the settings are on, and a Dependabot PR and this repository's
       workflows still run with `sha_pinning_required` true.
 
 ## Threat model delta
@@ -84,6 +84,12 @@ in `Test and lint`, already required.
 1. This PR's own checks pass, with the removed job gone. (R3, R5)
 2. After the settings: a Dependabot PR runs its checks. (R7, R9)
 3. The next pre-release's files with the README's command, exit 0. (R1)
+
+### Results, 2026-11-01
+
+With the settings on, Build and Security dispatched on `main` passed, Scorecard's
+container included, and Dependabot's #266 ran its checks. No release has run with
+`sha_pinning_required` on; every Action its jobs use, nested ones too, is pinned.
 
 ### Prod visibility
 

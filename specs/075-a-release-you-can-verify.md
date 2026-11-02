@@ -61,7 +61,7 @@ Measured on `main` at ac5caf3:
 
 - [x] Every Action is pinned by SHA, and the check fails a branch that pins
       one by tag.
-- [ ] Dependabot is configured for Actions and Go modules, and has opened
+- [x] Dependabot is configured for Actions and Go modules, and has opened
       its first PR.
 - [x] Every job declares `permissions`, the default is none, and only the
       release job writes.
@@ -69,7 +69,7 @@ Measured on `main` at ac5caf3:
       `gh attestation verify` accepts for each artifact, and the README
       says how.
 - [x] gitleaks fails a branch with a planted fake key and passes `main`.
-- [ ] The Scorecard action has run on `main` and the README links its
+- [x] The Scorecard action has run on `main` and the README links its
       result.
 - [ ] The PR template asks about the BPF object, and CI warns on an object
       changed without its source.

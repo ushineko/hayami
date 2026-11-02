@@ -2,7 +2,7 @@
 
 **Issue**: #268
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -49,7 +49,7 @@ a file; it is worth what the signing job can trust.
 - [x] R6: the check refuses a tag without a suffix on a commit not on `main`,
       including with a tag named `origin/main` present, run locally against the
       step's script.
-- [ ] Immutable releases and a tag ruleset are on (repository settings,
+- [x] Immutable releases and a tag ruleset are on (repository settings,
       applied after this merges), and B7's "Not yet known" says so.
 
 ## Threat model delta
