@@ -35,6 +35,13 @@ written here; it is a private advisory until the release that fixes it.
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
 | B7 Supply chain and releases | A tampered binary installed with administrator or root rights | Pinned Actions, provenance, secret scanning (spec 075) |
 
+**Accepted.** The opt-in LibreHardwareMonitor install runs `winget` with no
+version pinned (`scripts/install_windows.ps1`, `installer/sensors.go`), and
+that program runs as administrator and loads a kernel driver. Winget checks an
+installer against its manifest's hash by its own documentation, not verified
+here. A pin would hold people on a version after its fixes, so hayami does not
+pin it (#269).
+
 ---
 
 ## B1 Privileged helpers
@@ -314,12 +321,16 @@ account.
 - `make vuln` (govulncheck) before every tagged release.
 - SHA256SUMS on every release.
 - Build provenance on every file a release publishes
-  (`actions/attest-build-provenance`, spec 075): `gh attestation verify
-  <file> -R ushineko/hayami` says this repository's release workflow built
-  it from the tagged commit. The README says how.
-- Every Action is pinned by full commit SHA, and the `pinned` job in
-  `.github/workflows/security.yml` fails a workflow that pins one by tag.
-  Dependabot proposes the next commit, and the Go modules, weekly.
+  (`actions/attest-build-provenance`, spec 075). The README's `gh attestation
+  verify` names the repository, `build.yml` and the tag, so it says this
+  repository's release workflow built the file from that tag. It does not
+  check the file's name: a genuine file of another version under an
+  installer's name fails only on the tag.
+- Every Action is pinned by full commit SHA, or digest for `docker://`, and
+  `tests/structure/actions_pinned_test.go` parses the workflows and fails one
+  that is not, in the required tests. Dependabot proposes the next commit, and
+  the Go modules, weekly, a week after a version appears. The linter's
+  checksums file is pinned in the `Makefile`.
 - Each job declares its own `permissions` and the workflows' default is
   none. Only the release job writes contents, and only it may mint an
   OIDC token and write attestations; Scorecard writes security events.
@@ -337,8 +348,17 @@ account.
   `TestTheObjectWasBuiltFromThisSource` (`internal/netcount/netcount_test.go`);
   the PR template asks about a changed object, and CI warns on a PR that
   changes the object without its source.
+- `make check-no-binaries` fails on any tracked compiled file, by type and by
+  name (`.o`, `.a`, `.so`, `.syso`), with `netcount_bpfel.o` the one exception.
 - OpenSSF Scorecard runs weekly and on `main`, and publishes its result.
 
+**Not yet known.** The BPF object's checks catch a mistake, not intent: the
+test hashes the source only, and an object built from other source passes with
+a comment changed in the `.c`. Only a reviewer running `make bpf` compares it.
+Three inputs sit unpinned behind pinned Actions: Scorecard's container is a
+mutable tag, `setup-go` reads its manifest from a branch and downloads Go, and
+`gitleaks-action` downloads its binary with no checksum check found. None of
+them runs in the jobs that build or publish a release, apart from Go itself.
 **Not yet known.** Builds are not reproducible, so provenance says which
 workflow built a file, not that the same source always builds the same
 file. Provenance proves where a file came from, not that its code is sound.
