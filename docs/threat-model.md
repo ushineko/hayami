@@ -323,6 +323,14 @@ account.
 - Each job declares its own `permissions` and the workflows' default is
   none. Only the release job writes contents, and only it may mint an
   OIDC token and write attestations; Scorecard writes security events.
+- What a release publishes is built apart from what publishes it (spec
+  079). `build-linux` and `build-windows` run no tests, read no cache, keep
+  no token and can write nothing. The `release` job runs no code from the
+  repository or its modules. `tests/structure/release_workflow_test.go`
+  holds the workflow to this.
+- A release without a suffix must be a commit on `main`; the `release` job
+  checks. A maintainer account can edit that check in the tag's workflow,
+  but a token without the `workflow` scope cannot.
 - gitleaks scans every PR's commits and `main`; its allow-list
   (`.gitleaks.toml`) is by pattern and path, never by turning a rule off.
 - The committed BPF object is tied to its source by
@@ -334,6 +342,10 @@ account.
 **Not yet known.** Builds are not reproducible, so provenance says which
 workflow built a file, not that the same source always builds the same
 file. Provenance proves where a file came from, not that its code is sound.
+The attestation names the `release` job, which signs what the build jobs
+hand it: a module linked into the panel still ships its code, and is signed
+with it, and a forged artifact in the same run would need the runtime token,
+which `run` steps do not hold (reaching it from runner memory was not tried).
 A maintainer account that can push a tag can still publish a release: no
 rule limits which commit a tag names, so that commit need not be on `main`
 or reviewed, and the tag's own workflow runs. With immutable releases off,

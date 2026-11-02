@@ -614,6 +614,10 @@ MIT. See
 
 ### Unreleased
 
+- **Security**: a release is built apart from what publishes it. The build
+  jobs run no tests, read no cache and can write nothing; the job that signs
+  and publishes runs no code from the repository or its modules. A release
+  without a suffix must be a commit on `main` (spec 079, #268).
 - **Security**: every file a release publishes carries build provenance,
   checked with `gh attestation verify <file> -R ushineko/hayami` (spec 075,
   #242). The workflows' Actions are pinned by commit and kept current by
