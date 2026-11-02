@@ -42,7 +42,7 @@ a file; it is worth what the signing job can trust.
 - [x] R7: `TestReleaseWorkflowFaultsAreFound` finds each planted fault.
 - [x] R8: B7 records the separation, and that the attestation trusts the build
       jobs.
-- [ ] R1 to R6, R9, R10 on GitHub: a pre-release tagged from this branch builds in the
+- [x] R1 to R6, R9, R10 on GitHub: a pre-release tagged from this branch builds in the
       new jobs, publishes as a pre-release not marked latest, carries all six
       files, and each passes `gh attestation verify` with `--signer-workflow`
       and `--source-ref`.
@@ -94,6 +94,21 @@ Environment: GitHub Actions, a `v<next>-rc.N` tag pushed from this branch with
    --signer-workflow ushineko/hayami/.github/workflows/build.yml --source-ref
    refs/tags/<tag>`: exit 0. A file changed by a byte: exit 1. (R4)
 4. An installer from the pre-release installs and runs on a desk.
+
+### Results, v0.11.14-rc.3 (run 41393440827)
+
+1. `build-linux` and `build-windows` restored no cache, kept no token and took
+   Go 1.27.3 from go.dev. `release` ran no Go and no make. Pass.
+2. A pre-release, not latest (`releases/latest` stayed v0.11.13), six files, the
+   changelog entry above the generated notes. Pass.
+3. All six files exit 0 with the README's flags. A file changed by a byte, the
+   wrong tag and the wrong workflow each exit 1. Pass.
+4. The Linux installer test against the published files, in its own home and
+   PID namespace: installs over a panel and uninstalls. Pass. The Windows
+   installers ran `--version` and `--dry-run` in `build-windows` only.
+
+`--latest` and the `main` check have not run on GitHub: they first run at the
+next stable release.
 
 ### Prod visibility
 
