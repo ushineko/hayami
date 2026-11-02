@@ -65,7 +65,7 @@ Measured on `main` at ac5caf3:
       its first PR.
 - [x] Every job declares `permissions`, the default is none, and only the
       release job writes.
-- [ ] A pre-release tagged from the branch carries attestations that
+- [x] A pre-release tagged from the branch carries attestations that
       `gh attestation verify` accepts for each artifact, and the README
       says how.
 - [x] gitleaks fails a branch with a planted fake key and passes `main`.
@@ -91,6 +91,18 @@ Measured on `main` at ac5caf3:
   `security.yml:26 actions/checkout@v5`; `No secrets in the commits`
   failed with `github-pat` in `tmpplant/plant.go`. On #264 itself, both
   pass.
+- Provenance, E2E: `v0.11.14-rc.2`, tagged from a throwaway commit on
+  this branch (VERSION, `fynstall.yaml` and the changelog heading set to
+  the pre-release; never merged). Every job passed, and the release was
+  published as a pre-release, not the latest (0.11.13 stayed latest). All
+  six files downloaded, `sha256sum -c SHA256SUMS` OK, and `gh attestation
+  verify <file> -R ushineko/hayami` accepted each one; the certificate
+  names `build.yml@refs/tags/v0.11.14-rc.2` and the tagged commit. A copy
+  of the Linux installer with one byte changed failed (no attestation for
+  its digest), and the real file checked against `-R ushineko/sanshoku`
+  failed. The first attempt, `v0.11.14-rc.1`, failed its tests before the
+  release step (`fynstall.yaml` carries the version too) and published
+  nothing.
 - The PR template already asks about the BPF object (spec 072);
   the `bpf` job adds the warning.
 - B7 in `docs/threat-model.md` lists the defences and what stays open.
