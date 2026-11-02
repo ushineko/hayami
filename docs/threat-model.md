@@ -363,10 +363,14 @@ account.
 
 **Not yet known.** The BPF comparison is about the object, not the process that
 loads it: Go code in the helper can replace the bytes before loading them, and any
-module linked into it runs with its capabilities. A PR can change the script, the
-job or the test along with the object, so a change to `.github/`, `tools/` or those
-tests in such a PR is the thing to look for; there is one maintainer and no second
-pair of eyes to require.
+module linked into it runs with its capabilities. A payload for that need not look
+like a binary: an XOR'd or base64 file passes `check-no-binaries`, and a recipe in
+the `Makefile` can add `-overlay`. A PR can change the script, the job, the tests or
+`generate.go` along with the object, so a change to `.github/`, `tools/`, the
+`Makefile`, `generate.go` or those tests in such a PR is the thing to look for; there
+is one maintainer and no second pair of eyes to require. A `vmlinux.h` can only hold
+types, but its values are not checked: `IPPROTO_TCP = 200` builds and passes, and
+gives wrong counts. A diff there from a kernel bump is the place to hide that.
 Some inputs sit unpinned behind pinned Actions: Scorecard's container is a
 mutable tag, the test jobs' `setup-go` reads its manifest from a branch, and
 `gitleaks-action` downloads its binary with no checksum check found. Those run
@@ -573,3 +577,16 @@ stops each. A review starts by reading these.
   body before the generated notes.
 - `file` missing on the runner: it is in the image's toolset, and the check now
   fails without it.
+
+### B7, spec 081, 2026-11-02
+
+- A tag changing only the BPF object: the release jobs need `bpf-rebuilt`, in the
+  tag's own workflow.
+- A `//go:generate` in another file, `//go:build ignore` on `generate.go`, `GOFLAGS`
+  in the `Makefile`, or a no-op compiler: none passes the comparison.
+- `.gitattributes` `text`, `eol` or `ident` on the object: each fails the comparison
+  or the status check.
+- A shadow `bpf/bpf/` header: `TestVmlinuxHoldsOnlyTypes` holds the directory.
+- `BPF_TOOLS` in CI: nothing sets it; on a desk, what is in it is not checked again.
+- The container's writable mount: no token, no socket, and no later step in the job.
+- The image's multi-architecture digest: an index pins its children.

@@ -2,7 +2,7 @@
 
 **Issue**: #242
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -71,7 +71,7 @@ Measured on `main` at ac5caf3:
 - [x] gitleaks fails a branch with a planted fake key and passes `main`.
 - [x] The Scorecard action has run on `main` and the README links its
       result.
-- [ ] The PR template asks about the BPF object, and CI warns on an object
+- [x] The PR template asks about the BPF object, and CI warns on an object
       changed without its source.
 - [x] B7's section of the threat model records the defences.
 
@@ -105,6 +105,10 @@ Measured on `main` at ac5caf3:
   nothing.
 - The PR template already asks about the BPF object (spec 072);
   the `bpf` job adds the warning.
+- The warning, E2E: throwaway draft PR #282 changed one byte of the object
+  with its source unchanged, and `The BPF object changes with its source`
+  raised it on the changed file. Spec 081 adds a rebuild, for what a warning
+  cannot see.
 - B7 in `docs/threat-model.md` lists the defences and what stays open.
 
 ## Threat model delta

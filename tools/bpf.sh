@@ -48,7 +48,14 @@ if [[ "$MODE" == check && -n "$(git status --porcelain -- internal/netcount)" ]]
     die "internal/netcount has uncommitted changes; a comparison would mean nothing"
 fi
 
-TOOLS="${BPF_TOOLS:-$(mktemp -d)}"
+[[ "$(uname -m)" == x86_64 ]] || die "the LLVM this pins is for x86_64"
+
+if [[ -n "${BPF_TOOLS:-}" ]]; then
+    TOOLS="$BPF_TOOLS"
+else
+    TOOLS="$(mktemp -d)"
+    trap 'rm -rf "$TOOLS"' EXIT
+fi
 mkdir -p "$TOOLS"
 TOOLS="$(cd "$TOOLS" && pwd)"
 
@@ -68,6 +75,8 @@ if [[ ! -f "$TOOLS/libbpf/src/bpf_helpers.h" ]]; then
     tar -xzf "$TOOLS/libbpf.tar.gz" -C "$TOOLS/libbpf" --strip-components=1
     rm -f "$TOOLS/libbpf.tar.gz"
 fi
+
+docker pull --quiet "$IMAGE" >/dev/null
 
 # Removed first, so a build that writes nothing cannot pass on what was there.
 rm -f "${OUTPUTS[@]}"

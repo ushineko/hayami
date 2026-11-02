@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -59,8 +60,9 @@ func TestALineIsWhatMovedBetweenTwoReadings(t *testing.T) {
 // The committed object is built from the committed source. Editing the
 // program without `make bpf` would ship the old program under the new
 // source, and a reviewer reading the C would be reading the wrong thing.
-// The preprocessor lines bpftool writes into a vmlinux.h.
-var vmlinuxDirectives = map[string]bool{
+// What bpftool writes into a vmlinux.h that is not a plain type: these lines, to
+// the byte.
+var vmlinuxLines = map[string]bool{
 	"#ifndef __VMLINUX_H__":                true,
 	"#define __VMLINUX_H__":                true,
 	"#ifndef BPF_NO_PRESERVE_ACCESS_INDEX": true,
@@ -78,17 +80,30 @@ var vmlinuxDirectives = map[string]bool{
 	"#ifndef BPF_NO_KFUNC_PROTOTYPES": true,
 	"#pragma clang attribute pop":     true,
 	"#endif /* __VMLINUX_H__ */":      true,
+	"/* BPF kfuncs */":                true,
 }
 
-var vmlinuxCode = regexp.MustCompile(`\basm\b|__asm|incbin|\)\s*\{|^\s*(%:|\?\?=)|\\$`)
+var (
+	// Any line but those holds none of these: a directive by any spelling, a
+	// comment to put in front of one, a continuation, or code.
+	vmlinuxCode = regexp.MustCompile(`[#\r\\]|%:|\?\?|/\*|\*/|//|_Pragma|__pragma|__declspec|\basm\b|__asm|incbin|section\s*\(|\bstatic\b|[^\t\x20-\x7e]`)
+	// A brace opens a type, and a line closes one; a function's never appears.
+	vmlinuxBrace     = regexp.MustCompile(`^\s*(typedef\s+)?((const|volatile)\s+)*(struct|union|enum)\b[^(){]*\{(\}[^(){]*;)?$`)
+	vmlinuxAttribute = regexp.MustCompile(`__attribute__\s*\(\(\s*(\w+)`)
+)
 
-// vmlinuxFaults names the lines of a vmlinux.h that are not what bpftool writes.
+// vmlinuxFaults names the lines of a vmlinux.h that bpftool would not have written.
 func vmlinuxFaults(src string) []string {
 	var faults []string
 	for number, line := range strings.Split(src, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "#") && !vmlinuxDirectives[line] {
-			faults = append(faults, fmt.Sprintf("line %d: %s", number+1, line))
-		} else if vmlinuxCode.MatchString(line) {
+		if vmlinuxLines[line] {
+			continue
+		}
+		bad := vmlinuxCode.MatchString(line) || (strings.Contains(line, "{") && !vmlinuxBrace.MatchString(line))
+		for _, attribute := range vmlinuxAttribute.FindAllStringSubmatch(line, -1) {
+			bad = bad || !slices.Contains([]string{"packed", "mode", "aligned", "address_space"}, attribute[1])
+		}
+		if bad {
 			faults = append(faults, fmt.Sprintf("line %d: %s", number+1, line))
 		}
 	}
@@ -122,21 +137,64 @@ func TestVmlinuxHoldsOnlyTypes(t *testing.T) {
 }
 
 func TestVmlinuxFaultsAreFound(t *testing.T) {
-	assert.Empty(t, vmlinuxFaults("#ifndef __VMLINUX_H__\n#define __VMLINUX_H__\nstruct a {\n\tu16 disasm_flags;\n};\n#endif /* __VMLINUX_H__ */\n"))
+	assert.Empty(t, vmlinuxFaults("#ifndef __VMLINUX_H__\n#define __VMLINUX_H__\nstruct a {\n\tu16 disasm_flags;\n\tunsigned int static_flags;\n};\nstruct b {};\ntypedef struct {\n} c;\nenum d {\n\tD = 1,\n} __attribute__((mode(byte)));\n#endif /* __VMLINUX_H__ */\n"))
 
 	for name, src := range map[string]string{
-		"a macro":       "#define bpf_skb_load_bytes(s,o,t,l) x\n",
-		"an include":    "#include \"evil.h\"\n",
-		"a spaced hash": "  #  define x 1\n",
-		"an undef":      "#undef __weak\n",
-		"a line macro":  "%:define x 1\n",
-		"asm":           "__asm__(\".incbin \\\"x\\\"\");\n",
-		"a function":    "static inline int f(void) {\n\treturn 1;\n}\n",
-		"a trigraph":    "??=define x 1\n",
-		"a continued":   "#define __weak \\\n__attribute__((weak))\n",
+		"a macro":             "#define bpf_skb_load_bytes(s,o,t,l) x\n",
+		"an include":          "#include \"evil.h\"\n",
+		"a spaced hash":       "  #  define x 1\n",
+		"an undef":            "#undef __weak\n",
+		"a digraph":           "%:define x 1\n",
+		"a trigraph":          "??=define x 1\n",
+		"a comment first":     "/**/#define x 1\n",
+		"a comment across":    "/* a\n*/ #define x 1\n",
+		"a digraph, comment":  "/**/%:define x 1\n",
+		"a bare carriage":     "struct a {};\r#define x 1\n",
+		"a byte order mark":   "\xef\xbb\xbf#define x 1\n",
+		"a misplaced comment": "  /* BPF kfuncs */\n",
+		"a line comment":      "int a; // x\n",
+		"a continuation":      "#define __weak \\\n__attribute__((weak))\n",
+		"a pragma operator":   "_Pragma(\"clang optimize off\")\n",
+		"asm":                 "__asm__(\".incbin \\\"x\\\"\");\n",
+		"a function":          "static inline int f(void) {\n\treturn 1;\n}\n",
+		"a brace below":       "int f(void)\n{\n\treturn 1;\n}\n",
+		"a section":           "__attribute__((section(\"kprobe/x\"), used)) int h;\n",
+		"another attribute":   "__attribute__((used)) int h;\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert.NotEmpty(t, vmlinuxFaults(src))
 		})
 	}
+}
+
+// A build that does something else leaves a clean tree too, so what it runs is
+// held here: compile, then write the hash, with nothing after them and no other
+// include path. Changing the build means changing this, in plain sight.
+func TestTheBuildIsTheOneDirectivesSay(t *testing.T) {
+	src, err := os.ReadFile("generate.go")
+	require.NoError(t, err)
+	var directives []string
+	for _, line := range strings.Split(string(src), "\n") {
+		if strings.HasPrefix(line, "//go:generate") {
+			directives = append(directives, line)
+		}
+	}
+	assert.Equal(t, []string{
+		`//go:generate go run github.com/cilium/ebpf/cmd/bpf2go@v0.22.0 -tags linux -target bpfel -go-package netcount netcount bpf/netcount.bpf.c -- -O2 -g -Wall -Werror -Ibpf`,
+		`//go:generate sh -c "printf '// Code generated by go generate; DO NOT EDIT.\\n\\npackage netcount\\n\\n// sourceHash is the SHA-256 of bpf/netcount.bpf.c when netcount_bpfel.o was built from it.\\nconst sourceHash = \"%s\"\\n' $(sha256sum bpf/netcount.bpf.c | cut -d' ' -f1) > source_hash.go"`,
+	}, directives)
+}
+
+// The source is what a reviewer reads, so what it compiles has to be in it.
+func TestTheSourceIncludesAndEmbedsNothingElse(t *testing.T) {
+	src, err := os.ReadFile("bpf/netcount.bpf.c")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		`#include "vmlinux.h"`,
+		`#include <bpf/bpf_core_read.h>`,
+		`#include <bpf/bpf_endian.h>`,
+		`#include <bpf/bpf_helpers.h>`,
+		`#include <bpf/bpf_tracing.h>`,
+	}, regexp.MustCompile(`(?m)^[ \t]*(#[ \t]*include|%:[ \t]*include).*$`).FindAllString(string(src), -1))
+	assert.NotRegexp(t, `\basm\b|__asm|incbin|_Pragma`, string(src))
 }

@@ -36,17 +36,17 @@ runs in a pinned image, on a desk and in CI, and the object it gives is committe
 - R7 The build names `generate.go`, removes what it writes first, requires it
   written, and compares bytes against the committed blobs, so a stray directive,
   a build tag or a `.gitattributes` cannot make it pass.
-- R8 `vmlinux.h` may hold only what bpftool writes, and `bpf/` only that and the
-  source, enforced by a test.
+- R8 `vmlinux.h` may hold only what bpftool writes, line by line, and `bpf/` only
+  that and the source. `generate.go`'s directives, and what the source includes, are
+  held by tests. Only `Makefile` is a makefile. All enforced in the required tests.
 
 ## Acceptance Criteria
 
-- [ ] R1, R3: the job passes on this PR's tree.
-- [ ] R1: on a throwaway draft PR, an object with one byte changed fails the job
-      and raises the existing warning (which also closes spec 075's last
-      criterion).
-- [ ] R1: on that PR, an object changed along with the `.c` and `source_hash.go`
-      fails the job, where the older checks are silent.
+- [x] R1, R3: the job passes on this PR's tree, on `ubuntu-latest`.
+- [x] R1: on throwaway draft PR #282, an object with one byte changed raised the
+      existing warning, which closes spec 075's last criterion.
+- [x] R1: on that PR, with the `.c` and `source_hash.go` also changed from `main`, the
+      warning stayed silent and the job failed: `netcount_bpfel.o differ: byte 9001`.
 - [x] R2: the script's hashes match LLVM's published digest and the libbpf tag;
       `make bpf-check` passes on a desk.
 - [x] The new object differs from the old in `.BTF` only, and the two `.BTF`s hold
@@ -60,14 +60,18 @@ runs in a pinned image, on a desk and in CI, and the object it gives is committe
 - [x] R7: on a clean tree `tools/bpf.sh check` passes; planted cases are on the
       throwaway PR.
 - [x] R8: `TestVmlinuxHoldsOnlyTypes` passes, and `TestVmlinuxFaultsAreFound` finds
-      a macro, an include, asm, a function, and the spellings around them.
+      each evasion the refutation pass tried: a comment before a directive, a
+      digraph, a bare carriage return, a byte order mark, `_Pragma`, a brace on the
+      next line, a section attribute, and others.
 
 ## Threat model delta
 
 Boundary B7, for what reaches boundary B1's helper. Before: a PR could replace
 the object with one built from other source, and only a reviewer running
-`make bpf` would see. After: that fails a required check. An attacker has to
-change the script's pins or `vmlinux.h` too, which shows in the diff.
+`make bpf` would see. After: that fails a check a release waits for. An attacker has
+to change the script, `generate.go`, the job or the tests too, which shows in the
+diff; `vmlinux.h` can change only as types, and Go code can still swap the bytes at
+load time. B7 records each.
 `docs/threat-model.md` B7 is updated in this PR. The PR gets the document's
 adversarial review.
 

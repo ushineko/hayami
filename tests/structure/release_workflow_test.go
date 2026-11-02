@@ -259,3 +259,10 @@ jobs:
 		})
 	}
 }
+
+// make prefers these to Makefile, so one would change what every target does.
+func TestOnlyTheMakefileIsAMakefile(t *testing.T) {
+	for _, name := range []string{"GNUmakefile", "makefile"} {
+		assert.NoFileExists(t, filepath.Join("..", "..", name))
+	}
+}
