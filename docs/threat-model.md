@@ -28,7 +28,7 @@ written here; it is a private advisory until the release that fixes it.
 | Boundary | What is at stake | Status |
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
-| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its advisory fixed in 0.11.12; #244 open |
+| B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its findings fixed (the advisory in 0.11.12, #244 and #245 since) |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Modelled; fuzzing is spec 074 |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
@@ -137,6 +137,14 @@ name.
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
 - The helper's copy is written as `.new` in a root-owned directory and
   renamed into place (`copyProgram`, `internal/nethelper/service_linux.go`).
+- On Windows the helper's program goes into Program Files as the known
+  folder names it, not as `%ProgramFiles%` says, and is copied from a handle
+  the install opens first, which no other process may rename or replace
+  while it is held (`Dir`, `openSelf`, `internal/nethelper/service_windows.go`;
+  #244).
+- The elevated PowerShell step carries `lhm_settings.ps1`'s text in its
+  command rather than running the file, which is in a directory the user can
+  write (`Install-Sensors`, `scripts/install_windows.ps1`; #244).
 - The udev rule grants the logged-in user (`uaccess`) the devices hayami
   reads, matched by vendor on the device itself and never on a parent, so
   nothing plugged into one of those vendors' hubs or docks is opened up
@@ -157,8 +165,7 @@ already running as the user could replace it before the prompt. polkit's
 prompt names the program, and the person who approves it is trusted to
 mean it.
 
-**Open findings.** #244 (Windows elevated steps trust paths the user can
-write).
+**Open findings.** None from the first assessment: #244 and #245 are fixed.
 Its advisory is fixed in 0.11.12 (GHSA-32hh-7v39-jrjg). The Linux install
 paths held in the first assessment, and the polkit route in its own review
 (spec 078); see "Checked".

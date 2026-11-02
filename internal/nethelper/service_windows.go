@@ -77,8 +77,17 @@ const (
 )
 
 // Dir is where the service's program is kept.
+//
+// Program Files is the known folder's, not %ProgramFiles%'s: the user's
+// environment can set that variable, and an elevated install that followed
+// it would put the service's program in a directory the user can write
+// (#244).
 func Dir() string {
-	return filepath.Join(os.Getenv("ProgramFiles"), "hayami")
+	base, err := windows.KnownFolderPath(windows.FOLDERID_ProgramFiles, 0)
+	if err != nil {
+		base = os.Getenv("ProgramFiles")
+	}
+	return filepath.Join(base, "hayami")
 }
 
 // Probe finds what there is of the helper. It needs no administrator.
@@ -126,6 +135,15 @@ run again: a service already there is stopped, given the new program and the
 new account, and left stopped for a panel to start.
 */
 func Install(allow, version string) error {
+	// This program is held open first, before the service is stopped (which
+	// can take seconds), and copied from that handle: the file is the user's
+	// to change, and one renamed aside and replaced in the meantime would be
+	// the program the service then runs as Local Service (#244).
+	self, err := openSelf()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = self.Close() }()
 	sid, err := windows.StringToSid(allow)
 	if err != nil {
 		return fmt.Errorf("%q is not an account's SID: %w", allow, err)
@@ -145,7 +163,7 @@ func Install(allow, version string) error {
 		}
 	}
 
-	path, err := copyProgram()
+	path, err := copyProgram(self)
 	if err != nil {
 		return err
 	}
@@ -206,11 +224,8 @@ func allowStart(service *mgr.Service, sid *windows.SID) error {
 // copyProgram puts this program in Program Files as the service's own, and
 // returns where. The directory inherits Program Files' access list: readable
 // by everyone, written by administrators.
-func copyProgram() (string, error) {
-	self, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("finding this program: %w", err)
-	}
+func copyProgram(in *os.File) (string, error) {
+	self := in.Name()
 	dir := Dir()
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // Program Files' own access list governs it
 		return "", fmt.Errorf("making %s: %w", dir, err)
@@ -219,11 +234,6 @@ func copyProgram() (string, error) {
 	if strings.EqualFold(self, dest) {
 		return dest, nil
 	}
-	in, err := os.Open(self) //nolint:gosec // this program's own file
-	if err != nil {
-		return "", fmt.Errorf("reading %s: %w", self, err)
-	}
-	defer func() { _ = in.Close() }()
 	tmp := dest + ".new"
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec // a program, in Program Files
 	if err != nil {
@@ -451,4 +461,29 @@ func RunElevated(ctx context.Context, exe string, args ...string) error {
 		return fmt.Errorf("the elevated step ended with code %d", code) //nolint:err113 // the code is the message
 	}
 	return nil
+}
+
+// openSelf is this program's file, opened so that nobody else may write,
+// rename or delete it while it is held.
+func openSelf() (*os.File, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("finding this program: %w", err)
+	}
+	return openLocked(self)
+}
+
+// openLocked opens path for reading, sharing read access only: a rename or a
+// replacement, which needs delete access, is refused while it is open.
+func openLocked(path string) (*os.File, error) {
+	name, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	h, err := windows.CreateFile(name, windows.GENERIC_READ, windows.FILE_SHARE_READ, nil,
+		windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return os.NewFile(uintptr(h), path), nil
 }

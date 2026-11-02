@@ -604,6 +604,14 @@ MIT. See
   raw USB access to anything behind an NZXT hub (#245, sanshoku 0.1.18).
   Copy the rule into `/etc/udev/rules.d` again (`install.sh` and the
   installer do, where they may).
+- **Security**: on Windows, the steps that run as an administrator no
+  longer trust paths the user can write (#244). The network helper's program
+  goes into Program Files as Windows names it, whatever `%ProgramFiles%`
+  says, and is copied from a file held open from the start of the install,
+  so it cannot be swapped part-way; the LibreHardwareMonitor set-up carries
+  its settings code in its command instead of running a script from a
+  temporary directory. Setting up LibreHardwareMonitor also works from a
+  remote session, where `%USERDOMAIN%` named the wrong account.
 - **Fix**: an upgrade no longer installs the network helper, or sets up
   LibreHardwareMonitor, again because an earlier install was told to. Both
   are now decided at each install, so an unattended `--yes` upgrade asks for
