@@ -59,7 +59,7 @@ Measured on `main` at ac5caf3:
 
 ## Acceptance Criteria
 
-- [ ] Every Action is pinned by SHA, and the check fails a branch that pins
+- [x] Every Action is pinned by SHA, and the check fails a branch that pins
       one by tag.
 - [ ] Dependabot is configured for Actions and Go modules, and has opened
       its first PR.
@@ -68,7 +68,7 @@ Measured on `main` at ac5caf3:
 - [ ] A pre-release tagged from the branch carries attestations that
       `gh attestation verify` accepts for each artifact, and the README
       says how.
-- [ ] gitleaks fails a branch with a planted fake key and passes `main`.
+- [x] gitleaks fails a branch with a planted fake key and passes `main`.
 - [ ] The Scorecard action has run on `main` and the README links its
       result.
 - [ ] The PR template asks about the BPF object, and CI warns on an object
@@ -85,6 +85,12 @@ Measured on `main` at ac5caf3:
   holds `id-token` and `attestations`; `scorecard` writes security events
   (and needs an OIDC token to publish). `secrets` reads pull requests,
   which gitleaks needs to list a PR's commits.
+- E2E, PR #265 (a draft from a throwaway branch, closed and deleted): one
+  `uses:` pinned by tag and a random, never-issued `ghp_` string in a Go
+  file. `Actions are pinned by commit` failed naming
+  `security.yml:26 actions/checkout@v5`; `No secrets in the commits`
+  failed with `github-pat` in `tmpplant/plant.go`. On #264 itself, both
+  pass.
 - The PR template already asks about the BPF object (spec 072);
   the `bpf` job adds the warning.
 - B7 in `docs/threat-model.md` lists the defences and what stays open.
