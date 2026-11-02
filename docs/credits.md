@@ -19,7 +19,7 @@ carry the detail. In short:
 | [LibrePods](https://github.com/librepods-org/librepods) | GPL-3.0 | Apple's accessory protocol over L2CAP for AirPods (spec 009). |
 | [HeadsetControl](https://github.com/Sapd/HeadsetControl) | GPL-3.0 | The Arctis Nova Pro Wireless base station, read through it as a subprocess until spec 020, then directly. |
 | [liquidctl](https://github.com/liquidctl/liquidctl) | GPL-3.0 | The Kraken, read through it as a subprocess until spec 020; its protocol work is what the direct driver was learned from. |
-| The Linux kernel | GPL-2.0 | hidraw, hwmon by label, BlueZ over D-Bus, `/proc/net/dev`. |
+| The Linux kernel | GPL-2.0 | hidraw, hwmon by label, BlueZ over D-Bus, `/proc/net/dev`. `internal/netcount/bpf/vmlinux.h` is generated from its type information, and the eBPF program compiled against it, `netcount.bpf.c`, is GPL-2.0-only. |
 
 ## Built on
 
