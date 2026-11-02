@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.13
+**Version**: 0.11.14-rc.3
 
 *a chart you read at a glance*
 
@@ -615,7 +615,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.14-rc.3
 
 - **Security**: a release is built apart from what publishes it. The build
   jobs run no tests, read no cache and can write nothing; the job that signs
