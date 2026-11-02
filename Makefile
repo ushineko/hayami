@@ -100,8 +100,11 @@ lint: install-lint ## Lint files
 # tests skip where no sound server is listening.
 .PHONY: check-no-binaries
 check-no-binaries: ## Fail if a compiled binary is tracked in the repository
-	@found=$$( { git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
-	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff)|vnd\.microsoft\.portable-executable)' \
+	@command -v file >/dev/null || { echo "check-no-binaries needs file(1)" >&2; exit 1; }; \
+	file -b internal/netcount/netcount_bpfel.o | grep -q eBPF \
+	    || { echo "internal/netcount/netcount_bpfel.o is not an eBPF object" >&2; exit 1; }; \
+	found=$$( { git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
+	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff|mach-binary)|vnd\.microsoft\.portable-executable)' \
 	    | cut -d: -f1; git ls-files '*.o' '*.a' '*.so' '*.syso'; } \
 	    | sort -u | grep -vxF 'internal/netcount/netcount_bpfel.o'); \
 	if [ -n "$$found" ]; then \

@@ -38,8 +38,10 @@ that passed objects, and a dependency flow with no delay.
       values and failing for another workflow, tag or branch.
 - [x] R2, R4, R6: B2 and B7 record these.
 - [x] R3: `TestEveryActionIsPinned` passes; `TestAnUnpinnedActionIsFound` finds
-      each form the old check passed.
-- [x] R5: `make check-no-binaries` passes this tree and fails a planted `.syso`.
+      each form the old check passed, non-string keys, a second document, local
+      actions outside `.github`, and container images by tag.
+- [x] R5: `make check-no-binaries` passes this tree and fails a planted `.syso`,
+      a missing `file(1)`, and an ordinary ELF at the exempt path.
 - [x] R7: `cooldown` is set for both ecosystems.
 - [x] R8: `make install-lint` installs with the pinned hash and fails with
       another.
@@ -52,8 +54,8 @@ Boundary B7, and B2 for the winget line. A contributor or upstream can no
 longer satisfy the pin check with a comment or another YAML form, or add native
 code with no source without failing a required check. A person checking a
 download checks the workflow and the tag as well. What is unchanged: a binary
-reviewer compares nothing automatically, and three inputs stay unpinned behind
-pinned Actions. `docs/threat-model.md` is updated in this PR. The PR gets the
+reviewer compares nothing automatically, some inputs stay unpinned behind pinned
+Actions, and a pin's commit is not checked to belong to its repository. `docs/threat-model.md` is updated in this PR. The PR gets the
 document's adversarial review.
 
 ## Risks & Assumptions
@@ -63,6 +65,13 @@ document's adversarial review.
 - A week's cooldown delays a fix that is not reported as a security update.
   Accepted.
 - A new `LINT_VERSION` needs a new hash; `make install-lint` says so.
+- Both structure tests guard against a mistake, not an attacker who can change
+  the workflow; `sha_pinning_required` is the enforcement for pins.
+- Byte tricks that hide a binary from `file(1)` stay open: Go ignores such a file
+  without an embed and a loader, which a reviewer can read.
+- Rebuilding the BPF object in CI is left out: it needs a pinned clang and a
+  committed `vmlinux.h`. It reproduces byte for byte locally, so a reviewer's
+  `make bpf` is a meaningful comparison.
 - Rollback: revert the commit, and turn the settings off.
 
 ## Verification

@@ -1,7 +1,10 @@
 package structure_test
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,28 +22,50 @@ var (
 	pinnedByDigest = regexp.MustCompile(`^docker://[^@\s]+@sha256:[0-9a-f]{64}$`)
 )
 
-// unpinnedActions says which `uses:` values in a workflow can change without
-// the workflow changing. It reads the YAML rather than its lines, so a comment
-// says nothing and an anchor, a flow map or a quoted key is what it means.
+// A local action runs from this repository's own .github, where this test
+// reads it too.
+var localAction = regexp.MustCompile(`^\./\.github/[^\s]*$`)
+
+// unpinnedActions says which `uses:` values and container images in a workflow
+// can change without the workflow changing. It reads the YAML rather than its
+// lines, so a comment says nothing and an anchor, a flow map or a quoted key is
+// what it means. A key that is not a string is read too: GitHub turns one into
+// a string, and a job named `true:` would otherwise hide the file. This guards
+// against a mistake; `sha_pinning_required` is what enforces pins.
 func unpinnedActions(src []byte) ([]string, error) {
-	var doc any
-	if err := yaml.Unmarshal(src, &doc); err != nil {
-		return nil, err
-	}
 	var bad []string
+	checkUse := func(use string) {
+		use = strings.TrimSpace(use)
+		if (!localAction.MatchString(use) || strings.Contains(use, "..")) && !pinnedByCommit.MatchString(use) && !pinnedByDigest.MatchString(use) {
+			bad = append(bad, use)
+		}
+	}
+	checkImage := func(image string) {
+		if !pinnedByDigest.MatchString("docker://" + strings.TrimSpace(image)) {
+			bad = append(bad, image)
+		}
+	}
 	var walk func(any)
+	visit := func(key string, value any) {
+		text, isText := value.(string)
+		switch {
+		case isText && strings.EqualFold(key, "uses"):
+			checkUse(text)
+		case isText && (strings.EqualFold(key, "image") || strings.EqualFold(key, "container")):
+			checkImage(text)
+		default:
+			walk(value)
+		}
+	}
 	walk = func(v any) {
 		switch v := v.(type) {
 		case map[string]any:
 			for key, value := range v {
-				if use, ok := value.(string); ok && key == "uses" {
-					use = strings.TrimSpace(use)
-					if !strings.HasPrefix(use, "./") && !pinnedByCommit.MatchString(use) && !pinnedByDigest.MatchString(use) {
-						bad = append(bad, use)
-					}
-					continue
-				}
-				walk(value)
+				visit(key, value)
+			}
+		case map[any]any:
+			for key, value := range v {
+				visit(fmt.Sprint(key), value)
 			}
 		case []any:
 			for _, item := range v {
@@ -48,8 +73,18 @@ func unpinnedActions(src []byte) ([]string, error) {
 			}
 		}
 	}
-	walk(doc)
-	return bad, nil
+	decoder := yaml.NewDecoder(bytes.NewReader(src))
+	for {
+		var doc any
+		err := decoder.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			return bad, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		walk(doc)
+	}
 }
 
 func TestEveryActionIsPinned(t *testing.T) {
@@ -86,11 +121,13 @@ func TestAnUnpinnedActionIsFound(t *testing.T) {
 	digest := strings.Repeat("0123456789abcdef", 4)
 
 	pinned := map[string]string{
-		"a commit":           "- uses: a/b@" + sha + " # v1",
-		"a quoted commit":    "- uses: 'a/b@" + sha + "'",
-		"a local action":     "- uses: ./.github/actions/x",
-		"a reusable commit":  "- uses: a/b/.github/workflows/c.yml@" + sha,
-		"a container digest": "- uses: docker://a/b@sha256:" + digest,
+		"a commit":              "- uses: a/b@" + sha + " # v1",
+		"a quoted commit":       "- uses: 'a/b@" + sha + "'",
+		"a local action":        "- uses: ./.github/actions/x",
+		"a container by digest": "jobs:\n  x:\n    container: a/b@sha256:" + digest,
+		"a service by digest":   "services:\n  x:\n    image: a/b@sha256:" + digest,
+		"a reusable commit":     "- uses: a/b/.github/workflows/c.yml@" + sha,
+		"a container digest":    "- uses: docker://a/b@sha256:" + digest,
 	}
 	for name, src := range pinned {
 		t.Run(name, func(t *testing.T) {
@@ -101,19 +138,28 @@ func TestAnUnpinnedActionIsFound(t *testing.T) {
 	}
 
 	unpinned := map[string]string{
-		"a tag":                 "- uses: a/b@v1",
-		"a commit in a comment": "- uses: a/b@main # @" + sha,
-		"local in a comment":    "- uses: a/b@main # uses: ./x",
-		"a flow map":            "- { uses: a/b@main }",
-		"a quoted key":          "- \"uses\": a/b@main",
-		"a space before":        "- uses : a/b@main",
-		"a block scalar":        "- uses: >-\n    a/b@main",
-		"the next line":         "- uses:\n    a/b@main",
-		"an anchor":             "x: &a a/b@main\ny:\n  - uses: *a",
-		"a container tag":       "- uses: docker://a/b:latest",
-		"no version":            "- uses: a/b",
-		"a short commit":        "- uses: a/b@012345",
-		"a reusable tag":        "jobs:\n  x:\n    uses: a/b/.github/workflows/c.yml@v1",
+		"a tag":                  "- uses: a/b@v1",
+		"a commit in a comment":  "- uses: a/b@main # @" + sha,
+		"local in a comment":     "- uses: a/b@main # uses: ./x",
+		"a flow map":             "- { uses: a/b@main }",
+		"a quoted key":           "- \"uses\": a/b@main",
+		"a space before":         "- uses : a/b@main",
+		"a block scalar":         "- uses: >-\n    a/b@main",
+		"the next line":          "- uses:\n    a/b@main",
+		"an anchor":              "x: &a a/b@main\ny:\n  - uses: *a",
+		"a container tag":        "- uses: docker://a/b:latest",
+		"no version":             "- uses: a/b",
+		"a short commit":         "- uses: a/b@012345",
+		"a reusable tag":         "jobs:\n  x:\n    uses: a/b/.github/workflows/c.yml@v1",
+		"a job named true":       "jobs:\n  true:\n    uses: a/b@main",
+		"a job named 1":          "jobs:\n  1:\n    uses: a/b@main",
+		"a key in capitals":      "- USES: a/b@main",
+		"a second document":      "a: b\n---\n- uses: a/b@main",
+		"a local action outside": "- uses: ./tools/x",
+		"a path up and out":      "- uses: ./../../evil",
+		"a container's tag":      "jobs:\n  x:\n    container: a/b:latest",
+		"a container map's tag":  "jobs:\n  x:\n    container:\n      image: a/b:latest",
+		"a service's tag":        "services:\n  x:\n    image: a/b:latest",
 	}
 	for name, src := range unpinned {
 		t.Run(name, func(t *testing.T) {

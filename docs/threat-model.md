@@ -355,10 +355,17 @@ account.
 **Not yet known.** The BPF object's checks catch a mistake, not intent: the
 test hashes the source only, and an object built from other source passes with
 a comment changed in the `.c`. Only a reviewer running `make bpf` compares it.
-Three inputs sit unpinned behind pinned Actions: Scorecard's container is a
-mutable tag, `setup-go` reads its manifest from a branch and downloads Go, and
-`gitleaks-action` downloads its binary with no checksum check found. None of
-them runs in the jobs that build or publish a release, apart from Go itself.
+A rebuild does reproduce the committed object byte for byte with `bpf2go`,
+clang 23 and this kernel's `vmlinux.h`; CI has neither, and a comparison there
+needs a digest-pinned clang and a committed `vmlinux.h`.
+Some inputs sit unpinned behind pinned Actions: Scorecard's container is a
+mutable tag, the test jobs' `setup-go` reads its manifest from a branch, and
+`gitleaks-action` downloads its binary with no checksum check found. Those run
+apart from the release. The build jobs take Go from go.dev with no checksum,
+because a hash in the repository would give up the newest patch on each run, so
+a tampered Go download would be built with and signed. A pin's commit is not
+checked to belong to the repository it names: a fork's commit resolves through
+the parent's name, so a reviewer reading a changed pin is the check.
 **Not yet known.** Builds are not reproducible, so provenance says which
 workflow built a file, not that the same source always builds the same
 file. Provenance proves where a file came from, not that its code is sound.
@@ -426,6 +433,7 @@ the goal of a working proof of concept.
 | 2026-11-01 | B3, B6 | Review of specs 076 and 077 (one reviewer, findings checked against the code). | Poll errors bypassing the home redaction; substring matches in it; the shared cache bypassing the Retry-After cap; a failed re-read losing refreshed tokens; and, from its question about redirects, the token endpoint having moved (#256). All fixed before 0.11.13. |
 | 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
 | 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Further findings are held private until fixed. |
+| 2026-11-01 | B7 | The adversarial review of specs 079 and 080 before they were pushed: one reviewer, then a refutation pass. Read-only; local experiments. | A tag named `origin/main` passing the `main` check; artifacts taken by name; a re-run able to publish a partial draft; gaps in both structure tests and the binary check. All fixed before merge. Limits recorded under B7's "Not yet known". |
 
 ## Checked
 
@@ -531,3 +539,18 @@ stops each. A review starts by reading these.
   internal linker drops it (#271 has the desktop panel's case).
 - Renaming the BPF object and replacing its content entirely: git reports a
   delete and an add, so the warning fires (#271 has the forms that do not).
+
+### B7, specs 079 and 080, 2026-11-01
+
+- A branch named `origin/main` shadowing the `main` check: it lands at
+  `refs/remotes/origin/origin/main`. A tag does shadow it, so the ref is spelled
+  out.
+- A test job pre-creating an artifact's name: the builder's upload fails, which
+  is a denial of service and no more.
+- `permissions: write-all` or `read-all` hiding from the release test: a decode
+  error, and the test fails.
+- The committed BPF object differing from its source: rebuilt byte-identical.
+- Notes dropped by `--notes-file` with `--generate-notes`: GitHub's API puts the
+  body before the generated notes.
+- `file` missing on the runner: it is in the image's toolset, and the check now
+  fails without it.
