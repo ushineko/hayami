@@ -2,7 +2,7 @@
 
 **Issue**: #276
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -54,7 +54,7 @@ runs in a pinned image, on a desk and in CI, and the object it gives is committe
 - [x] R4: `generate.go` calls no `bpftool`; a clean rebuild leaves the tree
       unchanged.
 - [x] R5: B7 records it.
-- [ ] R3: the job is a required check.
+- [x] R3: the job is a required check, in `main`'s branch protection.
 - [x] R6: `TestTheReleaseIsBuiltApartFromWhatPublishesIt` fails a release that
       does not need the job.
 - [x] R7: on a clean tree `tools/bpf.sh check` passes; planted cases are on the
@@ -79,9 +79,10 @@ adversarial review.
 
 - `vmlinux.h` adds 3.4 MB of text to the repository, generated from a kernel's
   BTF. It has type definitions only, and no name from the machine it came from.
-  Other projects commit theirs, but the kernel's licence is GPL-2.0 and this
-  repository's is MIT; whether a generated header of types needs a note was not
-  settled here.
+  Other projects commit theirs. The kernel's licence is GPL-2.0 and this
+  repository's is MIT; the maintainer accepted committing it, and
+  `docs/credits.md` records where it comes from. This is a decision, not legal
+  advice taken.
 - The job downloads 2 GB on every run, for about a minute. It is not cached, so
   a cache has nothing to poison.
 - A new LLVM or libbpf means a new hash and, likely, a new object: `make bpf`
