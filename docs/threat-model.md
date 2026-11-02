@@ -348,9 +348,10 @@ account.
   `TestTheObjectWasBuiltFromThisSource` (`internal/netcount/netcount_test.go`);
   the PR template asks about a changed object, and CI warns on a PR that
   changes the object without its source.
-- `tools/bpf-check.sh`, a CI job on every PR and on `main`, rebuilds the BPF
-  object from its source and fails if it differs by a byte (spec 081). LLVM and
-  libbpf are pinned by hash, `bpf2go` by version, and `vmlinux.h` is committed.
+- `tools/bpf.sh check`, a CI job on every PR and on `main`, rebuilds the BPF
+  object from its source and fails if it differs by a byte (spec 081). It builds
+  in a Go image pinned by digest; LLVM and libbpf are pinned by hash, `bpf2go` by
+  version, and `vmlinux.h` is committed.
 - `make check-no-binaries` fails on any tracked compiled file, by type and by
   name (`.o`, `.a`, `.so`, `.syso`), with `netcount_bpfel.o` the one exception.
 - OpenSSF Scorecard runs weekly and on `main`, and publishes its result.

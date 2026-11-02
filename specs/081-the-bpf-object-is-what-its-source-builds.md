@@ -12,17 +12,21 @@ clang (spec 072), and a reviewer cannot read it. The checks so far catch a
 mistake: a test hashes the source, and a job warns when the object changes
 alone. An object built from other source passes both.
 
-Spec 072 expected clang's output not to be reproducible. It is, given the same
-inputs: LLVM's official 23.1.4 release, a machine's own Arch build of it, in any
-build directory, gave the same bytes as the committed object.
+Spec 072 expected clang's output not to be reproducible. Given the same inputs
+it nearly is. LLVM's official 23.1.4 release and a machine's own Arch build of it
+gave the object committed so far, on that machine. On `ubuntu-latest` the same
+release gave different bytes, in `.BTF` only: the same size, with type names in
+another order, and every other section identical. A `golang:1.27.3-bookworm`
+container on the desk gave the same bytes as `ubuntu-latest`, twice. So the build
+runs in a pinned image, on a desk and in CI, and the object it gives is committed.
 
 ## Requirements
 
-- R1 `tools/bpf-check.sh` rebuilds the object and fails if `internal/netcount`
-  differs from what is committed.
-- R2 Its inputs are pinned: LLVM's release and libbpf's headers by SHA-256,
-  `bpf2go` by version, and `vmlinux.h` by being committed. It downloads nothing
-  it has not checked.
+- R1 `tools/bpf.sh check` rebuilds the object and fails if `internal/netcount`
+  differs from what is committed. `make bpf` builds it the same way.
+- R2 Its inputs are pinned: the Go image by digest, LLVM's release and libbpf's
+  headers by SHA-256, `bpf2go` by version, and `vmlinux.h` by being committed. It
+  downloads nothing it has not checked.
 - R3 A job runs it on every PR and on `main`, and it is required.
 - R4 `make bpf` no longer depends on the running kernel. `make bpf-vmlinux`
   writes the header again when that is wanted.
@@ -37,7 +41,9 @@ build directory, gave the same bytes as the committed object.
 - [ ] R1: on that PR, an object changed along with the `.c` and `source_hash.go`
       fails the job, where the older checks are silent.
 - [x] R2: the script's hashes match LLVM's published digest and the libbpf tag;
-      `make bpf-check` passes on a desk with those tools.
+      `make bpf-check` passes on a desk.
+- [x] The new object differs from the old in `.BTF` only, and the two `.BTF`s hold
+      the same 1,052 types: 153 forward declarations have swapped IDs.
 - [x] R4: `generate.go` calls no `bpftool`; a clean rebuild leaves the tree
       unchanged.
 - [x] R5: B7 records it.
@@ -63,10 +69,12 @@ adversarial review.
   a cache has nothing to poison.
 - A new LLVM or libbpf means a new hash and, likely, a new object: `make bpf`
   with those tools, committed together.
-- `make bpf` with other tools gives an object CI refuses, which is the point, and
-  the message says so.
-- The headers' path changes a few bytes, so CI installs them where a distribution
-  does.
+- The headers' path changes a few bytes, so the image mounts them where a
+  distribution puts them.
+- The object's bytes change once, in `.BTF` only. The kernel's verifier was not
+  run against the new object here: its programs and relocations are unchanged.
+- A build now needs docker and pulls an image from Docker Hub; only `make bpf`
+  does, not an ordinary build. Dependabot does not track the digest.
 - The GitHub source archive's hash is assumed stable. If it changed the job fails
   closed.
 - Rollback: revert the commit, and drop the required check first.
