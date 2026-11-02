@@ -2,7 +2,7 @@
 
 **Issue**: #241
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -59,7 +59,7 @@ thought of.
       `FuzzNormalise`, `FuzzSettingsFile`.
 - [x] Each target was seen to find a planted panic before the plant was
       removed (Verification).
-- [ ] CI runs every target on PRs in its own job, and the job's time is
+- [x] CI runs every target on PRs in its own job, and the job's time is
       recorded in Verification.
 - [x] Every crash found while writing the targets is fixed and committed as
       a corpus entry: none was found.
@@ -93,7 +93,8 @@ Fixes to crashes found change the parsers; each fix is its own commit.
   was found by nine of the ten within 90 seconds at two workers;
   `FuzzSettingsFile`, at its lower rate, found a one-byte plant in a second.
   The plants and the crash files they wrote were removed.
-- CI's Fuzz job: recorded on the PR.
+- CI's Fuzz job on PR #263: 3m8s for all ten targets at ten seconds each,
+  in its own job alongside the tests, which it does not hold up.
 
 ## E2E Test Plan
 
