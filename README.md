@@ -612,7 +612,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.14-rc.1
 
 - **Security**: every file a release publishes carries build provenance,
   checked with `gh attestation verify <file> -R ushineko/hayami` (spec 075,
