@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.13
+**Version**: 0.11.14-rc.2
 
 *a chart you read at a glance*
 
@@ -612,7 +612,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.14-rc.2
 
 - **Security**: every file a release publishes carries build provenance,
   checked with `gh attestation verify <file> -R ushineko/hayami` (spec 075,
