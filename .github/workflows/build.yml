@@ -297,3 +297,7 @@ jobs:
             dist/SHA256SUMS
           body_path: dist/NOTES.md
           generate_release_notes: true
+          # A tag with a suffix (v0.11.14-rc.1) is a pre-release: published
+          # for testing, never the release a download link calls latest.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ !contains(github.ref_name, '-') }}
