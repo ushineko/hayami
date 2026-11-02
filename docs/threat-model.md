@@ -348,6 +348,9 @@ account.
   `TestTheObjectWasBuiltFromThisSource` (`internal/netcount/netcount_test.go`);
   the PR template asks about a changed object, and CI warns on a PR that
   changes the object without its source.
+- `tools/bpf-check.sh`, a CI job on every PR and on `main`, rebuilds the BPF
+  object from its source and fails if it differs by a byte (spec 081). LLVM and
+  libbpf are pinned by hash, `bpf2go` by version, and `vmlinux.h` is committed.
 - `make check-no-binaries` fails on any tracked compiled file, by type and by
   name (`.o`, `.a`, `.so`, `.syso`), with `netcount_bpfel.o` the one exception.
 - OpenSSF Scorecard runs weekly and on `main`, and publishes its result.
@@ -357,12 +360,10 @@ account.
   one; the secrets and BPF checks are required on `main`; Dependabot alerts and
   security updates are on (specs 079, 080).
 
-**Not yet known.** The BPF object's checks catch a mistake, not intent: the
-test hashes the source only, and an object built from other source passes with
-a comment changed in the `.c`. Only a reviewer running `make bpf` compares it.
-A rebuild does reproduce the committed object byte for byte with `bpf2go`,
-clang 23 and this kernel's `vmlinux.h`; CI has neither, and a comparison there
-needs a digest-pinned clang and a committed `vmlinux.h`.
+**Not yet known.** The BPF comparison trusts its inputs: a PR can change the
+script's pins and `vmlinux.h` along with the object, and a reviewer reading a
+3 MB header's diff is the check on that. A change to `.github/` or `tools/` in
+such a PR is the thing to look for.
 Some inputs sit unpinned behind pinned Actions: Scorecard's container is a
 mutable tag, the test jobs' `setup-go` reads its manifest from a branch, and
 `gitleaks-action` downloads its binary with no checksum check found. Those run

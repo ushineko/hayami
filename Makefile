@@ -119,11 +119,21 @@ check-no-binaries: ## Fail if a compiled binary is tracked in the repository
 
 # The network helper's eBPF counter (spec 072): compiles
 # internal/netcount/bpf/netcount.bpf.c into the object that is committed, so
-# an ordinary build needs none of this. Needs clang, bpftool and libbpf's
-# headers, and a kernel with BTF to write vmlinux.h from.
+# an ordinary build needs none of this. Needs clang and libbpf's headers, of the
+# versions tools/bpf-check.sh pins, or the object will not match what CI builds.
 .PHONY: bpf
-bpf: ## Rebuild the network helper's eBPF counter (clang, bpftool, libbpf)
+bpf: ## Rebuild the network helper's eBPF counter (clang, libbpf)
 	cd internal/netcount && go generate
+
+# The program's types, from this machine's kernel. Committed, because the object
+# depends on them; changing them changes the object. Needs bpftool.
+.PHONY: bpf-vmlinux
+bpf-vmlinux: ## Write vmlinux.h again from the running kernel (bpftool)
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/netcount/bpf/vmlinux.h
+
+.PHONY: bpf-check
+bpf-check: ## Rebuild the eBPF object with pinned tools and compare it (downloads LLVM)
+	tools/bpf-check.sh
 
 .PHONY: test
 test: ## Run the tests with the race detector

@@ -56,6 +56,24 @@ jobs:
             echo "::warning file=internal/netcount/netcount_bpfel.o::The compiled BPF object changed without its source. A reviewer rebuilds it with make bpf and compares."
           fi
 
+  # A warning is for a mistake. This is for intent: the object is rebuilt from
+  # its source with pinned tools, and has to come out the same (spec 081).
+  bpf-rebuilt:
+    name: The BPF object is what its source builds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Rebuild the object and compare it
+        run: make bpf-check
+
   # OpenSSF Scorecard: how the repository's own practices read from outside.
   # Weekly and on main; its result is public and the README links it.
   scorecard:
