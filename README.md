@@ -133,6 +133,22 @@ The preferences window:
 
 ## Installing
 
+### Checking a download
+
+Every file a release publishes carries build provenance: GitHub signs that
+it was built by this repository's release workflow, from the tagged
+commit. Check one before running it, with the GitHub CLI:
+
+```
+gh attestation verify hayami-<version>-linux-amd64-installer -R ushineko/hayami
+```
+
+A file changed after the build, or built anywhere else, fails.
+`SHA256SUMS` in the same release says a download is whole; the attestation
+says who built it. How the repository's practices read from outside is its
+[OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/ushineko/hayami).
+Releases before the first to carry it have no attestation.
+
 ### On Linux
 
 **An installer.** A [release](https://github.com/ushineko/hayami/releases)
@@ -598,6 +614,11 @@ MIT. See
 
 ### Unreleased
 
+- **Security**: every file a release publishes carries build provenance,
+  checked with `gh attestation verify <file> -R ushineko/hayami` (spec 075,
+  #242). The workflows' Actions are pinned by commit and kept current by
+  Dependabot, each job has only the permissions it needs, and every pull
+  request is scanned for secrets.
 - **Security**: the udev rule matches each device itself, not a parent
   device, so a device plugged into a Logitech, Razer, SteelSeries or NZXT hub
   or dock is no longer opened to the person at the desk; the NZXT rule gave
