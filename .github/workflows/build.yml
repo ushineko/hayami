@@ -172,11 +172,18 @@ jobs:
   # the release does not ship, and the jobs above may share a cache; neither
   # reaches what people install. These two run no tests, read no cache, keep
   # no token and can write nothing.
+  #
+  # Go comes from go.dev, the newest patch of the line by go.dev's own list,
+  # rather than through the manifest setup-go otherwise reads from a branch of
+  # another repository. The release takes each job's artifact by the ID the job
+  # reported, not by a name another job could reuse.
   build-linux:
     name: Build the Linux release
     needs: [test, fuzz, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     permissions:
       contents: read
     steps:
@@ -186,7 +193,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
+          go-download-base-url: https://go.dev/dl
           cache: false
 
       - name: Install the window's build dependencies
@@ -222,7 +229,8 @@ jobs:
           "dist/hayami-$v-linux-amd64-cli-installer" --version | grep -F "hayami $v installer"
           "dist/hayami-$v-linux-amd64-installer" --version | grep -F "hayami $v installer"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hayami-linux-release
           path: |
@@ -236,6 +244,8 @@ jobs:
     needs: [test, fuzz, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     permissions:
       contents: read
     steps:
@@ -245,7 +255,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
+          go-download-base-url: https://go.dev/dl
           cache: false
 
       - name: Install fynstall, at the version go.mod requires
@@ -275,7 +285,8 @@ jobs:
           "dist/hayami-$v-windows-amd64-cli-installer.exe" --dry-run --yes
           "dist/hayami-$v-windows-amd64-installer.exe" --version | grep -F "hayami $v installer"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hayami-windows-installers
           path: |
@@ -312,26 +323,31 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # A release is a commit on main, which is a commit that was reviewed. A
-      # tag with a suffix is a pre-release, which may be tried from a branch.
+      # A release is a commit on main. This catches a tag pushed from the wrong
+      # place; it does not stop a stolen token, which can put a commit on main
+      # or tag from a workflow without this step. The ref is spelled out, since
+      # a tag named origin/main would otherwise win. A tag with a suffix is a
+      # pre-release, which may be tried from a branch.
       - name: A release is a commit on main
         env:
           TAG: ${{ github.ref_name }}
         run: |
           case "$TAG" in
             *-*) echo "pre-release $TAG: not required to be on main" ;;
-            *) git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            *) git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main \
                  || { echo "$TAG names a commit that is not on main"; exit 1; } ;;
           esac
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: hayami-linux-release
+          artifact-ids: ${{ needs.build-linux.outputs.artifact-id }}
+          merge-multiple: true
           path: dist
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: hayami-windows-installers
+          artifact-ids: ${{ needs.build-windows.outputs.artifact-id }}
+          merge-multiple: true
           path: dist
 
       - name: Write SHA256SUMS
@@ -372,23 +388,23 @@ jobs:
             dist/*-linux-amd64-cli-installer
             dist/SHA256SUMS
 
-      # A draft first, then published, because a published release's files
-      # cannot change once immutable releases are on. A tag with a suffix
-      # (v0.11.14-rc.1) is a pre-release: published for testing, never the
-      # release a download link calls latest. GitHub's generated notes go under
-      # the changelog entry, so the "Full Changelog" link still appears.
+      # gh creates a draft, uploads to it and publishes it, so this works with
+      # immutable releases on, removes the draft if an upload fails and refuses
+      # a release that already exists. A tag with a suffix (v0.11.14-rc.1) is a
+      # pre-release: published for testing, never the release a download link
+      # calls latest. GitHub's generated notes go under the changelog entry, so
+      # the "Full Changelog" link still appears.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
           case "$TAG" in
-            *-*) kind="--prerelease"; latest="--latest=false" ;;
-            *) kind=""; latest="--latest" ;;
+            *-*) kind="--prerelease --latest=false" ;;
+            *) kind="--latest" ;;
           esac
-          # shellcheck disable=SC2086 # $kind is empty or one flag
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-            --title "$TAG" --notes-file dist/NOTES.md --generate-notes $kind "$latest" \
+          # shellcheck disable=SC2086 # $kind is one or two flags
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" --notes-file dist/NOTES.md --generate-notes $kind \
             dist/*.tar.gz dist/*.exe dist/*-linux-amd64-installer \
             dist/*-linux-amd64-cli-installer dist/SHA256SUMS
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "$latest"

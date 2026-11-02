@@ -22,28 +22,33 @@ a file; it is worth what the signing job can trust.
   `checkout`, `download-artifact` and `attest-build-provenance`, and its `run`
   steps run nothing from the repository or its modules. It keeps no token
   after checkout.
-- R5 The release is created as a draft and published afterwards, with `gh`,
-  so it keeps working when immutable releases are on. `softprops/action-gh-release`
-  goes: one fewer third-party Action holding the write token.
+- R5 `gh release create` publishes the release, which uploads to a draft and
+  then publishes it, so it keeps working when immutable releases are on.
+  `softprops/action-gh-release` goes: one fewer third-party Action holding the
+  write token.
 - R6 A tag without a suffix must name a commit on `main`. A tag with a suffix
   is a pre-release and may be tried from a branch.
-- R7 A structural test holds the workflow to R1 to R4, and is falsified
-  against planted workflows.
+- R7 A structural test holds the workflow to R1 to R4, R6 and R9, and is
+  falsified against planted workflows.
 - R8 B7 of the threat model records this and what stays open.
+- R9 The release takes each artifact by the ID its build job reported, not by
+  name.
+- R10 The build jobs take Go from go.dev, not through setup-go's manifest.
 
 ## Acceptance Criteria
 
-- [x] R1 to R4: `TestTheReleaseIsBuiltApartFromWhatPublishesIt` passes on
-      `build.yml`.
+- [x] R1 to R4, R6, R9: `TestTheReleaseIsBuiltApartFromWhatPublishesIt` passes
+      on `build.yml`.
 - [x] R7: `TestReleaseWorkflowFaultsAreFound` finds each planted fault.
 - [x] R8: B7 records the separation, and that the attestation trusts the build
       jobs.
-- [ ] R1 to R6 on GitHub: a pre-release tagged from this branch builds in the
+- [ ] R1 to R6, R9, R10 on GitHub: a pre-release tagged from this branch builds in the
       new jobs, publishes as a pre-release not marked latest, carries all six
       files, and each passes `gh attestation verify` with `--signer-workflow`
       and `--source-ref`.
 - [x] R6: the check refuses a tag without a suffix on a commit not on `main`,
-      run locally against the step's script.
+      including with a tag named `origin/main` present, run locally against the
+      step's script.
 - [ ] Immutable releases and a tag ruleset are on (repository settings,
       applied after this merges), and B7's "Not yet known" says so.
 
@@ -52,8 +57,8 @@ a file; it is worth what the signing job can trust.
 Boundary B7. Before: a module that runs in tests could reach the files a
 release publishes, and code run during a build held the release's rights.
 After: neither job does both. What is unchanged: a module linked into the
-panel ships its code, and a maintainer account can edit the workflow in a
-tag. `docs/threat-model.md` B7 is updated in this PR. The PR gets the
+panel ships its code, and a maintainer account can tag a commit whose workflow
+predates this, or put a commit on `main`. `docs/threat-model.md` B7 is updated in this PR. The PR gets the
 document's adversarial review.
 
 ## Risks & Assumptions
@@ -64,7 +69,12 @@ document's adversarial review.
   the files, and a downloaded release asset has no mode either.
 - `gh` is on the runner image, as the image itself is trusted.
 - `gh release create --notes-file --generate-notes` puts the notes above the
-  generated ones. Checked by the pre-release.
+  generated ones, per GitHub's documentation. Checked by the pre-release.
+- A pre-release exercises only `--prerelease`; `--latest` and the `main` check
+  first run on GitHub at the next stable release. Watch that run.
+- `go-download-base-url` gives the newest patch from go.dev's list, read from
+  setup-go's source. Go is still downloaded with no checksum; pinning one would
+  give up the newest patch on each run. Checked in the pre-release's log.
 - Rollback: revert the commit. The workflow is the only thing that changes
   until the repository settings are applied, and those can be turned off for
   later releases. A release published while immutable stays immutable.

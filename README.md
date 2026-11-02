@@ -144,6 +144,9 @@ gh attestation verify hayami-<version>-linux-amd64-installer -R ushineko/hayami
 ```
 
 A file changed after the build, or built anywhere else, fails.
+A version with a hyphen (`0.11.14-rc.1`) is a pre-release, whatever the
+release page says of it: it may be built from a branch, and is not for
+installing unless you are trying it on purpose.
 `SHA256SUMS` in the same release says a download is whole; the attestation
 says who built it. How the repository's practices read from outside is its
 [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/ushineko/hayami).
