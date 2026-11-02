@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.13
+**Version**: 0.11.14
 
 *a chart you read at a glance*
 
@@ -618,7 +618,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.14
 
 - **Security**: a release is built apart from what publishes it. The build
   jobs run no tests, read no cache and can write nothing; the job that signs
@@ -630,8 +630,9 @@ MIT. See
   attestation command checks the workflow and the tag as well (#269).
 - **Security**: every file a release publishes carries build provenance,
   checked with `gh attestation verify` as Installing says (spec 075, #242).
-  The workflows' Actions are pinned by commit and kept current by Dependabot, each job has only the permissions it needs, and every pull
-  request is scanned for secrets.
+  The workflows' Actions are pinned by commit and kept current by Dependabot,
+  each job has only the permissions it needs, and every pull request is
+  scanned for secrets.
 - **Security**: the udev rule matches each device itself, not a parent
   device, so a device plugged into a Logitech, Razer, SteelSeries or NZXT hub
   or dock is no longer opened to the person at the desk; the NZXT rule gave
