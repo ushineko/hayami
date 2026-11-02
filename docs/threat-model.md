@@ -334,7 +334,12 @@ account.
 **Not yet known.** Builds are not reproducible, so provenance says which
 workflow built a file, not that the same source always builds the same
 file. Provenance proves where a file came from, not that its code is sound.
-A maintainer account that can push a tag can still publish a release.
+A maintainer account that can push a tag can still publish a release: no
+rule limits which commit a tag names, so that commit need not be on `main`
+or reviewed, and the tag's own workflow runs. With immutable releases off,
+moving a tag can also replace a published release's files (the release
+action overwrites an asset of the same name; read from its source, not
+exercised). The fix, when it comes, is immutable releases and a tag ruleset.
 
 ---
 
@@ -382,6 +387,7 @@ the goal of a working proof of concept.
 | 2026-10-31 | B1 | Tests on Windows 11 (build 26200) of the fix for GHSA-94c3-mf55-vv8v: a squatted pipe, and a server impersonating the panel. | The assessment's impersonation claim did not hold: Windows lets a pipe server impersonate only after reading from the pipe, and the panel never writes. Recorded under "Checked". |
 | 2026-11-01 | B3, B6 | Review of specs 076 and 077 (one reviewer, findings checked against the code). | Poll errors bypassing the home redaction; substring matches in it; the shared cache bypassing the Retry-After cap; a failed re-read losing refreshed tokens; and, from its question about redirects, the token endpoint having moved (#256). All fixed before 0.11.13. |
 | 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
+| 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Further findings are held private until fixed. |
 
 ## Checked
 
@@ -458,3 +464,32 @@ stops each. A review starts by reading these.
   numbers and labels only, and an unreadable cache is no cache.
 - Corrupting the credential store with a bad refresh reply: a store that
   does not parse is never written, and an empty token is refused.
+
+### B7, 2026-11-01
+
+- Secrets or write access from a fork or Dependabot PR: `pull_request` only
+  with a read-only token; neither workflow uses `pull_request_target` or
+  `workflow_run`.
+- A PR's artifact reaching the release: `download-artifact` has no `run-id`,
+  so it reads the same run only.
+- Script injection through a tag or PR value: values reach the shell through
+  `env` or `with:`, never expanded inside `run:`.
+- `workflow_dispatch` on a branch reaching the release job: its condition
+  needs `refs/tags/v`.
+- A pin's comment lying about its version: all nine matched their claimed
+  tag at this review.
+- Swapping a module on the proxy: `go.sum` and the checksum database, with
+  no `replace`, `go.work` or proxy override.
+- A file changed after attestation: `gh attestation verify` exits 1.
+- The gitleaks allow-list's `invented[-_a-z]*` hiding a real leak: gitleaks
+  tests it against the secret found, not the line, so a random token
+  containing it is negligible.
+- The Windows upload placing Linux filenames over release files: its
+  patterns match only `*.exe`; it would take a forged artifact.
+- `run` steps in test jobs using the runtime token: it is not in their
+  environment (runner `ScriptHandler.cs`); reaching it would mean scraping
+  runner memory, which was not tried.
+- An unreferenced `.syso` running in `hayami-tui`: built without cgo, the
+  internal linker drops it (#271 has the desktop panel's case).
+- Renaming the BPF object and replacing its content entirely: git reports a
+  delete and an add, so the warning fires (#271 has the forms that do not).
