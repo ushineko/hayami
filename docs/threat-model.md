@@ -323,6 +323,14 @@ account.
 - Each job declares its own `permissions` and the workflows' default is
   none. Only the release job writes contents, and only it may mint an
   OIDC token and write attestations; Scorecard writes security events.
+- What a release publishes is built apart from what publishes it (spec
+  079). `build-linux` and `build-windows` run no tests, read no cache, keep
+  no token and can write nothing. The `release` job runs no code from the
+  repository or its modules. `tests/structure/release_workflow_test.go`
+  holds the workflow to this.
+- A release without a suffix must be a commit on `main`; the `release` job
+  checks. This catches a tag pushed from the wrong place, not a stolen token
+  (see "Not yet known").
 - gitleaks scans every PR's commits and `main`; its allow-list
   (`.gitleaks.toml`) is by pattern and path, never by turning a rule off.
 - The committed BPF object is tied to its source by
@@ -334,12 +342,22 @@ account.
 **Not yet known.** Builds are not reproducible, so provenance says which
 workflow built a file, not that the same source always builds the same
 file. Provenance proves where a file came from, not that its code is sound.
+The attestation names the `release` job, which signs what the build jobs
+hand it: a module linked into the panel still ships its code, and is signed
+with it. The release takes each artifact by the ID its job reported, so
+another job cannot swap one; a build job can still tamper with its own.
 A maintainer account that can push a tag can still publish a release: no
-rule limits which commit a tag names, so that commit need not be on `main`
-or reviewed, and the tag's own workflow runs. With immutable releases off,
-moving a tag can also replace a published release's files (the release
-action overwrites an asset of the same name; read from its source, not
-exercised). The fix, when it comes, is immutable releases and a tag ruleset.
+rule limits which commit a tag names, and the tag's own workflow runs, so a
+tag on a commit from before spec 079 runs the workflow as it was then, without
+these separations, and signs as the same `build.yml`. An admin's token can also
+put a commit directly on `main`, since `enforce_admins` is off (it has to be:
+one maintainer cannot review their own PR). A tag with a suffix skips the `main`
+check and can be promoted afterwards with `gh release edit`; its file names and
+tag keep the suffix. With immutable releases off, that token can also replace a
+published release's files. Immutable releases and a tag ruleset narrow this; a
+ruleset needs a bypass for whoever tags, which is the same account. Whether a
+token without the `workflow` scope can push a new commit on an old base was not
+tested.
 
 ---
 

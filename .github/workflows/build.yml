@@ -159,16 +159,6 @@ jobs:
 
       # Run, not only built: each says its version, and the command-line one
       # lists the whole plan and changes nothing.
-      # What the installers carry was built by install_windows.ps1, which
-      # says `-dev` off the tag or from a modified tree (Get-BuildVersion).
-      # A release that said it would ship a desk's build, so it fails here.
-      - name: The release says its own version
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          v="$(tr -d '[:space:]' < VERSION)"
-          ./hayami-tui.exe --version | tr -d '\r' | grep -Fx "hayami-tui version $v"
-
       - name: The installers run
         shell: bash
         run: |
@@ -177,39 +167,34 @@ jobs:
           "dist/hayami-$v-windows-amd64-cli-installer.exe" --dry-run --yes
           "dist/hayami-$v-windows-amd64-installer.exe" --version | grep -F "hayami $v installer"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: hayami-windows-installers
-          path: |
-            dist/*-windows-amd64-installer.exe
-            dist/*-windows-amd64-cli-installer.exe
-          if-no-files-found: error
-
-  # The Release is published here and never by hand. Pushing a v* tag is the
-  # whole of the ceremony: the job checks the tag against VERSION, builds the
-  # tarball and the Linux installers, takes the Windows installers the job
-  # above built, and attaches them all.
+  # What a release publishes is built by the two jobs below and published by
+  # the one after them (spec 079). Tests, the linter and the fuzzer run code
+  # the release does not ship, and the jobs above may share a cache; neither
+  # reaches what people install. These two run no tests, read no cache, keep
+  # no token and can write nothing.
   #
-  # Linux amd64 and Windows amd64, for now. The desktop panel links against
-  # the system's OpenGL and X11 or Wayland libraries, so another target means
-  # a cross toolchain for each, and hayami is still experimental enough that
-  # the AUR and the other architectures are a later problem.
-  release:
-    name: Release
+  # Go comes from go.dev, the newest patch of the line by go.dev's own list,
+  # rather than through the manifest setup-go otherwise reads from a branch of
+  # another repository. The release takes each job's artifact by the ID the job
+  # reported, not by a name another job could reuse.
+  build-linux:
+    name: Build the Linux release
     needs: [test, fuzz, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    # Writes the release; id-token and attestations sign what it publishes.
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ env.GO_VERSION }}
-          check-latest: true
+          go-download-base-url: https://go.dev/dl
+          cache: false
 
       - name: Install the window's build dependencies
         run: |
@@ -236,7 +221,7 @@ jobs:
           v="$(tr -d '[:space:]' < VERSION)"
           ./hayami-tui --version | grep -Fx "hayami-tui version $v"
 
-      # After the tarball, for the same reason as the download below.
+      # After the tarball, because `make release` empties dist/.
       - name: Build the Linux installers
         run: |
           make installer
@@ -244,14 +229,128 @@ jobs:
           "dist/hayami-$v-linux-amd64-cli-installer" --version | grep -F "hayami $v installer"
           "dist/hayami-$v-linux-amd64-installer" --version | grep -F "hayami $v installer"
 
-      # After the tarball, because `make release` empties dist/. The sums are
-      # written again so the one file covers everything attached.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hayami-linux-release
+          path: |
+            dist/*.tar.gz
+            dist/*-linux-amd64-installer
+            dist/*-linux-amd64-cli-installer
+          if-no-files-found: error
+
+  build-windows:
+    name: Build the Windows release
+    needs: [test, fuzz, windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          go-download-base-url: https://go.dev/dl
+          cache: false
+
+      - name: Install fynstall, at the version go.mod requires
+        shell: bash
+        run: go install "github.com/ushineko/fynstall/cmd/fynstall@$(go list -m -f '{{.Version}}' github.com/ushineko/fynstall)"
+
+      # The script builds both panels with the version stamped in, as it does
+      # on a desk, and the installers around them.
+      - name: Build the installers
+        shell: pwsh
+        run: ./scripts/installer_windows.ps1 -Fynstall (Join-Path (go env GOPATH) "bin\fynstall.exe") -Windowed -WithCliOnly
+
+      # What the installers carry was built by install_windows.ps1, which
+      # says `-dev` off the tag or from a modified tree (Get-BuildVersion).
+      # A release that said it would ship a desk's build, so it fails here.
+      - name: The release says its own version
+        shell: bash
+        run: |
+          v="$(tr -d '[:space:]' < VERSION)"
+          ./hayami-tui.exe --version | tr -d '\r' | grep -Fx "hayami-tui version $v"
+
+      - name: The installers run
+        shell: bash
+        run: |
+          v="$(tr -d '[:space:]' < VERSION)"
+          "dist/hayami-$v-windows-amd64-cli-installer.exe" --version | grep -F "hayami $v installer"
+          "dist/hayami-$v-windows-amd64-cli-installer.exe" --dry-run --yes
+          "dist/hayami-$v-windows-amd64-installer.exe" --version | grep -F "hayami $v installer"
+
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hayami-windows-installers
+          path: |
+            dist/*-windows-amd64-installer.exe
+            dist/*-windows-amd64-cli-installer.exe
+          if-no-files-found: error
+
+  # The Release is published here and never by hand. Pushing a v* tag is the
+  # whole of the ceremony: the jobs above build what it carries, and this one
+  # signs and attaches it.
+  #
+  # This job holds the only write rights in the workflow, so it runs nothing
+  # from the repository or its modules: no Go, no make, no program it built.
+  # tests/structure/release_workflow_test.go holds it to that.
+  #
+  # Linux amd64 and Windows amd64, for now. The desktop panel links against
+  # the system's OpenGL and X11 or Wayland libraries, so another target means
+  # a cross toolchain for each, and hayami is still experimental enough that
+  # the AUR and the other architectures are a later problem.
+  release:
+    name: Release
+    needs: [test, fuzz, windows, build-linux, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    # Writes the release; id-token and attestations sign what it publishes.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      # For README.md and for main's history. Read as data; nothing in it runs.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # A release is a commit on main. This catches a tag pushed from the wrong
+      # place; it does not stop a stolen token, which can put a commit on main
+      # or tag from a workflow without this step. The ref is spelled out, since
+      # a tag named origin/main would otherwise win. A tag with a suffix is a
+      # pre-release, which may be tried from a branch.
+      - name: A release is a commit on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            *-*) echo "pre-release $TAG: not required to be on main" ;;
+            *) git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main \
+                 || { echo "$TAG names a commit that is not on main"; exit 1; } ;;
+          esac
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.build-linux.outputs.artifact-id }}
+          merge-multiple: true
           path: dist
 
-      - name: Add the installers to SHA256SUMS
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.build-windows.outputs.artifact-id }}
+          merge-multiple: true
+          path: dist
+
+      - name: Write SHA256SUMS
         run: |
           cd dist
           ls -l
@@ -289,17 +388,23 @@ jobs:
             dist/*-linux-amd64-cli-installer
             dist/SHA256SUMS
 
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          files: |
-            dist/*.tar.gz
-            dist/*.exe
-            dist/*-linux-amd64-installer
-            dist/*-linux-amd64-cli-installer
-            dist/SHA256SUMS
-          body_path: dist/NOTES.md
-          generate_release_notes: true
-          # A tag with a suffix (v0.11.14-rc.1) is a pre-release: published
-          # for testing, never the release a download link calls latest.
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          make_latest: ${{ !contains(github.ref_name, '-') }}
+      # gh creates a draft, uploads to it and publishes it, so this works with
+      # immutable releases on, removes the draft if an upload fails and refuses
+      # a release that already exists. A tag with a suffix (v0.11.14-rc.1) is a
+      # pre-release: published for testing, never the release a download link
+      # calls latest. GitHub's generated notes go under the changelog entry, so
+      # the "Full Changelog" link still appears.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            *-*) kind="--prerelease --latest=false" ;;
+            *) kind="--latest" ;;
+          esac
+          # shellcheck disable=SC2086 # $kind is one or two flags
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" --notes-file dist/NOTES.md --generate-notes $kind \
+            dist/*.tar.gz dist/*.exe dist/*-linux-amd64-installer \
+            dist/*-linux-amd64-cli-installer dist/SHA256SUMS
