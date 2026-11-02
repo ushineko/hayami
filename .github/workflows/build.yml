@@ -88,6 +88,22 @@ jobs:
       - name: The installer installs and uninstalls
         run: HAYAMI_INSTALLERS="$PWD/dist" go test -count=1 -run TestTheLinuxInstaller ./tests/structure
 
+  # Every parser that reads what hayami does not control, fuzzed for ten
+  # seconds each (spec 074). Its own job, so a fuzz run does not hold the
+  # tests up; the packages it fuzzes are pure Go and need none of the
+  # window's headers.
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+      - name: Fuzz each parser
+        run: make fuzz FUZZTIME=10s
+
   # Spec 033. Both panels build and every test passes on Windows. The desktop
   # panel needs cgo; the runner image carries a mingw gcc on PATH.
   windows:
@@ -171,7 +187,7 @@ jobs:
   # the AUR and the other architectures are a later problem.
   release:
     name: Release
-    needs: [test, windows]
+    needs: [test, fuzz, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

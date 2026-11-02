@@ -119,6 +119,27 @@ bpf: ## Rebuild the network helper's eBPF counter (clang, bpftool, libbpf)
 test: ## Run the tests with the race detector
 	go test -race ./...
 
+# Fuzz every parser that has a target (spec 074): each Fuzz function in each
+# package under internal/ that has one, for FUZZTIME. A crash is written to
+# that package's testdata/fuzz, where it stays as a regression test once the
+# parser is fixed. CI runs this on every PR; run it longer by hand before a
+# release: make fuzz FUZZTIME=10m.
+FUZZTIME ?= 10s
+# Workers per target. Go starts one per CPU by default, which on a desk
+# takes every core for the length of the run; two, at the lowest priority,
+# leaves the machine usable.
+FUZZ_PARALLEL ?= 2
+FUZZ_PKGS = $(sort $(dir $(shell grep -rl '^func Fuzz' --include='*_test.go' internal)))
+
+.PHONY: fuzz
+fuzz: ## Fuzz each parser for FUZZTIME (default 10s)
+	@set -e; for pkg in $(FUZZ_PKGS); do \
+		for t in $$(grep -h '^func Fuzz' $$pkg*_test.go | sed 's/func \(Fuzz[A-Za-z0-9]*\).*/\1/'); do \
+			echo "== $$pkg$$t"; \
+			nice -n 19 go test -run='^$$' -fuzz="^$$t\$$" -fuzztime=$(FUZZTIME) -parallel=$(FUZZ_PARALLEL) ./$$pkg; \
+		done; \
+	done
+
 .PHONY: coverage
 coverage: ## Run the tests and open a coverage report
 	go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out

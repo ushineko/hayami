@@ -17,7 +17,7 @@ import (
 
 // tempCache points the package at a directory of this test's own. Nothing
 // here writes to the real cache: it belongs to programs that are running.
-func tempCache(t *testing.T) string {
+func tempCache(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
 	testenv.Cache(t, dir)
