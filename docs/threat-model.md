@@ -351,6 +351,11 @@ account.
 - `make check-no-binaries` fails on any tracked compiled file, by type and by
   name (`.o`, `.a`, `.so`, `.syso`), with `netcount_bpfel.o` the one exception.
 - OpenSSF Scorecard runs weekly and on `main`, and publishes its result.
+- Repository settings: `sha_pinning_required` makes GitHub refuse an Action not
+  pinned by SHA; immutable releases are on; a ruleset stops a `v*` tag moving or
+  being deleted, with no bypass, and another lets only an administrator create
+  one; the secrets and BPF checks are required on `main`; Dependabot alerts and
+  security updates are on (specs 079, 080).
 
 **Not yet known.** The BPF object's checks catch a mistake, not intent: the
 test hashes the source only, and an object built from other source passes with
@@ -380,11 +385,12 @@ these separations, and signs as the same `build.yml`. An admin's token can also
 put a commit directly on `main`, since `enforce_admins` is off (it has to be:
 one maintainer cannot review their own PR). A tag with a suffix skips the `main`
 check and can be promoted afterwards with `gh release edit`; its file names and
-tag keep the suffix. With immutable releases off, that token can also replace a
-published release's files. Immutable releases and a tag ruleset narrow this; a
-ruleset needs a bypass for whoever tags, which is the same account. Whether a
-token without the `workflow` scope can push a new commit on an old base was not
-tested.
+tag keep the suffix. Immutable releases cover only releases published since they
+were turned on, on 2026-11-01: that token can still replace the files of an
+earlier one. The tag rulesets stop a mistake or a lesser token, not this account:
+it is the administrator who may create a tag and may edit a ruleset or turn a
+setting off. Whether a token without the `workflow` scope can push a new commit
+on an old base was not tested.
 
 ---
 
