@@ -34,8 +34,8 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: false
 
   # The compiled eBPF object is committed so a build needs no clang. A PR
-  # that changes it without its source is said, so a reviewer rebuilds it
-  # with `make bpf` and compares (spec 072 R3, spec 075 R7).
+  # that changes it without its source is said, for the reviewer; the Build
+  # workflow rebuilds it and compares (spec 072 R3, spec 075 R7, spec 081).
   bpf:
     name: The BPF object changes with its source
     if: github.event_name == 'pull_request'
@@ -53,7 +53,7 @@ jobs:
           changed=$(git diff --name-only "$BASE"...HEAD)
           if echo "$changed" | grep -qx 'internal/netcount/netcount_bpfel.o' \
             && ! echo "$changed" | grep -qx 'internal/netcount/bpf/netcount.bpf.c'; then
-            echo "::warning file=internal/netcount/netcount_bpfel.o::The compiled BPF object changed without its source. A reviewer rebuilds it with make bpf and compares."
+            echo "::warning file=internal/netcount/netcount_bpfel.o::The compiled BPF object changed without its source. The Build workflow rebuilds it and compares."
           fi
 
   # OpenSSF Scorecard: how the repository's own practices read from outside.

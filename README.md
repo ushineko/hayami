@@ -618,6 +618,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Security**: CI rebuilds the network helper's eBPF object from its source
+  with pinned tools, and fails if it is not the one committed (spec 081, #276).
+  `vmlinux.h` is committed, since the object depends on it. The object's bytes
+  change for this, in its type information only; the program is the same.
+
 ### 0.11.14 (2026-11-01)
 
 - **Security**: a release is built apart from what publishes it. The build

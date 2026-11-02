@@ -104,7 +104,7 @@ check-no-binaries: ## Fail if a compiled binary is tracked in the repository
 	file -b internal/netcount/netcount_bpfel.o | grep -q eBPF \
 	    || { echo "internal/netcount/netcount_bpfel.o is not an eBPF object" >&2; exit 1; }; \
 	found=$$( { git ls-files -z | xargs -0 -r file --mime-type -- 2>/dev/null \
-	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff|mach-binary)|vnd\.microsoft\.portable-executable)' \
+	    | grep -E 'application/(x-(executable|sharedlib|pie-executable|archive|object|dosexec|coff|mach-binary|xz|bzip2)|gzip|zip|zstd|vnd\.microsoft\.portable-executable)' \
 	    | cut -d: -f1; git ls-files '*.o' '*.a' '*.so' '*.syso'; } \
 	    | sort -u | grep -vxF 'internal/netcount/netcount_bpfel.o'); \
 	if [ -n "$$found" ]; then \
@@ -118,12 +118,23 @@ check-no-binaries: ## Fail if a compiled binary is tracked in the repository
 	echo "No compiled binaries are tracked."
 
 # The network helper's eBPF counter (spec 072): compiles
-# internal/netcount/bpf/netcount.bpf.c into the object that is committed, so
-# an ordinary build needs none of this. Needs clang, bpftool and libbpf's
-# headers, and a kernel with BTF to write vmlinux.h from.
+# internal/netcount/bpf/netcount.bpf.c into the object that is committed, so an
+# ordinary build needs none of this. Runs in a pinned image, with pinned tools it
+# downloads, so CI gets the same bytes (spec 081). Needs docker.
 .PHONY: bpf
-bpf: ## Rebuild the network helper's eBPF counter (clang, bpftool, libbpf)
-	cd internal/netcount && go generate
+bpf: ## Rebuild the network helper's eBPF counter (docker; downloads LLVM)
+	tools/bpf.sh build
+
+.PHONY: bpf-check
+bpf-check: ## Fail if the committed eBPF object is not what its source builds
+	tools/bpf.sh check
+
+# The program's types, from this machine's kernel. Committed, because the object
+# depends on them; changing them changes the object. Needs bpftool.
+.PHONY: bpf-vmlinux
+bpf-vmlinux: ## Write vmlinux.h again from the running kernel (bpftool)
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > internal/netcount/bpf/vmlinux.h.new
+	mv internal/netcount/bpf/vmlinux.h.new internal/netcount/bpf/vmlinux.h
 
 .PHONY: test
 test: ## Run the tests with the race detector
