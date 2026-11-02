@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.14
+**Version**: 0.11.15-rc.1
 
 *a chart you read at a glance*
 
@@ -617,6 +617,11 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.11.15-rc.1
+
+- A pre-release to try the Actions bump in #277 through the release jobs. Not
+  for installing.
 
 ### 0.11.14 (2026-11-01)
 
