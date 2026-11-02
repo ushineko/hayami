@@ -438,7 +438,7 @@ the goal of a working proof of concept.
 | 2026-10-31 | B1 | Tests on Windows 11 (build 26200) of the fix for GHSA-94c3-mf55-vv8v: a squatted pipe, and a server impersonating the panel. | The assessment's impersonation claim did not hold: Windows lets a pipe server impersonate only after reading from the pipe, and the panel never writes. Recorded under "Checked". |
 | 2026-11-01 | B3, B6 | Review of specs 076 and 077 (one reviewer, findings checked against the code). | Poll errors bypassing the home redaction; substring matches in it; the shared cache bypassing the Retry-After cap; a failed re-read losing refreshed tokens; and, from its question about redirects, the token endpoint having moved (#256). All fixed before 0.11.13. |
 | 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
-| 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Further findings are held private until fixed. |
+| 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Two private advisories, both fixed in 0.11.14: GHSA-g9rj-2f3c-8cv4 (the Go cache) and GHSA-j38w-g54m-r8mh (the release build's rights). |
 | 2026-11-01 | B7 | The adversarial review of specs 079 and 080 before they were pushed: one reviewer, then a refutation pass. Read-only; local experiments. | A tag named `origin/main` passing the `main` check; artifacts taken by name; a re-run able to publish a partial draft; gaps in both structure tests and the binary check. All fixed before merge. Limits recorded under B7's "Not yet known". |
 
 ## Checked
@@ -545,6 +545,15 @@ stops each. A review starts by reading these.
   internal linker drops it (#271 has the desktop panel's case).
 - Renaming the BPF object and replacing its content entirely: git reports a
   delete and an add, so the warning fires (#271 has the forms that do not).
+
+- Saving tampered state to the Linux Go cache from `go test -race` or lint: the
+  Fuzz job reserves the key first, while it finishes first. Release builds read
+  no cache since 0.11.14 either way.
+- A PR run poisoning `main` or a release through the cache: PR caches are scoped
+  to `refs/pull/N/merge`.
+- One tag's cache reaching another tag's release: GitHub's scope rules forbid it.
+- Fork-forced eviction planting anything: it only forces a miss, and the re-save
+  comes from whatever code runs next.
 
 ### B7, specs 079 and 080, 2026-11-01
 
