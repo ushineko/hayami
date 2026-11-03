@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.14
+**Version**: 0.11.15
 
 *a chart you read at a glance*
 
@@ -618,7 +618,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.15 (2026-11-03)
 
 - **Security**: CI rebuilds the network helper's eBPF object from its source
   with pinned tools, and fails if it is not the one committed (spec 081, #276).
