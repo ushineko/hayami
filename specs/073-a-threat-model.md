@@ -2,7 +2,7 @@
 
 **Issue**: #240
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Context
 
@@ -131,11 +131,12 @@ parses (B4), and 075 hardens the supply chain and releases (B7).
       a section for each of B1–B7 carrying every heading of R1, and every
       defence it names points at a file that exists. (Each reference
       checked with grep.)
-- [ ] `SECURITY.md` exists, private vulnerability reporting is on, and a
-      test report filed through it reaches the maintainer. (`SECURITY.md`
-      written; reporting enabled, `{"enabled":true}`; the two advisories of
-      the first assessment were drafted through the same mechanism. A test
-      report from an account that is not the maintainer's is still to do.)
+- [x] `SECURITY.md` exists and private vulnerability reporting is on.
+      (`SECURITY.md` written; reporting enabled, `{"enabled":true}`; the two
+      advisories of the first assessment were drafted through the same
+      mechanism.) The criterion also asked for a test report filed from an
+      account that is not the maintainer's; the maintainer dropped that part
+      on 2026-11-03. The route has not been tried from outside.
 - [x] `.claude/CLAUDE.md`, `CONTRIBUTING.md` and the PR template carry the
       gate of R4. (The PR template and `CONTRIBUTING.md` are rendered from
       the shared contributing policy; it gained optional per-project
@@ -215,9 +216,11 @@ The first assessment, 2026-10-31, on `main` at 5fba846 (0.11.10):
 ## E2E Test Plan
 
 1. File a test report through private vulnerability reporting; it arrives
-   and is visible only to the maintainer. (AC 2)
+   and is visible only to the maintainer. (AC 2) Not run: dropped with that
+   part of AC 2.
 2. Open a PR touching `internal/nethelper`; the template asks the gate's
-   question. (AC 3)
+   question. (AC 3) Done: #258 and #262 touched `internal/nethelper`, and
+   both bodies carry the template's "Threat model" section.
 
 ### Prod visibility
 
