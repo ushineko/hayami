@@ -63,16 +63,16 @@ type Credentials struct {
 	// still be labelled correctly.
 	Plan string
 
-	// Tier is rateLimitTier, the store's half of the check RecordedPlan
-	// makes, and with Plan what a remembered plan is checked against
-	// (spec 082).
-	Tier string
-
 	// RecordedPlan is the plan as Claude Code's account record names it, in
 	// lower case ("ultra"), when that record is this store's account; empty
 	// otherwise. It is newer than Plan, which an Ultra store still gives as
 	// "max".
 	RecordedPlan string
+
+	// ObservedPlan is the plan the account's usage reading shows, set by the
+	// panel, which has the reading (spec 083). The record comes first: this
+	// is for when the record is another account's.
+	ObservedPlan string
 
 	// raw is the whole file as it was read, so a write preserves every key
 	// this build has never heard of. The file is Claude Code's.
@@ -187,7 +187,6 @@ func Read(s Store) (*Credentials, error) {
 		RefreshToken: o.RefreshToken,
 		ExpiresAt:    o.ExpiresAt,
 		Plan:         o.SubscriptionType,
-		Tier:         o.RateLimitTier,
 		RecordedPlan: recordedPlan(o.RateLimitTier),
 		raw:          raw,
 	}, nil
@@ -200,7 +199,7 @@ func (c *Credentials) Badge() string {
 	if c == nil {
 		return ""
 	}
-	switch first(c.RecordedPlan, c.Plan) {
+	switch first(c.ShownPlan(), c.Plan) {
 	case "ultra":
 		return "U"
 	case "max":
@@ -214,6 +213,13 @@ func (c *Credentials) Badge() string {
 	default:
 		return ""
 	}
+}
+
+// ShownPlan is the plan an account is called by where the store's own word is
+// out of date: the record's, or the one its usage reading shows. Empty when
+// there is neither.
+func (c *Credentials) ShownPlan() string {
+	return first(c.RecordedPlan, c.ObservedPlan)
 }
 
 // first is the first of its arguments that is not empty.

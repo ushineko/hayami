@@ -88,6 +88,25 @@ func TestASpendThatIsDisabledIsNotDrawn(t *testing.T) {
 	}
 }
 
+// A week with no five-hour window is what tells Ultra from Max. Only a payload
+// that says so counts: nothing read is not a window missing.
+func TestAWeekOnlyPayloadIsOneThatSaysSo(t *testing.T) {
+	week := `"seven_day": {"utilization": 40}`
+	for body, want := range map[string]bool{
+		`{` + week + `}`:                                  true,
+		`{"five_hour": null, ` + week + `}`:               true,
+		`{"five_hour": {"utilization": 1}, ` + week + `}`: false,
+		`{"five_hour": null, "seven_day": null}`:          false,
+		`{}`:                                              false,
+		`null`:                                            false,
+		``:                                                false,
+		`{"sev`:                                           false,
+		`[1, 2]`:                                          false,
+	} {
+		assert.Equal(t, want, usage.ClaudeWeekOnly(json.RawMessage(body)), "payload %q", body)
+	}
+}
+
 func TestACodexPayloadDecodesItsWindowsAndItsLimit(t *testing.T) {
 	got, err := usage.Codex(json.RawMessage(codexPayload))
 

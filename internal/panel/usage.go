@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -247,9 +248,9 @@ func refresh(ctx context.Context, now time.Time, a usage.Account, states map[str
 // after the wrapper that reaches it, and the cache files keep it; on screen it
 // is called by its plan once Claude Code's account record names that plan, so
 // an Ultra account is "CC ultra" and not "CC max". The record describes the
-// account that last refreshed it, so a plan it named is remembered while the
-// store still agrees (spec 082). A profile's name is its directory's, which
-// somebody chose, and stays.
+// account that last refreshed it, so when it is another account's the store's
+// own usage reading is asked (spec 083). A profile's name is its directory's,
+// which somebody chose, and stays.
 func claudeStores() (stores map[string]claude.Store, badges, names map[string]string) {
 	stores = map[string]claude.Store{}
 	badges = map[string]string{}
@@ -263,10 +264,10 @@ func claudeStores() (stores map[string]claude.Store, badges, names map[string]st
 	for _, s := range found {
 		stores[s.Name] = s
 		if creds, err := claude.Read(s); err == nil {
+			creds.ObservedPlan = observedPlan(s.Name, creds)
 			read[s.Name] = creds
 		}
 	}
-	rememberPlans(read, stores)
 	for _, s := range found {
 		creds, ok := read[s.Name]
 		if !ok {
@@ -275,11 +276,47 @@ func claudeStores() (stores map[string]claude.Store, badges, names map[string]st
 		badges[s.Name] = creds.Badge()
 		// A profile already called by the plan's name keeps it: two accounts
 		// under one caption would share a drawer.
-		if _, taken := stores[creds.RecordedPlan]; s.Name == claude.DefaultProfileName && creds.RecordedPlan != "" && !taken {
-			names[s.Name] = creds.RecordedPlan
+		plan := creds.ShownPlan()
+		if s.Name == claude.DefaultProfileName && plan != "" && !claudeNameTaken(plan, stores) {
+			names[s.Name] = plan
 		}
 	}
 	return stores, badges, names
+}
+
+// claudeNameTaken reports whether an account is already called name: a store,
+// or a cache file with no store behind it, which is drawn too.
+func claudeNameTaken(name string, stores map[string]claude.Store) bool {
+	if _, ok := stores[name]; ok {
+		return true
+	}
+	accounts, err := usage.Accounts()
+	if err != nil {
+		return false
+	}
+	return slices.Contains(accounts, usage.Account{Provider: usage.ProviderClaude, Name: name})
+}
+
+/*
+observedPlan is the plan a store's own usage reading shows, or empty. An Ultra
+store's credential file says "max", and what tells it from a Max account is
+that it has no five-hour window (#288). Worked out from the reading every time,
+so it cannot outlast the plan, and a failed fetch leaves the last good reading
+in the cache and so the same answer.
+
+It is an inference from a shape: should Max lose its five-hour window, this is
+the line that changes. A record that vouches for the store comes first, which
+is ShownPlan's order.
+*/
+func observedPlan(name string, creds *claude.Credentials) string {
+	if creds.Plan != "max" {
+		return ""
+	}
+	entry, err := usage.Read(name, usage.ProviderClaude)
+	if err != nil || entry == nil || !usage.ClaudeWeekOnly(entry.Data) {
+		return ""
+	}
+	return "ultra"
 }
 
 // accountLabel is what a caption calls an account: its own label, or the

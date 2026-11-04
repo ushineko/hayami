@@ -345,10 +345,6 @@ The last reading of each section is kept in `sections.json`, under
 `~/.cache/hayami` on Linux and `%LOCALAPPDATA%\hayami` on Windows, so a panel
 that has just started shows what it last knew, dimmed, until a live reading
 arrives. Readings older than a day are ignored, and deleting the file is safe.
-The plan Claude Code's account record last named for each Claude account is
-kept beside it in `claude-plans.json`, because the record describes whichever
-account used Claude Code last. It holds plan names and tiers, never a token,
-and deleting it is safe.
 
 The usage cache is shared with the Python tools: `~/.cache/claude-usage-widget`
 on Linux, `%LOCALAPPDATA%\claude-usage-widget\cache` on Windows.
@@ -624,10 +620,10 @@ MIT. See
 
 ### Unreleased
 
-- **Fixed**: an Ultra account stays "CC ultra" once another account has used
-  Claude Code. The account record describes whichever account refreshed it
-  last, so the plan it named is now remembered, and forgotten when the
-  account's own store changes type or tier (spec 082, #286).
+- **Fixed**: an Ultra account is "CC ultra" when the account record describes
+  another account. A store saying "max" whose usage reading has a seven-day
+  window and no five-hour one is called Ultra; a record that vouches for the
+  store and names its plan still decides (spec 083, #288).
 
 ### 0.11.15 (2026-11-03)
 
