@@ -137,8 +137,13 @@ Made by the operator on 2026-11-04.
 
 ### Phase 2: manual control
 
-- R17 Connect, disconnect and bounce are buttons in the drawer's VPN view, and in
-  no menu. Disconnect and bounce need the two presses ending a process needs.
+- R17 Connect, disconnect and bounce are rows in each VPN's part of the drawer, in no
+  menu, marked with an arrow because they otherwise read like the lines under them.
+  They are rows and not buttons, by the operator's decision on 2026-11-04, because a
+  drawer's buttons are in its heading and there is a VPN per part. Disconnect and bounce
+  need two presses: the first asks on the row, and the question lapses after 5 s.
+  One press at a time on a connection: the same one again is ignored, and another
+  replaces it, so a connect taking too long can be disconnected.
 - R18 NetworkManager activation goes through `ActivateConnection` and
   `DeactivateConnection`, leaving authorisation to polkit. hayami registers no
   secret agent and never sees a VPN's secret.
@@ -147,6 +152,10 @@ Made by the operator on 2026-11-04.
   Raising the browser, which vpn-toggle does by `kdotool`, is left out unless the
   flow proves unusable without it.
 - R20 Control is only in the desktop panel. The terminal panel reads.
+- R20a A press is bounded at vpn-toggle's 60 s, including a sign-in page left open; a
+  session that does not end up connected is closed. Starting a profile closes its older
+  sessions first, as vpn-toggle does. A profile that asks for a typed password is closed
+  and says so, because hayami takes no credential.
 
 ### Phase 3: the keepalive helper
 
@@ -251,12 +260,21 @@ helper's job (a phase 3 test confirms this).
 
 ### Phase 2
 
-- [ ] A real NetworkManager VPN is connected, disconnected and bounced from the
-      drawer, and the card follows.
-- [ ] A real OpenVPN3 session completes browser sign-in from the drawer.
-- [ ] A sign-in URL with any scheme other than `https` is refused, by test.
-- [ ] A press denied by polkit is reported, and the state stays as it was.
-- [ ] The terminal panel has no control path, by test.
+- [x] A real NetworkManager VPN is connected, disconnected and bounced from the
+      drawer, and the card follows. On the desk on 2026-11-04, pressed by the operator;
+      `TestARealVPNIsConnectedAndDisconnected` does the same through the real bus when
+      `HAYAMI_TEST_VPN` names a connection.
+- [x] A real OpenVPN3 session completes browser sign-in from the drawer. On the desk on
+      2026-11-04, pressed by the operator, with the browser already signed in. This
+      confirmed that `SESS_AUTH_URL`'s message is the address.
+- [x] A sign-in URL with any scheme other than `https` is refused, by test.
+      `TestOnlyAnHTTPSSignInAddressIsOpened`, `TestASessionThatDoesNotConnectIsClosed`.
+- [x] A press denied by polkit is reported, and the state stays as it was.
+      `TestAPressPolkitRefusesIsReported`, `TestARefusedPressIsSaidUnderThatVPN`, against
+      NetworkManager's error name; not seen from a real refusal on this desk, where the
+      session's polkit allows it.
+- [x] The terminal panel has no control path, by test.
+      `TestTheTerminalPanelHasNoWayToActOnAVPN`, `TestAVPNsControlsAreInNoTextAndNoJSON`.
 
 ### Phase 3
 
@@ -304,8 +322,11 @@ helper's job (a phase 3 test confirms this).
   and skips nsswitch, so a tunnel with its own DNS may not be asked. On the desk,
   where `/etc/resolv.conf` lists the LAN's servers, Go's resolver and `getent` agreed on
   the one tunnel compared, and resolved over the bus gives the same answer as `getent`.
-- **Assumed:** OpenVPN3 session properties suffice for name, state and interface.
-  Untested until a session is live.
+- **A panel quit during a sign-in leaves the session waiting.** The row reads connecting
+  on the next start, and Disconnect closes it.
+- **A tunnel can take the default route.** On the desk, one connection takes the
+  default route and DNS while up. That is the connection's own setting, and a press
+  brings it into effect with no warning beyond the row.
 - **Two monitors during phases 1 and 2.** vpn-toggle's probes and hayami's run side
   by side, which is harmless.
 - **Rollback.** Each phase is one revertible PR. No setting is required, an unknown
@@ -359,6 +380,12 @@ profile. Installed build through the fynstall CLI installer.
 | Kill the tunnel's VPN process, without the helper, then with it | Without: what NetworkManager does is recorded. With: re-dialled | Phase 3 drop |
 | Disconnect from hayami, helper on | Stays down | Phase 3 disconnect |
 | Quit the panel; kill the helper | Helper keeps running; restarts after the kill | Phase 3 lifetime |
+
+Done on the desk on 2026-11-04, with the tunnel named by `HAYAMI_TEST_VPN` for the
+core test and pressed by the operator on a real window for the rest: a NetworkManager VPN
+connected, disconnected and bounced through the real bus; the same disconnect pressed in the drawer;
+an OpenVPN3 connect pressed in the drawer, which opened the browser, already signed in,
+and came up. A sign-in typed through inside the 60 s has not been run.
 
 ### Prod visibility
 

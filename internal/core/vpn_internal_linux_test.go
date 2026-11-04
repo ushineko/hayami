@@ -49,7 +49,7 @@ func (f *fakeBus) callArgs(_ context.Context, _ string, _ dbus.ObjectPath, _ str
 	return nil
 }
 
-func (f *fakeBus) callStarting(_ context.Context, _ string, _ dbus.ObjectPath, _ string, out ...any) error {
+func (f *fakeBus) callStarting(_ context.Context, _ string, _ dbus.ObjectPath, _ string, _ []any, out ...any) error {
 	f.startCalls++
 	if f.startCalls <= f.startFails {
 		return errors.New("the object does not exist yet")

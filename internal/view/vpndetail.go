@@ -3,10 +3,64 @@ package view
 import (
 	"fmt"
 	"slices"
+	"strings"
+
+	"github.com/ushineko/hayami/internal/safetext"
 )
 
 // DetailVPN is the VPNs behind the Network card's rows (spec 085 R13).
 const DetailVPN = "vpn"
+
+// What a press on a VPN's row can ask for (spec 085 R17).
+const (
+	VPNConnect    = "connect"
+	VPNDisconnect = "disconnect"
+	VPNBounce     = "bounce"
+)
+
+// actVPN starts a line's Open that asks for an action on a VPN, as against a detail
+// to open. The action comes next and the connection's name last, since a name can
+// hold anything.
+const actVPN = "!vpn/"
+
+// VPNAct is what a line's Open says to ask for an action on a VPN.
+func VPNAct(action, name string) string { return actVPN + action + "/" + name }
+
+// ParseVPNAct is the action and the VPN in a line's Open, if that is what it asks.
+func ParseVPNAct(open string) (action, name string, ok bool) {
+	rest, ok := strings.CutPrefix(open, actVPN)
+	if !ok {
+		return "", "", false
+	}
+	return strings.Cut(rest, "/")
+}
+
+// vpnControls are what can be asked of a VPN in the state it was read in. Nothing
+// for one that could not be read: it is not known which would apply.
+func vpnControls(v VPNReading) []DetailLine {
+	row := func(label, action string) DetailLine {
+		return DetailLine{Name: label, Open: VPNAct(action, v.Name)}
+	}
+	switch v.State {
+	case VPNDown:
+		return []DetailLine{row("Connect", VPNConnect)}
+	case VPNConnecting:
+		return []DetailLine{row("Disconnect", VPNDisconnect)}
+	case VPNUp:
+		return []DetailLine{row("Disconnect", VPNDisconnect), row("Bounce", VPNBounce)}
+	}
+	return nil
+}
+
+// VPNSaid is the line that says how a press went: what is under way, or why it did
+// not work. The words can be another program's, so they are made safe and cut to fit.
+func VPNSaid(text string, failed bool) DetailLine {
+	line := DetailLine{Name: "Last press", Value: clipMiddle(safetext.Printable(text, 0), vpnValueWidth), Status: Info}
+	if failed {
+		line.Status = Warn
+	}
+	return line
+}
 
 // detailTrailWidth is how many characters a trail takes in `detail`'s text.
 const detailTrailWidth = 40
@@ -69,6 +123,7 @@ func VPNDetail(section string, vpns []VPNDetailReading) Detail {
 			TitleParts: []Part{{Text: state.word, Status: state.status}},
 			Trails:     vpnTrails(v),
 			Lines:      vpnLines(v),
+			Controls:   vpnControls(v.VPNReading),
 		})
 	}
 	return d
@@ -81,8 +136,12 @@ func vpnName(v VPNReading) string {
 	return v.Name
 }
 
+// vpnPlotMinimum is the fewest points a plot draws anything from: one point is no
+// line, and the plot would stand empty at its full height until the next check.
+const vpnPlotMinimum = 2
+
 func vpnTrails(v VPNDetailReading) []Trail {
-	if len(v.Samples) == 0 {
+	if len(v.Samples) < vpnPlotMinimum {
 		return nil
 	}
 	out := []Trail{{Name: "latency", Samples: v.Samples, Status: Info, Coloured: true}}

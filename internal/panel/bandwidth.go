@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -75,6 +76,23 @@ func (b *Bandwidth) SetVPNs(settings config.BandwidthSettings) {
 	b.labelsMu.Unlock()
 	b.vpns.SetNames(names)
 	b.health.configure(settings)
+}
+
+// ControlVPN does what a press on a VPN's row asked. Only a chosen VPN has rows, so
+// any other name is not a press.
+func (b *Bandwidth) ControlVPN(ctx context.Context, action, name string, signIn core.SignIn) error {
+	if b.vpns == nil || !slices.ContainsFunc(b.vpns.Readings(), func(v core.VPN) bool { return v.Name == name }) {
+		return core.ErrVPNNotConfigured
+	}
+	switch action {
+	case view.VPNConnect:
+		return b.vpns.Connect(ctx, name, signIn) //nolint:wrapcheck // its words are what the row says
+	case view.VPNDisconnect:
+		return b.vpns.Disconnect(ctx, name) //nolint:wrapcheck // its words are what the row says
+	case view.VPNBounce:
+		return b.vpns.Bounce(ctx, name, signIn) //nolint:wrapcheck // its words are what the row says
+	}
+	return fmt.Errorf("no VPN action %q", action)
 }
 
 // vpnChosen reports whether this source draws any VPN.

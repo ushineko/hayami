@@ -13,6 +13,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -60,6 +61,14 @@ type Detailer interface {
 	// CloseDetail says a detail is no longer shown, so whatever was held
 	// open to read it can be let go.
 	CloseDetail(id string)
+}
+
+// VPNController is a source that can act on a VPN, for the shell with something to
+// press (spec 085 R20).
+type VPNController interface {
+	// ControlVPN does one of view's VPN actions on a chosen connection, and returns
+	// once it has worked or will not.
+	ControlVPN(ctx context.Context, action, name string, signIn core.SignIn) error
 }
 
 // ProcessInterval is how often a list of processes is read while it is

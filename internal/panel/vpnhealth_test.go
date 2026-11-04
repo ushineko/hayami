@@ -233,6 +233,13 @@ func TestTheDetailPlotsLatencyAndMarksFailures(t *testing.T) {
 	assert.Zero(t, trails[1].Samples[0])
 	assert.Positive(t, trails[1].Samples[1], "the failure rises to the top of the plot")
 	assert.Contains(t, d.Text(), "1 of ")
+
+	// The poll started a cycle, whose point is on its way to the test's directory,
+	// and the test's end removes that directory.
+	assert.Eventually(t, func() bool {
+		raw, err := os.ReadFile(path)
+		return err == nil && strings.Count(string(raw), "\n") == len(lines)+1
+	}, 5*time.Second, time.Millisecond)
 }
 
 func TestTheVPNDetailIsOfferedOnlyWhenOneIsChosen(t *testing.T) {
