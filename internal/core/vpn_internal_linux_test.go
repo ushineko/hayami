@@ -23,6 +23,11 @@ type fakeBus struct {
 	settings int
 	answers  []resolvedAddress
 	args     []any
+
+	configs     []dbus.ObjectPath
+	connections map[dbus.ObjectPath]map[string]dbus.Variant
+	startCalls  int
+	startFails  int
 }
 
 func (f *fakeBus) hasOwner(_ context.Context, name string) (bool, error) {
@@ -44,13 +49,26 @@ func (f *fakeBus) callArgs(_ context.Context, _ string, _ dbus.ObjectPath, _ str
 	return nil
 }
 
-func (f *fakeBus) call(_ context.Context, _ string, _ dbus.ObjectPath, method string, out ...any) error {
+func (f *fakeBus) callStarting(_ context.Context, _ string, _ dbus.ObjectPath, _ string, out ...any) error {
+	f.startCalls++
+	if f.startCalls <= f.startFails {
+		return errors.New("the object does not exist yet")
+	}
+	*out[0].(*[]dbus.ObjectPath) = f.configs
+	return nil
+}
+
+func (f *fakeBus) call(_ context.Context, _ string, path dbus.ObjectPath, method string, out ...any) error {
 	switch method {
+	case nmSetIface + ".ListConnections":
+		*out[0].(*[]dbus.ObjectPath) = f.configs
 	case nmSettings + ".GetSettings":
 		f.settings++
-		*out[0].(*map[string]map[string]dbus.Variant) = map[string]map[string]dbus.Variant{
-			"connection": {"timestamp": dbus.MakeVariant(f.stamp)},
+		connection := map[string]dbus.Variant{"timestamp": dbus.MakeVariant(f.stamp)}
+		if c, ok := f.connections[path]; ok {
+			connection = c
 		}
+		*out[0].(*map[string]map[string]dbus.Variant) = map[string]map[string]dbus.Variant{"connection": connection}
 	case ov3Name + ".FetchAvailableSessions":
 		*out[0].(*[]dbus.ObjectPath) = f.sessions
 	default:
@@ -176,6 +194,55 @@ func TestOpenVPN3SessionsAreRead(t *testing.T) {
 	assert.Equal(t, "tun1", got[0].Interface)
 	assert.Equal(t, time.Unix(1_700_000_000, 0), got[0].Since)
 	assert.Equal(t, VPNConnecting, got[1].State, "a session waiting for its sign-in page is not up")
+}
+
+func TestNetworkManagersVPNConnectionsAreListedUpOrNot(t *testing.T) {
+	bus := &fakeBus{
+		owners:  map[string]bool{nmName: true},
+		configs: []dbus.ObjectPath{"/s/wired", "/s/vpn", "/s/gone"},
+		connections: map[dbus.ObjectPath]map[string]dbus.Variant{
+			"/s/wired": {"type": dbus.MakeVariant("802-3-ethernet"), "id": dbus.MakeVariant("wired")},
+			"/s/vpn":   {"type": dbus.MakeVariant("vpn"), "id": dbus.MakeVariant("invented")},
+		},
+	}
+
+	got, err := newNMVPNs(bus).configured(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"invented"}, got)
+}
+
+// The manager starts on the call, and the first can arrive before its object does.
+func TestOpenVPN3ProfilesAreListedOnceItsManagerHasStarted(t *testing.T) {
+	bus := &fakeBus{
+		startFails: 1,
+		configs:    []dbus.ObjectPath{"/c/1"},
+		objects:    map[dbus.ObjectPath]map[string]dbus.Variant{"/c/1": {"name": dbus.MakeVariant("invented")}},
+	}
+
+	got, err := ov3Configured(context.Background(), bus)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"invented"}, got)
+	assert.Equal(t, 2, bus.startCalls)
+}
+
+// The real system bus: every system this machine runs lists without an error.
+func TestRealConfiguredConnectionsAreListed(t *testing.T) {
+	for _, system := range linuxVPNs() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		names, err := system.Configured(ctx)
+		cancel()
+		if errors.Is(err, ErrVPNBackendAbsent) {
+			continue
+		}
+		if err != nil {
+			t.Skipf("%s: %v", system.Name, err)
+		}
+		for _, name := range names {
+			assert.NotEmpty(t, name, system.Name)
+		}
+	}
 }
 
 // The real system bus: what a fake cannot say is whether these are the right

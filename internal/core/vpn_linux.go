@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"time"
@@ -19,6 +20,10 @@ const (
 	nmSettings   = nmName + ".Settings.Connection"
 	ov3Name      = "net.openvpn.v3.sessions"
 	ov3Path      = "/net/openvpn/v3/sessions"
+	ov3Configs   = "net.openvpn.v3.configuration"
+	ov3CfgPath   = "/net/openvpn/v3/configuration"
+	nmSetPath    = nmPath + "/Settings"
+	nmSetIface   = nmName + ".Settings"
 	dbusProps    = "org.freedesktop.DBus.Properties.GetAll"
 	dbusHasOwner = "org.freedesktop.DBus.NameHasOwner"
 )
@@ -32,6 +37,10 @@ type vpnBus interface {
 	props(ctx context.Context, dest string, path dbus.ObjectPath, iface string) (map[string]dbus.Variant, error)
 	call(ctx context.Context, dest string, path dbus.ObjectPath, method string, out ...any) error
 	callArgs(ctx context.Context, dest string, path dbus.ObjectPath, method string, args []any, out ...any) error
+
+	// callStarting is a call that may start its service, for a person who has
+	// asked for the list it gives.
+	callStarting(ctx context.Context, dest string, path dbus.ObjectPath, method string, out ...any) error
 }
 
 // systemBus is the real one. It connects on first use, so a machine with no
@@ -65,6 +74,18 @@ func (b systemBus) call(ctx context.Context, dest string, path dbus.ObjectPath, 
 
 func (b systemBus) callArgs(ctx context.Context, dest string, path dbus.ObjectPath, method string, args []any, out ...any) error {
 	return b.callWith(ctx, dest, path, method, args, out...)
+}
+
+func (systemBus) callStarting(ctx context.Context, dest string, path dbus.ObjectPath, method string, out ...any) error {
+	conn, err := dbus.SystemBus()
+	if err != nil {
+		return fmt.Errorf("connecting to the system bus: %w", err)
+	}
+	err = conn.Object(dest, path).CallWithContext(ctx, method, 0).Store(out...)
+	if err != nil {
+		return fmt.Errorf("calling %s: %w", method, err)
+	}
+	return nil
 }
 
 func (systemBus) callWith(ctx context.Context, dest string, path dbus.ObjectPath, method string, args []any, out ...any) error {
@@ -205,6 +226,65 @@ func (n *nmVPNs) started(ctx context.Context, active, connection dbus.ObjectPath
 	return t
 }
 
+// configured lists NetworkManager's connections of type `vpn`, as vpn-toggle does.
+// A connection's settings come without its secrets, which take a call this never
+// makes.
+func (n *nmVPNs) configured(ctx context.Context) ([]string, error) {
+	has, err := n.bus.hasOwner(ctx, nmName)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, ErrVPNBackendAbsent
+	}
+	var paths []dbus.ObjectPath
+	if err := n.bus.call(ctx, nmName, nmSetPath, nmSetIface+".ListConnections", &paths); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, path := range paths {
+		var settings map[string]map[string]dbus.Variant
+		if err := n.bus.call(ctx, nmName, path, nmSettings+".GetSettings", &settings); err != nil {
+			continue
+		}
+		c := settings["connection"]
+		if variant[string](c, "type") == "vpn" {
+			if id := variant[string](c, "id"); id != "" {
+				out = append(out, id)
+			}
+		}
+	}
+	return out, nil
+}
+
+// ov3Configured lists OpenVPN3's configuration profiles. Its manager exits when idle
+// and starts when called, and the first call can reach it before it has made the
+// object, so that one is asked twice.
+func ov3Configured(ctx context.Context, bus vpnBus) ([]string, error) {
+	var paths []dbus.ObjectPath
+	method := ov3Configs + ".FetchAvailableConfigs"
+	if err := bus.callStarting(ctx, ov3Configs, ov3CfgPath, method, &paths); err != nil {
+		var unknown dbus.Error
+		if errors.As(err, &unknown) && unknown.Name == "org.freedesktop.DBus.Error.ServiceUnknown" {
+			return nil, ErrVPNBackendAbsent
+		}
+		if err := bus.callStarting(ctx, ov3Configs, ov3CfgPath, method, &paths); err != nil {
+			return nil, err
+		}
+	}
+	var out []string
+	for _, path := range paths {
+		p, err := bus.props(ctx, ov3Configs, path, ov3Configs)
+		if err != nil {
+			continue
+		}
+		if name := variant[string](p, "name"); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out, nil
+}
+
 // ov3Connected is the status OpenVPN3 reports for a session with a tunnel:
 // major CONNECTION, minor CONN_CONNECTED.
 var ov3Connected = [2]uint32{2, 7}
@@ -253,7 +333,11 @@ func linuxVPNs() []VPNBackend {
 	bus := systemBus{}
 	nm := newNMVPNs(bus)
 	return []VPNBackend{
-		{Name: "NetworkManager", Active: nm.active},
-		{Name: "OpenVPN3", Active: func(ctx context.Context) ([]VPN, error) { return ov3VPNs(ctx, bus) }},
+		{Name: "NetworkManager", Active: nm.active, Configured: nm.configured},
+		{
+			Name:       "OpenVPN3",
+			Active:     func(ctx context.Context) ([]VPN, error) { return ov3VPNs(ctx, bus) },
+			Configured: func(ctx context.Context) ([]string, error) { return ov3Configured(ctx, bus) },
+		},
 	}
 }

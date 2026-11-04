@@ -65,6 +65,11 @@ type VPNBackend struct {
 	// Active is the connections that are up or coming up. One this does not
 	// list is down.
 	Active func(context.Context) ([]VPN, error)
+
+	// Configured is the name of every connection this system has, up or not, for
+	// a person choosing among them. It is asked only then, and may start a
+	// system's daemon, which a poll never does.
+	Configured func(context.Context) ([]string, error)
 }
 
 // VPNSection reads the VPNs the user chose. A chosen VPN always has a reading,

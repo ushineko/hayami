@@ -632,9 +632,11 @@ MIT. See
 
 - **Added**: a VPN can have a line on the Network card, with its state and how
   long it has been connected. Linux only, read from NetworkManager and OpenVPN3
-  over the system bus. For now it is chosen in the settings file, under
+  over the system bus. It is chosen in preferences, on the Sections page, or under
   `sectionSettings.bandwidth.vpns`; nothing changes on a machine that names none
   (spec 085, #298).
+- **Added**: preferences offers once to import vpn-toggle's VPNs and checks, and leaves
+  its files alone. A geolocation check is not imported, and the import says so.
 - **Added**: a VPN can have health checks, a ping or a DNS lookup, made natively by
   one process however many panels are running. Its row shows the latency, or `fail`
   beside `up` for a tunnel that is on and not answering. The Network drawer gains a

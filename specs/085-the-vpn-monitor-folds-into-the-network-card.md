@@ -64,8 +64,8 @@ Made by the operator on 2026-11-04.
   that is on but unresponsive, and re-dials one that dropped.
 - **OpenVPN3:** reconnected manually, since its connections need a sign-in page and a
   person at the desk. The helper only notifies.
-- **Checks:** ping and DNS natively. Geolocation only as an explicit per-VPN
-  opt-in, off by default.
+- **Checks:** ping and DNS natively. Geolocation was first to be an opt-in, and was
+  then dropped (R16).
 - **Graphs:** latency in the Network drawer. The card has a text line per VPN,
   and its plot keeps carrying rates.
 - **Migration:** a one-time offer to import the VPN list and checks. Metrics
@@ -103,7 +103,7 @@ Made by the operator on 2026-11-04.
   and `hayami-tui detail`, as the peer lists already show addresses (B6). They are not
   on the card, where space is limited, and so not in `readings`. `doctor` shows none,
   since it is what gets pasted into a bug report. The public exit address is neither
-  looked up for display nor shown; the geolocation opt-in (R16) only compares it. A
+  looked up nor shown. A
   connection's name is shown because the person chose it. Everything passes the
   printable filter.
 - R10 **Checks.** Each check is a table entry: `ping` (host), `dns` (hostname,
@@ -131,11 +131,9 @@ Made by the operator on 2026-11-04.
 - R15 **Import.** When vpn-toggle's config exists and no VPN is configured,
   preferences offers once to import its VPN list and checks. The offer is
   remembered when declined. The file is parsed as untrusted and only read.
-- R16 **Geolocation.** A per-VPN opt-in, off by default, and imported as off even
-  where vpn-toggle had it on, with the import naming what it left off. Preferences
-  says which third party is told the address before it can be switched on. The
-  provider must offer HTTPS; ip-api.com's free tier offers only HTTP, so choosing
-  the provider is a task in this phase.
+- R16 **Geolocation is not carried over,** by the operator's decision on 2026-11-04. It
+  told a third party this machine's address, and ip-api.com's free tier is HTTP only.
+  hayami makes no third-party call for a VPN. An import names the check it left out.
 
 ### Phase 2: manual control
 
@@ -243,10 +241,11 @@ helper's job (a phase 3 test confirms this).
 - [x] The drawer and `detail` show the real tunnel's address, gateway and routes;
       the card, `readings` and `doctor` contain no address. `TestReadingsCarryNoVPNAddress`;
       `doctor` read on the desk.
-- [ ] Import reads a fixture of vpn-toggle's config, leaves geolocation off and
-      says so, and is offered once.
-- [ ] No third-party connection is made with geolocation off, shown by a test
-      that fails any dial to a provider.
+- [x] Import reads a fixture of vpn-toggle's config, leaves geolocation out and
+      says so, and is offered once. `TestAGeolocationCheckIsLeftOutAndNamed`,
+      `TestTheImportIsOfferedOnce`.
+- [x] No third-party connection is made: no VPN code dials anything but the targets in
+      the settings, with no geolocation code present.
 - [x] A hidden Network section performs no check and no bus read. A hidden section's
       source is not polled (spec 052), and every check and read starts from `Poll`.
 
@@ -308,7 +307,7 @@ helper's job (a phase 3 test confirms this).
 - **Assumed:** OpenVPN3 session properties suffice for name, state and interface.
   Untested until a session is live.
 - **Two monitors during phases 1 and 2.** vpn-toggle's probes and hayami's run side
-  by side. Harmless, but the geolocation provider sees both.
+  by side, which is harmless.
 - **Rollback.** Each phase is one revertible PR. No setting is required, an unknown
   setting is ignored by an older build, and the store is a cache. vpn-toggle stays
   installed until after phase 3 has run for a while, so reverting leaves a working
@@ -335,8 +334,6 @@ Update `docs/threat-model.md` in the PR of the phase named.
   card, `readings` and `doctor` omit them (R9). Connection
   names can identify an employer or place, so the screenshot rules apply to them and
   the gallery must not show them unreviewed.
-- **Geolocation (phase 1).** The first call to a third party about the person's own
-  address, off by default, and recorded under B5 as an accepted disclosure when on.
 - **B3, credentials.** No boundary touched: no secret agent, no token. An OpenVPN3
   sign-in URL is treated as sensitive, and is not logged (R19).
 - **B2, installing (phase 3).** A new user unit, installed on request and removed
