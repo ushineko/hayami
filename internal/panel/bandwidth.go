@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -25,6 +26,12 @@ type Bandwidth struct {
 
 	// names puts names to peers.
 	names *core.PeerNames
+
+	// vpns reads the chosen VPNs (spec 085), and labels is what the card calls
+	// each. Nil on a platform with no VPN systems.
+	vpns     *core.VPNSection
+	labelsMu sync.Mutex
+	labels   map[string]string
 }
 
 // NewBandwidth builds the bandwidth source over the named interfaces. read is
@@ -36,6 +43,48 @@ func NewBandwidth(names []string, read func() (map[string]core.Counters, error))
 // SetNetProcesses gives the source a reader of the network by process, which
 // is what makes its card open a list.
 func (b *Bandwidth) SetNetProcesses(build func() core.NetReader) { b.net = build }
+
+// SetVPNSystems gives the source the systems that keep VPNs and the ones
+// chosen. A platform with no systems has no VPN rows, whatever the settings say
+// (spec 085 R3).
+func (b *Bandwidth) SetVPNSystems(systems []core.VPNBackend, chosen []config.VPNItem) {
+	if len(systems) == 0 {
+		return
+	}
+	b.vpns = core.NewVPNSection(nil, systems)
+	b.SetVPNs(chosen)
+}
+
+// SetVPNs replaces the chosen VPNs, for a change of the settings.
+func (b *Bandwidth) SetVPNs(chosen []config.VPNItem) {
+	if b.vpns == nil {
+		return
+	}
+	names := make([]string, 0, len(chosen))
+	labels := make(map[string]string, len(chosen))
+	for _, c := range chosen {
+		names = append(names, c.Name)
+		labels[c.Name] = c.Label
+	}
+	b.labelsMu.Lock()
+	b.labels = labels
+	b.labelsMu.Unlock()
+	b.vpns.SetNames(names)
+}
+
+// vpnChosen reports whether this source draws any VPN.
+func (b *Bandwidth) vpnChosen() bool { return b.vpns != nil && b.vpns.Chosen() }
+
+// Poll reads the interfaces, and the VPNs when they are due. Either is enough
+// for the card to have something to say.
+func (b *Bandwidth) Poll(ctx context.Context) (bool, error) {
+	has, err := b.BandwidthSection.Poll(ctx)
+	if b.vpnChosen() {
+		b.vpns.Poll(ctx)
+		has = true
+	}
+	return has, err //nolint:wrapcheck // the section's own account
+}
 
 // Section turns the last sample into rows, and the trails into a plot.
 //
@@ -77,7 +126,7 @@ func (b *Bandwidth) Section() view.Section {
 		})
 	}
 	sec := view.Bandwidth(out)
-	if len(readings) == 0 {
+	if len(readings) == 0 && !b.vpnChosen() {
 		reasons = append(reasons, view.Reason{
 			Text: "no interfaces chosen", Status: view.Info,
 			Detail: "pick one in the preferences, or pass --sections",
@@ -90,11 +139,52 @@ func (b *Bandwidth) Section() view.Section {
 		// doctor say it; the words are the source's (spec 040).
 		reasons = append(reasons, reason(view.Reason{Label: "Wi-Fi", Status: view.Info, Aside: true}, err))
 	}
+	if b.vpnChosen() {
+		sec.Rows = append(sec.Rows, view.VPNRows(b.vpnReadings())...)
+		reasons = append(reasons, b.vpnReasons()...)
+	}
 	sec.Reasons = reasons
 	if b.net != nil {
 		sec.Opens = view.DetailProcesses
 	}
 	return sec
+}
+
+// vpnStates is core's state as the view takes it.
+var vpnStates = map[core.VPNState]view.VPNState{
+	core.VPNDown: view.VPNDown, core.VPNConnecting: view.VPNConnecting,
+	core.VPNUp: view.VPNUp, core.VPNUnknown: view.VPNUnknown,
+}
+
+// vpnReadings are the chosen VPNs as the view takes them.
+func (b *Bandwidth) vpnReadings() []view.VPNReading {
+	b.labelsMu.Lock()
+	labels := b.labels
+	b.labelsMu.Unlock()
+	now := time.Now()
+	vpns := b.vpns.Readings()
+	out := make([]view.VPNReading, 0, len(vpns))
+	for _, v := range vpns {
+		out = append(out, view.VPNReading{
+			Name: v.Name, Label: labels[v.Name], State: vpnStates[v.State],
+			Interface: v.Interface, Stale: v.Stale,
+			Connected: view.Maybe(now.Sub(v.Since), v.State == core.VPNUp && !v.Since.IsZero()),
+		})
+	}
+	return out
+}
+
+// vpnReasons say why the rows may not be the whole story: a system that would
+// not answer, or none running at all. Neither makes a row read as a tunnel down
+// (spec 085 R4).
+func (b *Bandwidth) vpnReasons() []view.Reason {
+	if err := b.vpns.Failed(); err != nil {
+		return []view.Reason{{Label: "VPN", Text: "would not answer", Detail: err.Error(), Status: view.Warn}}
+	}
+	if b.vpns.NoSystem() {
+		return []view.Reason{{Label: "VPN", Text: "no VPN system running", Status: view.Info}}
+	}
+	return nil
 }
 
 // Details is the network by process, where this source was given a reader.
@@ -210,8 +300,17 @@ func link(w core.Wireless) view.LinkReading {
 // Key names the section.
 func (b *Bandwidth) Key() string { return view.BandwidthInfo.Key }
 
-// Data is the last sample as plain values.
-func (b *Bandwidth) Data() any { return b.Readings() }
+// Data is the last sample as plain values. With no VPN chosen it is the list of
+// interfaces it always was, so a script reading it sees no change (spec 085 R7).
+func (b *Bandwidth) Data() any {
+	if !b.vpnChosen() {
+		return b.Readings()
+	}
+	return struct {
+		Interfaces []core.Rates `json:"interfaces"`
+		VPNs       []core.VPN   `json:"vpns"`
+	}{b.Readings(), b.vpns.Readings()}
+}
 
 /*
 peerDetail is the breakdown: one part per interface, each the

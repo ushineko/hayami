@@ -29,6 +29,7 @@ func NewHost(HostConfig) Host {
 			samples: processes,
 		},
 		NetProcesses: func() NetReader { return newNetReader(processes) },
+		VPNs:         linuxVPNs(),
 		Permission:   PermissionAbsence,
 	}
 }

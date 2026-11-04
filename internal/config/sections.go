@@ -81,9 +81,18 @@ func (s Setting[T]) Set(c Config, v T) Config {
 	return c
 }
 
-// BandwidthSettings are the bandwidth section's: which interfaces it watches.
+// BandwidthSettings are the bandwidth section's: which interfaces it watches,
+// and which VPNs have a row on its card (spec 085).
 type BandwidthSettings struct {
-	Interfaces []string `json:"interfaces,omitempty"`
+	Interfaces []string  `json:"interfaces,omitempty"`
+	VPNs       []VPNItem `json:"vpns,omitempty"`
+}
+
+// VPNItem is one chosen VPN: the connection's name, and what the card calls it
+// where that is long, as a provider's generated names are.
+type VPNItem struct {
+	Name  string `json:"name"`
+	Label string `json:"label,omitempty"`
 }
 
 // CoolerSettings are the cooler section's: where LibreHardwareMonitor serves

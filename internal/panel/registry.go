@@ -68,11 +68,13 @@ func (e Env) withHost() Env {
 // counters and Wi-Fi where the env names no counters. A test's counters read
 // no Wi-Fi, as they always have.
 func (e Env) bandwidth() Source {
-	names := config.Bandwidth.Get(e.Settings).Interfaces
+	settings := config.Bandwidth.Get(e.Settings)
+	names := settings.Interfaces
 	if e.Counters != nil {
 		return NewBandwidth(names, e.Counters)
 	}
 	b := NewBandwidth(names, e.Host.Counters)
+	b.SetVPNSystems(e.Host.VPNs, settings.VPNs)
 	b.SetWirelessReader(e.Host.Wireless)
 	if e.Host.NetProcesses != nil {
 		b.SetNetProcesses(e.Host.NetProcesses)

@@ -65,6 +65,10 @@ func paritySections(t *testing.T) []view.Section {
 		},
 		{Name: "Ethernet 2", HasRate: true, HasTotal: true},
 	})
+	bandwidth.Rows = append(bandwidth.Rows, view.VPNRows([]view.VPNReading{
+		{Name: "invented-gateway-udp", Label: "Gateway", State: view.VPNUp, Interface: "tun0", Connected: view.Some(90 * time.Minute)},
+		{Name: "office", State: view.VPNDown},
+	})...)
 	bandwidth.Reasons = []view.Reason{{Label: "wlan9", Text: "not present", Status: view.Info}}
 
 	cooler := view.Cooler(view.CoolerReading{Probes: []view.Probe{

@@ -330,6 +330,9 @@ hayami:
         bandwidth:
             interfaces:
                 - eno2
+            vpns:
+                - name: office-gateway-udp
+                  label: Office
         cooler:
             lhm: http://127.0.0.1:8085/data.json
 ```
@@ -617,6 +620,14 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: a VPN can have a line on the Network card, with its state and how
+  long it has been connected. Linux only, read from NetworkManager and OpenVPN3
+  over the system bus. For now it is chosen in the settings file, under
+  `sectionSettings.bandwidth.vpns`; nothing changes on a machine that names none
+  (spec 085, #298).
 
 ### 0.11.18 (2026-11-04)
 
