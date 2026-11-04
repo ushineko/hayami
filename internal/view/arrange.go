@@ -354,7 +354,7 @@ func trailRow(s Section, t Trail, width int, c columns, p Painter) string {
 
 // trailLabel names a plot's line. A section with one trail is named for the
 // section, which is what it has always been; a section with two names each
-// trail, because "Cooler" twice is two lines a reader cannot tell apart.
+// trail, because "Hardware" twice is two lines a reader cannot tell apart.
 func trailLabel(s Section, t Trail) string {
 	if len(s.Trails) < 2 || t.Name == "" {
 		return s.Title

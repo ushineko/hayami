@@ -137,3 +137,13 @@ func TestTheCacheIsReplacedRatherThanRewritten(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "a temporary file was left in the cache directory")
 }
+
+// A card keeps the title it is built with, so a cache written before a section
+// was renamed must not name the card for the life of the program.
+func TestARestoredSectionCarriesThisBuildsTitle(t *testing.T) {
+	c := readings.Cache{"cooler": {At: time.Now(), Section: view.Section{Key: "cooler", Title: "Cooler"}}}
+
+	s, err := c.Restore("cooler")
+	require.NoError(t, err)
+	assert.Equal(t, view.CoolerInfo.Title, s.Title)
+}

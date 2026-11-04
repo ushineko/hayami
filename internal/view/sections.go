@@ -27,9 +27,9 @@ type SectionInfo struct {
 // The sections, by name, for the builder and the source that each belongs
 // to.
 var (
-	BandwidthInfo   = SectionInfo{Key: "bandwidth", Title: "Bandwidth", Icon: IconBandwidth, Default: true}
-	UsageInfo       = SectionInfo{Key: "usage", Title: "Usage", Icon: IconUsage, Default: true}
-	CoolerInfo      = SectionInfo{Key: "cooler", Title: "Cooler", Icon: IconCooler, Default: true}
+	BandwidthInfo   = SectionInfo{Key: "bandwidth", Title: "Network", Icon: IconBandwidth, Default: true}
+	UsageInfo       = SectionInfo{Key: "usage", Title: "AI Usage", Icon: IconUsage, Default: true}
+	CoolerInfo      = SectionInfo{Key: "cooler", Title: "Hardware", Icon: IconCooler, Default: true}
 	PeripheralsInfo = SectionInfo{Key: "peripherals", Title: "Peripherals", Icon: IconPeripherals, Default: true}
 )
 
