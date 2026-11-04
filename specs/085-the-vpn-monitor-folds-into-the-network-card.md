@@ -83,13 +83,13 @@ Made by the operator on 2026-11-04.
   with none draws what it draws today. Interfaces work the same way.
 - R8 **Traffic is not repeated.** The row names no rates; the tunnel's rates stay
   on its interface row if that interface is chosen.
-- R9 **Addresses.** The tunnel's own address is shown: on the card, on the row's
-  detail line, which is kept blank while the tunnel is down so that it does not
-  reflow, and in the drawer with the gateway and routes. This is what the panel is
-  for, and the drawer's peer lists already show addresses (B6). `doctor` shows none,
-  since it is what gets pasted into a bug report. hayami does not look up the public
-  exit address, except for the geolocation opt-in (R16). A connection's name is shown
-  because the person chose it. Everything passes the printable filter.
+- R9 **Addresses.** The tunnel's address, gateway and routes are shown in the drawer
+  and `hayami-tui detail`, as the peer lists already show addresses (B6). They are not
+  on the card, where space is limited, and so not in `readings`. `doctor` shows none,
+  since it is what gets pasted into a bug report. The public exit address is neither
+  looked up for display nor shown; the geolocation opt-in (R16) only compares it. A
+  connection's name is shown because the person chose it. Everything passes the
+  printable filter.
 - R10 **Checks.** Each check is a table entry: `ping` (host), `dns` (hostname,
   expected prefix). A check has a timeout, is cancellable and runs after a grace
   period following a connect. Defaults are vpn-toggle's: every 120 s, 15 s grace.
@@ -190,8 +190,8 @@ helper's job (a phase 3 test confirms this).
 
 ### Phase 1
 
-- [ ] A row per chosen VPN draws state, latency, connected time and the tunnel's
-      address at fixed widths, in all three arrangements in both shells (parity fixture added).
+- [ ] A row per chosen VPN draws state, latency and connected time at fixed
+      widths, in all three arrangements in both shells (parity fixture added).
 - [ ] With no VPN chosen, the Network card's rows and plot are unchanged.
 - [ ] Connecting and disconnecting a real VPN does not change the window's
       height, asserted from pixels on a real window.
@@ -208,7 +208,8 @@ helper's job (a phase 3 test confirms this).
       row does not read as down.
 - [ ] The drawer's VPN view plots latency with failures marked, screenshotted
       from a real window, with the test falsified first.
-- [ ] `doctor` output contains no address; the card and drawer show the real tunnel's.
+- [ ] The drawer and `detail` show the real tunnel's address, gateway and routes;
+      the card, `readings` and `doctor` contain no address.
 - [ ] Import reads a fixture of vpn-toggle's config, leaves geolocation off and
       says so, and is offered once.
 - [ ] No third-party connection is made with geolocation off, shown by a test
@@ -296,8 +297,8 @@ Update `docs/threat-model.md` in the PR of the phase named.
   bounded by R21 to R24. A re-dial acts only on a tunnel already seen connected. A bus name is trusted only because the system bus owns it. "hayami runs one program to
   read" stays true.
 - **B6, what hayami shows and prints (phase 1).** The tunnel's address, gateway and
-  routes are shown and accepted as peers' addresses are; `doctor` omits them (R9).
-  `readings --json` carries the card's address, so a pasted one discloses it. Connection
+  routes are shown in the drawer and `detail`, accepted as peers' addresses are; the
+  card, `readings` and `doctor` omit them (R9). Connection
   names can identify an employer or place, so the screenshot rules apply to them and
   the gallery must not show them unreviewed.
 - **Geolocation (phase 1).** The first call to a third party about the person's own
@@ -316,7 +317,7 @@ profile. Installed build through the fynstall CLI installer.
 
 | Step | Expected | AC |
 |---|---|---|
-| Choose a connected VPN in preferences | Row appears with state, latency, time and address; window grows by one row | Phase 1 rows |
+| Choose a connected VPN in preferences | Row appears with state, latency and time; window grows by one row | Phase 1 rows |
 | Disconnect and reconnect it with `nmcli` | Row changes state; window height does not change | Phase 1 reflow |
 | Open 3 terminal panes, watch the store | One point per interval; quit the holder and points continue | Phase 1 prober |
 | Open Network drawer, VPN | Latency plot, failures marked, statistics, address, gateway and routes | Phase 1 drawer |
