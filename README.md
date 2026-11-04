@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.15
+**Version**: 0.11.16-rc.2
 
 *a chart you read at a glance*
 
@@ -622,7 +622,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.16-rc.2
 
 - **Fixed**: an Ultra account stays "CC ultra" once another account has used
   Claude Code. The account record describes whichever account refreshed it
