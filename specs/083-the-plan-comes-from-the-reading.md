@@ -2,7 +2,7 @@
 
 **Issue**: #288
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
@@ -54,8 +54,8 @@ Ultra ("Max without the five-hour window").
 - [x] B3's adversarial review run; what survives filed, what is refuted under
       "Checked". (No exploit path; the caption collision fixed here, R5; the
       drawer's stale label filed as #289.)
-- [ ] On the desk, after a build is installed: "CC ultra" with U while the
-      record describes the enterprise account. (E2E 1.)
+- [x] On the desk, after a build is installed: "CC ultra" with U while the
+      record describes the enterprise account. (E2E 1; 0.11.16, 2026-11-03.)
 
 ## Threat model delta
 
@@ -90,6 +90,9 @@ red-team log and "Checked" are updated in the same PR.
 1. On the desk, with this build and the record describing the enterprise
    account: the panel's Ultra account is drawn "CC ultra" with U, and
    `~/.cache/claude-usage-widget/usage-max.json` keeps its name. (R2, R5)
+   Passed on 0.11.16, 2026-11-03: a picture of the installed panel's window
+   and the terminal panel both draw "CC ultra" with U beside a seven-day
+   meter, and the cache file is still `usage-max.json`.
 
 ### Prod visibility
 
