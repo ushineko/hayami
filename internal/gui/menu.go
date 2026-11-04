@@ -8,6 +8,7 @@ import (
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/panel"
 	"github.com/ushineko/hayami/internal/prefs"
 )
 
@@ -65,11 +66,12 @@ func MenuWith(a fyne.App, store *config.Store, version string, onChange func(con
 		// that overwrites.
 		if window == nil {
 			window = prefs.New(a, prefs.Options{
-				Store:    store,
-				Version:  version,
-				Theme:    themeFor(store, applied),
-				OnChange: func() { applied(store.Config()) },
-				Page:     page,
+				Store:      store,
+				Version:    version,
+				Theme:      themeFor(store, applied),
+				OnChange:   func() { applied(store.Config()) },
+				Page:       page,
+				VPNSystems: panel.VPNSystems,
 			})
 		}
 		window.ShowPage(page)

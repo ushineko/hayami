@@ -82,6 +82,10 @@ func (e Env) bandwidth() Source {
 	return b
 }
 
+// VPNSystems are this platform's VPN systems, for a person choosing among their
+// connections.
+func VPNSystems() []core.VPNBackend { return platform().VPNs }
+
 // Spec is one section: what it is called and drawn with, and how its source
 // is built.
 type Spec struct {

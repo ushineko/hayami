@@ -24,6 +24,7 @@ import (
 	fdtheme "github.com/ushineko/fynedesygn/theme"
 
 	"github.com/ushineko/hayami/internal/config"
+	"github.com/ushineko/hayami/internal/core"
 )
 
 // AppID names the preferences window for a compositor. It is the panel's own
@@ -37,6 +38,17 @@ type Options struct {
 
 	// Version is shown in the window's title.
 	Version string
+
+	// VPNSystems are the VPN systems to offer connections from; nil is none, and
+	// no VPN group. VPNToggleConfig is where vpn-toggle's settings are looked for;
+	// empty is where it keeps them.
+	VPNSystems      func() []core.VPNBackend
+	VPNToggleConfig string
+
+	// Background runs a slow read off the render thread; nil is a goroutine. A test
+	// runs it inline, because the headless driver does not serialise fyne.Do with
+	// the test's own goroutine, which crashes the text shaper (see #125).
+	Background func(func())
 
 	// OnChange is called after every change, on the UI thread, so the panel
 	// can follow without a restart.

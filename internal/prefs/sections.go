@@ -46,7 +46,7 @@ section's setting, and a navigation entry for a list of checkboxes was more
 than it was worth once the list was short enough to read.
 */
 var sectionPrefs = map[string]func(*Window, *shell.Shell) fyne.CanvasObject{
-	view.BandwidthInfo.Key:   (*Window).buildInterfaces,
+	view.BandwidthInfo.Key:   (*Window).buildNetwork,
 	view.PeripheralsInfo.Key: (*Window).buildPeripherals,
 }
 

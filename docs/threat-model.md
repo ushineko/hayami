@@ -239,8 +239,13 @@ sending reports, a helper sending lines, a provider's API.
 - VPN state comes from the system bus, whose names only the bus's own policy
   lets a service own. Each property is taken as its expected type or as blank
   (`variant`, `internal/core/vpn_linux.go`), a connection's name is free text and
-  passes the printable filter on its way out, and no call starts a daemon that
-  is not running or asks for a secret (spec 085).
+  passes the printable filter on its way out. No poll starts a daemon that is not
+  running, and no call asks for a secret. Listing what can be chosen may start
+  OpenVPN3's configuration manager, when a person has opened the preferences (spec 085).
+- vpn-toggle's settings are read once, on an offer a person answers: bounded,
+  parsed as another program's data and fuzzed, never written (`ParseVPNToggle`,
+  `internal/config/vpnimport.go`). They could aim a check at a host, which the person
+  sees in the list before it runs, and they name no secret.
 
 **Accepted.** LibreHardwareMonitor's address can be set to another URL in
 the settings, which are the user's own; hayami then fetches that URL.

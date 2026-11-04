@@ -15,6 +15,15 @@ func SectionPrefKeys() []string {
 	return out
 }
 
+// ChooseVPN is chooseVPN, OrderVPNs orderVPNs and ImportOutcome importOutcome.
+var (
+	ChooseVPN     = chooseVPN
+	OrderVPNs     = orderVPNs
+	ImportVPNs    = importVPNs
+	ImportOutcome = importOutcome
+	ListVPNs      = listVPNs
+)
+
 // Readme is the About page's document pane while About is on screen.
 func (w *Window) Readme() *markdown.Pane { return w.readme }
 

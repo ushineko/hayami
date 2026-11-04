@@ -92,6 +92,10 @@ type BandwidthSettings struct {
 	// vpn-toggle's default for each: 120 and 15.
 	VPNCheckSeconds int `json:"vpnCheckSeconds,omitempty"`
 	VPNGraceSeconds int `json:"vpnGraceSeconds,omitempty"`
+
+	// VPNImportOffered is whether the offer to take vpn-toggle's settings has been
+	// answered, so that a person who said no is not asked again.
+	VPNImportOffered bool `json:"vpnImportOffered,omitempty"`
 }
 
 // VPNItem is one chosen VPN: the connection's name, and what the card calls it
