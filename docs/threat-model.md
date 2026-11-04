@@ -448,6 +448,7 @@ the goal of a working proof of concept.
 | 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
 | 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Two private advisories, both fixed in 0.11.14: GHSA-g9rj-2f3c-8cv4 (the Go cache) and GHSA-j38w-g54m-r8mh (the release build's rights). |
 | 2026-11-01 | B7 | The adversarial review of specs 079 and 080 before they were pushed: one reviewer, then a refutation pass. Read-only; local experiments. | A tag named `origin/main` passing the `main` check; artifacts taken by name; a re-run able to publish a partial draft; gaps in both structure tests and the binary check. All fixed before merge. Limits recorded under B7's "Not yet known". |
+| 2026-11-03 | B3 | The adversarial review of spec 083 (the plan read from the usage reading, #288): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | No exploit path: a label and a badge are all it gives a writer of the cache, who already sets every number beside them. A caption collision with a cache-only account fixed before merge; the drawer asking for a stale caption filed as #289. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
@@ -592,7 +593,27 @@ stops each. A review starts by reading these.
 - The container's writable mount: no token, no socket, and no later step in the job.
 - The image's multi-architecture digest: an index pins its children.
 
+### B3, spec 083, 2026-11-03
+
+- A label selecting a token, store or cache file for writing: fetching is keyed
+  on the account's name (`refresh`, `loadClaude`, `internal/panel/usage.go`).
+  A caption does choose which cache file the drawer reads, read-only and with
+  no token, and a writer of those files already controls them.
+- A forged reading or a hostile API response naming the plan: it flips a label
+  and a badge between max and ultra, and sets every number beside them already.
+- A hostile payload: a wrong type or malformed JSON reads as no sign of a plan
+  (`ClaudeWeekOnly`, `internal/usage/payload.go`), and `encoding/json` reports
+  excess depth as an error.
+- A huge file or a FIFO at the cache path: `usage.Read` is unbounded, and
+  `gather` already read the same file; this adds reads, not an exposure.
+- A store's name reaching a path: `sanitise` removes separators and dots
+  (`internal/usage/path.go`).
+- A token reaching the label: `ObservedPlan` is only ever "ultra", and nothing
+  new logs, prints or marshals the credentials.
+
 ### B3, spec 082, 2026-11-03
+
+Spec 083 removed `claude-plans.json`; these stand as what was checked of it.
 
 - A token in `claude-plans.json`: it holds a store's plan, subscription type
   and tier (`seenPlan`, `internal/panel/plans.go`); the credential store is

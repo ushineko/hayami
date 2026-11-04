@@ -126,6 +126,22 @@ type claudeWindow struct {
 	ResetsAt    string  `json:"resets_at"`
 }
 
+// ClaudeWeekOnly reports whether a Claude payload has a seven-day window and no
+// five-hour one, which is how a store saying "max" shows it is on Ultra (spec
+// 083). Empty or unreadable data shows nothing, and neither does a payload
+// with no windows: an account with no reading is not an account with no
+// five-hour window.
+func ClaudeWeekOnly(data json.RawMessage) bool {
+	if len(data) == 0 {
+		return false
+	}
+	var p claudePayload
+	if json.Unmarshal(data, &p) != nil {
+		return false
+	}
+	return p.SevenDay != nil && p.FiveHour == nil
+}
+
 // Claude reads the windows out of a Claude payload.
 //
 // A window the payload does not carry is absent rather than zero: a quota at

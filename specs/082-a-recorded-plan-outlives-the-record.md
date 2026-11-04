@@ -2,7 +2,11 @@
 
 **Issue**: #286
 
-## Status: INCOMPLETE
+## Status: SUPERSEDED by spec 083 (#288)
+
+Merged as #287 and shipped only in the 0.11.16-rc.2 pre-release. The memory
+could only keep a name a record had shown, and none was showing, so the
+desk check below was never run; spec 083 replaced the memory.
 
 ## Executive Summary
 
