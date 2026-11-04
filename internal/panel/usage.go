@@ -246,8 +246,10 @@ func refresh(ctx context.Context, now time.Time, a usage.Account, states map[str
 // The default store is the one renamed. "max" is a name this program gave it,
 // after the wrapper that reaches it, and the cache files keep it; on screen it
 // is called by its plan once Claude Code's account record names that plan, so
-// an Ultra account is "CC ultra" and not "CC max". A profile's name is its
-// directory's, which somebody chose, and stays.
+// an Ultra account is "CC ultra" and not "CC max". The record describes the
+// account that last refreshed it, so a plan it named is remembered while the
+// store still agrees (spec 082). A profile's name is its directory's, which
+// somebody chose, and stays.
 func claudeStores() (stores map[string]claude.Store, badges, names map[string]string) {
 	stores = map[string]claude.Store{}
 	badges = map[string]string{}
@@ -257,14 +259,23 @@ func claudeStores() (stores map[string]claude.Store, badges, names map[string]st
 	if err != nil {
 		return stores, badges, names
 	}
+	read := map[string]*claude.Credentials{}
 	for _, s := range found {
 		stores[s.Name] = s
-		creds, err := claude.Read(s)
-		if err != nil {
+		if creds, err := claude.Read(s); err == nil {
+			read[s.Name] = creds
+		}
+	}
+	rememberPlans(read, stores)
+	for _, s := range found {
+		creds, ok := read[s.Name]
+		if !ok {
 			continue
 		}
 		badges[s.Name] = creds.Badge()
-		if s.Name == claude.DefaultProfileName && creds.RecordedPlan != "" {
+		// A profile already called by the plan's name keeps it: two accounts
+		// under one caption would share a drawer.
+		if _, taken := stores[creds.RecordedPlan]; s.Name == claude.DefaultProfileName && creds.RecordedPlan != "" && !taken {
 			names[s.Name] = creds.RecordedPlan
 		}
 	}
