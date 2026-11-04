@@ -330,9 +330,16 @@ hayami:
         bandwidth:
             interfaces:
                 - eno2
+            vpnCheckSeconds: 120
             vpns:
                 - name: office-gateway-udp
                   label: Office
+                  checks:
+                      - type: ping
+                        target: 10.0.0.1
+                      - type: dns
+                        target: intranet.example.com
+                        prefix: "10."
         cooler:
             lhm: http://127.0.0.1:8085/data.json
 ```
@@ -628,6 +635,10 @@ MIT. See
   over the system bus. For now it is chosen in the settings file, under
   `sectionSettings.bandwidth.vpns`; nothing changes on a machine that names none
   (spec 085, #298).
+- **Added**: a VPN can have health checks, a ping or a DNS lookup, made natively by
+  one process however many panels are running. Its row shows the latency, or `fail`
+  beside `up` for a tunnel that is on and not answering. The Network drawer gains a
+  `VPN` view with each tunnel's plot, statistics, address, gateway and routes.
 
 ### 0.11.18 (2026-11-04)
 

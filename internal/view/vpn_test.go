@@ -76,3 +76,61 @@ func TestALabelTakesTheCardAndTheNameTheTip(t *testing.T) {
 func TestAStaleReadingDrawsDim(t *testing.T) {
 	require.True(t, view.VPNRows([]view.VPNReading{{Name: "a", Stale: true}})[0].Stale)
 }
+
+// A tunnel can push dozens of routes. They must not push out the health, or the
+// next VPN.
+func TestManyRoutesDoNotCrowdOutTheHealth(t *testing.T) {
+	routes := make([]string, 50)
+	for i := range routes {
+		routes[i] = "10.0.0.0/32"
+	}
+	d := view.VPNDetail("bandwidth", []view.VPNDetailReading{
+		{VPNReading: view.VPNReading{Name: "a", State: view.VPNUp}, Routes: routes,
+			Stats: view.VPNStats{Checks: 4, Failures: 1, AverageMS: 12}},
+		{VPNReading: view.VPNReading{Name: "b", State: view.VPNDown}},
+	})
+
+	require.Len(t, d.Parts, 2, "each VPN is its own part, which the window rules off")
+	assert.Equal(t, "b", d.Parts[1].Title)
+	names := make([]string, 0, len(d.Parts[0].Lines))
+	for _, l := range d.Parts[0].Lines {
+		names = append(names, l.Name)
+	}
+	assert.Less(t, len(names), 15)
+	assert.Contains(t, names, "Uptime")
+	assert.Contains(t, d.Text(), "and 46 more")
+}
+
+// Every width-sensitive latency fits its column.
+func TestALatencyFitsItsColumnAtAnySize(t *testing.T) {
+	want := utf8.RuneCountInString(view.VPNRows([]view.VPNReading{{Name: "a"}})[0].Value)
+	for _, ms := range []float64{0, 0.4, 12, 999, 999.6, 1500, 99_949, 99_951, 1e9} {
+		row := view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNUp, Latency: view.Some(ms)}})[0]
+		assert.Equal(t, want, utf8.RuneCountInString(row.Value), "%v ms: %q", ms, row.Value)
+	}
+	failing := view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNUp, Failing: true}})[0]
+	assert.Equal(t, want, utf8.RuneCountInString(failing.Value))
+	assert.Contains(t, failing.Value, "fail")
+}
+
+// One long value makes a scrolling drawer as wide as itself, which pushes every
+// row's value past the edge: seen on a real window, with a provider's generated
+// name on a real connection.
+func TestALongValueIsClippedFromItsMiddle(t *testing.T) {
+	d := view.VPNDetail("bandwidth", []view.VPNDetailReading{{
+		VPNReading: view.VPNReading{Name: "invented-provider-gateway-aes-128-cbc-udp-dns", Label: "a"},
+		Addresses:  []string{"2001:db8:1234:5678:9abc:def0:1234:5678/64"},
+	}})
+
+	for _, l := range d.Parts[0].Lines {
+		assert.LessOrEqual(t, utf8.RuneCountInString(l.Value), 28, l.Name)
+		if l.Name == "Connection" {
+			assert.Contains(t, l.Value, "…")
+			assert.Contains(t, l.Value, "invented")
+			assert.Contains(t, l.Value, "udp-dns", "both ends stay")
+		}
+		if l.Name == "Address" {
+			assert.Contains(t, l.Value, "/64", "the prefix length stays")
+		}
+	}
+}

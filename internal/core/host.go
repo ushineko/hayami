@@ -60,6 +60,9 @@ type Host struct {
 	// and no drawer tab.
 	VPNs []VPNBackend
 
+	// VPNCheckers are the health checks this platform can make.
+	VPNCheckers VPNCheckers
+
 	// Permission is an Open refused for want of permission, as the absence a
 	// reader can act on, with this platform's advice.
 	Permission func(error) (*Absence, bool)

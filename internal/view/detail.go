@@ -1,6 +1,7 @@
 package view
 
 import (
+	"slices"
 	"sort"
 	"strings"
 
@@ -29,6 +30,14 @@ type Detail struct {
 
 	Meters []Meter      `json:"meters,omitempty"`
 	Lines  []DetailLine `json:"lines,omitempty"`
+
+	// Trails are a plot over the lines, against one scale, for a detail that is
+	// a part of another: each VPN's own.
+	Trails []Trail `json:"trails,omitempty"`
+
+	// TitleParts are a value on the heading's line, for a part that says the
+	// one thing a reader looks for next to its name: a VPN's state.
+	TitleParts []Part `json:"title_parts,omitempty"`
 
 	// Filterable marks a list a person narrows by name: the process lists.
 	// A breakdown of a quota is short and is not.
@@ -105,6 +114,20 @@ type DetailInfo struct {
 	// another.
 	Label string `json:"label,omitempty"`
 	Key   string `json:"key,omitempty"`
+
+	// OnRequest keeps a detail out of `readings` and `doctor`, which are what
+	// gets pasted into a bug report: it is read only when a person opens it, or
+	// names it to `detail`. A VPN's addresses (spec 085 R9).
+	OnRequest bool `json:"-"`
+}
+
+// JoinedRow is parts as the value of a row.
+func JoinedRow(parts []Part) Row {
+	row := Row{Parts: parts}
+	for _, p := range parts {
+		row.Value += p.Text
+	}
+	return row
 }
 
 // Matching is the detail with only the lines keep passes, headings kept. It
@@ -134,7 +157,7 @@ func (d Detail) Top(n int) Detail {
 
 // Quiet reports whether a detail has nothing at all to draw.
 func (d Detail) Quiet() bool {
-	return len(d.Lines) == 0 && len(d.Meters) == 0 && len(d.Reasons) == 0 && d.Note == "" && len(d.Parts) == 0
+	return len(d.Trails) == 0 && len(d.Lines) == 0 && len(d.Meters) == 0 && len(d.Reasons) == 0 && d.Note == "" && len(d.Parts) == 0
 }
 
 // printable is the detail with every string a terminal would act on made
@@ -143,6 +166,10 @@ func (d Detail) Quiet() bool {
 func (d Detail) printable() Detail {
 	p := func(s string) string { return safetext.Printable(s, 0) }
 	d.Title, d.Note = p(d.Title), p(d.Note)
+	d.Trails = slices.Clone(d.Trails)
+	for i := range d.Trails {
+		d.Trails[i].Name = p(d.Trails[i].Name)
+	}
 	meters := make([]Meter, len(d.Meters))
 	for i, m := range d.Meters {
 		m.Label, m.Caption, m.Reset = p(m.Label), p(m.Caption), p(m.Reset)
@@ -170,9 +197,19 @@ func (d Detail) printable() Detail {
 func (d Detail) Text() string {
 	d = d.printable()
 	var b strings.Builder
-	b.WriteString(d.Title + "\n")
+	b.WriteString(d.Title)
+	if row := JoinedRow(d.TitleParts); row.Value != "" {
+		b.WriteString("  " + strings.TrimRight(row.Value, " "))
+	}
+	b.WriteString("\n")
 	for _, m := range d.Meters {
 		b.WriteString("  " + strings.TrimRight(padRight(truncate(m.Name(), MeterNameWidth), MeterNameWidth)+" "+m.Caption+"  "+m.Reset, " ") + "\n")
+	}
+	for _, t := range d.Trails {
+		if len(t.Samples) > 0 {
+			b.WriteString("  " + padRight(truncate(t.Name, DetailNameWidth), DetailNameWidth) + "  " +
+				Sparkline(t.Samples, min(len(t.Samples), detailTrailWidth), SparkMinSpan) + "\n")
+		}
 	}
 	for _, l := range d.Lines {
 		if l.Heading {

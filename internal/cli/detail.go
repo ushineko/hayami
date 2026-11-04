@@ -100,6 +100,9 @@ func details(ctx context.Context, s panel.Source) map[string]view.Detail {
 	}
 	out := map[string]view.Detail{}
 	for _, info := range d.Details() {
+		if info.OnRequest {
+			continue
+		}
 		detail, _ := d.PollDetail(ctx, info.ID)
 		d.CloseDetail(info.ID)
 		out[info.ID] = detail

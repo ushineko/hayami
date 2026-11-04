@@ -74,7 +74,7 @@ func (e Env) bandwidth() Source {
 		return NewBandwidth(names, e.Counters)
 	}
 	b := NewBandwidth(names, e.Host.Counters)
-	b.SetVPNSystems(e.Host.VPNs, settings.VPNs)
+	b.SetVPNSystems(e.Host.VPNs, e.Host.VPNCheckers, settings)
 	b.SetWirelessReader(e.Host.Wireless)
 	if e.Host.NetProcesses != nil {
 		b.SetNetProcesses(e.Host.NetProcesses)

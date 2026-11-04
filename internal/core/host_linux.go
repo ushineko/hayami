@@ -30,6 +30,7 @@ func NewHost(HostConfig) Host {
 		},
 		NetProcesses: func() NetReader { return newNetReader(processes) },
 		VPNs:         linuxVPNs(),
+		VPNCheckers:  linuxVPNCheckers(),
 		Permission:   PermissionAbsence,
 	}
 }

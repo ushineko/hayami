@@ -86,13 +86,29 @@ func (s Setting[T]) Set(c Config, v T) Config {
 type BandwidthSettings struct {
 	Interfaces []string  `json:"interfaces,omitempty"`
 	VPNs       []VPNItem `json:"vpns,omitempty"`
+
+	// VPNCheckSeconds is how often a connected VPN is checked, and
+	// VPNGraceSeconds how long after connecting it is left alone. Zero is
+	// vpn-toggle's default for each: 120 and 15.
+	VPNCheckSeconds int `json:"vpnCheckSeconds,omitempty"`
+	VPNGraceSeconds int `json:"vpnGraceSeconds,omitempty"`
 }
 
 // VPNItem is one chosen VPN: the connection's name, and what the card calls it
 // where that is long, as a provider's generated names are.
 type VPNItem struct {
-	Name  string `json:"name"`
-	Label string `json:"label,omitempty"`
+	Name   string         `json:"name"`
+	Label  string         `json:"label,omitempty"`
+	Checks []VPNCheckItem `json:"checks,omitempty"`
+}
+
+// VPNCheckItem is one health check of a VPN: `ping` a host, or `dns` a name whose
+// address must start with a prefix.
+type VPNCheckItem struct {
+	Type           string `json:"type"`
+	Target         string `json:"target"`
+	Prefix         string `json:"prefix,omitempty"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
 }
 
 // CoolerSettings are the cooler section's: where LibreHardwareMonitor serves
