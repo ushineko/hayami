@@ -25,7 +25,7 @@ carry the detail. In short:
 
 | Library | Licence | For |
 |---|---|---|
-| [Fyne](https://github.com/fyne-io/fyne) | BSD-3-Clause | The desktop panel and the preferences window. |
+| [Fyne](https://github.com/fyne-io/fyne) | BSD-3-Clause | The desktop panel and the preferences window, built from [a fork](https://github.com/ushineko/fyne) carrying fixes not yet released (`go.mod`). |
 | [fynedesygn](https://github.com/ushineko/fynedesygn) | MIT | The glance window, the cards, cells, meters and sparklines, the theme. |
 | [Bubble Tea](https://github.com/charmbracelet/bubbletea) and Lip Gloss | MIT | The terminal panel. |
 | [sanshoku](https://github.com/ushineko/sanshoku) | MIT | Every device. |

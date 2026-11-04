@@ -618,6 +618,15 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Changed**: the desktop panel builds against a fork of Fyne, tag
+  `v2.8.3-ushineko.4`, on the commit fynedesygn 0.1.113 pins, as the sibling
+  projects do. On Linux a window is no longer stalled by a resize on NVIDIA,
+  and a theme override no longer keeps fonts or what it covered. Text now
+  comes from Fyne's glyph atlas, so its edges differ slightly from 0.11.16's;
+  the fork keeps a translucent panel's alpha under them (spec 084, #293).
+
 ### 0.11.16 (2026-11-03)
 
 - **Fixed**: an Ultra account is "CC ultra" when the account record describes
