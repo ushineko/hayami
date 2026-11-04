@@ -448,6 +448,7 @@ the goal of a working proof of concept.
 | 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
 | 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Two private advisories, both fixed in 0.11.14: GHSA-g9rj-2f3c-8cv4 (the Go cache) and GHSA-j38w-g54m-r8mh (the release build's rights). |
 | 2026-11-01 | B7 | The adversarial review of specs 079 and 080 before they were pushed: one reviewer, then a refutation pass. Read-only; local experiments. | A tag named `origin/main` passing the `main` check; artifacts taken by name; a re-run able to publish a partial draft; gaps in both structure tests and the binary check. All fixed before merge. Limits recorded under B7's "Not yet known". |
+| 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
 
@@ -590,3 +591,20 @@ stops each. A review starts by reading these.
 - `BPF_TOOLS` in CI: nothing sets it; on a desk, what is in it is not checked again.
 - The container's writable mount: no token, no socket, and no later step in the job.
 - The image's multi-architecture digest: an index pins its children.
+
+### B3, spec 082, 2026-11-03
+
+- A token in `claude-plans.json`: it holds a store's plan, subscription type
+  and tier (`seenPlan`, `internal/panel/plans.go`); the credential store is
+  never written from it.
+- A planted plan choosing a token, a store or a cache file: all are keyed by
+  the store's name, which the plan does not change. It changes a label and a
+  badge, as `planDisplayName` in `~/.claude.json` already could, and passing
+  the check needs the store's tier, read from the file that holds the tokens.
+- A FIFO or `/dev/zero` at the path: the same poll already reads the
+  credential stores, `~/.claude.json` and the usage cache unbounded; any of
+  them stalls it first.
+- A link at the path redirecting the write: `WriteAtomic` renames a new file
+  over it (`internal/readings/readings.go`).
+- Another account: the file is created `0600` inside the user's cache
+  directory.

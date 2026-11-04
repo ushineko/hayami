@@ -63,6 +63,11 @@ type Credentials struct {
 	// still be labelled correctly.
 	Plan string
 
+	// Tier is rateLimitTier, the store's half of the check RecordedPlan
+	// makes, and with Plan what a remembered plan is checked against
+	// (spec 082).
+	Tier string
+
 	// RecordedPlan is the plan as Claude Code's account record names it, in
 	// lower case ("ultra"), when that record is this store's account; empty
 	// otherwise. It is newer than Plan, which an Ultra store still gives as
@@ -182,6 +187,7 @@ func Read(s Store) (*Credentials, error) {
 		RefreshToken: o.RefreshToken,
 		ExpiresAt:    o.ExpiresAt,
 		Plan:         o.SubscriptionType,
+		Tier:         o.RateLimitTier,
 		RecordedPlan: recordedPlan(o.RateLimitTier),
 		raw:          raw,
 	}, nil
