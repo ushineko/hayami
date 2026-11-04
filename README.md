@@ -40,9 +40,9 @@ section is not polled at all.
 | Section | What it shows | Where it reads from |
 |---|---|---|
 | Peripherals | Battery level and charging state of mice, keyboards, headsets and game controllers, a cell per kind of device | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, the DualSense over USB or Bluetooth, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
-| Bandwidth | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
-| Cooler | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
-| Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
+| Network | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
+| Hardware | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
+| AI Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
 
 The sections can be laid out three ways, in either panel:
 
@@ -371,12 +371,12 @@ on Linux, `%LOCALAPPDATA%\claude-usage-widget\cache` on Windows.
   AirPods' per-ear levels are read on Linux only, and a headset paired
   through a USB Bluetooth transmitter such as the UGREEN BT701 reports
   neither battery nor connection.
-- **Cooler**: the processor's load and name come from the system, and the
+- **Hardware**: the processor's load and name come from the system, and the
   graphics card's temperature, load and name from D3DKMT and the `GPU Engine`
   counters, Task Manager's sources, for any vendor. The load is the busiest
   engine, as Task Manager shows it, so it reads lower than `nvidia-smi`. The
   NZXT Kraken is read on Linux only.
-- **Bandwidth** offers the interfaces Network Connections shows; loopback,
+- **Network** offers the interfaces Network Connections shows; loopback,
   the `Local Area Connection*` adapters and IPv6 transition tunnels are behind
   "Show every interface".
 
@@ -617,6 +617,12 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Changed**: three cards have new names: Bandwidth is now Network, Cooler is
+  Hardware and Usage is AI Usage. Settings files and `--sections` keep the old
+  keys (`bandwidth`, `cooler`, `usage`).
 
 ### 0.11.17 (2026-11-03)
 

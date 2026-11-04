@@ -198,6 +198,10 @@ Marked, because a restored reading is a claim about the past drawn in the
 present, and the only thing distinguishing it is that both shells draw it dim.
 The caller uses it when a live poll gave nothing and throws it away when one
 did.
+
+The title is this build's and not the cache's: a card keeps the title it was
+built with for the life of the program, so a section renamed since the file
+was written would otherwise carry its old name until the next start.
 */
 func (c Cache) Restore(key string) (view.Section, error) {
 	e, ok := c[key]
@@ -206,5 +210,8 @@ func (c Cache) Restore(key string) (view.Section, error) {
 	}
 	s := e.Section
 	s.Restored = true
+	if info, ok := view.SectionByKey(key); ok {
+		s.Title = info.Title
+	}
 	return s, nil
 }
