@@ -284,6 +284,14 @@ something else between hayami reading it and acting on it.
   settings (`internal/core/vpncheck_linux.go`, spec 085). A settings file aiming a
   check at a host makes this machine probe it, and nothing more; the settings are the
   user's own. Nothing is sent to a third party. No program is run.
+- A press changes a VPN only through NetworkManager's and OpenVPN3's own calls on the
+  system bus, so polkit and the session manager decide what is allowed, and a refusal is
+  reported (`internal/core/vpn_linux.go`, spec 085). Disconnect and bounce take two
+  presses. hayami registers no secret agent and sees no VPN secret. Control is in the
+  desktop panel only.
+- An OpenVPN3 sign-in address comes from the session manager and goes to the browser only
+  if it is `https` with a host (`SignInURL`, `internal/core/vpn.go`). It is not logged,
+  printed, drawn or carried in an error, since such an address can hold a one-time token.
 - hayami runs one program to read: `nvidia-smi`, with a timeout
   (`internal/core/processors.go`, `internal/core/gpuprocs.go`), found on the
   user's `PATH`, as the user.

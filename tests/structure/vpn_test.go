@@ -77,3 +77,51 @@ func TestTheProgramCheckFindsAnExec(t *testing.T) {
 	assert.Empty(t, programsRun(parse(`var t = map[string]int{"ping": 1}`)))
 	assert.Empty(t, programsRun(parse(`func a() { exec.Command("nvidia-smi") }`)))
 }
+
+// usesVPNControl names what a file does with the VPN's controls: the shell's way to
+// them, and the lines that offer them.
+func usesVPNControl(f *ast.File) []string {
+	var out []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok {
+			switch id.Name {
+			case "ControlVPN", "VPNController", "Controls", "ParseVPNAct", "VPNAct":
+				out = append(out, id.Name)
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// Control is only in the desktop panel (spec 085 R20).
+func TestTheTerminalPanelHasNoWayToActOnAVPN(t *testing.T) {
+	checked := 0
+	for _, dir := range []string{"internal/tui", "internal/cli", "cmd/hayami-tui"} {
+		root := filepath.Join("..", "..", dir)
+		err := filepath.WalkDir(root, func(path string, e os.DirEntry, err error) error {
+			if err != nil || e.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+				return err
+			}
+			f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+			require.NoError(t, err)
+			checked++
+			assert.Empty(t, usesVPNControl(f), path)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+	require.Positive(t, checked, "the walk found no sources")
+}
+
+func TestTheControlCheckFindsAUse(t *testing.T) {
+	parse := func(src string) *ast.File {
+		f, err := parser.ParseFile(token.NewFileSet(), "x.go", "package x\n"+src, 0)
+		require.NoError(t, err)
+		return f
+	}
+
+	assert.Equal(t, []string{"ControlVPN"}, usesVPNControl(parse(`func a() { s.ControlVPN(ctx, "bounce", n, nil) }`)))
+	assert.Equal(t, []string{"Controls"}, usesVPNControl(parse(`func a() { _ = d.Controls }`)))
+	assert.Empty(t, usesVPNControl(parse(`func a() { _ = d.Lines }`)))
+}

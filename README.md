@@ -635,6 +635,9 @@ MIT. See
   over the system bus. It is chosen in preferences, on the Sections page, or under
   `sectionSettings.bandwidth.vpns`; nothing changes on a machine that names none
   (spec 085, #298).
+- **Added**: the drawer's VPN view connects, disconnects and bounces a chosen VPN, on
+  Linux. Disconnect and bounce take two presses. An OpenVPN3 profile's sign-in page opens
+  in the browser. The terminal panel only reads (spec 085, #298).
 - **Added**: preferences offers once to import vpn-toggle's VPNs and checks, and leaves
   its files alone. A geolocation check is not imported, and the import says so.
 - **Added**: a VPN can have health checks, a ping or a DNS lookup, made natively by

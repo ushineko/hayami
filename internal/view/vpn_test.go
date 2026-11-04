@@ -1,6 +1,8 @@
 package view_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -133,4 +135,59 @@ func TestALongValueIsClippedFromItsMiddle(t *testing.T) {
 			assert.Contains(t, l.Value, "/64", "the prefix length stays")
 		}
 	}
+}
+
+// Text and JSON are what the terminal panel and `detail` have, and neither offers a
+// press (spec 085 R20).
+func TestAVPNsControlsAreInNoTextAndNoJSON(t *testing.T) {
+	d := view.VPNDetail("net", []view.VPNDetailReading{{VPNReading: view.VPNReading{Name: "invented", State: view.VPNUp}}})
+	require.NotEmpty(t, d.Parts[0].Controls, "the desktop panel has them")
+
+	text := d.Text()
+	raw, err := json.Marshal(d)
+	require.NoError(t, err)
+
+	for _, word := range []string{"Disconnect", "Bounce", "!vpn"} {
+		assert.NotContains(t, text, word)
+		assert.NotContains(t, string(raw), word)
+	}
+}
+
+func TestAPressNamesItsActionAndAnyConnection(t *testing.T) {
+	for _, name := range []string{"plain", "with/slash", "with space", "ünï/cødé"} {
+		action, got, ok := view.ParseVPNAct(view.VPNAct(view.VPNBounce, name))
+		require.True(t, ok)
+		assert.Equal(t, view.VPNBounce, action)
+		assert.Equal(t, name, got)
+	}
+	for _, other := range []string{"", view.ActKill, view.DetailVPN + "/plain"} {
+		_, _, ok := view.ParseVPNAct(other)
+		assert.False(t, ok, other)
+	}
+}
+
+func TestWhatAPressSaidIsMadeSafeAndFits(t *testing.T) {
+	line := view.VPNSaid("evil\x1b[31m"+strings.Repeat("x", 200), true)
+
+	assert.NotContains(t, line.Value, "\x1b")
+	assert.LessOrEqual(t, len([]rune(line.Value)), 28)
+	assert.Equal(t, view.Warn, line.Status)
+}
+
+// One check is no line, and an empty plot reads as a gap in the drawer. What it found
+// is in the lines.
+func TestAPlotWaitsForALineToDraw(t *testing.T) {
+	reading := func(samples ...float64) view.VPNDetailReading {
+		return view.VPNDetailReading{
+			VPNReading: view.VPNReading{Name: "invented", State: view.VPNUp},
+			Samples:    samples, Failed: make([]bool, len(samples)),
+			LastChecks: []view.VPNCheckLine{{Type: "ping", Latency: 13, OK: true}},
+		}
+	}
+
+	one := view.VPNDetail("net", []view.VPNDetailReading{reading(13)}).Parts[0]
+	assert.Empty(t, one.Trails)
+	assert.Contains(t, one.Text(), "13", "the one check is still reported")
+
+	assert.NotEmpty(t, view.VPNDetail("net", []view.VPNDetailReading{reading(13, 14)}).Parts[0].Trails)
 }

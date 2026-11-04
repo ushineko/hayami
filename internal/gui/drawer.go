@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -78,6 +79,11 @@ type drawer struct {
 	confirming bool
 	killed     string
 
+	// vpn is the presses on a VPN's rows, and openURL gives a sign-in address to the
+	// person's browser; a test replaces it, so no test opens one.
+	vpn     vpnPresses
+	openURL func(*url.URL) error
+
 	// stop ends the poll of what is shown, and gen tells a result that
 	// arrives after the drawer has moved on from one that is current.
 	stop context.CancelFunc
@@ -151,6 +157,8 @@ func (p *Panel) buildDrawer(a fyne.App, o Options) {
 	if d.desk == nil {
 		d.desk = noDesk{}
 	}
+	d.vpn = vpnPresses{running: map[string]*vpnRun{}, said: map[string]view.DetailLine{}}
+	d.openURL = a.OpenURL
 	d.filter.OnChanged = p.renderDrawer
 	d.sw.OnChanged = p.chosen
 	d.name = detailNameWidth(a, o)

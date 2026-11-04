@@ -2,6 +2,7 @@ package gui
 
 import (
 	"image/color"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -586,3 +587,31 @@ func DrawerReach(p *Panel) float32 { return p.win.Panel().Drawer().Reach() }
 // Choices are the switch a section's details would be offered through, for
 // a test asking whether one is drawn at all.
 func Choices(src panel.Detailer, id string) []glance.Choice { return choices(src, id) }
+
+// PressVPNRow clicks the row of a drawer's part whose name starts with label.
+func PressVPNRow(p *Panel, part int, label string) bool {
+	for _, r := range p.drawer.parts[part].rows {
+		if r.Shown() && strings.HasPrefix(r.ID(), "!vpn/") && strings.Contains(strings.Join(visibleTexts(r.Object()), " "), label) {
+			p.tappedRow(r)
+			return true
+		}
+	}
+	return false
+}
+
+// OpenURLWith makes f what a sign-in address is given to.
+func OpenURLWith(p *Panel, f func(*url.URL) error) { p.drawer.openURL = f }
+
+// LapseVPNQuestion makes the question standing on a VPN's row older than it may be.
+func LapseVPNQuestion(p *Panel) { p.drawer.vpn.askedAt = time.Now().Add(-2 * vpnConfirmLapse) }
+
+// StartVPNPress is a press with the question already answered, for a test of what
+// comes after it.
+func StartVPNPress(p *Panel, action, name string) {
+	ask := view.VPNAct(action, name)
+	p.drawer.vpn.asking, p.drawer.vpn.askedAt = ask, time.Now()
+	p.pressVPN(ask, action, name)
+}
+
+// VPNPressMarker is what starts a row that can be pressed.
+func VPNPressMarker(p *Panel) string { return p.words().press }

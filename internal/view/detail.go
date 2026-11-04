@@ -56,6 +56,11 @@ type Detail struct {
 	// account (spec 062). A detail with parts has nothing else of its own
 	// but its heading, and a shell that cannot fit them scrolls.
 	Parts []Detail `json:"parts,omitempty"`
+
+	// Controls are lines a shell that can act may offer, each with what a press
+	// on it asks for in Open. They are in no text and no JSON, and only the
+	// desktop panel reads them (spec 085 R20).
+	Controls []DetailLine `json:"-"`
 }
 
 // DetailLine is one line of a detail: a name at the left and a value at the

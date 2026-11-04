@@ -41,6 +41,10 @@ func (p *Panel) tappedRow(r *glance.Row) {
 	if ask == "" {
 		return
 	}
+	if action, name, ok := view.ParseVPNAct(ask); ok {
+		p.pressVPN(ask, action, name)
+		return
+	}
 	d := p.drawer
 	src, ok := p.source(d.section)
 	if !ok {
@@ -273,6 +277,7 @@ the one place.
 func (p *Panel) decorate(d view.Detail) view.Detail {
 	drawer := p.drawer
 	_ = drawer
+	d = p.withVPNControls(d)
 	if !p.drills(d.Section) {
 		return d
 	}
@@ -340,7 +345,7 @@ const (
 
 // buttonWords are the drawer's glyph-carrying labels, for the face the
 // panel is drawn in.
-type buttonWords struct{ pause, resume, back string }
+type buttonWords struct{ pause, resume, back, press string }
 
 /*
 words are the button labels, each with a glyph the face can draw.
@@ -365,5 +370,6 @@ func (p *Panel) words() buttonWords {
 		pause:  fdtheme.FirstDrawable(th, plain, "\u2016", "||") + " Pause",
 		resume: fdtheme.FirstDrawable(th, plain, fdtheme.ForwardGlyphs...) + " Resume",
 		back:   fdtheme.FirstDrawable(th, plain, fdtheme.BackGlyphs...) + " Back",
+		press:  fdtheme.FirstDrawable(th, plain, fdtheme.ForwardGlyphs...) + " ",
 	}
 }

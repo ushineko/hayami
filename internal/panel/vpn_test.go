@@ -176,3 +176,24 @@ func TestChangingTheChosenVPNsTakesEffect(t *testing.T) {
 
 	assert.Len(t, vpnRows(b.Section()), 2)
 }
+
+func TestOnlyAChosenVPNCanBePressed(t *testing.T) {
+	tempCache(t)
+	var calls []string
+	b := panel.NewBandwidth(nil, noCounters)
+	b.SetVPNSystems([]core.VPNBackend{{
+		Name:       "fake",
+		Active:     answering(),
+		Configured: func(context.Context) ([]string, error) { return []string{"chosen", "not chosen"}, nil },
+		Connect: func(_ context.Context, name string, _ core.SignIn) error {
+			calls = append(calls, name)
+			return nil
+		},
+	}}, nil, config.BandwidthSettings{VPNs: []config.VPNItem{{Name: "chosen"}}})
+
+	require.NoError(t, b.ControlVPN(context.Background(), view.VPNConnect, "chosen", nil))
+	require.ErrorIs(t, b.ControlVPN(context.Background(), view.VPNConnect, "not chosen", nil), core.ErrVPNNotConfigured)
+	require.Error(t, b.ControlVPN(context.Background(), "explode", "chosen", nil))
+
+	assert.Equal(t, []string{"chosen"}, calls)
+}
