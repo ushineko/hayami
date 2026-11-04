@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.17
+**Version**: 0.11.18
 
 *a chart you read at a glance*
 
@@ -618,7 +618,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.18 (2026-11-04)
 
 - **Changed**: three cards have new names: Bandwidth is now Network, Cooler is
   Hardware and Usage is AI Usage. Settings files and `--sections` keep the old
