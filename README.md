@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.15
+**Version**: 0.11.16
 
 *a chart you read at a glance*
 
@@ -618,7 +618,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.16 (2026-11-03)
 
 - **Fixed**: an Ultra account is "CC ultra" when the account record describes
   another account. A store saying "max" whose usage reading has a seven-day
