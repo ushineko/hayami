@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.16
+**Version**: 0.11.17
 
 *a chart you read at a glance*
 
@@ -618,7 +618,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.11.17 (2026-11-03)
 
 - **Changed**: the desktop panel builds against a fork of Fyne, tag
   `v2.8.3-ushineko.4`, on the commit fynedesygn 0.1.113 pins, as the sibling
