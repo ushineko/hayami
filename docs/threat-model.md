@@ -318,7 +318,11 @@ account.
 
 **Defences.**
 
-- `make vuln` (govulncheck) before every tagged release.
+- `make vuln` (govulncheck) before every tagged release. It scans twice while
+  Fyne is replaced by a fork: govulncheck asks about a replaced module by the
+  fork's path and Fyne's advisories are under its own, so the second scan drops
+  the `replace` (spec 084). That reads upstream's source at the fork's base, not
+  the fork's own commits.
 - SHA256SUMS on every release.
 - Build provenance on every file a release publishes
   (`actions/attest-build-provenance`, spec 075). The README's `gh attestation
@@ -379,6 +383,20 @@ because a hash in the repository would give up the newest patch on each run, so
 a tampered Go download would be built with and signed. A pin's commit is not
 checked to belong to the repository it names: a fork's commit resolves through
 the parent's name, so a reviewer reading a changed pin is the check.
+**Accepted.** The panel builds Fyne from a fork, `github.com/ushineko/fyne`,
+through one `replace` to a tag (spec 084). `go.sum` and the checksum database
+hold that tag's contents, so moving the tag fails the build, and new code needs
+a new tag and a reviewed change to `go.mod`. The fork reaches more than the
+panel: `hayami-tui` links its packages through `fynedesygn/theme`, so their
+`init` runs in `sudo hayami-tui network-helper install` and in the helper, as
+upstream Fyne's did. The fork is a further repository to protect: it has no
+ruleset and no immutable releases, like fynedesygn and sanshoku, which the same
+account publishes. Its base is an untagged `develop` commit, 479 past v2.8.2
+and not reviewed here, and moving it by hand skips Dependabot's week. Nothing
+proposes the fork's updates, since Dependabot does not follow a `replace`, so an
+upstream fix reaches hayami when someone moves the fork. The `replace` goes at
+the first tagged Fyne release that carries its fixes.
+
 **Not yet known.** Builds are not reproducible, so provenance says which
 workflow built a file, not that the same source always builds the same
 file. Provenance proves where a file came from, not that its code is sound.
@@ -448,6 +466,7 @@ the goal of a working proof of concept.
 | 2026-11-01 | B2 | Review of spec 078, the Linux installer's polkit route (one reviewer). | No path to root beyond what `sudo` on the same file gave. The uninstaller elevating the user's `hayami-tui` instead of the helper's own copy, and `pkexec` taken from the PATH as found; both fixed before 0.11.13. Installing 0.11.13 then found #259. |
 | 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Two private advisories, both fixed in 0.11.14: GHSA-g9rj-2f3c-8cv4 (the Go cache) and GHSA-j38w-g54m-r8mh (the release build's rights). |
 | 2026-11-01 | B7 | The adversarial review of specs 079 and 080 before they were pushed: one reviewer, then a refutation pass. Read-only; local experiments. | A tag named `origin/main` passing the `main` check; artifacts taken by name; a re-run able to publish a partial draft; gaps in both structure tests and the binary check. All fixed before merge. Limits recorded under B7's "Not yet known". |
+| 2026-11-03 | B7 | The adversarial review of spec 084 (the Fyne fork, #293): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. | No way found to change what builds without a reviewed `go.mod` change. `make vuln` went blind to Fyne under the `replace`: fixed before merge with a second scan. The fork reaching the privileged paths and skipping the cooldown held, both accepted in the section above. |
 | 2026-11-03 | B3 | The adversarial review of spec 083 (the plan read from the usage reading, #288): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | No exploit path: a label and a badge are all it gives a writer of the cache, who already sets every number beside them. A caption collision with a cache-only account fixed before merge; the drawer asking for a stale caption filed as #289. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
@@ -541,7 +560,9 @@ stops each. A review starts by reading these.
 - A pin's comment lying about its version: all nine matched their claimed
   tag at this review.
 - Swapping a module on the proxy: `go.sum` and the checksum database, with
-  no `replace`, `go.work` or proxy override.
+  no `go.work` or proxy override. At this review there was no `replace`
+  either; spec 084 added one, to a tagged module, which `go.sum` and the
+  checksum database hold the same way.
 - A file changed after attestation: `gh attestation verify` exits 1.
 - The gitleaks allow-list's `invented[-_a-z]*` hiding a real leak: gitleaks
   tests it against the secret found, not the line, so a random token
@@ -592,6 +613,15 @@ stops each. A review starts by reading these.
 - `BPF_TOOLS` in CI: nothing sets it; on a desk, what is in it is not checked again.
 - The container's writable mount: no token, no socket, and no later step in the job.
 - The image's multi-architecture digest: an index pins its children.
+
+### B7, spec 084, 2026-11-03
+
+- Moving the fork's tag, or a proxy serving other contents: the tag's hash is in
+  `go.sum` and the checksum database, and `go mod verify` passes.
+- A CI or Makefile override: no `GOFLAGS`, `GOPROXY` or `GONOSUM*` in either.
+- The base not being upstream's: `b655332` is on Fyne's `develop`.
+- The fork's four commits doing something else: no network, exec or file writes;
+  the only new `unsafe` is `idOf`, for weak keys.
 
 ### B3, spec 083, 2026-11-03
 

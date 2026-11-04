@@ -219,6 +219,14 @@ installer: build ## Build the Linux installers into dist/ with fynstall
 .PHONY: vuln
 vuln: ## Scan for known vulnerabilities, before every tagged release
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	@# govulncheck asks about a replaced module by the fork's path, and Fyne's
+	@# advisories are filed under its own, so its source is scanned as well: a
+	@# copy without the replace, at the commit the fork is based on (spec 084).
+	@tmp=$$(mktemp -d) && trap 'rm -rf "$$tmp"' EXIT && \
+		git checkout-index -a --prefix="$$tmp/" && \
+		go -C "$$tmp" mod edit -dropreplace=fyne.io/fyne/v2 && \
+		go -C "$$tmp" mod download fyne.io/fyne/v2 && \
+		go run golang.org/x/vuln/cmd/govulncheck@latest -C "$$tmp" ./...
 
 .PHONY: clean
 clean: ## Remove build artifacts

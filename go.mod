@@ -3,7 +3,7 @@ module github.com/ushineko/hayami
 go 1.26.0
 
 require (
-	fyne.io/fyne/v2 v2.8.2
+	fyne.io/fyne/v2 v2.8.3-0.20261103091334-b655332b73c2
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cilium/ebpf v0.22.0
@@ -13,7 +13,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.12.1
-	github.com/ushineko/fynedesygn v0.1.108
+	github.com/ushineko/fynedesygn v0.1.113
 	github.com/ushineko/fynstall v0.2.6
 	github.com/ushineko/sanshoku v0.1.18
 	go.yaml.in/yaml/v3 v3.0.6
@@ -70,3 +70,16 @@ require (
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
+
+// Fyne at b655332, the commit fynedesygn pins, plus four fixes not yet in a
+// tagged release, from github.com/ushineko/fyne (spec 084):
+//   - on Linux, a resize no longer makes the GL context current per event,
+//     which stalled a window drag on NVIDIA;
+//   - the font cache is keyed by font, not theme scope (fyne-io/fyne#6642), so
+//     a theme override no longer keeps fonts at each refresh (fyne-io/fyne#6640);
+//   - the theme cache holds what an override covers weakly, so what was closed
+//     can be freed;
+//   - batched text is drawn premultiplied, so a translucent window keeps its
+//     alpha at the edges of a glyph.
+// Drop this for the first tagged Fyne release that carries all four.
+replace fyne.io/fyne/v2 => github.com/ushineko/fyne/v2 v2.8.3-ushineko.4
