@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -301,6 +302,9 @@ func appendVPNPoint(p vpnPoint) error {
 	raw, err := json.Marshal(p)
 	if err != nil {
 		return fmt.Errorf("encoding a VPN health point: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("making the cache directory: %w", err)
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec // a path readings composed
 	if err != nil {
