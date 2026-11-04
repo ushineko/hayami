@@ -233,6 +233,11 @@ sending reports, a helper sending lines, a provider's API.
   `internal/core/netdev.go`); `sock_diag` replies are length-checked before
   each field (`parseInetDiag`, `internal/core/netprocs_linux.go`).
 - The helper's lines are bounded (B1).
+- VPN state comes from the system bus, whose names only the bus's own policy
+  lets a service own. Each property is taken as its expected type or as blank
+  (`variant`, `internal/core/vpn_linux.go`), a connection's name is free text and
+  passes the printable filter on its way out, and no call starts a daemon that
+  is not running or asks for a secret (spec 085).
 
 **Accepted.** LibreHardwareMonitor's address can be set to another URL in
 the settings, which are the user's own; hayami then fetches that URL.

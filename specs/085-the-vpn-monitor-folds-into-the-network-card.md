@@ -31,12 +31,28 @@ connected and no OpenVPN3 session.
 | Can VPN state be read without a subprocess? | Yes. `org.freedesktop.NetworkManager` answers on the system bus without root: `ActiveConnections`, `Connection.Active.{Vpn,Type,State,Ip4Config}`, `VPN.Connection.VpnState` (5 when connected) | `nmcli` is not needed. `godbus/dbus/v5` is already a direct dependency and works with `CGO_ENABLED=0` |
 | Can a VPN be tied to its interface? | Yes. The VPN's `Ip4Config` path equals the `Ip4Config` of a device whose `IpInterface` is `tun0`. `Devices` on the active connection names the parent, not the tunnel, so vpn-toggle's `GENERAL.DEVICES` reading is the wrong field for this | The line can name the interface the Network card already reads |
 | Can configured VPNs be listed? | `Settings.ListConnections` answers without root. Secrets are not requested | Discovery needs no credential |
-| Is OpenVPN3 readable? | `net.openvpn.v3.sessions` answers `FetchAvailableSessions` (no sessions at the time) and emits `SessionManagerEvent` | **Not established:** the properties of a live session. Phase 1 must read one before its AC is checked |
+| Is OpenVPN3 readable? | `net.openvpn.v3.sessions` answers `FetchAvailableSessions` (no sessions at the time) and emits `SessionManagerEvent` | A live session was read later in phase 1 (below) |
 | Is native ping possible? | `net.ipv4.ping_group_range` is `0 2147483647` here, so unprivileged ICMP datagram sockets are allowed | Ping needs no subprocess on this desk. Other distributions may restrict it; that is a typed absence, not a fallback to `ping` |
 | Can the card's plot carry latency? | No. `ScaleShared` fits every trace on the Network plot to one scale, in bytes per second | Latency is plotted in the drawer |
 | Can a drawer draw a plot? | No. `view.Detail` has meters and lines, and no trails | `view.Detail` gains trails, and the drawer draws them |
 | Can the library's sparkline mark an event? | `glance.Sparkline` has series and samples. No marker was found in its public functions | A failure or bounce marker is a fynedesygn gap (see Gaps found) |
 | What does the desk's vpn-toggle use? | Three VPNs: one each of ping, DNS and geolocation. The newest metric on any is 2026-10-20, though a VPN is connected and the monitor setting is on. Cause not investigated | Import must carry all three types. The stale metrics are a question for vpn-toggle, not this spec |
+
+NetworkManager's `connection.timestamp` is the connected time: on the desk it
+matched the start of the tunnel's process, about 7.6 days back. The VPN properties
+read are `Vpn`, `Id`, `State`, `Ip4Config` and `Connection` on the active connection,
+and `Ip4Config` and `IpInterface` on the device.
+
+A live OpenVPN3 session was read on 2026-11-04, and its reader confirmed: `config_name`,
+`device_name`, `session_created` and `status`, on `net.openvpn.v3.sessions`. Status
+major 2, minor 7 is connected; a session waiting at its sign-in page has no device yet
+and reads as connecting. `session_created` is when the session started, so its
+connected time includes the time spent at the sign-in page.
+
+## Delivery
+
+Phase 1 is three PRs, approved by the operator on 2026-11-04: 1a reading, 1b health,
+1c setup.
 
 ## Decisions
 
@@ -192,20 +208,27 @@ helper's job (a phase 3 test confirms this).
 
 - [ ] A row per chosen VPN draws state, latency and connected time at fixed
       widths, in all three arrangements in both shells (parity fixture added).
-- [ ] With no VPN chosen, the Network card's rows and plot are unchanged.
-- [ ] Connecting and disconnecting a real VPN does not change the window's
-      height, asserted from pixels on a real window.
-- [ ] State, name and interface are read from a real NetworkManager VPN on the
+- [x] With no VPN chosen, the Network card's rows and plot are unchanged.
+      `TestWithNoVPNChosenTheCardIsUnchanged`.
+- [x] Connecting and disconnecting a real VPN does not change the window's
+      height, asserted from pixels on a real window. On the desk on 2026-11-04,
+      one panel run across down, up and down: 516x834 each time. Falsified with a
+      build that drops a down row: 434x788, 516x810, 434x788. A scripted run on the
+      desk, since `tests/window` is Windows only and this is Linux only; it does not
+      guard against a later regression.
+- [x] State, name and interface are read from a real NetworkManager VPN on the
       system bus, by an integration test that skips where none is connected.
-- [ ] The same is shown for a real OpenVPN3 session, and the properties it reads
-      are recorded in this spec.
-- [ ] `core` has no `exec` of `nmcli`, `openvpn3`, `ping` or `getent`, held by a
-      test in `tests/structure`.
+      `TestARealNetworkManagerVPNIsRead`.
+- [x] The same is shown for a real OpenVPN3 session, and the properties it reads
+      are recorded in this spec. `TestARealOpenVPN3SessionIsRead`.
+- [x] `core` has no `exec` of `nmcli`, `openvpn3`, `ping` or `getent`, held by a
+      test in `tests/structure`. `TestNoProgramIsRunToReadAVPN`.
 - [ ] With 3 processes running, a check is performed once per interval, and
       another process takes over when the lock's holder exits.
 - [ ] A store with a truncated last line loads; the store never exceeds its cap.
-- [ ] A failed probe (bus refused, socket refused) is reported as that, and the
-      row does not read as down.
+- [x] A failed probe (bus refused, socket refused) is reported as that, and the
+      row does not read as down. `TestAFailedProbeIsNotATunnelDown`; a refused socket
+      arrives with the checks in 1b.
 - [ ] The drawer's VPN view plots latency with failures marked, screenshotted
       from a real window, with the test falsified first.
 - [ ] The drawer and `detail` show the real tunnel's address, gateway and routes;

@@ -413,7 +413,9 @@ func (p *Panel) Apply(c config.Config) {
 	p.order(c.Sections)
 	for _, s := range p.opts.Sources {
 		if b, ok := s.(*panel.Bandwidth); ok {
-			b.SetInterfaces(config.Bandwidth.Get(c).Interfaces)
+			settings := config.Bandwidth.Get(c)
+			b.SetInterfaces(settings.Interfaces)
+			b.SetVPNs(settings.VPNs)
 		}
 	}
 }

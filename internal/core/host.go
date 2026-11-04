@@ -55,6 +55,11 @@ type Host struct {
 	GPUProcesses GPUProcessReader
 	NetProcesses func() NetReader
 
+	// VPNs are the systems that keep VPN connections (spec 085). None on a
+	// platform that has no reader for one, which also means no row, no setting
+	// and no drawer tab.
+	VPNs []VPNBackend
+
 	// Permission is an Open refused for want of permission, as the absence a
 	// reader can act on, with this platform's advice.
 	Permission func(error) (*Absence, bool)
