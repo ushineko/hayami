@@ -114,6 +114,8 @@ type Desk interface {
 // its meters, its lines, and the lines for its reasons and its note.
 type drawerPart struct {
 	head   *glance.Row
+	plot   *glance.Sparkline
+	traces map[string]bool
 	meters []*glance.Meter
 	rows   []*glance.Row
 	notes  []*glance.Row
@@ -620,6 +622,37 @@ func (p *Panel) setLine(r *glance.Row, l view.DetailLine) {
 	r.Set(p.value(view.Row{Value: l.Value, Unit: l.Unit, Parts: l.Parts, Status: l.Status}))
 }
 
+// plotPiece is the sparkline as the drawer takes its content. The library's
+// sparkline is a canvas object with colours set per trace, and has no theme of its
+// own to be told about.
+type plotPiece struct{ *glance.Sparkline }
+
+// Object is the sparkline itself.
+func (s plotPiece) Object() fyne.CanvasObject { return s.Sparkline }
+
+// SetTheme does nothing: drawPlot colours every trace on each draw.
+func (plotPiece) SetTheme(fyne.Theme) {}
+
+// DrawerPlotHeight is a plot's height in the drawer: twice a card's, because a
+// drawer is opened to look at the history a card only hints at.
+const DrawerPlotHeight = 2 * glance.SparklineHeight
+
+// drawPlot gives one part's plot its trails.
+func (p *Panel) drawPlot(built *drawerPart, trails []view.Trail) {
+	samples := make(map[string][]float64, len(trails))
+	for _, t := range trails {
+		colour := p.trailColour(t, view.Section{})
+		if built.traces[t.Name] {
+			built.plot.SetColour(t.Name, colour)
+		} else {
+			built.plot.AddSeries(t.Name, colour, view.SparkMinSpan)
+			built.traces[t.Name] = true
+		}
+		samples[t.Name] = t.Samples
+	}
+	built.plot.SetSamples(samples)
+}
+
 // tailLines are the lines under a detail's list: its reasons, then its note.
 func tailLines(detail view.Detail) []string {
 	var tail []string
@@ -654,7 +687,7 @@ func (p *Panel) renderParts(detail view.Detail) {
 
 	shape := ""
 	for _, part := range detail.Parts {
-		shape += fmt.Sprintf("%d/%d/%d;", len(part.Meters), len(part.Lines), len(tailLines(part)))
+		shape += fmt.Sprintf("%d/%d/%d/%t;", len(part.Meters), len(part.Lines), len(tailLines(part)), len(part.Trails) > 0)
 	}
 	if shape != d.partsShape {
 		// A rebuild starts the content again at the top. A live breakdown
@@ -679,6 +712,13 @@ func (p *Panel) renderParts(detail view.Detail) {
 			}
 			built := drawerPart{head: glance.NewRow("", "")}
 			pieces = append(pieces, built.head)
+			if len(part.Trails) > 0 {
+				built.plot = glance.NewSparkline(SparkCapacity)
+				built.plot.SetHeight(DrawerPlotHeight)
+				built.plot.SetScale(glance.ScaleShared)
+				built.traces = map[string]bool{}
+				pieces = append(pieces, plotPiece{built.plot})
+			}
 			for range part.Meters {
 				m := glance.NewMeter("", MeterLabelWidth)
 				built.meters = append(built.meters, m)
@@ -707,6 +747,12 @@ func (p *Panel) renderParts(detail view.Detail) {
 	for i, part := range detail.Parts {
 		built := d.parts[i]
 		built.head.SetLabel(part.Title)
+		if len(part.TitleParts) > 0 {
+			built.head.Set(p.value(view.JoinedRow(part.TitleParts)))
+		}
+		if built.plot != nil {
+			p.drawPlot(&built, part.Trails)
+		}
 		for j, m := range part.Meters {
 			setMeter(built.meters[j], m)
 		}

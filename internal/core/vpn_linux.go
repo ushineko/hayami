@@ -31,6 +31,7 @@ type vpnBus interface {
 	hasOwner(ctx context.Context, name string) (bool, error)
 	props(ctx context.Context, dest string, path dbus.ObjectPath, iface string) (map[string]dbus.Variant, error)
 	call(ctx context.Context, dest string, path dbus.ObjectPath, method string, out ...any) error
+	callArgs(ctx context.Context, dest string, path dbus.ObjectPath, method string, args []any, out ...any) error
 }
 
 // systemBus is the real one. It connects on first use, so a machine with no
@@ -60,6 +61,10 @@ func (b systemBus) props(ctx context.Context, dest string, path dbus.ObjectPath,
 
 func (b systemBus) call(ctx context.Context, dest string, path dbus.ObjectPath, method string, out ...any) error {
 	return b.callWith(ctx, dest, path, method, nil, out...)
+}
+
+func (b systemBus) callArgs(ctx context.Context, dest string, path dbus.ObjectPath, method string, args []any, out ...any) error {
+	return b.callWith(ctx, dest, path, method, args, out...)
 }
 
 func (systemBus) callWith(ctx context.Context, dest string, path dbus.ObjectPath, method string, args []any, out ...any) error {

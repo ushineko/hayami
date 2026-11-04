@@ -109,16 +109,20 @@ Made by the operator on 2026-11-04.
 - R10 **Checks.** Each check is a table entry: `ping` (host), `dns` (hostname,
   expected prefix). A check has a timeout, is cancellable and runs after a grace
   period following a connect. Defaults are vpn-toggle's: every 120 s, 15 s grace.
-- R11 **One prober.** The holder of a non-blocking `flock` runs the checks and
-  appends to a bounded store in the cache directory. Every other process only
-  reads the store, so any number of terminal panes cause one set of probes per
-  interval. A holder that exits frees the lock for the next process to take.
+  Names are looked up through systemd-resolved over the bus, past its cache, and
+  through Go's resolver where it does not run. Skipping the cache departs from
+  vpn-toggle, by the operator's decision: a cached answer passes on a dead tunnel.
+- R11 **One prober.** Each cycle takes a non-blocking `flock` and then asks a bounded
+  store in the cache directory whether a check is due, as the usage cache does. Any
+  number of terminal panes cause one set of probes per interval. Nobody holds the lock
+  between cycles, so a process that exits or hides the section stands in nobody's way.
 - R12 **The store.** JSON lines, one point per check cycle: time, VPN, latency,
   success, per-check results, bounce. Capped and compacted; a truncated last line
   is ignored. It holds no address. It is a cache: deleting it costs the history.
 - R13 **The drawer.** The Network drawer gains a `VPN` switch beside Procs and
-  Peers: each chosen VPN's state, interface, connected time, latency trail with
-  failures marked, average latency, failures, uptime and last check results.
+  Peers: each chosen VPN as its own part, under a rule, with its state on its heading
+  and its own plot of latency with failures marked, then interface, connected time,
+  average latency, failures, uptime and last check results.
   It opens from the card whether or not the process list is available, and
   `hayami-tui detail` prints the same facts.
 - R14 **Preferences.** A VPN group beside the interfaces on the Sections page:
@@ -206,7 +210,7 @@ helper's job (a phase 3 test confirms this).
 
 ### Phase 1
 
-- [ ] A row per chosen VPN draws state, latency and connected time at fixed
+- [x] A row per chosen VPN draws state, latency and connected time at fixed
       widths, in all three arrangements in both shells (parity fixture added).
 - [x] With no VPN chosen, the Network card's rows and plot are unchanged.
       `TestWithNoVPNChosenTheCardIsUnchanged`.
@@ -223,21 +227,28 @@ helper's job (a phase 3 test confirms this).
       are recorded in this spec. `TestARealOpenVPN3SessionIsRead`.
 - [x] `core` has no `exec` of `nmcli`, `openvpn3`, `ping` or `getent`, held by a
       test in `tests/structure`. `TestNoProgramIsRunToReadAVPN`.
-- [ ] With 3 processes running, a check is performed once per interval, and
+- [x] With 3 processes running, a check is performed once per interval, and
       another process takes over when the lock's holder exits.
-- [ ] A store with a truncated last line loads; the store never exceeds its cap.
+      `TestOneSetOfProbesHoweverManyPanels`, with real processes and a real `flock`.
+- [x] A store with a truncated last line loads; the store never exceeds its cap.
+      `TestAStoreWithATruncatedLastLineLoads`, `TestTheStoreDoesNotPassItsCap`.
 - [x] A failed probe (bus refused, socket refused) is reported as that, and the
-      row does not read as down. `TestAFailedProbeIsNotATunnelDown`; a refused socket
-      arrives with the checks in 1b.
-- [ ] The drawer's VPN view plots latency with failures marked, screenshotted
-      from a real window, with the test falsified first.
-- [ ] The drawer and `detail` show the real tunnel's address, gateway and routes;
-      the card, `readings` and `doctor` contain no address.
+      row does not read as down. `TestAFailedProbeIsNotATunnelDown`,
+      `TestACheckThatCouldNotRunIsNotAFailure`.
+- [x] The drawer's VPN view plots latency with failures marked, screenshotted
+      from a real window, with the test falsified first. On the desk on 2026-11-04, seen
+      by the operator and in a capture: three failures as red spikes over the latency.
+      The earlier build was the falsification: its capture showed every row cut off at
+      the drawer's edge, which the fix removed.
+- [x] The drawer and `detail` show the real tunnel's address, gateway and routes;
+      the card, `readings` and `doctor` contain no address. `TestReadingsCarryNoVPNAddress`;
+      `doctor` read on the desk.
 - [ ] Import reads a fixture of vpn-toggle's config, leaves geolocation off and
       says so, and is offered once.
 - [ ] No third-party connection is made with geolocation off, shown by a test
       that fails any dial to a provider.
-- [ ] A hidden Network section performs no check and no bus read.
+- [x] A hidden Network section performs no check and no bus read. A hidden section's
+      source is not polled (spec 052), and every check and read starts from `Poll`.
 
 ### Phase 2
 
@@ -290,10 +301,10 @@ helper's job (a phase 3 test confirms this).
 - **Assumed:** a user service can activate a connection through polkit and reach the
   desktop's secret agent while the person is logged in. vpn-toggle's unit runs this
   way, but this spec has not tested a bounce from a user service.
-- **Assumed:** DNS through Go's resolver gives the check's answer. vpn-toggle moved
-  to `getent` in v4.3.1 so lookups pass through nsswitch; the terminal panel is
-  built without cgo and so has no nsswitch modules. Phase 1 compares both on a real
-  tunnel, and a difference is decided before the check ships.
+- **DNS on a machine without systemd-resolved.** Go's resolver reads `/etc/resolv.conf`
+  and skips nsswitch, so a tunnel with its own DNS may not be asked. On the desk,
+  where `/etc/resolv.conf` lists the LAN's servers, Go's resolver and `getent` agreed on
+  the one tunnel compared, and resolved over the bus gives the same answer as `getent`.
 - **Assumed:** OpenVPN3 session properties suffice for name, state and interface.
   Untested until a session is live.
 - **Two monitors during phases 1 and 2.** vpn-toggle's probes and hayami's run side
@@ -361,11 +372,14 @@ and `readings` are how an installation is observed.
 
 For a fynedesygn change, not `internal/gui`:
 
-- `glance.Sparkline` has no way to mark an event on a trace (failure, bounce).
-  To confirm with fynedesygn's author before phase 1's drawer work: a marker API, or
-  a failure drawn as a gap in the series, which needs no library change.
-- A plot inside the drawer. Not yet known whether the sparkline fits in the
-  drawer's layout as it stands.
+- A scrolling drawer is as wide as its widest row. One value wider than the room
+  widens the content, and every row's value goes past the edge, cut off. Worked around
+  by `clipMiddle` in `view`; a drawer that held its rows to its own width would be the
+  fix. Seen on a real window.
+- `glance.Sparkline` is not a `Piece`, so the drawer's plot goes through a small adapter
+  in `internal/gui` (`plotPiece`).
+- `glance.Sparkline` has no way to mark an event on a trace. Not needed: a failure is a
+  spike on a second trace in the verdict colour, which reads clearly on a real window.
 
 ## Alternatives Considered
 

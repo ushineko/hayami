@@ -18,9 +18,21 @@ import (
 
 func noCounters() (map[string]core.Counters, error) { return map[string]core.Counters{}, nil }
 
-func network(interfaces []string, active func(context.Context) ([]core.VPN, error), chosen ...config.VPNItem) *panel.Bandwidth {
+// tempCache points the readings' cache, which the health store lives in, at a
+// directory of the test's own.
+func tempCache(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", dir)
+	t.Setenv("LOCALAPPDATA", dir)
+	return dir
+}
+
+func network(t *testing.T, interfaces []string, active func(context.Context) ([]core.VPN, error), chosen ...config.VPNItem) *panel.Bandwidth {
+	t.Helper()
+	tempCache(t)
 	b := panel.NewBandwidth(interfaces, noCounters)
-	b.SetVPNSystems([]core.VPNBackend{{Name: "fake", Active: active}}, chosen)
+	b.SetVPNSystems([]core.VPNBackend{{Name: "fake", Active: active}}, nil, config.BandwidthSettings{VPNs: chosen})
 	return b
 }
 
@@ -42,7 +54,7 @@ func vpnRows(s view.Section) []view.Row {
 // (spec 085 R7).
 func TestWithNoVPNChosenTheCardIsUnchanged(t *testing.T) {
 	asked := false
-	b := network([]string{"eth0"}, func(context.Context) ([]core.VPN, error) {
+	b := network(t, []string{"eth0"}, func(context.Context) ([]core.VPN, error) {
 		asked = true
 		return nil, nil
 	})
@@ -62,7 +74,7 @@ func TestWithNoVPNChosenTheCardIsUnchanged(t *testing.T) {
 // Nothing but VPNs chosen is still a card with something to say, and not one
 // saying no interfaces were picked.
 func TestAVPNAloneDrawsTheCard(t *testing.T) {
-	b := network(nil, answering(), config.VPNItem{Name: "a"})
+	b := network(t, nil, answering(), config.VPNItem{Name: "a"})
 
 	has, err := b.Poll(context.Background())
 
@@ -75,7 +87,7 @@ func TestAVPNAloneDrawsTheCard(t *testing.T) {
 
 func TestAnUpVPNDrawsWithItsLabelAndConnectedTime(t *testing.T) {
 	since := time.Now().Add(-90 * time.Minute)
-	b := network(nil, answering(core.VPN{Name: "long-name", State: core.VPNUp, Interface: "tun0", Since: since}),
+	b := network(t, nil, answering(core.VPN{Name: "long-name", State: core.VPNUp, Interface: "tun0", Since: since}),
 		config.VPNItem{Name: "long-name", Label: "Short"})
 
 	_, err := b.Poll(context.Background())
@@ -92,7 +104,7 @@ func TestAnUpVPNDrawsWithItsLabelAndConnectedTime(t *testing.T) {
 // A probe that failed is reported as that, and the row does not read as down
 // (spec 085 R4).
 func TestAFailedProbeIsNotATunnelDown(t *testing.T) {
-	b := network(nil, func(context.Context) ([]core.VPN, error) {
+	b := network(t, nil, func(context.Context) ([]core.VPN, error) {
 		return nil, errors.New("the bus refused")
 	}, config.VPNItem{Name: "a"})
 
@@ -109,7 +121,7 @@ func TestAFailedProbeIsNotATunnelDown(t *testing.T) {
 }
 
 func TestNoSystemRunningIsSaid(t *testing.T) {
-	b := network(nil, func(context.Context) ([]core.VPN, error) {
+	b := network(t, nil, func(context.Context) ([]core.VPN, error) {
 		return nil, core.ErrVPNBackendAbsent
 	}, config.VPNItem{Name: "a"})
 
@@ -125,7 +137,7 @@ func TestNoSystemRunningIsSaid(t *testing.T) {
 // machine that has them (spec 085 R3).
 func TestAPlatformWithNoSystemsDrawsNoRow(t *testing.T) {
 	b := panel.NewBandwidth(nil, noCounters)
-	b.SetVPNSystems(nil, []config.VPNItem{{Name: "a"}})
+	b.SetVPNSystems(nil, nil, config.BandwidthSettings{VPNs: []config.VPNItem{{Name: "a"}}})
 
 	has, err := b.Poll(context.Background())
 
@@ -136,7 +148,7 @@ func TestAPlatformWithNoSystemsDrawsNoRow(t *testing.T) {
 
 // The JSON says what the card says and carries no address (spec 085 R9).
 func TestTheJSONNamesTheVPNs(t *testing.T) {
-	b := network(nil, answering(core.VPN{Name: "a", State: core.VPNUp, Interface: "tun0"}), config.VPNItem{Name: "a"})
+	b := network(t, nil, answering(core.VPN{Name: "a", State: core.VPNUp, Interface: "tun0"}), config.VPNItem{Name: "a"})
 	_, err := b.Poll(context.Background())
 	require.NoError(t, err)
 
@@ -156,8 +168,8 @@ func TestTheJSONNamesTheVPNs(t *testing.T) {
 
 // A chosen list changes while the panel runs, from the preferences window.
 func TestChangingTheChosenVPNsTakesEffect(t *testing.T) {
-	b := network(nil, answering(), config.VPNItem{Name: "a"})
-	b.SetVPNs([]config.VPNItem{{Name: "b"}, {Name: "c"}})
+	b := network(t, nil, answering(), config.VPNItem{Name: "a"})
+	b.SetVPNs(config.BandwidthSettings{VPNs: []config.VPNItem{{Name: "b"}, {Name: "c"}}})
 
 	_, err := b.Poll(context.Background())
 	require.NoError(t, err)

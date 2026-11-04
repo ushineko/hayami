@@ -32,6 +32,9 @@ type Bandwidth struct {
 	vpns     *core.VPNSection
 	labelsMu sync.Mutex
 	labels   map[string]string
+
+	// health runs the chosen VPNs' checks and keeps what they said.
+	health *vpnHealth
 }
 
 // NewBandwidth builds the bandwidth source over the named interfaces. read is
@@ -47,22 +50,23 @@ func (b *Bandwidth) SetNetProcesses(build func() core.NetReader) { b.net = build
 // SetVPNSystems gives the source the systems that keep VPNs and the ones
 // chosen. A platform with no systems has no VPN rows, whatever the settings say
 // (spec 085 R3).
-func (b *Bandwidth) SetVPNSystems(systems []core.VPNBackend, chosen []config.VPNItem) {
+func (b *Bandwidth) SetVPNSystems(systems []core.VPNBackend, checkers core.VPNCheckers, settings config.BandwidthSettings) {
 	if len(systems) == 0 {
 		return
 	}
 	b.vpns = core.NewVPNSection(nil, systems)
-	b.SetVPNs(chosen)
+	b.health = newVPNHealth(checkers)
+	b.SetVPNs(settings)
 }
 
-// SetVPNs replaces the chosen VPNs, for a change of the settings.
-func (b *Bandwidth) SetVPNs(chosen []config.VPNItem) {
+// SetVPNs replaces the chosen VPNs and their checks, for a change of the settings.
+func (b *Bandwidth) SetVPNs(settings config.BandwidthSettings) {
 	if b.vpns == nil {
 		return
 	}
-	names := make([]string, 0, len(chosen))
-	labels := make(map[string]string, len(chosen))
-	for _, c := range chosen {
+	names := make([]string, 0, len(settings.VPNs))
+	labels := make(map[string]string, len(settings.VPNs))
+	for _, c := range settings.VPNs {
 		names = append(names, c.Name)
 		labels[c.Name] = c.Label
 	}
@@ -70,6 +74,7 @@ func (b *Bandwidth) SetVPNs(chosen []config.VPNItem) {
 	b.labels = labels
 	b.labelsMu.Unlock()
 	b.vpns.SetNames(names)
+	b.health.configure(settings)
 }
 
 // vpnChosen reports whether this source draws any VPN.
@@ -81,6 +86,7 @@ func (b *Bandwidth) Poll(ctx context.Context) (bool, error) {
 	has, err := b.BandwidthSection.Poll(ctx)
 	if b.vpnChosen() {
 		b.vpns.Poll(ctx)
+		b.health.tick(ctx, b.vpns.Readings())
 		has = true
 	}
 	return has, err //nolint:wrapcheck // the section's own account
@@ -146,6 +152,8 @@ func (b *Bandwidth) Section() view.Section {
 	sec.Reasons = reasons
 	if b.net != nil {
 		sec.Opens = view.DetailProcesses
+	} else if b.vpnChosen() {
+		sec.Opens = view.DetailVPN
 	}
 	return sec
 }
@@ -164,12 +172,21 @@ func (b *Bandwidth) vpnReadings() []view.VPNReading {
 	now := time.Now()
 	vpns := b.vpns.Readings()
 	out := make([]view.VPNReading, 0, len(vpns))
+	points := b.health.points()
 	for _, v := range vpns {
-		out = append(out, view.VPNReading{
+		r := view.VPNReading{
 			Name: v.Name, Label: labels[v.Name], State: vpnStates[v.State],
 			Interface: v.Interface, Stale: v.Stale,
 			Connected: view.Maybe(now.Sub(v.Since), v.State == core.VPNUp && !v.Since.IsZero()),
-		})
+		}
+		// A figure is about the tunnel that is up now. One from before it
+		// went down, or before the checks stopped, says nothing of it.
+		if v.State == core.VPNUp {
+			if last, ok := b.health.current(points[v.Name], v.Since, now); ok {
+				r.Latency, r.Failing = view.Some(last.LatencyMS), !last.OK
+			}
+		}
+		out = append(out, r)
 	}
 	return out
 }
@@ -189,15 +206,16 @@ func (b *Bandwidth) vpnReasons() []view.Reason {
 
 // Details is the network by process, where this source was given a reader.
 func (b *Bandwidth) Details() []view.DetailInfo {
-	if b.net == nil {
-		return nil
+	var out []view.DetailInfo
+	if b.net != nil {
+		// Both through ProcessInfo, so both carry the label and key a switch is
+		// built from. One built by hand lost them, and lost the switch with it.
+		out = append(out, view.ProcessInfo(view.DetailProcesses), view.ProcessInfo(view.DetailPeers))
 	}
-	// Both through ProcessInfo, so both carry the label and key a switch is
-	// built from. One built by hand lost them, and lost the switch with it.
-	return []view.DetailInfo{
-		view.ProcessInfo(view.DetailProcesses),
-		view.ProcessInfo(view.DetailPeers),
+	if b.vpnChosen() {
+		out = append(out, view.VPNDetailInfo())
 	}
+	return out
 }
 
 // DetailInterval is ProcessInterval.
@@ -223,6 +241,9 @@ traffic the list adds up to, so a list that comes to less than the rows above
 it reads as partial and not as wrong.
 */
 func (b *Bandwidth) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+	if id == view.DetailVPN && b.vpnChosen() {
+		return b.vpnDetail(), nil
+	}
 	key, title := b.Key(), view.ProcessTitle(id)
 	if (id != view.DetailProcesses && !b.Drills(id)) || b.net == nil {
 		return view.Detail{}, fmt.Errorf("the %s section has no detail %q", key, id)

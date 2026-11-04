@@ -41,6 +41,11 @@ type VPNReading struct {
 	Interface string
 	Connected Opt[time.Duration]
 
+	// Latency is the last check's, in milliseconds, and Failing says that check
+	// did not pass.
+	Latency Opt[float64]
+	Failing bool
+
 	// Stale marks a reading kept from an earlier poll.
 	Stale bool
 }
@@ -71,7 +76,7 @@ func vpnRow(r VPNReading) Row {
 	state := vpnStates[r.State]
 	parts := []Part{
 		{Text: fmt.Sprintf("%-*s", vpnStateWidth, state.word), Status: state.status},
-		{Text: fmt.Sprintf("  %*s", vpnLatencyWidth, Blank), Status: Info},
+		vpnLatency(r),
 		{Text: fmt.Sprintf("  %*s", vpnTimeWidth, vpnElapsed(r.Connected)), Status: Info},
 	}
 	row := Row{Label: r.Name, Parts: parts, Stale: r.Stale, ID: "vpn:" + r.Name}
@@ -86,6 +91,30 @@ func vpnRow(r VPNReading) Row {
 		row.Tip = vpnTip(row.Tip, r.Interface)
 	}
 	return row
+}
+
+// vpnLatency is the latency column. A check that failed says so here, and the
+// state beside it still says up: the tunnel is there, it is not answering, and
+// those are the two facts this exists to tell apart.
+func vpnLatency(r VPNReading) Part {
+	if r.Failing {
+		return Part{Text: fmt.Sprintf("  %*s", vpnLatencyWidth, "fail"), Status: Warn}
+	}
+	return Part{Text: fmt.Sprintf("  %*s", vpnLatencyWidth, formatMS(r.Latency)), Status: Info}
+}
+
+// formatMS is a latency in at most vpnLatencyWidth characters.
+func formatMS(ms Opt[float64]) string {
+	switch {
+	case !ms.OK:
+		return Blank
+	case ms.V < 999.5:
+		return fmt.Sprintf("%.0f ms", ms.V)
+	case ms.V < 99_950:
+		return fmt.Sprintf("%.1f s", ms.V/1000)
+	default:
+		return ">99 s"
+	}
 }
 
 func vpnTip(tip, iface string) string {

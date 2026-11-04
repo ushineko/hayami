@@ -21,6 +21,8 @@ type fakeBus struct {
 	stamp    uint64
 	reads    int
 	settings int
+	answers  []resolvedAddress
+	args     []any
 }
 
 func (f *fakeBus) hasOwner(_ context.Context, name string) (bool, error) {
@@ -34,6 +36,12 @@ func (f *fakeBus) props(_ context.Context, _ string, path dbus.ObjectPath, _ str
 		return nil, errors.New("no such object")
 	}
 	return p, nil
+}
+
+func (f *fakeBus) callArgs(_ context.Context, _ string, _ dbus.ObjectPath, _ string, args []any, out ...any) error {
+	f.args = args
+	*out[0].(*[]resolvedAddress) = f.answers
+	return nil
 }
 
 func (f *fakeBus) call(_ context.Context, _ string, _ dbus.ObjectPath, method string, out ...any) error {

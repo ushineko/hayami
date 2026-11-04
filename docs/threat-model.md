@@ -233,6 +233,9 @@ sending reports, a helper sending lines, a provider's API.
   `internal/core/netdev.go`); `sock_diag` replies are length-checked before
   each field (`parseInetDiag`, `internal/core/netprocs_linux.go`).
 - The helper's lines are bounded (B1).
+- The VPN health store is bounded, 0600, read to a size limit and tolerates a cut
+  line (`loadVPNPoints`, `internal/panel/vpnhealth.go`). `/proc/net/route` lines that
+  do not parse are skipped (`ParseRouteTable`, fuzzed).
 - VPN state comes from the system bus, whose names only the bus's own policy
   lets a service own. Each property is taken as its expected type or as blank
   (`variant`, `internal/core/vpn_linux.go`), a connection's name is free text and
@@ -271,6 +274,11 @@ something else between hayami reading it and acting on it.
   The kernel refuses another account's processes.
 - The KWin script is written to a new file with mode `0600` before KWin is
   told its path (`writeScript`, `internal/desktop/script.go`).
+- VPN health checks send one ICMP echo and look up one name per check, at the
+  interval chosen, only for a tunnel that is connected and only to a target in the
+  settings (`internal/core/vpncheck_linux.go`, spec 085). A settings file aiming a
+  check at a host makes this machine probe it, and nothing more; the settings are the
+  user's own. Nothing is sent to a third party. No program is run.
 - hayami runs one program to read: `nvidia-smi`, with a timeout
   (`internal/core/processors.go`, `internal/core/gpuprocs.go`), found on the
   user's `PATH`, as the user.
@@ -291,6 +299,9 @@ bug report someone pasted `doctor` or `readings --json` into.
 
 - Network names (SSID, BSSID) are never read (`docs/architecture.md`,
   rule 9).
+- A VPN's address, gateway and routes are read only for the drawer and `detail`.
+  They are not on the card, in `readings` or in `doctor`, which is what gets pasted
+  into a bug report (`DetailInfo.OnRequest`, spec 085).
 - `tools/screenshot.sh` runs the panel from a throwaway copy of the
   settings, so no path of the user's is shown.
 - Tokens are never printed (B3).

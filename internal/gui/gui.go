@@ -415,7 +415,7 @@ func (p *Panel) Apply(c config.Config) {
 		if b, ok := s.(*panel.Bandwidth); ok {
 			settings := config.Bandwidth.Get(c)
 			b.SetInterfaces(settings.Interfaces)
-			b.SetVPNs(settings.VPNs)
+			b.SetVPNs(settings)
 		}
 	}
 }
