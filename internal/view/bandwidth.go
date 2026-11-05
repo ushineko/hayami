@@ -110,7 +110,7 @@ func interfaceRow(r BandwidthReading, unitWidth int) Row {
 		// The totals take no band: they are a record of what has passed,
 		// not a rate, and a total that went amber at 10 MiB would be amber
 		// for the rest of the day.
-		details = append(details, totals(r))
+		details = append(details, totals(r, unitWidth))
 	}
 	if r.Radio {
 		details = append(details, linkLine(r.Link))
@@ -274,12 +274,13 @@ func rate(v float64, has bool, unitWidth int) string {
 	return number + " " + PadUnit(unit, unitWidth)
 }
 
-// totals is the pair of cumulative figures, under the rates they belong to.
-func totals(r BandwidthReading) string {
-	unit := UnitWidth("B", "KiB", "MiB", "GiB", "TiB")
-
+// totals is the pair of cumulative figures, in the columns of the rates above
+// them: each figure under its rate, its unit under the rate's unit. The columns
+// say which direction is which, so the line carries no arrows of its own, and
+// the sum sign stands where the down arrow does.
+func totals(r BandwidthReading, unitWidth int) string {
 	rx, rxUnit := Size(float64(r.RxTotal))
 	tx, txUnit := Size(float64(r.TxTotal))
-	return "Σ ↓ " + rx + " " + PadUnit(rxUnit, unit) +
-		"  ↑ " + tx + " " + PadUnit(txUnit, unit)
+	return "Σ " + rx + " " + PadUnit(rxUnit, unitWidth) +
+		"    " + tx + " " + PadUnit(txUnit, unitWidth)
 }

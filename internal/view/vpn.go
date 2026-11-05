@@ -51,11 +51,13 @@ type VPNReading struct {
 }
 
 // The columns of a VPN's value, so the line does not move as a state, a
-// latency or a duration changes.
+// latency or a duration changes. They are the columns of the rates above them
+// on the card: the state and the latency fill the down rate's, the latency
+// ending where its unit ends, and the time ends where the up rate's unit ends.
 const (
 	vpnStateWidth   = 7
 	vpnLatencyWidth = 6
-	vpnTimeWidth    = 7
+	vpnTimeWidth    = 15
 )
 
 // VPNRows are one row per VPN, under the interfaces on the Network card. Each
@@ -77,7 +79,7 @@ func vpnRow(r VPNReading) Row {
 	parts := []Part{
 		{Text: fmt.Sprintf("%-*s", vpnStateWidth, state.word), Status: state.status},
 		vpnLatency(r),
-		{Text: fmt.Sprintf("  %*s", vpnTimeWidth, vpnElapsed(r.Connected)), Status: Info},
+		{Text: fmt.Sprintf("%*s", vpnTimeWidth, vpnElapsed(r.Connected)), Status: Info},
 	}
 	row := Row{Label: r.Name, Parts: parts, Stale: r.Stale, ID: "vpn:" + r.Name}
 	for _, p := range parts {
@@ -98,9 +100,9 @@ func vpnRow(r VPNReading) Row {
 // those are the two facts this exists to tell apart.
 func vpnLatency(r VPNReading) Part {
 	if r.Failing {
-		return Part{Text: fmt.Sprintf("  %*s", vpnLatencyWidth, "fail"), Status: Warn}
+		return Part{Text: fmt.Sprintf("%*s", vpnLatencyWidth, "fail"), Status: Warn}
 	}
-	return Part{Text: fmt.Sprintf("  %*s", vpnLatencyWidth, formatMS(r.Latency)), Status: Info}
+	return Part{Text: fmt.Sprintf("%*s", vpnLatencyWidth, formatMS(r.Latency)), Status: Info}
 }
 
 // formatMS is a latency in at most vpnLatencyWidth characters.
@@ -125,7 +127,7 @@ func vpnTip(tip, iface string) string {
 }
 
 // vpnElapsed is how long a tunnel has been up, in the two largest units that
-// fit vpnTimeWidth.
+// fit a rate's figure and unit.
 func vpnElapsed(d Opt[time.Duration]) string {
 	if !d.OK || d.V < 0 {
 		return Blank
