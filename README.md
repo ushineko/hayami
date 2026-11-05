@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.12.0
+**Version**: 0.12.1
 
 *a chart you read at a glance*
 
@@ -689,7 +689,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.12.1 (2026-11-04)
 
 - **Changed**: the Network card reads as a table. An interface's totals sit in the
   columns of its rates, without arrows of their own, and a VPN's state, latency and
