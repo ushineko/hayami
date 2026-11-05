@@ -103,6 +103,25 @@ func TestManyRoutesDoNotCrowdOutTheHealth(t *testing.T) {
 	assert.Contains(t, d.Text(), "and 46 more")
 }
 
+/*
+Every line of the Network card sits on one grid: a rate, the totals under it and
+a VPN are the same width, so right-aligned they share their columns, and each
+figure starts and ends where the one above it does.
+*/
+func TestTheNetworkCardsLinesShareColumns(t *testing.T) {
+	sec := view.Bandwidth([]view.BandwidthReading{{
+		Name: "a", HasRate: true, RxRate: 20 << 10, TxRate: 52, HasTotal: true, RxTotal: 714 << 30, TxTotal: 3 << 20,
+	}})
+	rate, total := sec.Rows[0].Value, sec.Rows[0].Detail
+	vpn := view.VPNRows([]view.VPNReading{{
+		Name: "b", State: view.VPNUp, Latency: view.Some(16.0), Connected: view.Some(192 * time.Hour),
+	}})[0].Value
+
+	assert.Equal(t, "↓  20.0 KiB/s  ↑    52 B/s  ", rate)
+	assert.Equal(t, "Σ 714.0 GiB        3.0 MiB  ", total)
+	assert.Equal(t, "up      16 ms         8d 00h", vpn)
+}
+
 // Every width-sensitive latency fits its column.
 func TestALatencyFitsItsColumnAtAnySize(t *testing.T) {
 	want := utf8.RuneCountInString(view.VPNRows([]view.VPNReading{{Name: "a"}})[0].Value)

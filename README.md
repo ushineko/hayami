@@ -689,6 +689,12 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Changed**: the Network card reads as a table. An interface's totals sit in the
+  columns of its rates, without arrows of their own, and a VPN's state, latency and
+  time sit in the same columns.
+
 ### 0.12.0 (2026-11-04)
 
 - **Added**: a VPN can have a line on the Network card, with its state and how

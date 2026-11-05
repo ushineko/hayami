@@ -33,11 +33,21 @@ func interfacesHere(t *testing.T) (wifi, wired string) {
 	if wifi == "" {
 		t.Skip("no connected Wi-Fi interface")
 	}
+	return wifi, shortestOrdinary(t, func(name string) bool {
+		_, isRadio := radios[name]
+		return isRadio
+	})
+}
+
+// shortestOrdinary is the shortest-named ordinary interface here that skip
+// does not rule out, or a skip.
+func shortestOrdinary(t *testing.T, skip func(string) bool) string {
+	t.Helper()
 	counters, err := core.ReadCounters()
 	require.NoError(t, err)
 	var names []string
 	for name := range counters {
-		if _, isRadio := radios[name]; !isRadio && core.ClassifyInterface(name) == core.KindOrdinary {
+		if !skip(name) && core.ClassifyInterface(name) == core.KindOrdinary {
 			names = append(names, name)
 		}
 	}
@@ -53,7 +63,7 @@ func interfacesHere(t *testing.T) (wifi, wired string) {
 		}
 		return names[i] < names[j]
 	})
-	return wifi, names[0]
+	return names[0]
 }
 
 /*

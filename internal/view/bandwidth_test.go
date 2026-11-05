@@ -35,8 +35,8 @@ func TestBothDirectionsAreDrawn(t *testing.T) {
 	assert.Contains(t, s.Rows[0].Value, "↓")
 	assert.Contains(t, s.Rows[0].Value, "↑")
 	assert.Contains(t, s.Rows[0].Detail, "Σ")
-	assert.Contains(t, s.Rows[0].Detail, "↓")
-	assert.Contains(t, s.Rows[0].Detail, "↑")
+	assert.Contains(t, s.Rows[0].Detail, "256.0 GiB")
+	assert.Contains(t, s.Rows[0].Detail, "128.0 GiB")
 }
 
 /*
