@@ -23,3 +23,10 @@ var Summarise = summarise
 
 // FollowBandwidth is what the helper reads its settings through.
 var FollowBandwidth = followBandwidth
+
+// KeepaliveLines is what a report says of the helper, for a test's machine.
+func KeepaliveLines(installed, running bool, on int, toggleActive bool, toggleErr error) []string {
+	return keepaliveLines(keepaliveStanding{
+		installed: installed, running: running, on: on, toggleActive: toggleActive, toggleErr: toggleErr,
+	})
+}

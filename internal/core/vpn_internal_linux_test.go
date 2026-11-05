@@ -28,6 +28,9 @@ type fakeBus struct {
 	connections map[dbus.ObjectPath]map[string]dbus.Variant
 	startCalls  int
 	startFails  int
+
+	// settingsErr answers GetSettings, for the connections it names.
+	settingsErr map[dbus.ObjectPath]error
 }
 
 func (f *fakeBus) hasOwner(_ context.Context, name string) (bool, error) {
@@ -64,6 +67,9 @@ func (f *fakeBus) call(_ context.Context, _ string, path dbus.ObjectPath, method
 		*out[0].(*[]dbus.ObjectPath) = f.configs
 	case nmSettings + ".GetSettings":
 		f.settings++
+		if err := f.settingsErr[path]; err != nil {
+			return err
+		}
 		connection := map[string]dbus.Variant{"timestamp": dbus.MakeVariant(f.stamp)}
 		if c, ok := f.connections[path]; ok {
 			connection = c
@@ -99,6 +105,32 @@ func nmFixture(state uint32) *fakeBus {
 			"/d/tun": {"Ip4Config": v(dbus.ObjectPath("/ip/2")), "IpInterface": v("tun0")},
 		},
 	}
+}
+
+// A connection private to another account is listed to everybody, under any name its
+// owner chose. It is not this person's tunnel, or a dead tunnel reads as up and is never
+// re-dialled (spec 085's adversarial review).
+func TestAnotherAccountsVPNOfTheSameNameIsNotThisPersonsTunnel(t *testing.T) {
+	f := nmFixture(2)
+	f.settingsErr = map[dbus.ObjectPath]error{"/s/vpn": dbus.Error{Name: nmName + ".Settings.PermissionDenied"}}
+
+	got, err := newNMVPNs(f).active(context.Background())
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+// Any other failure says nothing of whose it is, and the tunnel stays up.
+func TestASettingsReadThatFailsDoesNotTakeTheTunnelAway(t *testing.T) {
+	f := nmFixture(2)
+	f.settingsErr = map[dbus.ObjectPath]error{"/s/vpn": errors.New("the bus is having a moment")}
+
+	got, err := newNMVPNs(f).active(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, VPNUp, got[0].State)
+	assert.True(t, got[0].Since.IsZero())
 }
 
 func TestNetworkManagersVPNIsReadWithItsTunnelInterface(t *testing.T) {
@@ -295,4 +327,10 @@ func TestARealOpenVPN3SessionIsRead(t *testing.T) {
 			assert.NoError(t, err)
 		}
 	}
+}
+
+func TestAVPNsNameCannotBeMarkupInANotification(t *testing.T) {
+	const name = `R&D <!-- "office" <b>x</b>`
+	assert.Equal(t, `R&amp;D &lt;!-- "office" &lt;b&gt;x&lt;/b&gt;`, notifyBody(name, true))
+	assert.Equal(t, name, notifyBody(name, false), "to a server that shows text, it is text")
 }

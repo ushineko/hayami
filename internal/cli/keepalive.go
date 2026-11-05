@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -48,8 +49,135 @@ func keepaliveCmd(f *flags) *cobra.Command {
 			return runKeepalive(ctx, cmd, f)
 		},
 	}
-	cmd.AddCommand(run)
+	status := &cobra.Command{
+		Use: "status", Short: "Say whether the helper is installed and running",
+		Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error { return keepaliveDoctor(cmd, f) },
+	}
+	install := &cobra.Command{
+		Use:   "install",
+		Short: "Install the helper as your own service, and start it",
+		Long: "Install the helper as your own service, and start it. Run again, it puts this\n" +
+			"program in place of the one running. It needs no administrator.\n\n" +
+			keepalive.OfferCaution,
+		Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if f.settings != "" {
+				return &UsageError{errKeepaliveSettings}
+			}
+			self, err := os.Executable()
+			if err != nil {
+				return fmt.Errorf("finding this program: %w", err)
+			}
+			if err := keepalive.Install(cmd.Context(), self); err != nil {
+				return err //nolint:wrapcheck // says which step
+			}
+			return keepaliveDoctor(cmd, f)
+		},
+	}
+	remove := &cobra.Command{
+		Use: "remove", Aliases: []string{"uninstall"}, Short: "Stop the helper and remove its service",
+		Args: cobra.NoArgs, SilenceUsage: true, SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			there := keepalive.Installed()
+			if err := keepalive.Remove(cmd.Context()); err != nil {
+				return err //nolint:wrapcheck // says which step
+			}
+			said := "not installed"
+			if there {
+				said = "removed"
+			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), said)
+			return nil
+		},
+	}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return keepaliveDoctor(cmd, f) }
+	cmd.AddCommand(status, install, remove, run)
 	return cmd
+}
+
+// errKeepaliveSettings is an install asked to use settings the service would not read.
+var errKeepaliveSettings = errors.New("the helper's service reads your own settings, so install takes no --settings")
+
+// vpnToggleService is the monitor hayami replaces (spec 085 R27).
+const vpnToggleService = "vpn-toggle.service"
+
+// doctorDeadline bounds asking the service manager for a line of a report.
+const doctorDeadline = 3 * time.Second
+
+// keepaliveStanding is what a report says of the helper.
+type keepaliveStanding struct {
+	installed, running bool
+
+	// on is how many VPNs are switched on for it.
+	on int
+
+	// toggleActive is vpn-toggle's service running, and toggleErr that it could not be
+	// asked.
+	toggleActive bool
+	toggleErr    error
+}
+
+// keepaliveLines is that in words: the state, what is missing for what was asked for,
+// and vpn-toggle when two monitors could be running (spec 085 R27).
+func keepaliveLines(s keepaliveStanding) []string {
+	var state string
+	switch {
+	case s.running && s.installed:
+		state = "running"
+	case s.running:
+		state = "running, started by hand"
+	case s.installed:
+		state = "installed, not running"
+	default:
+		state = "not installed"
+	}
+	lines := []string{fmt.Sprintf("vpn keepalive: %s, switched on for %d VPN(s)", state, s.on)}
+	if s.on > 0 && !s.running {
+		lines = append(lines, "  warning: nothing is keeping those VPNs working. hayami-tui vpn-keepalive install starts it.")
+	}
+	if !s.installed && !s.running {
+		return lines
+	}
+	switch {
+	case s.toggleErr != nil:
+		lines = append(lines, "  could not ask whether vpn-toggle is running: "+s.toggleErr.Error())
+	case s.toggleActive:
+		lines = append(lines, "  warning: vpn-toggle's service is running too, and two monitors on one VPN bounce each "+
+			"other's tunnel. systemctl --user disable --now vpn-toggle stops it.")
+	}
+	return lines
+}
+
+// keepaliveDoctor prints that, where the helper can be installed.
+func keepaliveDoctor(cmd *cobra.Command, f *flags) error {
+	if !keepalive.Offered() {
+		return nil
+	}
+	_, store, err := f.resolve()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+	files, err := keepalive.Here()
+	if err != nil {
+		return err //nolint:wrapcheck // says what it was asking
+	}
+	s := keepaliveStanding{installed: keepalive.Installed(), running: files.Running()}
+	for _, v := range config.Bandwidth.Get(store.Config()).VPNs {
+		if v.Keepalive {
+			s.on++
+		}
+	}
+	if s.installed || s.running {
+		ctx, cancel := context.WithTimeout(cmd.Context(), doctorDeadline)
+		defer cancel()
+		s.toggleActive, s.toggleErr = core.UserServiceActive(ctx, vpnToggleService)
+	}
+	for _, line := range keepaliveLines(s) {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), line)
+	}
+	return nil
 }
 
 func runKeepalive(ctx context.Context, cmd *cobra.Command, f *flags) error {

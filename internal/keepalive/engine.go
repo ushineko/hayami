@@ -212,14 +212,10 @@ func (e *Engine) down(now time.Time, name string, t *tracked, o Options, s *Stat
 		return nil
 	}
 	if !e.unattended[t.backend] {
-		if t.downSaid {
-			return nil
-		}
-		t.downSaid = true
-		return []Action{{Kind: Notify, VPN: name, Text: name + " dropped. It needs you to reconnect it."}}
+		return t.sayOnce(name, name+" dropped. It needs you to reconnect it.")
 	}
 	if o.NoRedial {
-		return nil
+		return t.sayOnce(name, name+" dropped, and re-dialling is off for it, so traffic may be leaving outside the tunnel.")
 	}
 	if !t.retryAt.IsZero() && now.Before(t.retryAt) {
 		return nil
@@ -271,11 +267,13 @@ func (e *Engine) BounceDone(now time.Time, name string, o Options, err error, s 
 		t.attempts, t.retryAt = 0, time.Time{}
 		return nil
 	}
-	if o.NoRedial || s.IsHeld(name) {
+	if s.IsHeld(name) {
 		return nil
 	}
-	e.retryLater(now, name, t, s)
-	return nil
+	if o.NoRedial {
+		return t.sayOnce(name, name+" was bounced and did not come back, and re-dialling is off for it, so traffic may be leaving outside the tunnel.")
+	}
+	return e.retryLater(now, name, t, s)
 }
 
 // RedialDone is how a re-dial went: a new grace period, or a longer wait.
@@ -291,16 +289,28 @@ func (e *Engine) RedialDone(now time.Time, name string, err error, s *State) []A
 	if s.IsHeld(name) {
 		return nil
 	}
-	e.retryLater(now, name, t, s)
-	return nil
+	return e.retryLater(now, name, t, s)
 }
 
 // retryLater schedules the next re-dial, and says so where the panels can read it. An
-// outage never stops the trying and never disables a VPN.
-func (e *Engine) retryLater(now time.Time, name string, t *tracked, s *State) {
+// outage never stops the trying and never disables a VPN. The first failure of an outage
+// also tells the person: with a tunnel gone its routes have gone, and someone able to
+// block the handshake has traffic in the clear with no panel open to show it (spec 085's
+// adversarial review).
+func (e *Engine) retryLater(now time.Time, name string, t *tracked, s *State) []Action {
 	t.attempts++
 	t.retryAt = now.Add(backoff(t.attempts))
 	s.SetRetry(name, t.attempts, t.retryAt)
+	return t.sayOnce(name, name+" is down and would not reconnect, so traffic may be leaving outside the tunnel. Still trying.")
+}
+
+// sayOnce is a notification, once for an outage.
+func (t *tracked) sayOnce(name, text string) []Action {
+	if t.downSaid {
+		return nil
+	}
+	t.downSaid = true
+	return []Action{{Kind: Notify, VPN: name, Text: text}}
 }
 
 // backoff is the wait after a number of failed attempts: 30 s, doubling, to 600 s.

@@ -18,6 +18,10 @@ waited on a polkit prompt on the desk running it until it timed out.
 func init() {
 	refuse := func(context.Context, *extension.Context) error { return errNoElevationInTests }
 	setUpNet, removeNet, setUp = refuse, refuse, refuse
+	// Not an administrator's, but a person's own service manager, and no test's to
+	// change on the machine it runs on.
+	setUpKeep, removeKeep = refuse, refuse
+	probeKeep = func() Keepalive { return Keepalive{} }
 }
 
 var errNoElevationInTests = errors.New("a test reached a step that asks for an administrator")

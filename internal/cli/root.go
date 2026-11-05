@@ -224,7 +224,10 @@ func doctorCmd(f *flags) *cobra.Command {
 			}
 			warn(cmd, opts)
 			findings := Diagnose(cmd.Context(), opts.Config.Sections, opts.Env(nil))
-			return Report(cmd.OutOrStdout(), findings)
+			if err := Report(cmd.OutOrStdout(), findings); err != nil {
+				return err
+			}
+			return keepaliveDoctor(cmd, f)
 		},
 	}
 }

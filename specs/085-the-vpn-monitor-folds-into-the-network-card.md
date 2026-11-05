@@ -2,11 +2,16 @@
 
 **Issue**: #298
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-To be filled in before the last phase's PR.
+hayami now does what vpn-toggle did, so that program can be retired: VPNs on the Network
+card, health checks, control from the drawer, and an optional user service that bounces
+a tunnel failing its check, disables it at three failures, and re-dials one that drops. A
+reviewer should look first at the rules in `internal/keepalive/engine.go`, the install in
+`internal/keepalive/service.go`, and the risk that the threshold leaves traffic outside the
+tunnel, which is stated on the switch and in the README.
 
 ## Context
 
@@ -104,6 +109,21 @@ transient user service, which needs no prompt to activate a connection.
   connected. Its session closed from `openvpn3` sent one for the drop, with no connect.
 - **Lifetime.** `kill -9` of the helper had systemd restart it in 2 s with the tunnel's
   process unchanged, and quitting the panel left it running and checking.
+- **The installed unit,** on the real user manager, from a path with a space, a percent
+  and a dollar in it: enabled, active, running that file. Killed, it came back after its
+  `RestartSec`; a clean stop stayed stopped; removed, no file or link was left.
+- **systemd's rules for a program's path, found by running it.** A dollar doubled stays two
+  dollars, since variables are only for arguments, and the helper then failed with
+  203/EXEC while `restart` had already returned success. A quote or a backslash fails to
+  load whatever the escaping. So install refuses those paths and waits to see the helper
+  running. `stop` also fails on a unit never loaded, which removal no longer reports.
+
+- **What the adversarial review changed.** Three paths survived and were fixed before
+  release: a failed bounce told nobody, another account's same-named VPN read as this
+  person's, and a VPN's name reached a notification as markup. One was refuted, and the rest
+  were filed as #305, #306 and #307. `docs/threat-model.md`, "Checked". That the fix for
+  another account's VPN holds was read from NetworkManager's rules and tested against its
+  error, not seen from a real second account.
 
 ## Requirements
 
@@ -199,11 +219,15 @@ and a tunnel that dropped. NetworkManager's autoconnect acts at startup and, by 
 operator's understanding, does not re-dial a dropped VPN, so re-dialling is the
 helper's job (a phase 3 test confirms this).
 
-- R21 **What it is.** A systemd user service running `hayami-tui vpn-keepalive`,
-  with `Restart=on-failure`. It runs as the user with no added privilege, and
-  NetworkManager and polkit decide what it may do. It is installed only when
-  asked: the installer's page and `hayami-tui vpn-keepalive install`. Without it
-  nothing acts on a VPN unasked, and phases 1 and 2 work as written.
+- R21 **What it is.** A systemd user service, `hayami-vpn-keepalive`, running
+  `hayami-tui vpn-keepalive run` with `Restart=on-failure`, tied to the graphical session
+  because a notification and a connection's secrets are the session's. It runs as the
+  user with no added privilege, and NetworkManager and polkit decide what it may do. It is
+  installed only when asked: the installer's page (`--keepalive=yes`) and `hayami-tui
+  vpn-keepalive install`, which reports a helper that did not start. An upgrade restarts
+  one that is there and an uninstall removes it. It removes and replaces only a unit
+  hayami wrote. Without it nothing acts on a VPN unasked, and phases 1 and 2 work as
+  written.
 - R22 **Its job.** It holds the prober lock (R11), so it runs the checks and
   writes the store, and panels read. It is switched on per VPN (`keepalive` in the
   VPN's settings), and there is no setting for the whole helper. A VPN chosen and not
@@ -235,6 +259,9 @@ helper's job (a phase 3 test confirms this).
   - a failed re-dial retries, backing off from 30 s, doubling, to 600 s, each retry
     visible, and never stops trying. A bounce whose reconnect failed joins this path
   - a successful re-dial resets the backoff and starts a new grace period
+  - the first failure to bring a tunnel back in an outage notifies, and so does a drop with
+    re-dialling off. Not in vpn-toggle: with the tunnel gone its routes have gone, and
+    nothing else would say so with no panel open
   - re-dialling can be switched off per VPN (`noRedial`), keeping the checks
 - R25 **OpenVPN3 is reconnected by a person: a departure from parity, decided by the
   operator.** Every OpenVPN3 connection in use needs a browser sign-in, and with
@@ -349,9 +376,15 @@ helper's job (a phase 3 test confirms this).
       transient unit with `Restart=on-failure`; the installed unit is the next PR's.
 - [x] Without the helper installed, nothing acts on a VPN unasked. Only `RunKeepalive`
       and `ControlVPN` reach the tunnels; with no helper, a killed tunnel stayed down.
-- [ ] `doctor` warns when vpn-toggle is active alongside the helper.
-- [ ] Uninstalling removes the unit and stops the helper.
-- [ ] The README covers VPNs, the helper and the retirement of vpn-toggle.
+- [x] `doctor` warns when vpn-toggle is active alongside the helper.
+      `TestDoctorWarnsOfVPNToggleOnlyAlongsideTheHelper`, and the read itself against the
+      real manager in `TestARealUserServiceIsReadActiveOrNot`. The real vpn-toggle was not
+      started to see it, since it would act on the desk's VPNs.
+- [x] Uninstalling removes the unit and stops the helper. On the real manager, by
+      `vpn-keepalive remove`; `TestAnUninstallRemovesTheHelperAndAnUpgradeDoesNot` for the
+      installer's hook, `TestTheShellScriptsLookAfterTheKeepaliveService` for the script.
+- [x] The README covers VPNs, the helper and the retirement of vpn-toggle. "VPNs and the
+      keepalive helper", "Coming from vpn-toggle".
 
 ## Risks & Assumptions
 
@@ -361,13 +394,22 @@ helper's job (a phase 3 test confirms this).
   be a later improvement, not parity.
 - **A helper restart forgets which tunnels it has seen.** At parity: a tunnel that
   drops while the helper is down is not re-dialled once it returns.
-- **The threshold takes a tunnel down.** At three failures the tunnel is disconnected
-  and disabled, at parity with vpn-toggle, so traffic then leaves outside the tunnel.
-  Stated where the helper is switched on.
+- **A bounce can leave traffic outside the tunnel, and whoever is on the path can cause it.**
+  A blocked transport alone keeps the tunnel's routes, so traffic is lost, not exposed. A
+  failed check then bounces, the disconnect removes those routes, and a blocked handshake
+  keeps them gone. At three failures the tunnel is disconnected and disabled, at parity with
+  vpn-toggle. Found by the adversarial review. Not parity: the first failed attempt of an
+  outage now notifies. Stated where the helper is switched on, in the installer and the
+  README.
 - **NetworkManager does not re-dial a dropped VPN, and autoconnect did not undo the
   threshold.** Both seen on one connection ("Phase 3 findings"). A connection that
   behaved otherwise could race a re-dial; NetworkManager refuses a second activation of
   an active connection, which costs a line in the journal.
+- **The service does not run outside a graphical session.** It is `PartOf` that target, so
+  logging out stops it and a tunnel then goes unwatched. Deliberate: a notification and a
+  connection's secrets are the session's.
+- **A path systemd will not run cannot be installed from.** A quote or a backslash in the
+  program's path, as under a home directory with an apostrophe, is refused with the reason.
 - **A user service can activate a connection** with the person logged in, connecting,
   disconnecting and bouncing with no prompt. A connection whose secrets need a person
   would fail that dial and back off. Not seen here.
@@ -441,8 +483,9 @@ core test and pressed by the operator on a real window for the rest: a NetworkMa
 connected, disconnected and bounced through the real bus; the same disconnect pressed in the drawer;
 an OpenVPN3 connect pressed in the drawer, which opened the browser, already signed in,
 and came up. A sign-in typed through inside the 60 s has not been run. The helper's steps
-were run on the desk on the same day as a transient user service ("Phase 3 findings"); the
-installed unit comes with the last PR.
+were run on the desk on the same day as a transient user service, and the install, its
+crash and stop behaviour and its removal on the real unit ("Phase 3 findings"). The full
+scene on an installed release is run when it is installed on the desk.
 
 ### Prod visibility
 

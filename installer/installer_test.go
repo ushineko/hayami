@@ -172,7 +172,8 @@ func TestTheExtensionKeepsFynstallsRules(t *testing.T) {
 	require.Regexp(t, `(?m)^  - name: `+ParamSensors+`$`, config, "fynstall.yaml does not declare the page's parameter")
 	require.Regexp(t, `(?m)^  - name: `+ParamNetwork+`$`, config, "fynstall.yaml does not declare the network page's parameter")
 	require.Regexp(t, `(?m)^extension: \./installer$`, config)
-	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork}))
+	require.Regexp(t, `(?m)^  - name: `+ParamKeepalive+`$`, config, "fynstall.yaml does not declare the keepalive page's parameter")
+	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork, ParamKeepalive}))
 	require.NotNil(t, Extension.AfterInstall)
 	require.NotNil(t, Extension.BeforeUninstall)
 }
@@ -193,6 +194,7 @@ func TestTheActionsAreNotCarriedIntoAnUpgrade(t *testing.T) {
 	}
 	assert.True(t, once[ParamSensors], "sensors is carried into an upgrade")
 	assert.True(t, once[ParamNetwork], "network is carried into an upgrade")
+	assert.True(t, once[ParamKeepalive], "keepalive is carried into an upgrade")
 }
 
 // The installer starts the panel when it is done unless a person says no:

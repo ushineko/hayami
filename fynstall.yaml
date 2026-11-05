@@ -71,6 +71,15 @@ parameters:
     # Likewise: carried, a --yes upgrade ran the helper's install and asked
     # for an administrator nobody had asked for (#259).
     once: true
+  # Set by the keepalive page. On the command line: --keepalive=yes. "no" unless
+  # a person says otherwise: once switched on for a VPN it acts on the tunnel with
+  # nobody asking (spec 085). An installed helper is restarted by an upgrade whatever
+  # this says; the choice itself is made once.
+  - name: keepalive
+    label: Install the VPN keepalive helper
+    description: "yes installs hayami's VPN keepalive helper, a service of your own account that keeps a chosen VPN working"
+    default: "no"
+    once: true
 
 ui:
   launch: bin/hayami{exe}
@@ -78,7 +87,8 @@ ui:
   # a person says no, so an upgrade, which had to stop it, brings it back.
   launch_default: true
 
-# hayami's own installer code: the pages that check for LibreHardwareMonitor
-# and for the network helper and offer to set each up, and the hooks that do
-# it, that stop the panel before an uninstall and that remove the helper.
+# hayami's own installer code: the pages that check for LibreHardwareMonitor,
+# for the network helper and for the VPN keepalive helper and offer to set each
+# up, and the hooks that do it, that stop the panel before an uninstall and that
+# remove the helpers.
 extension: ./installer

@@ -171,13 +171,17 @@ func (n *nmVPNs) active(ctx context.Context) ([]VPN, error) {
 		if !variant[bool](p, "Vpn") || !up {
 			continue
 		}
+		since, theirs := n.started(ctx, path, variant[dbus.ObjectPath](p, "Connection"))
+		if theirs {
+			continue
+		}
 		config := variant[dbus.ObjectPath](p, "Ip4Config")
 		seenActive[path], seenConfig[config] = true, true
 		out = append(out, VPN{
 			Name:      variant[string](p, "Id"),
 			State:     state,
 			Interface: n.iface(ctx, manager, config),
-			Since:     n.started(ctx, path, variant[dbus.ObjectPath](p, "Connection")),
+			Since:     since,
 		})
 	}
 	maps.DeleteFunc(n.since, func(k dbus.ObjectPath, _ time.Time) bool { return !seenActive[k] })
@@ -210,21 +214,27 @@ func (n *nmVPNs) iface(ctx context.Context, manager map[string]dbus.Variant, con
 
 // started is when the connection last came up, zero where it does not say.
 // GetSettings returns no secrets; those take a separate call this never makes.
-func (n *nmVPNs) started(ctx context.Context, active, connection dbus.ObjectPath) time.Time {
+//
+// theirs is NetworkManager refusing the settings, which is a connection private to
+// another account. Active connections are listed to everybody and an Id is free text,
+// so without this another person's VPN of the same name reads as this person's tunnel,
+// up while the real one is down (spec 085's adversarial review). Any other error says
+// nothing of whose it is, and a bus having a bad moment must not read as a tunnel down.
+func (n *nmVPNs) started(ctx context.Context, active, connection dbus.ObjectPath) (since time.Time, theirs bool) {
 	if t, ok := n.since[active]; ok {
-		return t
+		return t, false
 	}
 	var settings map[string]map[string]dbus.Variant
 	if err := n.bus.call(ctx, nmName, connection, nmSettings+".GetSettings", &settings); err != nil {
-		return time.Time{}
+		return time.Time{}, errors.Is(busRefusal(err), ErrVPNDenied)
 	}
 	stamp := variant[uint64](settings["connection"], "timestamp")
 	if stamp == 0 || stamp > 1<<62 {
-		return time.Time{}
+		return time.Time{}, false
 	}
 	t := time.Unix(int64(stamp), 0) //nolint:gosec // bounded just above
 	n.since[active] = t
-	return t
+	return t, false
 }
 
 // configured lists NetworkManager's connections of type `vpn`, as vpn-toggle does.

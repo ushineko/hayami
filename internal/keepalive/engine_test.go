@@ -221,7 +221,7 @@ func TestAnOutageNeverDisables(t *testing.T) {
 	b.read(core.VPNUp)
 	for range 50 {
 		require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
-		require.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
+		b.e.RedialDone(b.now, b.name, errDial, &b.s)
 		b.pass(keepalive.BackoffMax + time.Second)
 	}
 
@@ -236,7 +236,13 @@ func TestAFailedRedialBacksOffAndIsVisible(t *testing.T) {
 	for i, want := range wants {
 		want *= time.Second
 		require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)), "attempt %d", i)
-		require.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
+		said := b.e.RedialDone(b.now, b.name, errDial, &b.s)
+		if i == 0 {
+			require.Equal(t, []keepalive.Kind{keepalive.Notify}, kinds(said))
+			assert.Contains(t, said[0].Text, "outside the tunnel", "the first failure of an outage is said")
+		} else {
+			require.Empty(t, said, "and only the first")
+		}
 
 		retry := b.s.Retries[b.name]
 		assert.Equal(t, i+1, retry.Attempts, "each retry is visible")
@@ -254,7 +260,7 @@ func TestASuccessfulRedialResetsTheBackoffAndTheGrace(t *testing.T) {
 	b.read(core.VPNUp)
 	b.pass(time.Hour)
 	require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
-	require.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
+	b.e.RedialDone(b.now, b.name, errDial, &b.s)
 	b.pass(31 * time.Second)
 	require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
 
@@ -268,7 +274,7 @@ func TestASuccessfulRedialResetsTheBackoffAndTheGrace(t *testing.T) {
 	// The next outage starts from the first wait.
 	require.Empty(t, b.e.CheckDone(b.name, keepalive.Passed, &b.s))
 	require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
-	require.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
+	b.e.RedialDone(b.now, b.name, errDial, &b.s)
 	assert.Equal(t, b.now.Add(30*time.Second), b.s.Retries[b.name].At)
 }
 
@@ -279,8 +285,9 @@ func TestABounceThatLeftItDownJoinsTheRedials(t *testing.T) {
 	require.Equal(t, []keepalive.Kind{keepalive.Bounce}, b.failCheck())
 	assert.Empty(t, b.read(core.VPNDown), "the bounce has it")
 
-	require.Empty(t, b.e.BounceDone(b.now, b.name, b.o, errDial, &b.s))
+	said := b.e.BounceDone(b.now, b.name, b.o, errDial, &b.s)
 
+	require.Equal(t, []keepalive.Kind{keepalive.Notify}, kinds(said), "a bounce that left traffic outside the tunnel is said")
 	assert.Equal(t, b.now.Add(30*time.Second), b.s.Retries[b.name].At)
 	b.pass(31 * time.Second)
 	assert.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
@@ -292,12 +299,43 @@ func TestRedialCanBeSwitchedOffForAVPN(t *testing.T) {
 	b.o.NoRedial = true
 	b.settled()
 
-	assert.Empty(t, b.read(core.VPNDown))
+	assert.Equal(t, []keepalive.Kind{keepalive.Notify}, kinds(b.read(core.VPNDown)), "never a re-dial, but said")
+	assert.Empty(t, b.read(core.VPNDown), "once")
+	b.e.CheckDone(b.name, keepalive.NoResult, &b.s)
+	b.read(core.VPNUp)
 
-	// And a bounce that left it down stays down.
+	// And a bounce that left it down stays down, and is said.
+	b.pass(time.Hour)
+	require.Equal(t, []keepalive.Kind{keepalive.RunChecks}, kinds(b.read(core.VPNUp)))
 	require.Equal(t, []keepalive.Kind{keepalive.Bounce}, b.failCheck())
-	require.Empty(t, b.e.BounceDone(b.now, b.name, b.o, errDial, &b.s))
+	assert.Equal(t, []keepalive.Kind{keepalive.Notify}, kinds(b.e.BounceDone(b.now, b.name, b.o, errDial, &b.s)))
 	assert.Empty(t, b.s.Retries[b.name])
+}
+
+// An outage that ends and another that starts are two things to say.
+func TestEachOutageIsSaidOnce(t *testing.T) {
+	b := newBench(t, nm)
+	b.read(core.VPNUp)
+	outage := func() {
+		t.Helper()
+		require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
+		require.Len(t, b.e.RedialDone(b.now, b.name, errDial, &b.s), 1)
+		b.pass(31 * time.Second)
+		require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
+		require.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
+	}
+	outage()
+	b.read(core.VPNUp)
+	outage()
+}
+
+// A person's own disconnect is no outage to be told of.
+func TestAFailedDialOnAHeldTunnelIsNotSaid(t *testing.T) {
+	b := newBench(t, nm)
+	b.read(core.VPNUp)
+	require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
+	b.s.Hold(b.name)
+	assert.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
 }
 
 // R24: a disconnect pressed in hayami suppresses re-dialling.
@@ -319,7 +357,7 @@ func TestAPressedDisconnectCancelsARetryWaiting(t *testing.T) {
 	b := newBench(t, nm)
 	b.read(core.VPNUp)
 	require.Equal(t, []keepalive.Kind{keepalive.Redial}, kinds(b.read(core.VPNDown)))
-	require.Empty(t, b.e.RedialDone(b.now, b.name, errDial, &b.s))
+	b.e.RedialDone(b.now, b.name, errDial, &b.s)
 	require.NotEmpty(t, b.s.Retries[b.name])
 
 	b.s.Hold(b.name)

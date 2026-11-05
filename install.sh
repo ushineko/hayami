@@ -200,6 +200,12 @@ fi
 
 udev_rule
 
+# An installed VPN keepalive helper goes on running the old program until it is
+# restarted, and nothing else would. try-restart starts nothing that was stopped.
+if [ -f "${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/hayami-vpn-keepalive.service" ]; then
+    run systemctl --user try-restart hayami-vpn-keepalive.service
+fi
+
 # The network helper needs root and this script never asks for it: it says
 # the one line, which installs a copy of the program just built.
 if [ "$WITH_NETWORK" -eq 1 ]; then

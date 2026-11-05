@@ -139,6 +139,15 @@ name.
   `network` are fynstall `once` parameters, so a choice made at one install
   is never made again, and no administrator asked for, unless the person
   makes it again (`fynstall.yaml`; #259, fynstall spec 009).
+- The VPN keepalive helper is a user service, written and removed as the user with no
+  elevation, only when the person ticks the installer's page or runs `vpn-keepalive
+  install` (`internal/keepalive/service.go`, spec 085). `keepalive` is a `once` parameter
+  too; an upgrade restarts a helper already there and installs none. The unit has one
+  argument from outside it, the program's path: it must be absolute with no control
+  character, quote or backslash, so a path cannot add a line to the unit. A file at the
+  unit's path that does not start with hayami's mark is neither replaced nor removed. The
+  unit is written with a rename, so a link at the path is replaced and not followed, with
+  mode `0600`.
 - The Linux helper is removed by its own root-owned copy in
   `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
@@ -292,11 +301,12 @@ something else between hayami reading it and acting on it.
 - The keepalive helper acts unasked, and only as the user, through the same calls, so
   polkit decides for it too. It acts only on a VPN switched on for it in the settings,
   never on an OpenVPN3 session (which it only notifies on), and re-dials only a tunnel it
-  has seen connected (`internal/keepalive/engine.go`, spec 085). A check's failure
-  bounces a tunnel, and three disconnect it, so whoever can stop a check's answer on the
-  path can take the tunnel down and traffic then leaves outside it; that person can
-  already interrupt the tunnel, and the risk is stated on the switch. The state file a
-  press writes is in the user's own state directory, as are the settings.
+  has seen connected (`internal/keepalive/engine.go`, spec 085). The first failure to
+  bring a tunnel back in an outage is notified on. The state file a press writes is in
+  the user's own state directory, as are the settings. A connection NetworkManager
+  refuses to show this account is another account's, whatever it is called, and is not
+  read as this person's tunnel (`nmVPNs.started`, `internal/core/vpn_linux.go`). A
+  notification's body is escaped for a server that reads it as markup (`notifyBody`).
 - An OpenVPN3 sign-in address comes from the session manager and goes to the browser only
   if it is `https` with a host (`SignInURL`, `internal/core/vpn.go`). It is not logged,
   printed, drawn or carried in an error, since such an address can hold a one-time token.
@@ -307,6 +317,15 @@ something else between hayami reading it and acting on it.
 **Accepted.** A PID can be reused between the drill and the press; the
 window between them is a person's reaction time, and the signal is the
 user's own to send.
+
+Whoever is on the network path can make the keepalive helper take a tunnel down: a
+blocked transport fails a check, and the bounce's disconnect removes the routes that were
+holding traffic in a black hole, so blocking the handshake then has it in the clear. Passing
+handshakes and dropping the rest three times disables the VPN until a person re-enables it.
+This is what vpn-toggle does and what the operator chose to keep. The person is told, the
+switch and the README say so, and the helper is off unless asked for. A kill switch is
+outside this program. The bound on it, and the alternative of not disconnecting until the
+server answers, are in #305.
 
 ## B6 What hayami shows and prints
 
@@ -659,6 +678,37 @@ stops each. A review starts by reading these.
 - The base not being upstream's: `b655332` is on Fyne's `develop`.
 - The fork's four commits doing something else: no network, exec or file writes;
   the only new `unsafe` is `idOf`, for weak keys.
+
+### B2 and B5, spec 085, 2026-11-05
+
+Reviewed with the code and the attackers and not the author's reasoning; each path below
+was then checked by a separate pass. Three survived and were fixed before any release
+carried them: a failed bounce left traffic outside the tunnel with nothing said
+(`TestAFailedRedialBacksOffAndIsVisible`, `TestEachOutageIsSaidOnce`), another account's
+same-named VPN read as this person's tunnel
+(`TestAnotherAccountsVPNOfTheSameNameIsNotThisPersonsTunnel`; the refusal is by
+NetworkManager's documented rule and was not seen from a second real account), and a VPN's
+name reached a notification as markup (`TestAVPNsNameCannotBeMarkupInANotification`).
+Others were filed: #305 (on the network path), #306 (a hold outlasting a panel) and #307
+(a FIFO at a path, same account only).
+
+- Persisting a program another account can replace: the unit names the binary the person
+  just ran, and another account's write to that was already a compromise. The exposure is
+  that of any autostart entry.
+- Adding a line to the unit through the program's path: `execArgument` refuses control
+  characters, quotes and backslashes, and escapes a percent.
+- A link at the unit's path, on install and on removal: a rename replaces it, `rm -f` removes
+  the link, and a planted unit fails the mark.
+- Another account reading or locking the state file or locks: `0700` directories and `0600`
+  files. A custom `XDG_STATE_HOME` in a shared directory reopens this, and is the person's.
+- Another account adding a system-wide profile of the same name for a connect to find: that
+  takes an administrator under the default polkit rules.
+- A private duplicate chosen by a connect: it is not listed to this account (`eachVPN`).
+- Forging a ping or a DNS answer to pass a check: it only keeps a dead tunnel quiet. The
+  reply needs the kernel's echo ID and the source address.
+- A name in a path or a `systemctl` argument: names are map keys, and those arguments are
+  constants.
+- A PID or name race: the helper acts on no PID and re-reads bus paths per action.
 
 ### B3, spec 083, 2026-11-03
 

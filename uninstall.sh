@@ -94,6 +94,23 @@ elif [ -f "${rule}" ]; then
     echo "Left ${rule} alone: it is not the copy install.sh wrote."
 fi
 
+# The VPN keepalive helper is a service of this account, and goes with its program.
+# Only hayami's own: the same test `hayami-tui vpn-keepalive remove` makes.
+KEEPALIVE_UNIT="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/hayami-vpn-keepalive.service"
+if [ -f "${KEEPALIVE_UNIT}" ]; then
+    if ! head -n 1 "${KEEPALIVE_UNIT}" | grep -q '^# Written by hayami-tui vpn-keepalive install'; then
+        echo
+        echo "Left ${KEEPALIVE_UNIT} alone: hayami did not write it."
+    elif [ "$DRY_RUN" -eq 1 ]; then
+        echo "  would stop and remove ${KEEPALIVE_UNIT}"
+    else
+        echo "  stopping and removing ${KEEPALIVE_UNIT}"
+        systemctl --user disable --now hayami-vpn-keepalive.service >/dev/null 2>&1 || true
+        rm -f "${KEEPALIVE_UNIT}"
+        systemctl --user daemon-reload >/dev/null 2>&1 || true
+    fi
+fi
+
 # The network helper was installed with sudo, and is removed the same way.
 # Its program is a copy of its own, so it outlives the one removed above.
 if [ -f /etc/systemd/system/hayami-network.service ]; then
