@@ -289,6 +289,14 @@ something else between hayami reading it and acting on it.
   reported (`internal/core/vpn_linux.go`, spec 085). Disconnect and bounce take two
   presses. hayami registers no secret agent and sees no VPN secret. Control is in the
   desktop panel only.
+- The keepalive helper acts unasked, and only as the user, through the same calls, so
+  polkit decides for it too. It acts only on a VPN switched on for it in the settings,
+  never on an OpenVPN3 session (which it only notifies on), and re-dials only a tunnel it
+  has seen connected (`internal/keepalive/engine.go`, spec 085). A check's failure
+  bounces a tunnel, and three disconnect it, so whoever can stop a check's answer on the
+  path can take the tunnel down and traffic then leaves outside it; that person can
+  already interrupt the tunnel, and the risk is stated on the switch. The state file a
+  press writes is in the user's own state directory, as are the settings.
 - An OpenVPN3 sign-in address comes from the session manager and goes to the browser only
   if it is `https` with a host (`SignInURL`, `internal/core/vpn.go`). It is not logged,
   printed, drawn or carried in an error, since such an address can hold a one-time token.

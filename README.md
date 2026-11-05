@@ -640,6 +640,12 @@ MIT. See
   in the browser. The terminal panel only reads (spec 085, #298).
 - **Added**: preferences offers once to import vpn-toggle's VPNs and checks, and leaves
   its files alone. A geolocation check is not imported, and the import says so.
+- **Added**: a keepalive helper, `hayami-tui vpn-keepalive run`, for a VPN switched on
+  for it in preferences: a failed check bounces the tunnel, three in a row disconnect it
+  until you re-enable it from the drawer, and a tunnel that drops is re-dialled with a
+  growing wait. A VPN you disconnect in the drawer stays down; one taken down with `nmcli`
+  looks like a drop. An OpenVPN3 tunnel only gets a notification, since it needs you at
+  its sign-in page. Linux only (spec 085, #298).
 - **Added**: a VPN can have health checks, a ping or a DNS lookup, made natively by
   one process however many panels are running. Its row shows the latency, or `fail`
   beside `up` for a tunnel that is on and not answering. The Network drawer gains a

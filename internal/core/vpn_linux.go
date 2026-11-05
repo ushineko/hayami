@@ -592,7 +592,7 @@ func linuxVPNs() []VPNBackend {
 	bus := systemBus{}
 	nm := newNMVPNs(bus)
 	return []VPNBackend{
-		{Name: "NetworkManager", Active: nm.active, Configured: nm.configured, Connect: nm.connect, Disconnect: nm.disconnect},
+		{Name: "NetworkManager", Active: nm.active, Configured: nm.configured, Connect: nm.connect, Disconnect: nm.disconnect, Unattended: true},
 		{
 			Name:       "OpenVPN3",
 			Active:     func(ctx context.Context) ([]VPN, error) { return ov3VPNs(ctx, bus) },

@@ -22,6 +22,8 @@ var (
 	ImportVPNs    = importVPNs
 	ImportOutcome = importOutcome
 	ListVPNs      = listVPNs
+
+	VPNKeepaliveWarning = vpnKeepaliveWarning
 )
 
 // Readme is the About page's document pane while About is on screen.

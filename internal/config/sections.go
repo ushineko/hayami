@@ -104,6 +104,11 @@ type VPNItem struct {
 	Name   string         `json:"name"`
 	Label  string         `json:"label,omitempty"`
 	Checks []VPNCheckItem `json:"checks,omitempty"`
+
+	// Keepalive switches the keepalive helper on for this VPN, and NoRedial stops it
+	// re-dialling this one when it drops (spec 085 R22, R24).
+	Keepalive bool `json:"keepalive,omitempty"`
+	NoRedial  bool `json:"noRedial,omitempty"`
 }
 
 // VPNCheckItem is one health check of a VPN: `ping` a host, or `dns` a name whose

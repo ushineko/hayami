@@ -48,6 +48,7 @@ type vpnPoint struct {
 	VPN       string                `json:"vpn"`
 	LatencyMS float64               `json:"latency_ms"`
 	OK        bool                  `json:"ok"`
+	Bounce    bool                  `json:"bounce,omitempty"`
 	Checks    []core.VPNCheckResult `json:"checks,omitempty"`
 }
 
@@ -161,34 +162,42 @@ func (h *vpnHealth) cycle(ctx context.Context, vpns []core.VPN) {
 	defer release()
 
 	for _, v := range h.due(vpns, h.points()) {
-		h.mu.Lock()
-		checks := h.checks[v.Name]
-		h.mu.Unlock()
-
-		start := h.now()
-		point := vpnPoint{At: start, VPN: v.Name, OK: true}
-		ran := false
-		for _, c := range checks {
-			result := h.checkers.Run(ctx, c)
-			point.Checks = append(point.Checks, result)
-			if result.DidNotRun {
-				continue
-			}
-			ran = true
-			point.LatencyMS += result.LatencyMS
-			point.OK = point.OK && result.OK
-		}
-		// A cancelled check is a panel closing, which says nothing of the
-		// tunnel. A cycle in which nothing could run says nothing either, and
-		// is kept only as the reason it could not (spec 085 R23).
-		if ctx.Err() != nil {
+		point, ok := h.checkOne(ctx, v.Name)
+		if !ok {
 			return
 		}
-		point.OK = point.OK && ran
 		if err := appendVPNPoint(point); err != nil {
 			return
 		}
 	}
+}
+
+// checkOne runs one VPN's checks and says what they came to. It reports false for a
+// run cut short: a cancelled check is a process closing, which says nothing of the
+// tunnel. A cycle in which nothing could run says nothing either, and is kept only as
+// the reason it could not (spec 085 R23).
+func (h *vpnHealth) checkOne(ctx context.Context, name string) (vpnPoint, bool) {
+	h.mu.Lock()
+	checks := h.checks[name]
+	h.mu.Unlock()
+
+	point := vpnPoint{At: h.now(), VPN: name, OK: true}
+	ran := false
+	for _, c := range checks {
+		result := h.checkers.Run(ctx, c)
+		point.Checks = append(point.Checks, result)
+		if result.DidNotRun {
+			continue
+		}
+		ran = true
+		point.LatencyMS += result.LatencyMS
+		point.OK = point.OK && result.OK
+	}
+	if ctx.Err() != nil {
+		return vpnPoint{}, false
+	}
+	point.OK = point.OK && ran
+	return point, true
 }
 
 // points are what the store holds, by VPN, oldest first. It is read again only
@@ -350,6 +359,9 @@ func vpnStats(points []vpnPoint) view.VPNStats {
 		if !p.OK {
 			s.Failures++
 		}
+		if p.Bounce {
+			s.Bounces++
+		}
 	}
 	if s.Checks > 0 {
 		s.AverageMS = total / float64(s.Checks)
@@ -370,6 +382,7 @@ func (b *Bandwidth) vpnDetail() view.Detail {
 	for i, v := range vpns {
 		history := points[v.Name]
 		r := view.VPNDetailReading{VPNReading: card[i], Stats: vpnStats(history)}
+		b.keepaliveReading(&r)
 		if len(history) > vpnDetailTrail {
 			history = history[len(history)-vpnDetailTrail:]
 		}
@@ -394,4 +407,31 @@ func (b *Bandwidth) vpnDetail() view.Detail {
 		out = append(out, r)
 	}
 	return view.VPNDetail(b.Key(), out)
+}
+
+// keepaliveReading says what the keepalive helper is doing about a VPN it is switched
+// on for, as the file it shares with the panels says.
+func (b *Bandwidth) keepaliveReading(r *view.VPNDetailReading) {
+	b.labelsMu.Lock()
+	kept := b.keepaliveItems[r.Name]
+	b.labelsMu.Unlock()
+	if !kept {
+		return
+	}
+	state := b.keep.Load()
+	running := b.keep.Running()
+	retry, retrying := state.Retries[r.Name]
+	switch reason, disabled := state.Disabled[r.Name]; {
+	case disabled:
+		r.Keepalive, r.KeepaliveDisabled = reason, true
+	case !running:
+		r.Keepalive = "helper not running"
+	case state.IsHeld(r.Name):
+		r.Keepalive = "held down by you"
+	case retrying:
+		wait := max(time.Until(retry.At), 0).Round(time.Second)
+		r.Keepalive = fmt.Sprintf("retry %d in %s", retry.Attempts+1, wait)
+	default:
+		r.Keepalive = "on"
+	}
 }

@@ -191,3 +191,18 @@ func TestAPlotWaitsForALineToDraw(t *testing.T) {
 
 	assert.NotEmpty(t, view.VPNDetail("net", []view.VPNDetailReading{reading(13, 14)}).Parts[0].Trails)
 }
+
+func TestAVPNTheHelperGaveUpOnOffersToBeReenabled(t *testing.T) {
+	reading := view.VPNDetailReading{VPNReading: view.VPNReading{Name: "invented", State: view.VPNDown}}
+	assert.Len(t, view.VPNDetail("net", []view.VPNDetailReading{reading}).Parts[0].Controls, 1)
+
+	reading.Keepalive, reading.KeepaliveDisabled = "failed 3 checks in a row", true
+	part := view.VPNDetail("net", []view.VPNDetailReading{reading}).Parts[0]
+
+	require.Len(t, part.Controls, 2)
+	action, name, ok := view.ParseVPNAct(part.Controls[1].Open)
+	require.True(t, ok)
+	assert.Equal(t, view.VPNReenable, action)
+	assert.Equal(t, "invented", name)
+	assert.Contains(t, part.Text(), "failed 3 checks in a row", "the reason is shown, which a terminal can read")
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
+	"github.com/ushineko/hayami/internal/keepalive"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -27,6 +28,12 @@ type Bandwidth struct {
 
 	// names puts names to peers.
 	names *core.PeerNames
+
+	// keep is the file a press tells the keepalive helper through, keepErr why there
+	// is none, and keepaliveItems the VPNs it is switched on for.
+	keep           keepalive.Files
+	keepErr        error
+	keepaliveItems map[string]bool
 
 	// vpns reads the chosen VPNs (spec 085), and labels is what the card calls
 	// each. Nil on a platform with no VPN systems.
@@ -56,6 +63,9 @@ func (b *Bandwidth) SetVPNSystems(systems []core.VPNBackend, checkers core.VPNCh
 		return
 	}
 	b.vpns = core.NewVPNSection(nil, systems)
+	// A home directory that cannot be found leaves a press with nowhere to say so,
+	// which ControlVPN reports.
+	b.keep, b.keepErr = keepalive.Here()
 	b.health = newVPNHealth(checkers)
 	b.SetVPNs(settings)
 }
@@ -67,12 +77,15 @@ func (b *Bandwidth) SetVPNs(settings config.BandwidthSettings) {
 	}
 	names := make([]string, 0, len(settings.VPNs))
 	labels := make(map[string]string, len(settings.VPNs))
+	kept := make(map[string]bool, len(settings.VPNs))
 	for _, c := range settings.VPNs {
 		names = append(names, c.Name)
 		labels[c.Name] = c.Label
+		kept[c.Name] = c.Keepalive
 	}
 	b.labelsMu.Lock()
 	b.labels = labels
+	b.keepaliveItems = kept
 	b.labelsMu.Unlock()
 	b.vpns.SetNames(names)
 	b.health.configure(settings)
@@ -84,15 +97,40 @@ func (b *Bandwidth) ControlVPN(ctx context.Context, action, name string, signIn 
 	if b.vpns == nil || !slices.ContainsFunc(b.vpns.Readings(), func(v core.VPN) bool { return v.Name == name }) {
 		return core.ErrVPNNotConfigured
 	}
+	if b.keepErr != nil {
+		return b.keepErr
+	}
+	// The helper is told first. A tunnel seen down before the hold is written is a
+	// tunnel it would re-dial.
 	switch action {
 	case view.VPNConnect:
-		return b.vpns.Connect(ctx, name, signIn) //nolint:wrapcheck // its words are what the row says
+		return b.heldWhile(ctx, name, func() error { return b.vpns.Connect(ctx, name, signIn) })
 	case view.VPNDisconnect:
+		if err := b.keep.Update(func(s *keepalive.State) { s.Hold(name) }); err != nil {
+			return err //nolint:wrapcheck // its words are what the row says
+		}
 		return b.vpns.Disconnect(ctx, name) //nolint:wrapcheck // its words are what the row says
 	case view.VPNBounce:
-		return b.vpns.Bounce(ctx, name, signIn) //nolint:wrapcheck // its words are what the row says
+		return b.heldWhile(ctx, name, func() error { return b.vpns.Bounce(ctx, name, signIn) })
+	case view.VPNReenable:
+		return b.keep.Update(func(s *keepalive.State) { s.Enable(name) }) //nolint:wrapcheck // its words are what the row says
 	}
 	return fmt.Errorf("no VPN action %q", action)
+}
+
+// heldWhile holds a VPN for as long as a press takes, so the helper does not dial
+// against it: afterwards a drop is a drop again, including one the press could not
+// bring back. A press that was replaced leaves the hold to the press that replaced it,
+// which may be a disconnect that means to stay down.
+func (b *Bandwidth) heldWhile(ctx context.Context, name string, press func() error) error {
+	if err := b.keep.Update(func(s *keepalive.State) { s.Hold(name) }); err != nil {
+		return err //nolint:wrapcheck // its words are what the row says
+	}
+	err := press()
+	if ctx.Err() == nil {
+		_ = b.keep.Update(func(s *keepalive.State) { s.Release(name) })
+	}
+	return err
 }
 
 // vpnChosen reports whether this source draws any VPN.

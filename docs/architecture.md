@@ -295,6 +295,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | The network helper on Linux: every protocol, by eBPF | 9 | In place | #238 |
 | VPN systems as a table on the host, read over the system bus | 2, 5 | In place | #298 |
 | VPN health checks as a table, one set of probes across panels | 2, 5 | In place | #298 |
+| VPN keepalive rules as a pure engine, with a helper to run them | 2 | In place | #298 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a
