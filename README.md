@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.12.1
+**Version**: 0.13.0
 
 *a chart you read at a glance*
 
@@ -691,7 +691,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.13.0 (2026-11-05)
 
 - **Added**: a VPN that is up shows its rates and totals under its line on the Network
   card, in the columns of the other interfaces, and joins the trend. `readings` gives
