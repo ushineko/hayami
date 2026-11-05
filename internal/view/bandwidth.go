@@ -56,7 +56,7 @@ type LinkReading struct {
 // monitor puts them and why it can show four numbers per interface in 265 px.
 func Bandwidth(readings []BandwidthReading) Section {
 	s := BandwidthInfo.section()
-	unit := UnitWidth("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s")
+	unit := bandwidthUnitWidth()
 
 	for _, r := range readings {
 		s.Rows = append(s.Rows, interfaceRow(r, unit))
@@ -78,6 +78,9 @@ func Bandwidth(readings []BandwidthReading) Section {
 	}
 	return s
 }
+
+// bandwidthUnitWidth is the width a rate's unit takes on the Network card.
+func bandwidthUnitWidth() int { return UnitWidth("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s") }
 
 /*
 interfaceRow is one interface on one line, with its totals on a second.

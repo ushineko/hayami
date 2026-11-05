@@ -148,11 +148,13 @@ transient user service, which needs no prompt to activate a connection.
 - R6 **The line.** One row on the Network card per VPN the person chose: name,
   state, latest latency and time connected, at fixed widths. A chosen VPN keeps
   its row while down, so connecting and disconnecting does not reflow the panel.
-  Only changing the chosen list does.
+  Only changing the chosen list does. (Spec 086 amends this: an up tunnel has its
+  rates under its row, so a tunnel coming up or going down changes the height.)
 - R7 **A fresh machine sees no change.** No VPN is chosen by default, so a card
   with none draws what it draws today. Interfaces work the same way.
 - R8 **Traffic is not repeated.** The row names no rates; the tunnel's rates stay
-  on its interface row if that interface is chosen.
+  on its interface row if that interface is chosen. (Spec 086 replaces this: the
+  tunnel's rates are under its row.)
 - R9 **Addresses.** The tunnel's address, gateway and routes are shown in the drawer
   and `hayami-tui detail`, as the peer lists already show addresses (B6). They are not
   on the card, where space is limited, and so not in `readings`. `doctor` shows none,

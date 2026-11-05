@@ -649,10 +649,15 @@ func flatten(rows []view.Row, details bool) []view.Row {
 	for _, r := range rows {
 		bare := r
 		bare.Detail = ""
-		out = append(out, bare)
 		if !details {
+			// The row arrangement: each line is read alone, as in a pane.
+			if bare.Label == "" {
+				bare.Label = bare.PaneLabel
+			}
+			out = append(out, bare)
 			continue
 		}
+		out = append(out, bare)
 		for i, d := range r.DetailLines() {
 			out = append(out, view.Row{ID: fmt.Sprintf("%s/detail:%d", r.ID, i+1), Value: d, Status: view.Info})
 		}

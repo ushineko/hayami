@@ -187,7 +187,8 @@ adds a table, not a ladder.
 ### 8. The glance rules
 
 - **Nothing transient reflows the window.** Every value is formatted to a fixed
-  width. Only a section appearing or disappearing, or a peripheral connecting
+  width. Only a section appearing or disappearing, a VPN coming up or going down
+  (spec 086), or a peripheral connecting
   or going (a cell per device and none for an empty slot, spec 070), may
   change the window's size.
 - **The render thread never blocks.** Readers run off it, take a

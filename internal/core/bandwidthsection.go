@@ -79,6 +79,13 @@ type BandwidthSection struct {
 	// for one question and no more.
 	radios map[string]bool
 	probed bool
+
+	// tunnels are the interfaces of the VPNs that are up, by VPN (spec 086), and
+	// tunnelRates and tunnelTrails what they last read, by VPN. A tunnel's trail
+	// goes when it goes down: a rate is about the tunnel that is up now.
+	tunnels      map[string]string
+	tunnelRates  map[string]Rates
+	tunnelTrails map[string]*Trail
 }
 
 // NewBandwidthSection builds a section over the named interfaces. read is the
@@ -92,6 +99,7 @@ func NewBandwidthSection(names []string, read func() (map[string]Counters, error
 	return &BandwidthSection{
 		names: names, sampler: NewBandwidth(), read: read, trails: map[string]*Trail{},
 		now: time.Now, readWireless: wireless, radios: map[string]bool{},
+		tunnelRates: map[string]Rates{}, tunnelTrails: map[string]*Trail{},
 	}
 }
 
@@ -116,8 +124,9 @@ func (b *BandwidthSection) Interval() time.Duration { return BandwidthInterval }
 func (b *BandwidthSection) Poll(ctx context.Context) (bool, error) {
 	b.mu.Lock()
 	names := b.names
+	watching := len(names) > 0 || len(b.tunnels) > 0
 	b.mu.Unlock()
-	if len(names) == 0 {
+	if !watching {
 		return false, nil
 	}
 	if err := ctx.Err(); err != nil {
@@ -146,7 +155,13 @@ func (b *BandwidthSection) Poll(ctx context.Context) (bool, error) {
 func (b *BandwidthSection) record(names []string, counters map[string]Counters) func(context.Context) (map[string]Wireless, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.last = b.sampler.Sample(b.now(), names, counters)
+	all := slices.Clone(names)
+	for _, iface := range b.tunnels {
+		all = append(all, iface)
+	}
+	sampled := b.sampler.Sample(b.now(), all, counters)
+	b.last = sampled[:len(names):len(names)]
+	b.recordTunnels(sampled[len(names):])
 	for _, r := range b.last {
 		if !r.Present || !r.HasRate {
 			continue
@@ -160,6 +175,63 @@ func (b *BandwidthSection) record(names []string, counters map[string]Counters) 
 	}
 	b.forget()
 	return b.wirelessDue(names)
+}
+
+// recordTunnels keeps what the tunnels' interfaces read. The caller holds the
+// lock.
+func (b *BandwidthSection) recordTunnels(sampled []Rates) {
+	byInterface := make(map[string]Rates, len(sampled))
+	for _, r := range sampled {
+		byInterface[r.Name] = r
+	}
+	for vpn, iface := range b.tunnels {
+		r := byInterface[iface]
+		b.tunnelRates[vpn] = r
+		if !r.Present || !r.HasRate {
+			continue
+		}
+		t, ok := b.tunnelTrails[vpn]
+		if !ok {
+			t = &Trail{}
+			b.tunnelTrails[vpn] = t
+		}
+		t.add(r)
+	}
+}
+
+// SetTunnels names the interfaces of the VPNs that are up, by VPN, to be read
+// with the watched interfaces (spec 086). A VPN not named loses its rates and its
+// trail.
+func (b *BandwidthSection) SetTunnels(tunnels map[string]string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.tunnels = tunnels
+	for vpn := range b.tunnelRates {
+		if _, up := tunnels[vpn]; !up {
+			delete(b.tunnelRates, vpn)
+		}
+	}
+	for vpn := range b.tunnelTrails {
+		if _, up := tunnels[vpn]; !up {
+			delete(b.tunnelTrails, vpn)
+		}
+	}
+}
+
+// Tunnel is what a VPN's interface last read, and whether it did: not before the
+// first poll that knew of it, nor once the interface has gone.
+func (b *BandwidthSection) Tunnel(vpn string) (Rates, Trail, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	r, ok := b.tunnelRates[vpn]
+	if !ok || !r.Present {
+		return Rates{}, Trail{}, false
+	}
+	var trail Trail
+	if t := b.tunnelTrails[vpn]; t != nil {
+		trail = Trail{Rx: slices.Clone(t.Rx), Tx: slices.Clone(t.Tx)}
+	}
+	return r, trail, true
 }
 
 // wirelessDue is the Wi-Fi reader if this poll should ask it: the first poll

@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ushineko/hayami/internal/safetext"
 )
@@ -34,6 +35,10 @@ type Detail struct {
 	// Trails are a plot over the lines, against one scale, for a detail that is
 	// a part of another: each VPN's own.
 	Trails []Trail `json:"trails,omitempty"`
+
+	// TrailEvery is the time expected between the trails' samples, over which a
+	// new one drifts into place (spec 086). Zero draws it in one step.
+	TrailEvery time.Duration `json:"-"`
 
 	// TitleParts are a value on the heading's line, for a part that says the
 	// one thing a reader looks for next to its name: a VPN's state.

@@ -645,9 +645,16 @@ func (plotPiece) SetTheme(fyne.Theme) {}
 // drawer is opened to look at the history a card only hints at.
 const DrawerPlotHeight = 2 * glance.SparklineHeight
 
-// drawPlot gives one part's plot its trails.
-func (p *Panel) drawPlot(built *drawerPart, trails []view.Trail) {
-	samples := make(map[string][]float64, len(trails))
+// drawPlot gives one part's plot its trails, as a card's plot is given them (spec
+// 064, 086): a new sample drifts into place over the time between samples, and a
+// trace the part no longer has is emptied.
+func (p *Panel) drawPlot(built *drawerPart, part view.Detail) {
+	built.plot.SetDrift(part.TrailEvery)
+	trails := part.Trails
+	samples := make(map[string][]float64, len(built.traces)+len(trails))
+	for name := range built.traces {
+		samples[name] = nil
+	}
 	for _, t := range trails {
 		colour := p.trailColour(t, view.Section{})
 		if built.traces[t.Name] {
@@ -759,7 +766,7 @@ func (p *Panel) renderParts(detail view.Detail) {
 			built.head.Set(p.value(view.JoinedRow(part.TitleParts)))
 		}
 		if built.plot != nil {
-			p.drawPlot(&built, part.Trails)
+			p.drawPlot(&built, part)
 		}
 		for j, m := range part.Meters {
 			setMeter(built.meters[j], m)

@@ -271,6 +271,11 @@ type Row struct {
 	// is what it is.
 	LabelWidth int `json:",omitempty"`
 
+	// PaneLabel is the label in the row arrangement for a row with none of its own
+	// in a stack, where it leans on the line above: a tunnel's rates (spec 086). A
+	// pane's lines are each read alone. Empty falls back to the section's name.
+	PaneLabel string `json:",omitempty"`
+
 	// ID names the row for as long as it is the same reading: "cpu", "gpu:1",
 	// "coolant". A shell matches a poll's rows to the ones it drew by it, so
 	// a row arriving or leaving is placed without disturbing the others, and

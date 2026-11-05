@@ -574,7 +574,9 @@ opens on the right and the panel keeps the keyboard after a click.
 #### VPNs and the keepalive helper
 
 A VPN gets a line on the Network card when you choose it in preferences, on the
-Sections page, from NetworkManager's and OpenVPN3's lists. A check is a ping or a
+Sections page, from NetworkManager's and OpenVPN3's lists. While a tunnel is up, its
+rates and totals sit under that line and join the trend, and the totals count from
+when its interface was created. A check is a ping or a
 DNS lookup, sent only while the tunnel is up. The Network drawer's `VPN` view plots
 each tunnel, and connects, disconnects and bounces it; a disconnect and a bounce take
 two presses. All of this works with nothing else installed, and nothing acts on a VPN
@@ -688,6 +690,14 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: a VPN that is up shows its rates and totals under its line on the Network
+  card, in the columns of the other interfaces, and joins the trend. `readings` gives
+  them too. A tunnel coming up or going down changes the card's height (spec 086, #312).
+- **Changed**: the VPN drawer's latency plot drifts between checks, as the cards' plots
+  do, and a failure that has left its window leaves the plot (spec 086, #312).
 
 ### 0.12.1 (2026-11-04)
 

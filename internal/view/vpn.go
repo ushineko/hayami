@@ -48,6 +48,10 @@ type VPNReading struct {
 
 	// Stale marks a reading kept from an earlier poll.
 	Stale bool
+
+	// Traffic is what the tunnel's interface reads, while it is up and has one
+	// (spec 086), and nil otherwise.
+	Traffic *BandwidthReading
 }
 
 // The columns of a VPN's value, so the line does not move as a state, a
@@ -60,18 +64,66 @@ const (
 	vpnTimeWidth    = 15
 )
 
-// VPNRows are one row per VPN, under the interfaces on the Network card. Each
-// is one line and the address is not on it (spec 085 R6, R9): the card's
-// question is whether the tunnel is up and answering.
+// VPNRows are the VPNs' rows, under the interfaces on the Network card. A VPN has
+// one line saying whether the tunnel is up and answering, with no address on it
+// (spec 085 R9), and a tunnel that is up has its rates and totals under that, as
+// an interface has them (spec 086).
 //
-// The latency column is kept blank until a check has measured one, so the
-// figure arriving does not move the line.
+// The latency column is kept blank until a check has measured one, and the rates
+// until there are two samples, so a figure arriving does not move anything. A
+// tunnel coming up or going down does change the card's height.
 func VPNRows(readings []VPNReading) []Row {
 	rows := make([]Row, 0, len(readings))
 	for _, r := range readings {
 		rows = append(rows, vpnRow(r))
+		if r.Traffic != nil {
+			rows = append(rows, vpnTrafficRow(r))
+		}
 	}
 	return rows
+}
+
+// VPNTrails are the tunnels' rates for the card's plot, each pair in the series
+// after the last, from first. A trail is emitted for a tunnel that is down, empty,
+// as an interface's is before it has a sample, so a card with only VPNs has a plot
+// from the start and a tunnel's trace is emptied when it goes down.
+func VPNTrails(readings []VPNReading, first int) []Trail {
+	out := make([]Trail, 0, 2*len(readings))
+	for i, r := range readings {
+		var rx, tx []float64
+		if r.Traffic != nil {
+			rx, tx = r.Traffic.RxTrail, r.Traffic.TxTrail
+		}
+		name := r.Name
+		if r.Label != "" {
+			name = r.Label
+		}
+		out = append(out,
+			Trail{Name: name + " ↓", Samples: rx, Status: Info, Series: first + i, Coloured: true},
+			Trail{Name: name + " ↑", Samples: tx, Status: Info, Series: first + i, Secondary: true, Coloured: true})
+	}
+	return out
+}
+
+// vpnTrafficRow is a tunnel's rates with its totals under them. It has no label in
+// a stack, sitting under the line that names the tunnel, and its parts are an
+// interface's, so its figures take the same columns and bands.
+func vpnTrafficRow(r VPNReading) Row {
+	unit := bandwidthUnitWidth()
+	row := Row{
+		Parts: rates(*r.Traffic, unit), ID: "vpn:" + r.Name + "/rates", Tip: r.Traffic.Name,
+		PaneLabel: r.Name,
+	}
+	if r.Label != "" {
+		row.PaneLabel = r.Label
+	}
+	for _, p := range row.Parts {
+		row.Value += p.Text
+	}
+	if r.Traffic.HasTotal {
+		row.Detail = totals(*r.Traffic, unit)
+	}
+	return row
 }
 
 func vpnRow(r VPNReading) Row {

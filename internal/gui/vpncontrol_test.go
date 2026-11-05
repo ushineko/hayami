@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -252,4 +253,37 @@ func TestReenablingTakesOnePress(t *testing.T) {
 
 	await("the press", func() bool { return len(src.pressed()) == 1 })
 	assert.Equal(t, []string{"reenable invented"}, src.pressed())
+}
+
+// The drawer's plot moves as a card's does (spec 086): it drifts over the time between
+// checks, and a failure that has left the window leaves the plot.
+func TestTheDrawersPlotDriftsAndLosesATraceThatLeft(t *testing.T) {
+	reading := func(failed bool) view.Detail {
+		return view.VPNDetail("net", []view.VPNDetailReading{{
+			VPNReading: view.VPNReading{Name: "invented", State: view.VPNUp},
+			Samples:    []float64{10, 20, 30}, Failed: []bool{false, failed, false}, CheckEvery: time.Minute,
+		}})
+	}
+	src := &vpnSource{detailSource: newDetailSource("net", view.Section{Title: "Network"}, map[string]view.Detail{view.DetailVPN: reading(true)})}
+	src.section.Opens = view.DetailVPN
+	p, await := drawerPanel(t, src)
+	gui.Tap(p, "net", "", -1)
+	await("the failure on the plot", func() bool {
+		if len(gui.DrawerPartHeads(p)) != 1 {
+			return false
+		}
+		_, failed, ok := gui.DrawerPlot(p, 0, "failed")
+		return ok && len(failed) == 3
+	})
+
+	every, latency, ok := gui.DrawerPlot(p, 0, "latency")
+	require.True(t, ok)
+	assert.Equal(t, time.Minute, every)
+	assert.Equal(t, []float64{10, 20, 30}, latency)
+
+	src.set(view.DetailVPN, reading(false))
+	await("the failure gone from the plot", func() bool {
+		_, failed, _ := gui.DrawerPlot(p, 0, "failed")
+		return len(failed) == 0
+	})
 }

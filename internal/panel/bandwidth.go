@@ -88,6 +88,7 @@ func (b *Bandwidth) SetVPNs(settings config.BandwidthSettings) {
 	b.keepaliveItems = kept
 	b.labelsMu.Unlock()
 	b.vpns.SetNames(names)
+	b.SetTunnels(nil)
 	b.health.configure(settings)
 }
 
@@ -138,14 +139,29 @@ func (b *Bandwidth) vpnChosen() bool { return b.vpns != nil && b.vpns.Chosen() }
 
 // Poll reads the interfaces, and the VPNs when they are due. Either is enough
 // for the card to have something to say.
+//
+// The VPNs go first, so the counters read in this poll include a tunnel that has
+// just come up.
 func (b *Bandwidth) Poll(ctx context.Context) (bool, error) {
-	has, err := b.BandwidthSection.Poll(ctx)
-	if b.vpnChosen() {
+	chosen := b.vpnChosen()
+	if chosen {
 		b.vpns.Poll(ctx)
+		b.SetTunnels(tunnelsUp(b.vpns.Readings()))
 		b.health.tick(ctx, b.vpns.Readings())
-		has = true
 	}
-	return has, err //nolint:wrapcheck // the section's own account
+	has, err := b.BandwidthSection.Poll(ctx)
+	return has || chosen, err //nolint:wrapcheck // the section's own account
+}
+
+// tunnelsUp are the interfaces of the VPNs that are up, by VPN.
+func tunnelsUp(vpns []core.VPN) map[string]string {
+	out := make(map[string]string, len(vpns))
+	for _, v := range vpns {
+		if v.State == core.VPNUp && v.Interface != "" {
+			out[v.Name] = v.Interface
+		}
+	}
+	return out
 }
 
 // Section turns the last sample into rows, and the trails into a plot.
@@ -202,7 +218,10 @@ func (b *Bandwidth) Section() view.Section {
 		reasons = append(reasons, reason(view.Reason{Label: "Wi-Fi", Status: view.Info, Aside: true}, err))
 	}
 	if b.vpnChosen() {
-		sec.Rows = append(sec.Rows, view.VPNRows(b.vpnReadings())...)
+		vpns := b.vpnReadings()
+		sec.Rows = append(sec.Rows, view.VPNRows(vpns)...)
+		// After the interfaces', so an interface keeps its colour as VPNs are chosen.
+		sec.Trails = append(sec.Trails, view.VPNTrails(vpns, len(out))...)
 		reasons = append(reasons, b.vpnReasons()...)
 	}
 	sec.Reasons = reasons
@@ -240,6 +259,14 @@ func (b *Bandwidth) vpnReadings() []view.VPNReading {
 		if v.State == core.VPNUp {
 			if last, ok := b.health.current(points[v.Name], v.Since, now); ok {
 				r.Latency, r.Failing = view.Some(last.LatencyMS), !last.OK
+			}
+			if rates, trail, ok := b.Tunnel(v.Name); ok {
+				r.Traffic = &view.BandwidthReading{
+					Name: rates.Name, RxRate: rates.RxRate, TxRate: rates.TxRate,
+					RxTotal: rates.RxTotal, TxTotal: rates.TxTotal,
+					HasRate: rates.HasRate, HasTotal: rates.Present,
+					RxTrail: trail.Rx, TxTrail: trail.Tx,
+				}
 			}
 		}
 		out = append(out, r)
@@ -383,10 +410,23 @@ func (b *Bandwidth) Data() any {
 	if !b.vpnChosen() {
 		return b.Readings()
 	}
+	type vpnData struct {
+		core.VPN
+		Rates *core.Rates `json:"rates,omitempty"`
+	}
+	vpns := b.vpns.Readings()
+	out := make([]vpnData, 0, len(vpns))
+	for _, v := range vpns {
+		d := vpnData{VPN: v}
+		if rates, _, ok := b.Tunnel(v.Name); ok && v.State == core.VPNUp {
+			d.Rates = &rates
+		}
+		out = append(out, d)
+	}
 	return struct {
 		Interfaces []core.Rates `json:"interfaces"`
-		VPNs       []core.VPN   `json:"vpns"`
-	}{b.Readings(), b.vpns.Readings()}
+		VPNs       []vpnData    `json:"vpns"`
+	}{b.Readings(), out}
 }
 
 /*

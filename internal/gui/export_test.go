@@ -615,3 +615,13 @@ func StartVPNPress(p *Panel, action, name string) {
 
 // VPNPressMarker is what starts a row that can be pressed.
 func VPNPressMarker(p *Panel) string { return p.words().press }
+
+// DrawerPlot is one part's plot: the time it drifts over, what it holds for a trace,
+// and false when the part has no plot.
+func DrawerPlot(p *Panel, part int, trace string) (time.Duration, []float64, bool) {
+	plot := p.drawer.parts[part].plot
+	if plot == nil {
+		return 0, nil, false
+	}
+	return plot.Drift(), plot.Samples(trace), true
+}
