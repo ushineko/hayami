@@ -71,6 +71,40 @@ Made by the operator on 2026-11-04.
 - **Migration:** a one-time offer to import the VPN list and checks. Metrics
   are not imported.
 
+## Phase 3 findings
+
+Each on the desk on 2026-11-04, on a real NetworkManager VPN with autoconnect on and
+unlimited retries, and on a real OpenVPN3 session where named. The helper ran as a
+transient user service, which needs no prompt to activate a connection.
+
+- **NetworkManager does not re-dial a dropped VPN.** With the VPN's process killed and
+  no helper, one warning was logged and the connection stayed down for the two minutes
+  watched. The re-dial is the helper's job, as assumed.
+- **With the helper, the same kill was re-dialled:** a new process and tunnel within two
+  seconds of the helper's reading it down, and the next check passed.
+- **Autoconnect does not undo the threshold.** Connected with a check that never
+  answers, the tunnel was bounced twice 15 s apart and disconnected and disabled at the
+  third failure, and it was still down 45 s later. No bounce was contested by autoconnect.
+- **A VPN down when the helper starts stayed down** for the 20 s watched.
+- **A bounce recovers.** A failed check was bounced and the next passed, once with the
+  target changed in the settings, which the helper followed without a restart, and once
+  unplanned: one echo went unanswered inside a 2 s limit, on a tunnel otherwise answering
+  in about 15 ms, and the tunnel was back within 3 s.
+- **One lost echo is one bounce.** That is parity, since vpn-toggle also sends
+  `ping -c 1` and bounces per failed check. A check's limit is the tolerance: the default
+  is 5 s, and that one was a test's 2 s.
+- **A press raced the helper before it held.** Connect released the hold before
+  dialling, so the helper read the tunnel down and dialled too, and NetworkManager
+  refused the second as already active. Fixed by R24's hold for the length of a press, and
+  the same press pattern repeated on the real tunnel showed no dial from the helper.
+- **A disconnect with `nmcli` is re-dialled** two seconds later, as the risks expected.
+  The switch says so.
+- **OpenVPN3 is only told.** A connected session with a check that never answers sent
+  one notification, seen by the operator, however many checks failed, and stayed
+  connected. Its session closed from `openvpn3` sent one for the drop, with no connect.
+- **Lifetime.** `kill -9` of the helper had systemd restart it in 2 s with the tunnel's
+  process unchanged, and quitting the panel left it running and checking.
+
 ## Requirements
 
 ### All phases
@@ -171,7 +205,10 @@ helper's job (a phase 3 test confirms this).
   asked: the installer's page and `hayami-tui vpn-keepalive install`. Without it
   nothing acts on a VPN unasked, and phases 1 and 2 work as written.
 - R22 **Its job.** It holds the prober lock (R11), so it runs the checks and
-  writes the store, and panels read. It is switched on per VPN.
+  writes the store, and panels read. It is switched on per VPN (`keepalive` in the
+  VPN's settings), and there is no setting for the whole helper. A VPN chosen and not
+  switched on is still checked, because no panel can while the helper has the lock, and
+  is never acted on. It follows the settings file without a restart.
 - R23 **vpn-toggle's rules for a failed check,** at parity with `_on_session_done`
   and tested one by one, at the same defaults:
   - only a connected tunnel is checked, after its grace period
@@ -189,12 +226,16 @@ helper's job (a phase 3 test confirms this).
     has not seen connected since it started is left alone
   - an outage never disables a VPN; the threshold applies only to R23's failures
   - a disconnect pressed in hayami suppresses re-dialling until a connect is pressed,
-    and cancels any retry waiting. The press has to reach the helper; how is designed
-    in this phase
+    and cancels any retry waiting. The press reaches the helper through a small state
+    file, `$XDG_STATE_HOME/hayami/vpn-keepalive.json`, written before the press acts: a
+    hold, which outlives a restart of either, and counts with no helper running. A
+    connect or a bounce holds for as long as it takes, so the helper does not dial
+    against it, and a press replaced by another leaves the hold to the one that replaced
+    it. A hold also ends when the tunnel is seen back up with no press
   - a failed re-dial retries, backing off from 30 s, doubling, to 600 s, each retry
     visible, and never stops trying. A bounce whose reconnect failed joins this path
   - a successful re-dial resets the backoff and starts a new grace period
-  - re-dialling can be switched off per VPN, overriding the helper's setting
+  - re-dialling can be switched off per VPN (`noRedial`), keeping the checks
 - R25 **OpenVPN3 is reconnected by a person: a departure from parity, decided by the
   operator.** Every OpenVPN3 connection in use needs a browser sign-in, and with
   nobody at the desk it cannot complete. The helper still checks such a tunnel and
@@ -278,22 +319,36 @@ helper's job (a phase 3 test confirms this).
 
 ### Phase 3
 
-- [ ] Each rule in R23 has a test, against a fake backend and a fake clock.
-- [ ] A real tunnel made to fail its check is bounced and passes again.
-- [ ] A check failing through the threshold disconnects and disables, and the
-      helper does nothing further until re-enabled.
-- [ ] Each rule in R24 has a test, against a fake backend and a fake clock.
-- [ ] A real tunnel dropped without a request to NetworkManager (its VPN process
+- [x] Each rule in R23 has a test, against a fake backend and a fake clock.
+      `internal/keepalive/engine_test.go`, from `TestOnlyAConnectedTunnelIsCheckedAfterItsGrace`
+      to `TestAProbeThatCouldNotRunCountsForNothing`.
+- [x] A real tunnel made to fail its check is bounced and passes again. "Phase 3 findings".
+- [x] A check failing through the threshold disconnects and disables, and the
+      helper does nothing further until re-enabled. "Phase 3 findings";
+      `TestADisabledVPNIsLeftAloneUntilReenabled`.
+- [x] Each rule in R24 has a test, against a fake backend and a fake clock.
+      `internal/keepalive/engine_test.go`, from `TestATunnelThatDroppedIsRedialled` to
+      `TestAFailedCheckOnAHeldTunnelIsNotCounted`.
+- [x] A real tunnel dropped without a request to NetworkManager (its VPN process
       killed) is re-dialled by the helper, and NetworkManager's own behaviour without
-      the helper is recorded in this spec.
-- [ ] A disconnect pressed in hayami stays down, and cancels a retry waiting.
-- [ ] A VPN down when the helper starts is not connected by it.
-- [ ] On a real autoconnecting VPN, a bounce does not fight autoconnect, and what
+      the helper is recorded in this spec. "Phase 3 findings".
+- [x] A disconnect pressed in hayami stays down, and cancels a retry waiting. On the desk,
+      pressed by the operator, down for the minute watched;
+      `TestAPressedDisconnectCancelsARetryWaiting`,
+      `TestADisconnectPressedInAPanelStaysDownUntilAConnectIsPressed`.
+- [x] A VPN down when the helper starts is not connected by it. "Phase 3 findings";
+      `TestTheHelperLeavesAloneOneDownWhenItStarted`.
+- [x] On a real autoconnecting VPN, a bounce does not fight autoconnect, and what
       autoconnect does after the threshold's disconnect is recorded in this spec.
-- [ ] On an OpenVPN3 tunnel, a failed check and a drop each send a notification, and
+      "Phase 3 findings".
+- [x] On an OpenVPN3 tunnel, a failed check and a drop each send a notification, and
       the helper makes no connect or disconnect call, by test against a fake backend.
-- [ ] Killing the helper restarts it, and closing the panel leaves it running.
-- [ ] Without the helper installed, nothing acts on a VPN unasked.
+      `TestASignInSystemIsNotifiedOnAndNeverActedOn`, and on a real session in
+      "Phase 3 findings".
+- [x] Killing the helper restarts it, and closing the panel leaves it running. On a
+      transient unit with `Restart=on-failure`; the installed unit is the next PR's.
+- [x] Without the helper installed, nothing acts on a VPN unasked. Only `RunKeepalive`
+      and `ControlVPN` reach the tunnels; with no helper, a killed tunnel stayed down.
 - [ ] `doctor` warns when vpn-toggle is active alongside the helper.
 - [ ] Uninstalling removes the unit and stops the helper.
 - [ ] The README covers VPNs, the helper and the retirement of vpn-toggle.
@@ -309,15 +364,15 @@ helper's job (a phase 3 test confirms this).
 - **The threshold takes a tunnel down.** At three failures the tunnel is disconnected
   and disabled, at parity with vpn-toggle, so traffic then leaves outside the tunnel.
   Stated where the helper is switched on.
-- **Assumed:** NetworkManager does not re-dial a dropped VPN, on the operator's
-  understanding, not yet tested here. If it does on some connections, a re-dial may
-  race it.
-- **Assumed:** the helper and autoconnect do not fight. Autoconnect may undo the
-  disconnect at the threshold. Phase 3 tests this on a real autoconnecting VPN, and
-  what happens is recorded here.
-- **Assumed:** a user service can activate a connection through polkit and reach the
-  desktop's secret agent while the person is logged in. vpn-toggle's unit runs this
-  way, but this spec has not tested a bounce from a user service.
+- **NetworkManager does not re-dial a dropped VPN, and autoconnect did not undo the
+  threshold.** Both seen on one connection ("Phase 3 findings"). A connection that
+  behaved otherwise could race a re-dial; NetworkManager refuses a second activation of
+  an active connection, which costs a line in the journal.
+- **A user service can activate a connection** with the person logged in, connecting,
+  disconnecting and bouncing with no prompt. A connection whose secrets need a person
+  would fail that dial and back off. Not seen here.
+- **One lost echo bounces a tunnel,** at parity ("Phase 3 findings"). A later change could
+  ask for more than one, and is not parity.
 - **DNS on a machine without systemd-resolved.** Go's resolver reads `/etc/resolv.conf`
   and skips nsswitch, so a tunnel with its own DNS may not be asked. On the desk,
   where `/etc/resolv.conf` lists the LAN's servers, Go's resolver and `getent` agreed on
@@ -385,7 +440,9 @@ Done on the desk on 2026-11-04, with the tunnel named by `HAYAMI_TEST_VPN` for t
 core test and pressed by the operator on a real window for the rest: a NetworkManager VPN
 connected, disconnected and bounced through the real bus; the same disconnect pressed in the drawer;
 an OpenVPN3 connect pressed in the drawer, which opened the browser, already signed in,
-and came up. A sign-in typed through inside the 60 s has not been run.
+and came up. A sign-in typed through inside the 60 s has not been run. The helper's steps
+were run on the desk on the same day as a transient user service ("Phase 3 findings"); the
+installed unit comes with the last PR.
 
 ### Prod visibility
 

@@ -235,3 +235,21 @@ func TestADisconnectReplacesAConnectUnderWay(t *testing.T) {
 	await("the word to go", func() bool { return !partSays(p, 0, "Last press") })
 	assert.False(t, partSays(p, 0, core.ErrVPNFailed.Error()))
 }
+
+// Re-enabling takes nothing down, so it takes one press.
+func TestReenablingTakesOnePress(t *testing.T) {
+	detail := view.VPNDetail("net", []view.VPNDetailReading{{
+		VPNReading: view.VPNReading{Name: "invented", State: view.VPNDown},
+		Keepalive:  "failed 3 checks in a row", KeepaliveDisabled: true,
+	}})
+	src := &vpnSource{detailSource: newDetailSource("net", view.Section{Title: "Network"}, map[string]view.Detail{view.DetailVPN: detail})}
+	src.section.Opens = view.DetailVPN
+	p, await := drawerPanel(t, src)
+	gui.Tap(p, "net", "", -1)
+	await("the drawer's parts", func() bool { return len(gui.DrawerPartHeads(p)) == 1 })
+
+	require.True(t, gui.PressVPNRow(p, 0, "Re-enable"))
+
+	await("the press", func() bool { return len(src.pressed()) == 1 })
+	assert.Equal(t, []string{"reenable invented"}, src.pressed())
+}

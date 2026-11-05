@@ -244,3 +244,40 @@ func TestAPlatformWithNoSystemsHasNoVPNGroup(t *testing.T) {
 
 	assert.Nil(t, button(w, "Import 2 VPNs"))
 }
+
+// The helper is switched on per VPN, and re-dialling can be left off for one.
+func TestTheKeepaliveIsSwitchedOnPerVPN(t *testing.T) {
+	s := store(t, "")
+	w := vpnWindow(t, s, "", "kept", "other")
+	tick(w, "kept").SetChecked(true)
+	saved := func() config.VPNItem {
+		vpns := config.Bandwidth.Get(s.Config()).VPNs
+		require.Len(t, vpns, 1)
+		return vpns[0]
+	}
+	assert.False(t, saved().Keepalive, "off until asked")
+
+	keep := tick(w, "Keep this VPN working with the keepalive helper")
+	redial := tick(w, "Re-dial it when it drops")
+	require.NotNil(t, keep)
+	require.NotNil(t, redial)
+	assert.False(t, keep.Checked)
+	assert.True(t, redial.Disabled(), "nothing to re-dial with the helper off")
+
+	keep.SetChecked(true)
+	assert.True(t, saved().Keepalive)
+	assert.False(t, redial.Disabled())
+	assert.True(t, redial.Checked, "re-dialling comes with it")
+	assert.False(t, saved().NoRedial)
+
+	redial.SetChecked(false)
+	assert.True(t, saved().NoRedial)
+	assert.True(t, saved().Keepalive, "the other switch is kept")
+}
+
+// What switching it on can do is said beside the switch (spec 085 R27 and its risks).
+func TestTheKeepaliveSaysWhatItCanDo(t *testing.T) {
+	for _, said := range []string{"disconnect it", "outside the tunnel", "vpn-toggle", "nmcli", "OpenVPN3"} {
+		assert.Contains(t, prefs.VPNKeepaliveWarning, said)
+	}
+}

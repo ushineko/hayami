@@ -16,6 +16,7 @@ const (
 	VPNConnect    = "connect"
 	VPNDisconnect = "disconnect"
 	VPNBounce     = "bounce"
+	VPNReenable   = "reenable"
 )
 
 // actVPN starts a line's Open that asks for an action on a VPN, as against a detail
@@ -37,19 +38,23 @@ func ParseVPNAct(open string) (action, name string, ok bool) {
 
 // vpnControls are what can be asked of a VPN in the state it was read in. Nothing
 // for one that could not be read: it is not known which would apply.
-func vpnControls(v VPNReading) []DetailLine {
+func vpnControls(v VPNDetailReading) []DetailLine {
 	row := func(label, action string) DetailLine {
 		return DetailLine{Name: label, Open: VPNAct(action, v.Name)}
 	}
+	var out []DetailLine
 	switch v.State {
 	case VPNDown:
-		return []DetailLine{row("Connect", VPNConnect)}
+		out = []DetailLine{row("Connect", VPNConnect)}
 	case VPNConnecting:
-		return []DetailLine{row("Disconnect", VPNDisconnect)}
+		out = []DetailLine{row("Disconnect", VPNDisconnect)}
 	case VPNUp:
-		return []DetailLine{row("Disconnect", VPNDisconnect), row("Bounce", VPNBounce)}
+		out = []DetailLine{row("Disconnect", VPNDisconnect), row("Bounce", VPNBounce)}
 	}
-	return nil
+	if v.KeepaliveDisabled {
+		out = append(out, row("Re-enable keepalive", VPNReenable))
+	}
+	return out
 }
 
 // VPNSaid is the line that says how a press went: what is under way, or why it did
@@ -74,6 +79,7 @@ func VPNDetailInfo() DetailInfo {
 type VPNStats struct {
 	Checks    int
 	Failures  int
+	Bounces   int
 	AverageMS float64
 }
 
@@ -88,6 +94,12 @@ type VPNCheckLine struct {
 // VPNDetailReading is everything the drawer says of one VPN.
 type VPNDetailReading struct {
 	VPNReading
+
+	// Keepalive is what the helper is doing about this VPN, empty where it is not
+	// switched on, and KeepaliveDisabled that it has given up until a person re-enables
+	// it (spec 085 R23).
+	Keepalive         string
+	KeepaliveDisabled bool
 
 	Addresses []string
 	Gateway   string
@@ -123,7 +135,7 @@ func VPNDetail(section string, vpns []VPNDetailReading) Detail {
 			TitleParts: []Part{{Text: state.word, Status: state.status}},
 			Trails:     vpnTrails(v),
 			Lines:      vpnLines(v),
-			Controls:   vpnControls(v.VPNReading),
+			Controls:   vpnControls(v),
 		})
 	}
 	return d
@@ -168,6 +180,13 @@ func vpnLines(v VPNDetailReading) []DetailLine {
 	if v.Label != "" {
 		add("Connection", v.Name)
 	}
+	if v.Keepalive != "" {
+		line := DetailLine{Name: "Keepalive", Value: clipMiddle(v.Keepalive, vpnValueWidth)}
+		if v.KeepaliveDisabled {
+			line.Status = Bad
+		}
+		lines = append(lines, line)
+	}
 	add("Interface", v.Interface)
 	if v.Connected.OK {
 		add("Connected", vpnElapsed(v.Connected))
@@ -177,6 +196,9 @@ func vpnLines(v VPNDetailReading) []DetailLine {
 		add("Latency", formatMS(Some(v.Stats.AverageMS))+" average")
 		add("Failures", fmt.Sprintf("%d of %d", v.Stats.Failures, v.Stats.Checks))
 		add("Uptime", fmt.Sprintf("%.1f %%", passed))
+		if v.Stats.Bounces > 0 {
+			add("Bounces", fmt.Sprintf("%d", v.Stats.Bounces))
+		}
 	}
 	for _, c := range v.LastChecks {
 		lines = append(lines, vpnCheckDetail(c))

@@ -221,8 +221,43 @@ func (w *Window) vpnRow(name string, known []string, redraw func()) fyne.CanvasO
 		fyne.Do(redraw)
 	})
 	details.Add(container.NewHBox(add))
+	details.Add(w.vpnKeepalive(name, item))
 	return container.NewVBox(check, container.NewPadded(details))
 }
+
+// vpnKeepalive is whether the helper looks after this VPN. What that does goes beside
+// the switch, because the threshold takes a tunnel down and traffic then leaves outside
+// it (spec 085, its risks), and another monitor on the same VPN would fight it (R27).
+func (w *Window) vpnKeepalive(name string, item config.VPNItem) fyne.CanvasObject {
+	redial := widget.NewCheck("Re-dial it when it drops", nil)
+	redial.SetChecked(!item.NoRedial)
+	redial.OnChanged = func(on bool) {
+		w.changeVPN(name, func(i *config.VPNItem) { i.NoRedial = !on })
+	}
+	keep := widget.NewCheck("Keep this VPN working with the keepalive helper", nil)
+	keep.SetChecked(item.Keepalive)
+	sync := func(on bool) {
+		if on {
+			redial.Enable()
+		} else {
+			redial.Disable()
+		}
+	}
+	sync(item.Keepalive)
+	keep.OnChanged = func(on bool) {
+		w.changeVPN(name, func(i *config.VPNItem) { i.Keepalive = on })
+		sync(on)
+	}
+	return container.NewVBox(keep, redial, widgets.DimWrapped(vpnKeepaliveWarning))
+}
+
+// vpnKeepaliveWarning is what switching the helper on means.
+const vpnKeepaliveWarning = "A failed check bounces the tunnel. Three in a row disconnect it until you re-enable " +
+	"it, and traffic then leaves outside the tunnel. A dead check target looks like a dead tunnel. " +
+	"A tunnel taken down outside hayami, with nmcli for one, looks like a drop and is re-dialled. " +
+	"An OpenVPN3 tunnel is only notified on, since it needs you at its sign-in page. " +
+	"vpn-toggle must not be monitoring the same VPN: two monitors bounce each other's tunnel. " +
+	"Needs the helper running."
 
 func findVPN(vpns []config.VPNItem, name string) (config.VPNItem, bool) {
 	i := slices.IndexFunc(vpns, func(v config.VPNItem) bool { return v.Name == name })

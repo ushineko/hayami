@@ -25,6 +25,7 @@ func tempCache(t *testing.T) string {
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", dir)
 	t.Setenv("LOCALAPPDATA", dir)
+	t.Setenv("XDG_STATE_HOME", dir)
 	return dir
 }
 

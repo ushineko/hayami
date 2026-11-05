@@ -20,3 +20,6 @@ var WatchSettings = watchSettings
 
 // Summarise is what doctor says a section found, in one line.
 var Summarise = summarise
+
+// FollowBandwidth is what the helper reads its settings through.
+var FollowBandwidth = followBandwidth

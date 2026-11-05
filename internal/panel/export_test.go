@@ -119,3 +119,7 @@ func SetUsageNow(u *Usage, now func() time.Time) { u.now = now }
 func SetUsageBreakdown(u *Usage, read func(label string) (view.UsageBreakdown, error)) {
 	u.breakdown = read
 }
+
+// ForgetVPNReadTime has the next poll read the VPNs, in place of waiting out the
+// interval.
+func (b *Bandwidth) ForgetVPNReadTime() { b.vpns.Refresh() }

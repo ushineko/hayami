@@ -27,6 +27,7 @@ const vpnConfirmLapse = 5 * time.Second
 // vpnWorking is what a row says while its press is under way.
 var vpnWorking = map[string]string{
 	view.VPNConnect: "connecting", view.VPNDisconnect: "disconnecting", view.VPNBounce: "bouncing",
+	view.VPNReenable: "re-enabling",
 }
 
 // vpnSignInWaiting is what a row says while the browser has the sign-in page.
@@ -64,7 +65,8 @@ func (p *Panel) pressVPN(ask, action, name string) {
 	if !ok {
 		return
 	}
-	if action != view.VPNConnect && !p.confirmed(ask) {
+	onePress := action == view.VPNConnect || action == view.VPNReenable
+	if !onePress && !p.confirmed(ask) {
 		d.vpn.asking, d.vpn.askedAt = ask, time.Now()
 		p.renderDrawer()
 		return

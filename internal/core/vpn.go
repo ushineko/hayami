@@ -105,6 +105,12 @@ type VPNBackend struct {
 	// asked, and neither sees a secret (spec 085 R18).
 	Connect    func(ctx context.Context, name string, signIn SignIn) error
 	Disconnect func(ctx context.Context, name string) error
+
+	// Unattended says the keepalive helper may act on this system's tunnels with
+	// nobody at the desk. Not OpenVPN3's: every connection in use needs a person at
+	// a sign-in page, so a bounce it could not finish would turn a degraded tunnel
+	// into a down one (spec 085 R25).
+	Unattended bool
 }
 
 // vpnControlTimeout bounds a connect or a disconnect, and with it a sign-in page
@@ -157,6 +163,17 @@ func (v *VPNSection) Chosen() bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return len(v.names) > 0
+}
+
+// Follow takes a new list of chosen VPNs if it differs from the one held, and leaves
+// the readings and their timing alone if not. For a caller that asks at every look.
+func (v *VPNSection) Follow(names []string) {
+	v.mu.Lock()
+	same := slices.Equal(v.names, names)
+	v.mu.Unlock()
+	if !same {
+		v.SetNames(names)
+	}
 }
 
 // Refresh makes the next poll read, so a card follows a press rather than waiting
