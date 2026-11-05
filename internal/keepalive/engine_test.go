@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -419,6 +420,9 @@ func TestAStateFileLastsAndAStrangeOneIsEmpty(t *testing.T) {
 }
 
 func TestOnlyOneHelperRuns(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no lock here to find a helper by, and no VPN systems for one to run over (spec 085 R3)")
+	}
 	files := keepalive.At(t.TempDir())
 	assert.False(t, files.Running())
 

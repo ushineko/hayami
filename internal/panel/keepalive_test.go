@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -254,6 +255,9 @@ func TestASignInSystemIsNotifiedOnAndNeverActedOn(t *testing.T) {
 
 // A second helper finds the first, and the first's end lets another start.
 func TestOnlyOneHelperRunsAtATime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no lock here to find a helper by, and no VPN systems for one to run over (spec 085 R3)")
+	}
 	b := newHelperBench(t, true, checkedVPN("kept", true))
 	b.start()
 	b.await("the first to run", b.files.Running)
@@ -417,6 +421,9 @@ func TestAPressReplacedLeavesTheHoldToTheOneThatReplacedIt(t *testing.T) {
 }
 
 func TestTheDrawerSaysWhatTheHelperIsDoing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no lock here to find a helper by, and no VPN systems for one to run over (spec 085 R3)")
+	}
 	b := newHelperBench(t, true, checkedVPN("kept", true), checkedVPN("other", false))
 	source := panel.NewBandwidth(nil, noCounters)
 	source.SetVPNSystems(b.systems, nil, b.settings)
