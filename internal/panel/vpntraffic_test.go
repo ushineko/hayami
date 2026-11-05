@@ -147,4 +147,11 @@ func TestTheDetailPlotsTheNewestChecksThatRan(t *testing.T) {
 	assert.NotContains(t, samples, float64(total-3), "the check that did not run is not plotted")
 	assert.Equal(t, time.Hour, d.Parts[0].TrailEvery, "the settings' check interval")
 	assert.Len(t, samples, 60, "a full window, however many did not run")
+
+	// The poll started a cycle, whose point is on its way to the test's directory,
+	// and the test's end removes that directory.
+	assert.Eventually(t, func() bool {
+		raw, err := os.ReadFile(path) //nolint:gosec // the test's own temporary file
+		return err == nil && strings.Count(string(raw), "\n") == len(lines)+1
+	}, 5*time.Second, time.Millisecond)
 }
