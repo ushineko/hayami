@@ -34,6 +34,9 @@ func serviceBench(t *testing.T) (path string, asked *[]string, fail *error) {
 }
 
 func TestTheUnitRunsTheHelperAndComesBackFromACrash(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the helper is a systemd service, on Linux")
+	}
 	text, err := keepalive.UnitText("/opt/hayami/bin/hayami-tui")
 	require.NoError(t, err)
 	assert.Contains(t, text, `ExecStart="/opt/hayami/bin/hayami-tui" vpn-keepalive run`+"\n")
@@ -48,6 +51,9 @@ func TestTheUnitRunsTheHelperAndComesBackFromACrash(t *testing.T) {
 // specifier to systemd, and a line break another line of the unit. Each of these was
 // also started by a real manager (spec 085).
 func TestAProgramsPathIsOneArgumentWhateverItIsCalled(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the helper is a systemd service, on Linux")
+	}
 	for path, want := range map[string]string{
 		"/home/a b/hayami-tui":   `"/home/a b/hayami-tui"`,
 		"/home/100%/hayami-tui":  `"/home/100%%/hayami-tui"`,
