@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.11.18
+**Version**: 0.12.0
 
 *a chart you read at a glance*
 
@@ -689,7 +689,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.12.0 (2026-11-04)
 
 - **Added**: a VPN can have a line on the Network card, with its state and how
   long it has been connected. Linux only, read from NetworkManager and OpenVPN3
