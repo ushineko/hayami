@@ -252,12 +252,13 @@ func (w *Window) vpnKeepalive(name string, item config.VPNItem) fyne.CanvasObjec
 }
 
 // vpnKeepaliveWarning is what switching the helper on means.
-const vpnKeepaliveWarning = "A failed check bounces the tunnel. Three in a row disconnect it until you re-enable " +
-	"it, and traffic then leaves outside the tunnel. A dead check target looks like a dead tunnel. " +
+const vpnKeepaliveWarning = "A failed check bounces the tunnel, and traffic leaves outside the tunnel while it is down, for " +
+	"as long as it will not reconnect. Three in a row disconnect it until you re-enable it. A dead check " +
+	"target looks like a dead tunnel. " +
 	"A tunnel taken down outside hayami, with nmcli for one, looks like a drop and is re-dialled. " +
 	"An OpenVPN3 tunnel is only notified on, since it needs you at its sign-in page. " +
 	"vpn-toggle must not be monitoring the same VPN: two monitors bounce each other's tunnel. " +
-	"Needs the helper running."
+	"Needs the helper: the installer's page, or hayami-tui vpn-keepalive install."
 
 func findVPN(vpns []config.VPNItem, name string) (config.VPNItem, bool) {
 	i := slices.IndexFunc(vpns, func(v config.VPNItem) bool { return v.Name == name })

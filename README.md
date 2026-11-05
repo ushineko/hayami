@@ -571,6 +571,67 @@ keyboard back to the window you were in. hayami loads small KWin scripts for
 these while it runs and unloads them when it stops. Without KWin the drawer
 opens on the right and the panel keeps the keyboard after a click.
 
+#### VPNs and the keepalive helper
+
+A VPN gets a line on the Network card when you choose it in preferences, on the
+Sections page, from NetworkManager's and OpenVPN3's lists. A check is a ping or a
+DNS lookup, sent only while the tunnel is up. The Network drawer's `VPN` view plots
+each tunnel, and connects, disconnects and bounces it; a disconnect and a bounce take
+two presses. All of this works with nothing else installed, and nothing acts on a VPN
+unless you press something.
+
+The keepalive helper is what keeps a tunnel working with no panel open. It is optional:
+a service of your own account that needs no administrator.
+
+```bash
+hayami-tui vpn-keepalive install    # or the installer's VPN page, or --keepalive=yes
+hayami-tui vpn-keepalive status     # doctor says the same
+hayami-tui vpn-keepalive remove     # an uninstall does this too
+```
+
+It starts with your desktop session, comes back from a crash, and stays stopped if you
+stop it. It does nothing to a VPN until you tick **Keep this VPN working** for it in
+preferences. For a VPN that is ticked:
+
+- A failed check bounces the tunnel. A pass resets the count. **While a tunnel is down,
+  traffic leaves outside it,** and a bounce that will not reconnect stays that way until it
+  does; you get a notification. Whoever can block the VPN's traffic can cause this, so
+  where that matters, use a kill switch or leave this off.
+- A third failure in a row disconnects it and leaves it down until you press
+  **Re-enable keepalive** in the drawer. A check target that has gone away looks like a
+  tunnel that has, so aim checks at something reliable. One unanswered ping is one
+  failure; the default limit is 5 s.
+- A tunnel that drops is re-dialled, waiting from 30 s up to 10 minutes between tries,
+  and an outage never disables it. The first failed re-dial sends a notification. **Re-dial
+  it when it drops** turns this off for one VPN, and a drop is then only notified on.
+- A VPN it has not seen up since it started is left alone. It never opens a new tunnel.
+- **Disconnect in the drawer stays down** until you press Connect, and this survives a
+  restart. A tunnel taken down any other way, with `nmcli` for one, looks like a drop and
+  is re-dialled within seconds.
+- An OpenVPN3 tunnel gets a notification and nothing else, because reconnecting it needs
+  you at its sign-in page. Reconnect it from the drawer.
+
+The helper runs the checks while it runs, and the panels read what it found. A hidden
+Network section does not stop it.
+
+#### Coming from vpn-toggle
+
+hayami does what `vpn-toggle` did, at its defaults, apart from OpenVPN3 above and the
+geolocation check, which is left out because it asked a third party. **Do not run both
+over one VPN:** two monitors bounce each other's tunnel, and `doctor` warns if they
+are both running.
+
+1. Stop it: `systemctl --user disable --now vpn-toggle`.
+2. In preferences, take the offer to import its VPNs and checks, which says what it left
+   out. Tick **Keep this VPN working** for each one it should look after.
+3. Install the helper, as above, and read `hayami-tui doctor`.
+4. Once that has run for a while, uninstall it with its own `uninstall.sh`, which removes
+   its program, launcher, autostart entry and service, and asks about its settings.
+
+hayami only reads `~/.config/vpn-toggle`, for the import, and never changes it. Whatever
+you leave there, its settings, logs and metrics, stays until you remove it, and does
+nothing once the program has gone.
+
 #### Not yet confirmed on Linux
 
 Recent work was tested on Windows. On Linux, these have not yet been checked
@@ -640,12 +701,14 @@ MIT. See
   in the browser. The terminal panel only reads (spec 085, #298).
 - **Added**: preferences offers once to import vpn-toggle's VPNs and checks, and leaves
   its files alone. A geolocation check is not imported, and the import says so.
-- **Added**: a keepalive helper, `hayami-tui vpn-keepalive run`, for a VPN switched on
-  for it in preferences: a failed check bounces the tunnel, three in a row disconnect it
+- **Added**: a keepalive helper for a VPN switched on for it in preferences, installed
+  only when asked, from the installer's new VPN page or with `hayami-tui vpn-keepalive
+  install`, as a service of your own account with no administrator: a failed check bounces the tunnel, three in a row disconnect it
   until you re-enable it from the drawer, and a tunnel that drops is re-dialled with a
   growing wait. A VPN you disconnect in the drawer stays down; one taken down with `nmcli`
   looks like a drop. An OpenVPN3 tunnel only gets a notification, since it needs you at
-  its sign-in page. Linux only (spec 085, #298).
+  its sign-in page. An upgrade restarts it, an uninstall removes it, and `doctor` says
+  where it stands. Linux only. The README says how to move from vpn-toggle (spec 085, #298).
 - **Added**: a VPN can have health checks, a ping or a DNS lookup, made natively by
   one process however many panels are running. Its row shows the latency, or `fail`
   beside `up` for a tunnel that is on and not answering. The Network drawer gains a

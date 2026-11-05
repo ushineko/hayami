@@ -11,3 +11,8 @@ import (
 func Notify(context.Context, string, string) error {
 	return errors.New("notifications are not done on this platform") //nolint:err113 // said plainly
 }
+
+// UserServiceActive has no service manager to ask here.
+func UserServiceActive(context.Context, string) (bool, error) {
+	return false, errors.New("there is no user service manager on this platform") //nolint:err113 // said plainly
+}

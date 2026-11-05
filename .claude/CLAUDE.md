@@ -205,6 +205,12 @@ place updates the guide's Status table in the same PR.
   and `sudo hayami-tui network-helper install` asks nothing. hayami becomes
   root only when the person chose an action that needs it, through the
   system's own prompt; never unasked, and never by running sudo.
+- **A VPN is kept working by a helper too** (spec 085), and it is a different kind
+  of helper: a systemd user service, `hayami-vpn-keepalive`, running `hayami-tui
+  vpn-keepalive run` as the person with no added right, so it asks for no
+  administrator. It acts on a tunnel with nobody asking, only for a VPN switched on
+  for it, and never on OpenVPN3's, which it only notifies on. It is installed only
+  when asked: the installer's VPN page and `hayami-tui vpn-keepalive install`.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that

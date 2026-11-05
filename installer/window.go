@@ -31,6 +31,11 @@ func init() { //nolint:gochecknoinits // how fynstall is given a page's window
 			// polkit's pkexec (spec 078).
 			shown: func() bool { return probeNet(c).applies() }}
 	})
+	gui.Page(PageKeepalive, func(c *extension.Context) wizard.Page {
+		return &offerPage{c: c, title: "VPN", param: ParamKeepalive, checking: CheckingKeepalive,
+			check: func(context.Context) offering { return probeKeep() },
+			shown: func() bool { return probeKeep().applies() }}
+	})
 }
 
 // Checking is what the sensors page says until the check answers.
@@ -38,6 +43,9 @@ const Checking = "Checking for LibreHardwareMonitor…"
 
 // CheckingNetwork is what the network page says until the check answers.
 const CheckingNetwork = "Checking for the network helper…"
+
+// CheckingKeepalive is what the keepalive page says until the check answers.
+const CheckingKeepalive = "Checking for the VPN keepalive helper…"
 
 // background runs the check off the window's thread, and onWindow puts its
 // answer back on it. Variables, so a test runs both in line.

@@ -50,6 +50,13 @@ const ParamNetwork = "network"
 // PageNetwork is the network page's ID.
 const PageNetwork = "network"
 
+// ParamKeepalive is the parameter the keepalive page sets, declared in
+// fynstall.yaml: Yes to install the VPN keepalive helper, No to leave it.
+const ParamKeepalive = "keepalive"
+
+// PageKeepalive is the keepalive page's ID.
+const PageKeepalive = "keepalive"
+
 // Extension is what fynstall links into the installer and the uninstaller.
 // The name is fixed.
 var Extension = extension.Extension{
@@ -62,6 +69,10 @@ var Extension = extension.Extension{
 		ID:   PageNetwork,
 		Sets: []string{ParamNetwork},
 		CLI:  networkCLI,
+	}, {
+		ID:   PageKeepalive,
+		Sets: []string{ParamKeepalive},
+		CLI:  keepaliveCLI,
 	}},
 	AfterInstall:    afterInstall,
 	BeforeUninstall: beforeUninstall,
@@ -170,6 +181,7 @@ func afterInstall(ctx context.Context, c *extension.Context) error {
 		c.Logf(extension.Info, "Stopped %s, which was running from the earlier install", name)
 	}
 	placeRule(ctx, c)
+	placeKeepalive(ctx, c)
 	return nil
 }
 
@@ -203,6 +215,7 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 	if !c.Upgrade() {
 		removeRule(ctx, c)
 	}
+	dropKeepalive(ctx, c)
 	dropCopy(c)
 	return nil
 }
