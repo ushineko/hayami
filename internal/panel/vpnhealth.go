@@ -107,6 +107,13 @@ func (h *vpnHealth) configure(settings config.BandwidthSettings) {
 	}
 }
 
+// interval is the time between a VPN's checks.
+func (h *vpnHealth) interval() time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.every
+}
+
 // tick starts a cycle if none is running. It does not wait for it: a check can
 // take its whole timeout, and the rates on the same card are read every two
 // seconds.
@@ -381,16 +388,19 @@ func (b *Bandwidth) vpnDetail() view.Detail {
 	out := make([]view.VPNDetailReading, 0, len(vpns))
 	for i, v := range vpns {
 		history := points[v.Name]
-		r := view.VPNDetailReading{VPNReading: card[i], Stats: vpnStats(history)}
+		r := view.VPNDetailReading{VPNReading: card[i], Stats: vpnStats(history), CheckEvery: b.health.interval()}
 		b.keepaliveReading(&r)
-		if len(history) > vpnDetailTrail {
-			history = history[len(history)-vpnDetailTrail:]
-		}
+		// The newest that ran, and not those that ran of the newest: a window that
+		// shrank by a check that could not run would not be one sample along from
+		// the last, and the plot would jump instead of drifting (spec 086 R11).
 		for _, p := range history {
 			if checksRan(p) {
 				r.Samples = append(r.Samples, p.LatencyMS)
 				r.Failed = append(r.Failed, !p.OK)
 			}
+		}
+		if extra := len(r.Samples) - vpnDetailTrail; extra > 0 {
+			r.Samples, r.Failed = r.Samples[extra:], r.Failed[extra:]
 		}
 		if len(history) > 0 {
 			for _, c := range history[len(history)-1].Checks {

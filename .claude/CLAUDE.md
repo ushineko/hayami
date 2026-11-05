@@ -215,7 +215,8 @@ place updates the guide's Status table in the same PR.
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that
   arrives must not resize the window, which is what the fixed-width
-  formatters prevent. Only a section appearing or disappearing may.
+  formatters prevent. Only a section appearing or disappearing, or a VPN
+  coming up or going down (spec 086), may.
 
 ---
 

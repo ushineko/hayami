@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/ushineko/hayami/internal/safetext"
 )
@@ -112,6 +113,9 @@ type VPNDetailReading struct {
 	// them did not pass.
 	Samples []float64
 	Failed  []bool
+
+	// CheckEvery is the time between checks, which a new sample drifts over.
+	CheckEvery time.Duration
 }
 
 /*
@@ -134,6 +138,7 @@ func VPNDetail(section string, vpns []VPNDetailReading) Detail {
 			Section: section, ID: DetailVPN + "/" + v.Name, Title: vpnName(v.VPNReading),
 			TitleParts: []Part{{Text: state.word, Status: state.status}},
 			Trails:     vpnTrails(v),
+			TrailEvery: v.CheckEvery,
 			Lines:      vpnLines(v),
 			Controls:   vpnControls(v),
 		})

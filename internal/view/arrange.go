@@ -364,7 +364,11 @@ func trailLabel(s Section, t Trail) string {
 
 // labelled gives a row the section's name only when it has none of its own.
 func labelled(s Section, r Row) Row {
-	if r.Label == "" {
+	switch {
+	case r.Label != "":
+	case r.PaneLabel != "":
+		r.Label = r.PaneLabel
+	default:
 		r.Label = s.Title
 	}
 	return r
