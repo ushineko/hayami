@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.13.0
+**Version**: 0.13.1
 
 *a chart you read at a glance*
 
@@ -691,7 +691,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.13.1 (2026-11-06)
 
 - **Fixed**: in the terminal's usage row, a Codex limit on the bar shows its amounts
   (`720/1200 (60%)`), and a window that resets within a day says hours left
