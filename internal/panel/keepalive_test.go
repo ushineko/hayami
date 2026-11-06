@@ -277,7 +277,14 @@ func TestOnlyOneHelperRunsAtATime(t *testing.T) {
 func TestAPanelProbesNothingWhileTheHelperRunsAndTakesOverAfter(t *testing.T) {
 	b := newHelperBench(t, true, checkedVPN("kept", true))
 	b.start()
-	b.await("the helper's first check", func() bool { return b.checks.Load() > 0 })
+	// The point, not the ping: a check is counted before it is written, and a panel
+	// that polls in between finds nothing in the store. Linux's lock keeps that panel
+	// from probing; elsewhere there is no lock, and it probes.
+	path := filepath.Join(os.Getenv("XDG_CACHE_HOME"), "hayami", "vpn-health.jsonl")
+	b.await("the helper's first point", func() bool {
+		raw, err := os.ReadFile(path) //nolint:gosec // the test's own temporary file
+		return err == nil && strings.Contains(string(raw), "\n")
+	})
 
 	var probes atomic.Int64
 	checkers := core.VPNCheckers{"ping": func(context.Context, core.VPNCheck) error {
@@ -298,7 +305,6 @@ func TestAPanelProbesNothingWhileTheHelperRunsAndTakesOverAfter(t *testing.T) {
 	b.stop()
 	// The store's last point is on a clock of the test's making, so it is no guide to
 	// what is due: a fresh store is one with nothing checked.
-	path := filepath.Join(os.Getenv("XDG_CACHE_HOME"), "hayami", "vpn-health.jsonl")
 	require.NoError(t, os.Remove(path))
 	require.Eventually(t, func() bool {
 		source.ForgetVPNReadTime()
