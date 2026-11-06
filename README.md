@@ -691,6 +691,12 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: in the terminal's usage row, a Codex limit on the bar shows its amounts
+  (`720/1200 (60%)`), and a window that resets within a day says hours left
+  (`5h 100% (2h left)`) rather than `<1d` (spec 087, #316).
+
 ### 0.13.0 (2026-11-05)
 
 - **Added**: a VPN that is up shows its rates and totals under its line on the Network
