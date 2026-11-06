@@ -341,7 +341,24 @@ func TestAWindowOnItsLastDaySaysSo(t *testing.T) {
 	}, now)
 
 	assert.Contains(t, s.Meters[0].StatsLeft, "7d: 21 % (<1d)")
-	assert.Contains(t, text(s.Meters[0].Strip), "7d 21% (<1d left)")
+	assert.Contains(t, text(s.Meters[0].Strip), "7d 21% (6h left)", "the pane counts hours (issue #316)")
+}
+
+// Under a day the pane says hours, rounded up as the days are, because "<1d"
+// is always true of a five-hour window (issue #316). A day or more is days.
+func TestThePanesHoursLeftAreRoundedUp(t *testing.T) {
+	now := at(9, 0)
+	left := func(d time.Duration) string {
+		s := view.Usage(now, []view.UsageWindow{
+			{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 0.04, ResetsAt: now.Add(time.Second)},
+			{Account: "CC max", Name: "7d", Span: 7 * 24 * time.Hour, Fraction: 0.21, ResetsAt: now.Add(d)},
+		}, now)
+		return text(s.Meters[0].Strip)
+	}
+	assert.Equal(t, "4%  ·  7d 21% (2h left)", left(90*time.Minute))
+	assert.Equal(t, "4%  ·  7d 21% (3h left)", left(3*time.Hour))
+	assert.Equal(t, "4%  ·  7d 21% (<1h left)", left(time.Minute))
+	assert.Equal(t, "4%  ·  7d 21% (2d left)", left(36*time.Hour))
 }
 
 // The days are rounded up, as the widget rounds them: thirty-six hours is two
@@ -415,6 +432,10 @@ func TestAFullWindowHandsTheBarToTheLimit(t *testing.T) {
 		assert.Contains(t, m.StatsLeft, "5h: ")
 		assert.Contains(t, m.StatsLeft, "7d: ")
 	}
+
+	// The pane's strip says how much of the limit, and the full five hours'
+	// reset in hours (issue #316).
+	assert.Equal(t, "720/1200 (60%)  ·  5h 100% (2h left)  ·  7d 40% (3d left)", text(cx(1, 0.4).Strip))
 
 	plain := view.Usage(now, []view.UsageWindow{
 		{Account: "CC max", Name: "5h", Span: 5 * time.Hour, Fraction: 1, ResetsAt: now.Add(2 * time.Hour)},

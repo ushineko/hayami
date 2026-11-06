@@ -353,7 +353,12 @@ func strip(now time.Time, group []UsageWindow, lead UsageWindow) *Strip {
 		return out
 	}
 
-	out.Figures = []Figure{{Text: percent(lead.Fraction), Status: verdict(lead)}}
+	first := percent(lead.Fraction)
+	if lead.Name == "limit" {
+		// The column already names the limit; the figure is how much of it.
+		first = allowance(lead)
+	}
+	out.Figures = []Figure{{Text: first, Status: verdict(lead)}}
 	for _, w := range group {
 		if w.Name == lead.Name {
 			continue
@@ -378,7 +383,7 @@ func strip(now time.Time, group []UsageWindow, lead UsageWindow) *Strip {
 			// Nothing when the two reset together, as in the card.
 			out.Figures = append(out.Figures, Figure{Text: stripSeparator + w.Name + " ", Status: Dim},
 				Figure{Text: percent(w.Fraction), Status: verdict(w)})
-			if left := remaining(now, w, lead.ResetsAt); left != "" {
+			if left := stripLeft(now, w, lead.ResetsAt); left != "" {
 				out.Figures = append(out.Figures, Figure{Text: " (" + left + " left)", Status: Dim})
 			}
 		}
@@ -405,11 +410,35 @@ func budget(w UsageWindow) string {
 
 // individual is a Codex Business account's own allowance:
 // "individual 300.5/1200 (60%)".
-func individual(w UsageWindow) string {
+func individual(w UsageWindow) string { return "individual " + allowance(w) }
+
+// allowance is a limit's amounts and percentage, "300.5/1200 (60%)", or the
+// percentage alone when the provider gave no amounts.
+func allowance(w UsageWindow) string {
 	if w.Used == "" || w.Limit == "" {
-		return "individual " + percent(w.Fraction)
+		return percent(w.Fraction)
 	}
-	return "individual " + w.Used + "/" + w.Limit + " (" + percent(w.Fraction) + ")"
+	return w.Used + "/" + w.Limit + " (" + percent(w.Fraction) + ")"
+}
+
+// stripLeft is remaining for the pane, in hours under a day (issue #316):
+// "<1d" is always true of a five-hour window, so it says nothing there. The
+// hours are rounded up the way the days are, and "<1h" is the last hour.
+// The card keeps the days form; its captions are fixed width.
+func stripLeft(now time.Time, w UsageWindow, shown time.Time) string {
+	left := remaining(now, w, shown)
+	if left != "<1d" {
+		return left
+	}
+	d := w.ResetsAt.Sub(now)
+	if d < time.Hour {
+		return "<1h"
+	}
+	hours := int(d / time.Hour)
+	if d%time.Hour != 0 {
+		hours++
+	}
+	return itoa(hours) + "h"
 }
 
 // nothing reports whether an amount is zero, whatever its symbol or decimals.
