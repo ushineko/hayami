@@ -3,6 +3,7 @@ package claude
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,8 +12,91 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
+
+/*
+refused are the refresh tokens the token endpoint turned down, by their
+SHA-256, for the life of the process (spec 089).
+
+A refused refresh token stays refused. Sending it again at every gate
+changed nothing for a month on the machine this came from, and ended with
+the endpoint answering 429 to every machine behind the same address. A
+sign-in writes a new refresh token, which is not in here, so it is asked
+about at the next open gate. The digest rather than the token, so this
+holds nothing a token could be recovered from.
+*/
+var refused sync.Map
+
+func refuse(token string) { refused.Store(sha256.Sum256([]byte(token)), struct{}{}) }
+
+func wasRefused(token string) bool {
+	_, ok := refused.Load(sha256.Sum256([]byte(token)))
+	return ok
+}
+
+/*
+refusal is the endpoint turning down the refresh token used, which is
+remembered.
+
+Claude Code may have refreshed while the request was out: the token it spent
+is the one refused, and the store already holds its successor. Then nobody
+needs to sign in, and c takes the store's tokens, as writeBack does.
+*/
+func refusal(s Store, c *Credentials, used string) error {
+	refuse(used)
+	if now, err := readSettled(s); err == nil && now.RefreshToken != used {
+		*c = *now
+		return nil
+	}
+	return ErrNeedsLogin
+}
+
+// errorCode is the OAuth error a refusal names: RFC 6749's string field,
+// `{"error": "invalid_grant"}`, or the object Anthropic's APIs answer with,
+// `{"error": {"type": "invalid_grant"}}`. Empty when the body says neither.
+// Only the code is returned; the rest of a body is not put into an error.
+func errorCode(body io.Reader) string {
+	raw, err := io.ReadAll(io.LimitReader(body, maxBody))
+	if err != nil {
+		return ""
+	}
+	var reply struct {
+		Error json.RawMessage `json:"error"`
+	}
+	if json.Unmarshal(raw, &reply) != nil || len(reply.Error) == 0 {
+		return ""
+	}
+	var code string
+	if json.Unmarshal(reply.Error, &code) != nil {
+		var obj struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(reply.Error, &obj) != nil {
+			return ""
+		}
+		code = obj.Type
+	}
+	return printable(code)
+}
+
+// printable keeps a code to the shape OAuth's codes have (`invalid_grant`,
+// `unsupported_grant_type`: lower-case letters and underscores) and to a
+// length a code has, so a hostile reply cannot put a sentence of its own, or a
+// control character, into what the panel shows.
+func printable(code string) string {
+	const longest = 64
+	if len(code) > longest {
+		return ""
+	}
+	for _, r := range code {
+		if (r < 'a' || r > 'z') && r != '_' {
+			return ""
+		}
+	}
+	return code
+}
 
 // ExpiryMargin is how long before a token's stated expiry it is treated as
 // expired.
@@ -58,6 +142,9 @@ type refreshed struct {
 // before the request would put back what Claude Code wrote meanwhile.
 func Refresh(ctx context.Context, client *http.Client, s Store, c *Credentials) error {
 	used := c.RefreshToken
+	if wasRefused(used) {
+		return ErrNeedsLogin
+	}
 	body, err := json.Marshal(map[string]string{
 		"grant_type":    "refresh_token",
 		"refresh_token": c.RefreshToken,
@@ -79,10 +166,28 @@ func Refresh(ctx context.Context, client *http.Client, s Store, c *Credentials) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized:
+		return refusal(s, c, used)
+	case resp.StatusCode == http.StatusForbidden:
+		// Not remembered: a proxy or a challenge page answers 403 too, and a
+		// token that still works must not be given up on for one of those.
 		return ErrNeedsLogin
-	}
-	if resp.StatusCode != http.StatusOK {
+	case resp.StatusCode == http.StatusBadRequest:
+		code := errorCode(resp.Body)
+		if code == "invalid_grant" {
+			return refusal(s, c, used)
+		}
+		if code != "" {
+			return fmt.Errorf("the token endpoint answered %d (%s)", resp.StatusCode, code)
+		}
+		return fmt.Errorf("the token endpoint answered %d", resp.StatusCode)
+	case resp.StatusCode == http.StatusTooManyRequests:
+		return &Retryable{
+			After: retryAfter(resp.Header.Get("Retry-After")),
+			Err:   fmt.Errorf("the token endpoint answered %d", resp.StatusCode),
+		}
+	case resp.StatusCode != http.StatusOK:
 		return fmt.Errorf("the token endpoint answered %d", resp.StatusCode)
 	}
 

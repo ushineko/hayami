@@ -42,8 +42,9 @@ const (
 const Timeout = 10 * time.Second
 
 // ErrNeedsLogin is a store whose tokens the server has rejected outright. It
-// is not retried on the next poll: a 401 means a person has to log in, and
-// asking again every thirty seconds would neither fix it nor be polite.
+// is not retried on the next poll: a 401, or a refresh token answered with
+// `invalid_grant`, means a person has to log in, and asking again every
+// thirty seconds would neither fix it nor be polite.
 var ErrNeedsLogin = errors.New("this account needs a login")
 
 // Retryable is a failure the server asked us to wait out, carrying how long.

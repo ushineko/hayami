@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.14.1
+**Version**: 0.14.2
 
 *a chart you read at a glance*
 
@@ -53,6 +53,10 @@ The sections can be laid out three ways, in either panel:
 
 A usage reading that is more than five minutes old stays on screen and is
 marked stale: dim in the terminal, with its age in the window's hover note.
+A window that has reset since the reading is left out, because its old figure
+no longer applies. When the server refuses an account's Claude login, the
+account says "needs a login" on its card, in every window and pane; sign in
+with Claude Code again and it clears once the next reading arrives.
 
 ### What is behind a reading
 
@@ -698,6 +702,15 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.14.2 (2026-11-14)
+
+- **Fixed**: a Claude login the server refused left the usage section showing
+  old figures with nothing saying why (spec 089, #325). The account now says
+  "needs a login" on its card; any other failed refresh is in the hover
+  note and `doctor`; a window that has reset since the reading is no longer
+  drawn at its old figure; a refused refresh token is not sent again until a
+  sign-in replaces it, and a 429 from the token endpoint is waited out.
 
 ### 0.14.1 (2026-11-14)
 

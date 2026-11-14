@@ -3,6 +3,7 @@ package usage_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,6 +158,39 @@ func TestAFailedFetchKeepsTheLastGoodReadingAndMovesTheGate(t *testing.T) {
 	require.NotNil(t, entry.FetchedAt)
 	assert.InDelta(t, at, *entry.FetchedAt, 0.001, "the age of the reading changed although nothing was read")
 	assert.False(t, entry.Open(now), "the gate did not move after a failure")
+}
+
+// Spec 089. A login refused is recorded for every viewer: kept through a
+// failure of another kind, which does not mend a login, and gone at the next
+// success.
+func TestALoginRefusedIsRecordedUntilAFetchSucceeds(t *testing.T) {
+	tempCache(t)
+	now := time.Now()
+	fail := func(err error) usage.Fetch {
+		return func() (json.RawMessage, time.Duration, error) { return nil, 0, err }
+	}
+	refused := fmt.Errorf("wrapped: %w", usage.ErrLoginRefused)
+
+	got, err := usage.Cached(now, time.Minute, "max", usage.ProviderClaude, true, fail(refused))
+	require.Error(t, err)
+	assert.True(t, got.LoginRefused, "the fetching viewer was not told")
+
+	got, err = usage.Cached(now.Add(time.Second), time.Minute, "max", usage.ProviderClaude, false, fail(errors.New("unused")))
+	require.NoError(t, err, "the gate is closed: served, not fetched")
+	assert.True(t, got.LoginRefused, "a viewer reading the cache was not told")
+
+	_, err = usage.Cached(now.Add(2*time.Second), time.Minute, "max", usage.ProviderClaude, true, fail(errors.New("no network")))
+	require.Error(t, err)
+	entry, err := usage.Read("max", usage.ProviderClaude)
+	require.NoError(t, err)
+	assert.NotNil(t, entry.LoginRefusedAt, "a network failure after a refusal mended the login")
+
+	_, err = usage.Cached(now.Add(3*time.Second), time.Minute, "max", usage.ProviderClaude, true,
+		func() (json.RawMessage, time.Duration, error) { return payload("signed in"), 0, nil })
+	require.NoError(t, err)
+	entry, err = usage.Read("max", usage.ProviderClaude)
+	require.NoError(t, err)
+	assert.Nil(t, entry.LoginRefusedAt, "a success left the refusal recorded")
 }
 
 // A server that says how long to wait is obeyed, even when it asks for longer

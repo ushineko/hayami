@@ -2,6 +2,7 @@ package usage
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -18,7 +19,16 @@ type Result struct {
 
 	// Fresh reports whether Data came from a request this call made.
 	Fresh bool
+
+	// LoginRefused reports that the last fetch, by any viewer, was refused
+	// because the account needs a login, and nothing has succeeded since.
+	LoginRefused bool
 }
+
+// ErrLoginRefused is a fetch refused because the account needs a login. A
+// Fetch returns an error that is it, and the cache records the refusal for
+// every viewer (spec 089).
+var ErrLoginRefused = errors.New("the account needs a login")
 
 // Fetch is a request upstream. It returns the payload, or an error and a
 // retry-after the server asked for.
@@ -112,13 +122,17 @@ func Cached(now time.Time, ttl time.Duration, account, provider string, force bo
 		if cached != nil {
 			entry.FetchedAt = cached.FetchedAt
 			entry.Data = cached.Data
+			// A network that drops after a refusal does not mend the login.
+			entry.LoginRefusedAt = cached.LoginRefusedAt
+		}
+		if errors.Is(ferr, ErrLoginRefused) {
+			at := seconds(now)
+			entry.LoginRefusedAt = &at
 		}
 		if err := Write(account, provider, entry); err != nil {
 			return err
 		}
-		if cached != nil {
-			out = served(*cached)
-		}
+		out = served(entry)
 		return ferr
 	})
 	return out, err
@@ -129,7 +143,7 @@ func Served(e Entry) Result { return served(e) }
 
 // served is a cached entry as a result.
 func served(e Entry) Result {
-	r := Result{Data: e.Data}
+	r := Result{Data: e.Data, LoginRefused: e.LoginRefusedAt != nil}
 	if at, ok := e.Fetched(); ok {
 		r.FetchedAt = at
 	}
