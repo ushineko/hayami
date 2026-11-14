@@ -9,7 +9,7 @@ require (
 	github.com/cilium/ebpf v0.22.0
 	github.com/fyne-io/oksvg v0.2.1-0.20260918172519-a9af55fa95d9
 	github.com/godbus/dbus/v5 v5.2.4
-	github.com/mdlayher/wifi v0.9.0
+	github.com/mdlayher/wifi v0.10.0
 	github.com/spf13/cobra v1.10.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.12.1
@@ -18,7 +18,7 @@ require (
 	github.com/ushineko/sanshoku v0.1.18
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/image v0.47.0
-	golang.org/x/net v0.60.0
+	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.49.0
 )
 
@@ -66,7 +66,7 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
