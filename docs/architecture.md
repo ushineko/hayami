@@ -104,7 +104,8 @@ says the word and the key it is chosen by (`DetailInfo.Label`, `Key`) and the
 window draws them as a switch in the drawer (spec 062). A detail may be made
 of details (`Detail.Parts`), for a section that shows everything it has at
 once: every account's usage. A detail is read only while a shell shows it,
-never on the section's own poll. The window draws one in the design system's drawer; the
+never on the section's own poll. The window draws one in the design system's drawer, and
+several side by side where a Shift-click asks (spec 088); the
 terminal prints one from `hayami-tui detail`. A process in a detail is its
 name and nothing else: no command line, path or owner is read.
 

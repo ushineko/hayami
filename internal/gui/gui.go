@@ -110,10 +110,12 @@ type Panel struct {
 	shown   map[string]bool
 	wake    map[string]chan struct{}
 
-	// drawer is the detail beside the cards (spec 060); see drawer.go.
-	// drawerOut is whether it is out, for the position watcher, which runs
+	// drawers are the details beside the cards (spec 060, 088), every one
+	// made, the first first, and kit what they share; see drawer.go.
+	// drawerOut is whether any is out, for the position watcher, which runs
 	// on another goroutine (moved).
-	drawer    *drawer
+	drawers   []*drawer
+	kit       drawerKit
 	drawerOut atomic.Bool
 
 	// do hands a poll's result to the UI thread. It is fyne.Do; a test with
@@ -1049,20 +1051,24 @@ func (p *Panel) moved(store *config.Store, x, y, width int) {
 
 /*
 drawerShift is how far the cards are from the corner of a window that wide:
-the drawer's width and its gap when the window is the cards and a drawer on
-the left, and nothing otherwise.
+the drawers' widths and their gaps when the window is the cards and drawers
+on the left, and nothing otherwise.
 
-Only a difference that is a drawer's is taken. A window a person is dragging
-wider is wider than its cards too, until the next reading, and its corner is
-theirs.
+Only a difference that is a whole number of drawers is taken (spec 088 R14).
+A window a person is dragging wider is wider than its cards too, until the
+next reading, and its corner is theirs.
 */
 func (p *Panel) drawerShift(width float32) int {
 	pn := p.win.Panel()
 	dr := pn.Drawer()
 	extra, reach := width-pn.CardsSize().Width, dr.Reach()
+	if dr.Side() != glance.Left || reach <= 0 {
+		return 0
+	}
 	// The compositor's widths are whole pixels and these are not: two of
 	// them rounded are within two of the difference.
-	if dr.Side() != glance.Left || extra < reach-2 || extra > reach+2 {
+	n := float32(int(extra/reach + 0.5))
+	if n < 1 || extra < n*reach-2 || extra > n*reach+2 {
 		return 0
 	}
 	return int(extra + 0.5)
@@ -1349,8 +1355,8 @@ func Start(o Options) error {
 
 	// The detail's poll first: on Windows the network list holds a trace
 	// session open, which outlives a process that does not close it.
-	p.stopDetail()
-	p.drawer.desk.Stop()
+	p.stopDetails()
+	p.kit.desk.Stop()
 
 	// The window has gone. The scripts come out of the compositor first,
 	// while the process is still here to ask. Anything set in the window's

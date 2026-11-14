@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,26 +21,32 @@ import (
 )
 
 /*
-The drawer: what a card has no room to say, beside the cards and as tall as
+The drawers: what a card has no room to say, beside the cards and as tall as
 them (spec 060). The surface, its place, the filter and the keyboard are the
-design system's (fynedesygn spec 068); what it shows is a view.Detail, which
-a source reads and this draws.
+design system's (fynedesygn spec 068, 079); what a drawer shows is a
+view.Detail, which a source reads and this draws.
 
 A click anywhere on a card opens that section's detail, a second click on the
 same card closes the drawer, and a click on another card changes what it
 shows (spec 062). Where a section has several details the drawer has a switch
 between them, and what was chosen is where that card opens next. A detail is
-read only while it is shown, by a poll of its own that starts when the drawer
+read only while it is shown, by a poll of its own that starts when a drawer
 opens on it and stops when the drawer closes, moves on, or the section is
 hidden.
+
+A Shift-click opens another drawer beside the ones out, or closes one, and a
+plain click with several out closes them all (spec 088). Each drawer has its
+own detail, poll, pause, drill, filter and switch.
 */
 type drawer struct {
-	// sw chooses between a section's details where it has several: the
-	// cooler's lists. last is the detail each section last showed, which is
-	// what its card opens on next; it is not kept across a restart.
-	sw   *glance.Switch
-	last map[string]string
+	// dr is the design system's drawer this one draws in, and seq when it
+	// opened, which orders the open drawers as the row does.
+	dr  *glance.Drawer
+	seq int
 
+	// sw chooses between a section's details where it has several: the
+	// cooler's lists.
+	sw     *glance.Switch
 	filter *glance.Filter
 	meters []*glance.Meter
 	rows   []*glance.Row
@@ -61,12 +68,10 @@ type drawer struct {
 
 	// parts are the pieces of a detail made of details, every account's
 	// usage, built to its shape and set in place until the shape changes.
-	// rules is how many rules stand between them. name is the width a
-	// line's name column is pinned to.
+	// rules is how many rules stand between them.
 	parts      []drawerPart
 	rules      int
 	partsShape string
-	name       float32
 
 	// paused stops the reading of the open detail; confirming is the kill
 	// waiting for its second click; killed is what the last one did, said
@@ -79,19 +84,31 @@ type drawer struct {
 	confirming bool
 	killed     string
 
-	// vpn is the presses on a VPN's rows, and openURL gives a sign-in address to the
-	// person's browser; a test replaces it, so no test opens one.
-	vpn     vpnPresses
-	openURL func(*url.URL) error
+	// vpn is the presses on a VPN's rows.
+	vpn vpnPresses
 
 	// stop ends the poll of what is shown, and gen tells a result that
 	// arrives after the drawer has moved on from one that is current.
 	stop context.CancelFunc
 	gen  int
+}
 
-	// desk is the compositor's half: the room beside the window, a held
-	// edge, the keyboard handed back.
+/*
+drawerKit is what every drawer shares: what each card last showed, which is
+what it opens on next (it is not kept across a restart), the width a line's
+name column is pinned to, the compositor, and where a sign-in address goes.
+*/
+type drawerKit struct {
+	last map[string]string
+	name float32
 	desk Desk
+
+	// openURL gives a sign-in address to the person's browser; a test
+	// replaces it, so no test opens one.
+	openURL func(*url.URL) error
+
+	// seq counts openings, for drawer.seq.
+	seq int
 }
 
 /*
@@ -111,7 +128,9 @@ type Desk interface {
 	// window can do all three itself, on Windows, nothing is asked.
 	Asks() bool
 	Room(ctx context.Context) (left, right float32, ok bool)
-	HoldEdge(ctx context.Context, on bool) bool
+	// HoldEdge holds the edge away from the drawers, the right one when
+	// they are on the left, and reports whether the right edge is held.
+	HoldEdge(ctx context.Context, left bool) bool
 	Yield(ctx context.Context)
 	Stop()
 }
@@ -150,23 +169,29 @@ const DrawerMeters = 8
 // its note.
 const DrawerNotes = 4
 
-// buildDrawer makes the drawer's pieces and points the panel's clicks at it.
-// The pieces are built once; a detail sets them in place.
+// buildDrawer makes the first drawer's pieces and points the panel's clicks
+// at the drawers. More are made as Shift-clicks ask for them.
 func (p *Panel) buildDrawer(a fyne.App, o Options) {
-	d := &drawer{sw: glance.NewSwitch(), last: map[string]string{}, filter: glance.NewFilter(), desk: o.Desk}
-	if d.desk == nil {
-		d.desk = noDesk{}
+	p.kit = drawerKit{last: map[string]string{}, desk: o.Desk, openURL: a.OpenURL, name: detailNameWidth(a, o)}
+	if p.kit.desk == nil {
+		p.kit.desk = noDesk{}
 	}
+	p.newDrawer(p.win.Panel().Drawer())
+	p.win.Panel().OnTapped = p.tapped
+}
+
+// newDrawer gives one of the panel's drawers its pieces, built once; a
+// detail sets them in place.
+func (p *Panel) newDrawer(dr *glance.Drawer) *drawer {
+	d := &drawer{dr: dr, sw: glance.NewSwitch(), filter: glance.NewFilter()}
 	d.vpn = vpnPresses{running: map[string]*vpnRun{}, said: map[string]view.DetailLine{}}
-	d.openURL = a.OpenURL
-	d.filter.OnChanged = p.renderDrawer
-	d.sw.OnChanged = p.chosen
-	d.name = detailNameWidth(a, o)
-	name := d.name
+	d.filter.OnChanged = func() { p.renderOne(d) }
+	d.sw.OnChanged = func(id string) { p.chosen(d, id) }
+	d.sw.OnShifted = func(id string) { p.shiftChosen(d, id) }
 	// Every line starts hidden: a line is shown when a detail has something
 	// to put on it.
 	for range DrawerRows {
-		r := glance.NewRowWidth("", "", name)
+		r := glance.NewRowWidth("", "", p.kit.name)
 		r.SetShown(false)
 		d.rows = append(d.rows, r)
 	}
@@ -178,16 +203,14 @@ func (p *Panel) buildDrawer(a fyne.App, o Options) {
 	for range DrawerMeters {
 		d.meters = append(d.meters, glance.NewMeter("", MeterLabelWidth))
 	}
-	p.drawer = d
-
-	dr := p.win.Panel().Drawer()
 	dr.SetFilter(d.filter)
 	dr.SetSwitch(d.sw)
 	// A Wayland client cannot give the keyboard away; the compositor is
 	// asked, off this thread. On Windows the design system has already done
 	// it and this is not called.
-	dr.SetYield(func() { go d.desk.Yield(context.Background()) })
-	p.win.Panel().OnTapped = p.tapped
+	dr.SetYield(func() { go p.kit.desk.Yield(context.Background()) })
+	p.drawers = append(p.drawers, d)
+	return d
 }
 
 // detailNameWidth is the width a detail line's name column is pinned to:
@@ -232,27 +255,168 @@ func (p *Panel) source(key string) (panel.Source, bool) {
 	return nil, false
 }
 
-// tapped opens the drawer on the card clicked, changes what it shows when
-// another card's is out, or closes it on a second click of the same card
-// (spec 062 R1). A click on a card with no detail does nothing.
+// detailer is the section's source as one with details.
+func (p *Panel) detailer(section string) (panel.Detailer, bool) {
+	src, ok := p.source(section)
+	if !ok {
+		return nil, false
+	}
+	det, ok := src.(panel.Detailer)
+	return det, ok
+}
+
+// openDrawers are the drawers out, in the order they opened, which is the
+// row's order from the cards outwards.
+func (p *Panel) openDrawers() []*drawer {
+	var out []*drawer
+	for _, d := range p.drawers {
+		if d.dr.Open() {
+			out = append(out, d)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].seq < out[j].seq })
+	return out
+}
+
+// showing is the open drawer showing a section's detail, or the list a drill
+// shown in it was reached through, or nil.
+func (p *Panel) showing(section, id string) *drawer {
+	det, ok := p.detailer(section)
+	if !ok {
+		return nil
+	}
+	for _, d := range p.openDrawers() {
+		if d.section == section && detailRoot(det, d.id) == id {
+			return d
+		}
+	}
+	return nil
+}
+
+/*
+tapped answers a click on a card (spec 062 R1, spec 088 R1-R4, R7).
+
+A plain click with one drawer out or none opens the card's detail, changes
+what the drawer shows, or closes it on a second click of the same card; with
+several out it closes them all. A Shift-click is shiftTapped. A click on a
+card with no detail does nothing.
+*/
 func (p *Panel) tapped(tap glance.Tap) {
 	section, opens := p.subject(tap)
-	src, ok := p.source(section)
+	det, ok := p.detailer(section)
 	if !ok || opens == "" {
 		return
 	}
-	det, ok := src.(panel.Detailer)
-	if !ok {
+	if tap.Shift {
+		p.shiftTapped(det, section, opens)
 		return
 	}
-	d := p.drawer
-	if p.win.Panel().Drawer().Open() && d.section == section {
-		p.closeDrawer()
+	open := p.openDrawers()
+	switch {
+	case len(open) > 1:
+		p.closeAll()
+	case len(open) == 1 && open[0].section == section:
+		p.closeDrawer(open[0])
+	default:
+		id := p.opensOn(det, section, opens)
+		if id == "" {
+			return
+		}
+		d := p.drawers[0]
+		if len(open) == 1 {
+			d = open[0]
+		}
+		p.showDetail(d, det, section, id)
+	}
+}
+
+/*
+shiftTapped adds a drawer for the card's next detail not already out, in the
+order its switch reads starting with the one it opens on, or closes the
+card's drawer opened last when every one of its details is out (spec 088 R3,
+R4). For a card with one detail that is a toggle.
+*/
+func (p *Panel) shiftTapped(det panel.Detailer, section, opens string) {
+	first := p.opensOn(det, section, opens)
+	if first == "" {
 		return
 	}
-	if id := d.opensOn(det, section, opens); id != "" {
-		p.showDetail(det, section, id)
+	order := []string{first}
+	for _, c := range choices(det, first) {
+		order = append(order, c.ID)
 	}
+	for _, id := range order {
+		if p.showing(section, id) == nil {
+			p.addDrawer(det, section, id)
+			return
+		}
+	}
+	open := p.openDrawers()
+	for i := len(open) - 1; i >= 0; i-- {
+		if open[i].section == section {
+			p.closeDrawer(open[i])
+			return
+		}
+	}
+}
+
+/*
+addDrawer shows a detail in a drawer of its own beside those out, where the
+screen has room for one, and in the outermost where it has not (spec 088 R8,
+R9). With none out it is the first drawer, which opens whatever the room.
+
+The room is the window's to read on Windows. On Plasma the compositor is
+asked, off the UI thread as the first drawer's place is; elsewhere the row is
+held to glance.DrawersWithoutRoom.
+*/
+func (p *Panel) addDrawer(det panel.Detailer, section, id string) {
+	pn := p.win.Panel()
+	if pn.Opened() == 0 {
+		p.showDetail(p.drawers[0], det, section, id)
+		return
+	}
+	fits, known := pn.FitsHere()
+	if known || !p.kit.desk.Asks() {
+		if !known {
+			fits = pn.Opened() < glance.DrawersWithoutRoom
+		}
+		p.placeNew(fits, det, section, id)
+		return
+	}
+	go func() {
+		left, right, ok := p.kit.desk.Room(context.Background())
+		p.do(func() {
+			fits := pn.Opened() < glance.DrawersWithoutRoom
+			if ok {
+				fits = pn.Fits(left, right)
+			}
+			p.placeNew(fits, det, section, id)
+		})
+	}()
+}
+
+// placeNew shows a detail in a closed drawer, made if need be, or in the
+// outermost when another would not fit. Nothing is resized for the second.
+func (p *Panel) placeNew(fits bool, det panel.Detailer, section, id string) {
+	if p.showing(section, id) != nil {
+		return // opened meanwhile, by another click
+	}
+	if !fits {
+		out := p.win.Panel().Outermost()
+		for _, d := range p.drawers {
+			if d.dr == out {
+				p.showDetail(d, det, section, id)
+				return
+			}
+		}
+	}
+	for _, d := range p.drawers {
+		if !d.dr.Open() {
+			p.showDetail(d, det, section, id)
+			return
+		}
+	}
+	p.showDetail(p.newDrawer(p.win.Panel().AddDrawer()), det, section, id)
 }
 
 /*
@@ -260,7 +424,7 @@ opensOn is the detail a section's card opens on: the one it last showed while
 that is still offered, then the one the section names, then the first of its
 choices (spec 062 R7). Empty when the source offers none of them.
 */
-func (d *drawer) opensOn(src panel.Detailer, section, opens string) string {
+func (p *Panel) opensOn(src panel.Detailer, section, opens string) string {
 	offered := src.Details()
 	has := func(id string) bool {
 		for _, info := range offered {
@@ -270,7 +434,7 @@ func (d *drawer) opensOn(src panel.Detailer, section, opens string) string {
 		}
 		return false
 	}
-	if last := d.last[section]; has(last) {
+	if last := p.kit.last[section]; has(last) {
 		return last
 	}
 	if has(opens) {
@@ -319,26 +483,43 @@ func detailRoot(src panel.Detailer, id string) string {
 	return root
 }
 
-// chosen shows the detail a person chose in the drawer's switch, in place of
-// the one shown (spec 062 R6).
-func (p *Panel) chosen(id string) {
-	d := p.drawer
-	src, ok := p.source(d.section)
-	if !ok {
+// chosen shows the detail a person chose in a drawer's switch, in place of
+// the one shown (spec 062 R6). A detail is out in one drawer at a time: one
+// that shows it already closes (spec 088 R6).
+func (p *Panel) chosen(d *drawer, id string) {
+	src, _ := p.source(d.section)
+	det, ok := p.detailer(d.section)
+	if !ok || !panel.Offers(src, id) {
 		return
 	}
-	if det, ok := src.(panel.Detailer); ok && panel.Offers(src, id) {
-		p.showDetail(det, d.section, id)
+	if other := p.showing(d.section, id); other != nil && other != d {
+		p.closeDrawer(other)
 	}
+	p.showDetail(d, det, d.section, id)
 }
 
-// showDetail points the drawer at a detail, opening it if it is closed, and
+// shiftChosen opens a choice of a drawer's switch in a drawer of its own, or
+// closes the drawer that shows it, this one included (spec 088 R5).
+func (p *Panel) shiftChosen(d *drawer, id string) {
+	section := d.section
+	src, _ := p.source(section)
+	det, ok := p.detailer(section)
+	if !ok || !panel.Offers(src, id) {
+		return
+	}
+	if other := p.showing(section, id); other != nil {
+		p.closeDrawer(other)
+		return
+	}
+	p.addDrawer(det, section, id)
+}
+
+// showDetail points a drawer at a detail, opening it if it is closed, and
 // starts the poll that keeps it current.
-func (p *Panel) showDetail(src panel.Detailer, section, id string) {
-	d := p.drawer
-	p.stopDetail()
+func (p *Panel) showDetail(d *drawer, src panel.Detailer, section, id string) {
+	p.stopDetail(d)
 	d.section, d.id = section, id
-	d.last[section] = id
+	p.kit.last[section] = id
 	d.detail = view.Detail{Section: section, ID: id, Title: title(src, id)}
 	d.filter.Clear()
 	// A drill keeps the switch of the list it was reached through, selected
@@ -348,19 +529,25 @@ func (p *Panel) showDetail(src panel.Detailer, section, id string) {
 	d.sw.SetChoices(choices(src, root))
 	d.sw.Select(root)
 
-	dr := p.win.Panel().Drawer()
+	dr := d.dr
 	dr.SetTitle(d.detail.Title)
 	start := func() {
-		p.drawerOut.Store(true)
+		if !dr.Open() {
+			p.kit.seq++
+			d.seq = p.kit.seq
+		}
 		dr.SetOpen(true)
-		p.renderDrawer()
-		p.pollDetail(src, id)
+		p.drawerOut.Store(true)
+		p.renderOne(d)
+		p.pollDetail(d, src, id)
 	}
-	if dr.Open() || !d.desk.Asks() {
+	// Only the first drawer out settles the side and the held edge; the
+	// rest go beyond it, on its side.
+	if dr.Open() || p.win.Panel().Opened() > 0 || !p.kit.desk.Asks() {
 		start()
 		return
 	}
-	p.placeDrawer(start)
+	p.placeDrawer(d, start)
 }
 
 /*
@@ -372,17 +559,17 @@ Asked off the UI thread: each is a round trip to the compositor of a
 millisecond or two, and one that has stopped answering must cost its timeout
 and not the panel. A drawer nobody could place opens on the right.
 */
-func (p *Panel) placeDrawer(open func()) {
-	d := p.drawer
-	dr := p.win.Panel().Drawer()
+func (p *Panel) placeDrawer(d *drawer, open func()) {
+	dr := d.dr
 	auto := dr.Auto()
 	gen := d.gen
+	desk := p.kit.desk
 	go func() {
 		ctx := context.Background()
 		var left, right float32
 		asked := false
 		if auto {
-			left, right, asked = d.desk.Room(ctx)
+			left, right, asked = desk.Room(ctx)
 		}
 		side := make(chan glance.Side, 1)
 		p.do(func() {
@@ -391,7 +578,7 @@ func (p *Panel) placeDrawer(open func()) {
 			}
 			side <- dr.Side()
 		})
-		held := d.desk.HoldEdge(ctx, <-side == glance.Left)
+		held := desk.HoldEdge(ctx, <-side == glance.Left)
 		p.do(func() {
 			if d.gen != gen {
 				return // closed, or moved on, while the compositor was asked
@@ -422,10 +609,9 @@ func title(src panel.Detailer, id string) string {
 	return id
 }
 
-// pollDetail reads the detail at its interval until the drawer moves on,
-// drawing each reading on the UI thread.
-func (p *Panel) pollDetail(src panel.Detailer, id string) {
-	d := p.drawer
+// pollDetail reads a drawer's detail at its interval until the drawer moves
+// on, drawing each reading on the UI thread.
+func (p *Panel) pollDetail(d *drawer, src panel.Detailer, id string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	d.stop = func() {
 		cancel()
@@ -469,7 +655,7 @@ func (p *Panel) pollDetail(src panel.Detailer, id string) {
 					detail.Title = d.detail.Title
 				}
 				d.detail = detail
-				p.renderDrawer()
+				p.renderOne(d)
 			})
 			select {
 			case <-ctx.Done():
@@ -480,10 +666,9 @@ func (p *Panel) pollDetail(src panel.Detailer, id string) {
 	}()
 }
 
-// stopDetail ends the poll of what the drawer shows. Results still on their
+// stopDetail ends the poll of what a drawer shows. Results still on their
 // way are dropped by the generation.
-func (p *Panel) stopDetail() {
-	d := p.drawer
+func (p *Panel) stopDetail(d *drawer) {
 	d.gen++
 	if d.stop != nil {
 		d.stop()
@@ -491,22 +676,44 @@ func (p *Panel) stopDetail() {
 	}
 }
 
-// closeDrawer pushes the drawer back and stops reading what it showed.
-func (p *Panel) closeDrawer() {
-	p.stopDetail()
-	p.drawer.section, p.drawer.id = "", ""
-	p.win.Panel().Drawer().SetOpen(false)
+// stopDetails ends every drawer's poll.
+func (p *Panel) stopDetails() {
+	for _, d := range p.drawers {
+		p.stopDetail(d)
+	}
+}
+
+// closeDrawer pushes a drawer back and stops reading what it showed. Those
+// beyond it move in.
+func (p *Panel) closeDrawer(d *drawer) {
+	p.stopDetail(d)
+	d.section, d.id = "", ""
+	d.dr.SetOpen(false)
+	p.drawerOut.Store(p.win.Panel().Opened() > 0)
+}
+
+// closeAll pushes every drawer back in one change of shape. Closed one at a
+// time they were a resize each, and on Plasma the window kept the drawers'
+// width with the cards stretched across it (fynedesygn spec 079).
+func (p *Panel) closeAll() {
+	for _, d := range p.openDrawers() {
+		p.stopDetail(d)
+		d.section, d.id = "", ""
+	}
+	p.win.Panel().CloseDrawers()
 	p.drawerOut.Store(false)
 }
 
-// applyDrawer brings the drawer into line with the settings: its side, and
-// closed if the section it shows is no longer shown (spec 060 R4, R16).
+// applyDrawer brings the drawers into line with the settings: their side,
+// and each closed whose section is no longer shown (spec 060 R4, R16; spec
+// 088 R11, R13).
 func (p *Panel) applyDrawer(c config.Config) {
-	d := p.drawer
-	dr := p.win.Panel().Drawer()
-	if dr.Open() && !c.Shows(d.section) {
-		p.closeDrawer()
+	for _, d := range p.openDrawers() {
+		if !c.Shows(d.section) {
+			p.closeDrawer(d)
+		}
 	}
+	dr := p.win.Panel().Drawer()
 	switch c.DrawerSideOrDefault() {
 	case config.DrawerRight:
 		dr.SetSide(glance.Right)
@@ -517,29 +724,36 @@ func (p *Panel) applyDrawer(c config.Config) {
 	}
 }
 
+// renderDrawer draws every drawer out. It runs on the UI thread, after a
+// reading and whenever the cards change.
+func (p *Panel) renderDrawer() {
+	for _, d := range p.drawers {
+		p.renderOne(d)
+	}
+}
+
 /*
-renderDrawer draws the detail the drawer holds: its meters, then as many of
-its lines as the height fits, then its reasons and its note. It runs on the
-UI thread, after each reading and whenever the filter or the cards change.
+renderOne draws the detail a drawer holds: its meters, then as many of its
+lines as the height fits, then its reasons and its note. It runs on the UI
+thread, after each reading and whenever the filter or the cards change.
 
 The lines are narrowed by the filter before they are cut to the height, so a
 name far down a long list can be found. Nothing scrolls: the list is as long
 as the cards are tall (spec 060 R5).
 */
-func (p *Panel) renderDrawer() {
-	d := p.drawer
-	dr := p.win.Panel().Drawer()
-	if d == nil || !dr.Open() {
+func (p *Panel) renderOne(d *drawer) {
+	if d == nil || !d.dr.Open() {
 		return
 	}
+	dr := d.dr
 	// The reading is kept as it was read and decorated on the way to being
 	// drawn. Writing the decoration back would add it again at the next
 	// render, and a drawer redrawn three times between readings would grow
 	// three pause rows.
-	p.setControls()
-	detail := p.decorate(d.detail)
+	p.setControls(d)
+	detail := p.decorate(d, d.detail)
 	if len(detail.Parts) > 0 {
-		p.renderParts(detail)
+		p.renderParts(d, detail)
 		return
 	}
 	d.partsShape, d.parts = "", nil
@@ -604,7 +818,7 @@ func (p *Panel) renderDrawer() {
 	// A list of lines is clickable on the same terms a breakdown of parts
 	// is: the row carries what it asks for and the drawer reports which was
 	// hit. A row with nothing to ask does nothing.
-	dr.SetRowTapped(p.tappedRow, d.rows...)
+	dr.SetRowTapped(func(r *glance.Row) { p.tappedRow(d, r) }, d.rows...)
 	for i, r := range d.notes {
 		if i >= len(tail) {
 			r.SetShown(false)
@@ -694,9 +908,8 @@ when it is taller than the cards (R11). The pieces are built when the shape
 changes, an account or a limit arriving or going, and set in place otherwise,
 so a reading leaves a scrolled breakdown where it is (R12).
 */
-func (p *Panel) renderParts(detail view.Detail) {
-	d := p.drawer
-	dr := p.win.Panel().Drawer()
+func (p *Panel) renderParts(d *drawer, detail view.Detail) {
+	dr := d.dr
 	dr.SetTitle(detail.Title)
 	d.filter.Key = 0 // not a list: nothing to filter, as for one breakdown
 
@@ -740,7 +953,7 @@ func (p *Panel) renderParts(detail view.Detail) {
 				pieces = append(pieces, m)
 			}
 			for range part.Lines {
-				r := glance.NewRowWidth("", "", d.name)
+				r := glance.NewRowWidth("", "", p.kit.name)
 				built.rows = append(built.rows, r)
 				pieces = append(pieces, r)
 			}
@@ -757,7 +970,7 @@ func (p *Panel) renderParts(detail view.Detail) {
 		for _, built := range d.parts {
 			taps = append(taps, built.rows...)
 		}
-		dr.SetRowTapped(p.tappedRow, taps...)
+		dr.SetRowTapped(func(r *glance.Row) { p.tappedRow(d, r) }, taps...)
 	}
 	for i, part := range detail.Parts {
 		built := d.parts[i]
@@ -780,17 +993,16 @@ func (p *Panel) renderParts(detail view.Detail) {
 	}
 }
 
-// restyleDrawer repaints the drawer's own pieces in the current theme.
+// restyleDrawer repaints the drawers' own pieces in the current theme.
 func (p *Panel) restyleDrawer() {
-	if p.drawer == nil {
-		return
-	}
-	for _, m := range p.drawer.meters {
-		m.Restyle()
-	}
-	for _, part := range p.drawer.parts {
-		for _, m := range part.meters {
+	for _, d := range p.drawers {
+		for _, m := range d.meters {
 			m.Restyle()
+		}
+		for _, part := range d.parts {
+			for _, m := range part.meters {
+				m.Restyle()
+			}
 		}
 	}
 	p.renderDrawer()

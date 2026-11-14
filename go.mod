@@ -13,7 +13,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.12.1
-	github.com/ushineko/fynedesygn v0.1.113
+	github.com/ushineko/fynedesygn v0.1.117
 	github.com/ushineko/fynstall v0.2.6
 	github.com/ushineko/sanshoku v0.1.18
 	go.yaml.in/yaml/v3 v3.0.6

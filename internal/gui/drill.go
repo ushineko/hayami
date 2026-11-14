@@ -36,16 +36,15 @@ and the second answers it, and the question is drawn where the row was, so
 the pointer is already over the answer and a person who meant to read is not
 one click from ending a process.
 */
-func (p *Panel) tappedRow(r *glance.Row) {
+func (p *Panel) tappedRow(d *drawer, r *glance.Row) {
 	ask := p.rowAsk(r)
 	if ask == "" {
 		return
 	}
 	if action, name, ok := view.ParseVPNAct(ask); ok {
-		p.pressVPN(ask, action, name)
+		p.pressVPN(d, ask, action, name)
 		return
 	}
-	d := p.drawer
 	src, ok := p.source(d.section)
 	if !ok {
 		return
@@ -56,40 +55,39 @@ func (p *Panel) tappedRow(r *glance.Row) {
 	}
 	switch ask {
 	case view.ActPause:
-		p.setPaused(!d.paused.Load())
+		p.setPaused(d, !d.paused.Load())
 	case view.ActBack:
 		d.confirming = false
-		p.showDetail(det, d.section, p.drillUp(d.id))
+		p.showDetail(d, det, d.section, p.drillUp(d, d.id))
 	case view.ActKill:
 		d.confirming = true
-		p.renderDrawer()
+		p.renderOne(d)
 	case view.ActCancel:
 		d.confirming = false
-		p.renderDrawer()
+		p.renderOne(d)
 	case view.ActConfirm:
 		d.confirming = false
-		p.kill(d.id)
+		p.kill(d, d.id)
 	default:
 		d.confirming = false
 		// A drill is read while it is read: opening one stops the list
 		// moving under the reader, which is what they asked for by
 		// stopping on it.
 		was := d.paused.Load()
-		p.showDetail(det, d.section, ask)
-		p.setPaused(was)
+		p.showDetail(d, det, d.section, ask)
+		p.setPaused(d, was)
 	}
 }
 
-// setPaused stops or restarts the reading of the open detail. The cards
-// behind the drawer are not touched: pause is a property of what is being
-// read, not of the panel.
-func (p *Panel) setPaused(on bool) {
-	d := p.drawer
+// setPaused stops or restarts the reading of a drawer's detail. The cards
+// and the other drawers are not touched: pause is a property of what is
+// being read, not of the panel.
+func (p *Panel) setPaused(d *drawer, on bool) {
 	if d.paused.Load() == on {
 		return
 	}
 	d.paused.Store(on)
-	p.renderDrawer()
+	p.renderOne(d)
 }
 
 /*
@@ -100,9 +98,8 @@ The highlight is on only while the reading is stopped. A list that is moving
 is not one a person is picking a row out of, and lighting rows as they slide
 under a still pointer would be the panel twitching at them.
 */
-func (p *Panel) setControls() {
-	d := p.drawer
-	dr := p.win.Panel().Drawer()
+func (p *Panel) setControls(d *drawer) {
+	dr := d.dr
 	if !p.drills(d.section) {
 		dr.SetButtons()
 		dr.SetLeadButton(nil)
@@ -110,7 +107,7 @@ func (p *Panel) setControls() {
 		return
 	}
 	words := p.words()
-	if up := p.drillUp(d.id); up != d.id {
+	if up := p.drillUp(d, d.id); up != d.id {
 		src, _ := p.source(d.section)
 		det, _ := src.(panel.Detailer)
 		dr.SetLeadButton(&glance.DrawerSpec{
@@ -118,7 +115,7 @@ func (p *Panel) setControls() {
 			Words: []string{words.back},
 			On: func() {
 				d.confirming = false
-				p.showDetail(det, d.section, up)
+				p.showDetail(d, det, d.section, up)
 			},
 		})
 	} else {
@@ -127,12 +124,12 @@ func (p *Panel) setControls() {
 
 	pause := glance.DrawerSpec{
 		Label: words.pause,
-		On:    func() { p.setPaused(true) },
+		On:    func() { p.setPaused(d, true) },
 		Words: []string{words.pause, words.resume},
 	}
 	if d.paused.Load() {
 		pause.Label = words.resume
-		pause.On = func() { p.setPaused(false) }
+		pause.On = func() { p.setPaused(d, false) }
 		pause.Active = true
 	}
 	// The rows answer to a click whether or not the reading is stopped, so
@@ -142,7 +139,7 @@ func (p *Panel) setControls() {
 
 	// The kill is on the page about one process and nowhere else, and only
 	// while there is a process there to end.
-	if !p.killable() {
+	if !p.killable(d) {
 		d.confirming = false
 		dr.SetButtons(pause)
 		return
@@ -151,14 +148,14 @@ func (p *Panel) setControls() {
 		dr.SetButtons(
 			glance.DrawerSpec{
 				Label: cancelLabel,
-				On:    func() { d.confirming = false; p.renderDrawer() },
+				On:    func() { d.confirming = false; p.renderOne(d) },
 				Words: []string{cancelLabel},
 			},
 			glance.DrawerSpec{
 				Label: confirmLabel,
 				On: func() {
 					d.confirming = false
-					p.kill(d.id)
+					p.kill(d, d.id)
 				},
 				Words: []string{killLabel, confirmLabel},
 			},
@@ -168,7 +165,7 @@ func (p *Panel) setControls() {
 	dr.SetButtons(
 		glance.DrawerSpec{
 			Label: killLabel,
-			On:    func() { d.confirming = true; p.renderDrawer() },
+			On:    func() { d.confirming = true; p.renderOne(d) },
 			Words: []string{killLabel, confirmLabel},
 		},
 		pause)
@@ -176,8 +173,8 @@ func (p *Panel) setControls() {
 
 // drillUp asks the section where its way out leads, and stays put for a
 // section that has no drills.
-func (p *Panel) drillUp(id string) string {
-	src, ok := p.source(p.drawer.section)
+func (p *Panel) drillUp(d *drawer, id string) string {
+	src, ok := p.source(d.section)
 	if !ok {
 		return id
 	}
@@ -191,8 +188,8 @@ func (p *Panel) drillUp(id string) string {
 // killable reports whether the open page is about a process that is there to
 // be ended. The section says so by offering the action; this does not go
 // looking for processes of its own.
-func (p *Panel) killable() bool {
-	for _, l := range panel.DrillLines(p.drawer.detail) {
+func (p *Panel) killable(d *drawer) bool {
+	for _, l := range panel.DrillLines(d.detail) {
 		if l.Open == view.ActKill {
 			return true
 		}
@@ -213,7 +210,7 @@ The outcome is said on the page, with counts, because some of a tree can be
 ended and some refused: anything this user did not start answers with a
 refusal, and a panel that said nothing would look as though it had worked.
 */
-func (p *Panel) kill(id string) {
+func (p *Panel) kill(d *drawer, id string) {
 	pid, ok := panel.DrillPID(id)
 	if !ok {
 		return
@@ -223,8 +220,8 @@ func (p *Panel) kill(id string) {
 	if err != nil {
 		// A machine where this is not done yet says so, rather than
 		// reporting nought sent as though the processes had refused.
-		p.drawer.killed = err.Error()
-		p.renderDrawer()
+		d.killed = err.Error()
+		p.renderOne(d)
 		return
 	}
 	// Nothing asked and nothing refused is a tree with nothing to ask
@@ -233,11 +230,11 @@ func (p *Panel) kill(id string) {
 	grace := time.Duration(0)
 	if sent > 0 || refused > 0 {
 		grace = killGrace
-		p.drawer.killed = fmt.Sprintf("%s sent to %d", core.EndAsk, sent)
+		d.killed = fmt.Sprintf("%s sent to %d", core.EndAsk, sent)
 		if refused > 0 {
-			p.drawer.killed += fmt.Sprintf(", %d refused", refused)
+			d.killed += fmt.Sprintf(", %d refused", refused)
 		}
-		p.renderDrawer()
+		p.renderOne(d)
 	}
 
 	go func() {
@@ -245,18 +242,18 @@ func (p *Panel) kill(id string) {
 		left := alive(pids)
 		if len(left) == 0 {
 			p.do(func() {
-				p.drawer.killed = fmt.Sprintf("gone (%d ended)", len(pids))
-				p.renderDrawer()
+				d.killed = fmt.Sprintf("gone (%d ended)", len(pids))
+				p.renderOne(d)
 			})
 			return
 		}
 		killed, denied, _ := endAll(left, true)
 		p.do(func() {
-			p.drawer.killed = fmt.Sprintf("%s sent to %d", core.EndForce, killed)
+			d.killed = fmt.Sprintf("%s sent to %d", core.EndForce, killed)
 			if denied > 0 {
-				p.drawer.killed += fmt.Sprintf(", %d refused", denied)
+				d.killed += fmt.Sprintf(", %d refused", denied)
 			}
-			p.renderDrawer()
+			p.renderOne(d)
 		})
 	}()
 }
@@ -274,10 +271,8 @@ stopped the list or is being asked to confirm something. So the state lives
 here and is drawn on top, which also means every section gets the pause from
 the one place.
 */
-func (p *Panel) decorate(d view.Detail) view.Detail {
-	drawer := p.drawer
-	_ = drawer
-	d = p.withVPNControls(d)
+func (p *Panel) decorate(drawer *drawer, d view.Detail) view.Detail {
+	d = p.withVPNControls(drawer, d)
 	if !p.drills(d.Section) {
 		return d
 	}

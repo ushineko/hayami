@@ -432,18 +432,55 @@ func Tap(p *Panel, key, rowID string, meter int) {
 	p.win.Panel().OnTapped(tap)
 }
 
-// DrawerOpen reports whether the drawer is out, and DrawerTitle its heading.
-func DrawerOpen(p *Panel) bool    { return p.win.Panel().Drawer().Open() }
-func DrawerTitle(p *Panel) string { return p.win.Panel().Drawer().Title() }
+// first is the drawer the single-drawer helpers below read: the one out
+// nearest the cards, or the first made when none is out.
+func (p *Panel) first() *drawer {
+	if open := p.openDrawers(); len(open) > 0 {
+		return open[0]
+	}
+	return p.drawers[0]
+}
+
+// DrawerOpen reports whether a drawer is out, and DrawerTitle the heading of
+// the one nearest the cards.
+func DrawerOpen(p *Panel) bool    { return p.first().dr.Open() }
+func DrawerTitle(p *Panel) string { return p.first().dr.Title() }
+
+// OpenDrawers are the subjects of the drawers out, from the cards outwards,
+// each "section/id".
+func OpenDrawers(p *Panel) []string {
+	var out []string
+	for _, d := range p.openDrawers() {
+		out = append(out, d.section+"/"+d.id)
+	}
+	return out
+}
+
+// OpenedInLibrary is how many drawers the design system has out, which is
+// what the window's width follows.
+func OpenedInLibrary(p *Panel) int { return p.win.Panel().Opened() }
+
+// ShiftTapSection Shift-clicks a section's card.
+func ShiftTapSection(p *Panel, key string) {
+	p.win.Panel().OnTapped(glance.Tap{Card: p.cards[key].card, Shift: true})
+}
+
+// ChooseIn and ShiftChooseIn click a choice in the switch of the drawer out
+// at index i from the cards, plainly or with Shift held.
+func ChooseIn(p *Panel, i int, id string)      { p.openDrawers()[i].sw.OnChanged(id) }
+func ShiftChooseIn(p *Panel, i int, id string) { p.openDrawers()[i].sw.OnShifted(id) }
+
+// PauseIn stops the reading of the drawer out at index i, as its button does.
+func PauseIn(p *Panel, i int) { p.setPaused(p.openDrawers()[i], true) }
 
 // DrawerSubject is the section and the detail the drawer is open on.
-func DrawerSubject(p *Panel) (section, id string) { return p.drawer.section, p.drawer.id }
+func DrawerSubject(p *Panel) (section, id string) { return p.first().section, p.first().id }
 
 // DrawerLines are the lines the drawer shows, top to bottom, each its texts
 // joined; DrawerNotes the lines under them; DrawerMeters the labels of the
 // meters above them.
-func DrawerLines(p *Panel) []string     { return shownRows(p.drawer.rows) }
-func DrawerNoteLines(p *Panel) []string { return shownRows(p.drawer.notes) }
+func DrawerLines(p *Panel) []string     { return shownRows(p.first().rows) }
+func DrawerNoteLines(p *Panel) []string { return shownRows(p.first().notes) }
 
 func shownRows(rows []*glance.Row) []string {
 	var out []string
@@ -459,17 +496,17 @@ func shownRows(rows []*glance.Row) []string {
 // is nothing to choose or the switch is not in the window; DrawerChosen is
 // the detail selected in it.
 func DrawerChoices(p *Panel) []string {
-	sw := p.drawer.sw.Object()
+	sw := p.first().sw.Object()
 	if !sw.Visible() || !holds(p.win.Window().Canvas().Content(), sw) {
 		return nil
 	}
 	var out []string
-	for _, c := range p.drawer.sw.Choices() {
+	for _, c := range p.first().sw.Choices() {
 		out = append(out, c.Label)
 	}
 	return out
 }
-func DrawerChosen(p *Panel) string { return p.drawer.sw.Selected() }
+func DrawerChosen(p *Panel) string { return p.first().sw.Selected() }
 
 // holds reports whether an object is drawn under another: a switch whose
 // visible flag is set but which no layout was given is not on screen (#226).
@@ -508,7 +545,7 @@ func TypeKey(p *Panel, name fyne.KeyName) {
 // DrawerPartMeters how many meters each has.
 func DrawerPartHeads(p *Panel) []string {
 	var out []string
-	for _, part := range p.drawer.parts {
+	for _, part := range p.first().parts {
 		out = append(out, strings.Join(visibleTexts(part.head.Object()), "|"))
 	}
 	return out
@@ -516,42 +553,42 @@ func DrawerPartHeads(p *Panel) []string {
 
 func DrawerPartMeters(p *Panel) []int {
 	var out []int
-	for _, part := range p.drawer.parts {
+	for _, part := range p.first().parts {
 		out = append(out, len(part.meters))
 	}
 	return out
 }
 
 // DrawerRules is how many rules the drawer draws between its parts.
-func DrawerRules(p *Panel) int { return p.drawer.rules }
+func DrawerRules(p *Panel) int { return p.first().rules }
 
 // DrawerPartLines are the lines of one part, top to bottom, then its notes.
 func DrawerPartLines(p *Panel, i int) []string {
-	return append(shownRows(p.drawer.parts[i].rows), shownRows(p.drawer.parts[i].notes)...)
+	return append(shownRows(p.first().parts[i].rows), shownRows(p.first().parts[i].notes)...)
 }
 
 // DrawerOffset is how far the drawer's content is scrolled, and DrawerScrolls
 // whether it scrolls at all when it is taller than the room.
-func DrawerOffset(p *Panel) float32 { return p.win.Panel().Drawer().Offset() }
-func DrawerScrolls(p *Panel) bool   { return p.win.Panel().Drawer().Scrolling() }
+func DrawerOffset(p *Panel) float32 { return p.first().dr.Offset() }
+func DrawerScrolls(p *Panel) bool   { return p.first().dr.Scrolling() }
 
 // DrawerMeterCount is how many meters the content of the drawer holds.
-func DrawerMeterCount(p *Panel) int { return p.drawer.shownMeters }
+func DrawerMeterCount(p *Panel) int { return p.first().shownMeters }
 
 // DrawerFit is how many lines the drawer has room for under its filter.
 func DrawerFit(p *Panel) int {
-	return p.win.Panel().Drawer().Fit(p.drawer.rows[0], p.drawer.filter)
+	return p.first().dr.Fit(p.first().rows[0], p.first().filter)
 }
 
 // FilterType types into the panel as a person would, and FilterKey presses a
 // key. FilterText is what the filter holds.
 func FilterType(p *Panel, text string) {
 	for _, r := range text {
-		p.drawer.filter.TypedRune(r)
+		p.first().filter.TypedRune(r)
 	}
 }
-func FilterKey(p *Panel, name fyne.KeyName) { p.drawer.filter.TypedKey(&fyne.KeyEvent{Name: name}) }
-func FilterText(p *Panel) string            { return p.drawer.filter.Text() }
+func FilterKey(p *Panel, name fyne.KeyName) { p.first().filter.TypedKey(&fyne.KeyEvent{Name: name}) }
+func FilterText(p *Panel) string            { return p.first().filter.Text() }
 
 // DrawerSide is the side the drawer is set to and whether it chooses by
 // room.
@@ -561,12 +598,12 @@ func DrawerSide(p *Panel) (side glance.Side, auto bool) {
 }
 
 // CloseDrawer closes the drawer as a click on its subject does.
-func CloseDrawer(p *Panel) { p.closeDrawer() }
+func CloseDrawer(p *Panel) { p.closeDrawer(p.first()) }
 
 // AsksNothing reports whether the panel's drawer has no compositor to ask,
 // which is what a panel built without a Desk must be.
 func AsksNothing(p *Panel) bool {
-	_, none := p.drawer.desk.(noDesk)
+	_, none := p.kit.desk.(noDesk)
 	return none
 }
 
@@ -590,9 +627,9 @@ func Choices(src panel.Detailer, id string) []glance.Choice { return choices(src
 
 // PressVPNRow clicks the row of a drawer's part whose name starts with label.
 func PressVPNRow(p *Panel, part int, label string) bool {
-	for _, r := range p.drawer.parts[part].rows {
+	for _, r := range p.first().parts[part].rows {
 		if r.Shown() && strings.HasPrefix(r.ID(), "!vpn/") && strings.Contains(strings.Join(visibleTexts(r.Object()), " "), label) {
-			p.tappedRow(r)
+			p.tappedRow(p.first(), r)
 			return true
 		}
 	}
@@ -600,17 +637,17 @@ func PressVPNRow(p *Panel, part int, label string) bool {
 }
 
 // OpenURLWith makes f what a sign-in address is given to.
-func OpenURLWith(p *Panel, f func(*url.URL) error) { p.drawer.openURL = f }
+func OpenURLWith(p *Panel, f func(*url.URL) error) { p.kit.openURL = f }
 
 // LapseVPNQuestion makes the question standing on a VPN's row older than it may be.
-func LapseVPNQuestion(p *Panel) { p.drawer.vpn.askedAt = time.Now().Add(-2 * vpnConfirmLapse) }
+func LapseVPNQuestion(p *Panel) { p.first().vpn.askedAt = time.Now().Add(-2 * vpnConfirmLapse) }
 
 // StartVPNPress is a press with the question already answered, for a test of what
 // comes after it.
 func StartVPNPress(p *Panel, action, name string) {
 	ask := view.VPNAct(action, name)
-	p.drawer.vpn.asking, p.drawer.vpn.askedAt = ask, time.Now()
-	p.pressVPN(ask, action, name)
+	p.first().vpn.asking, p.first().vpn.askedAt = ask, time.Now()
+	p.pressVPN(p.first(), ask, action, name)
 }
 
 // VPNPressMarker is what starts a row that can be pressed.
@@ -619,7 +656,7 @@ func VPNPressMarker(p *Panel) string { return p.words().press }
 // DrawerPlot is one part's plot: the time it drifts over, what it holds for a trace,
 // and false when the part has no plot.
 func DrawerPlot(p *Panel, part int, trace string) (time.Duration, []float64, bool) {
-	plot := p.drawer.parts[part].plot
+	plot := p.first().parts[part].plot
 	if plot == nil {
 		return 0, nil, false
 	}

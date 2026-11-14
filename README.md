@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.13.1
+**Version**: 0.14.0
 
 *a chart you read at a glance*
 
@@ -83,8 +83,16 @@ The usage drawer is not a list. When every account does not fit the cards'
 height it scrolls inside the drawer, by the wheel or by Up, Down, Page Up,
 Page Down, Home and End, and the panel stays the height it was.
 
+**Several at once.** Shift-click a card to open its drawer beside the ones
+already open; on the cooler card each Shift-click opens the next of its
+lists, CPU, then GPU, then Mem. Shift-click a card whose drawer is open to
+close just that one, or Shift-click a choice in a drawer's switch to open it
+in a drawer of its own. A plain click with several open closes them all.
+The drawers go as far as the screen has room; after that a Shift-click shows
+the new detail in the outermost drawer.
+
 Nothing here is read until the drawer is open, and it stops when the drawer
-closes. The drawer opens on whichever side of the panel the screen has room
+closes. The drawers open on whichever side of the panel the screen has room
 on; Preferences, Window can name a side.
 
 The network list is partial and says so under the list:
@@ -566,8 +574,8 @@ a titlebar. KWin already places an active full-screen window over the panel,
 so the Windows hide-for-full-screen option is not needed there.
 
 The detail drawer needs KWin for three things a Wayland program cannot do
-itself: learn how much room is beside the panel, grow leftwards, and give the
-keyboard back to the window you were in. hayami loads small KWin scripts for
+itself: learn how much room is beside the panel, grow sideways without moving
+the cards, and give the keyboard back to the window you were in. hayami loads small KWin scripts for
 these while it runs and unloads them when it stops. Without KWin the drawer
 opens on the right and the panel keeps the keyboard after a click.
 
@@ -690,6 +698,20 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.14.0 (2026-11-14)
+
+- **Added**: several drawers at once (spec 088, #320). Shift-click a card to
+  open its detail beside the drawers already out, or to close its own; on the
+  cooler card each Shift-click opens the next of its lists. Shift-click a
+  choice in a drawer's switch to open it beside. A plain click with several
+  out closes them all. The row stops where the screen does, and the outermost
+  takes the next detail. Each drawer has its own reading, pause, drill and
+  filter. fynedesygn 0.1.117.
+- **Fixed**: a drawer on the right moved the cards left by half its width on
+  Plasma 6.8, which keeps a window's centre as it grows. The panel now holds
+  its left edge for drawers on the right, as it holds the right edge for
+  drawers on the left (fynedesygn #236).
 
 ### 0.13.1 (2026-11-06)
 

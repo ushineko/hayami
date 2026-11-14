@@ -55,8 +55,7 @@ type vpnPresses struct {
 // connection: the same one again is ignored, since a second connect would close the
 // session waiting at its sign-in page, and another replaces it, so that a person can
 // disconnect a connect that is taking too long.
-func (p *Panel) pressVPN(ask, action, name string) {
-	d := p.drawer
+func (p *Panel) pressVPN(d *drawer, ask, action, name string) {
 	src, ok := p.source(d.section)
 	if !ok {
 		return
@@ -66,9 +65,9 @@ func (p *Panel) pressVPN(ask, action, name string) {
 		return
 	}
 	onePress := action == view.VPNConnect || action == view.VPNReenable
-	if !onePress && !p.confirmed(ask) {
+	if !onePress && !p.confirmed(d, ask) {
 		d.vpn.asking, d.vpn.askedAt = ask, time.Now()
-		p.renderDrawer()
+		p.renderOne(d)
 		return
 	}
 	d.vpn.asking = ""
@@ -83,7 +82,7 @@ func (p *Panel) pressVPN(ask, action, name string) {
 	run := &vpnRun{action: action, cancel: cancel}
 	d.vpn.running[name] = run
 	d.vpn.said[name] = view.VPNSaid(vpnWorking[action], false)
-	p.renderDrawer()
+	p.renderOne(d)
 
 	say := func(line view.DetailLine, last bool) {
 		p.do(func() {
@@ -97,11 +96,11 @@ func (p *Panel) pressVPN(ask, action, name string) {
 					delete(d.vpn.said, name)
 				}
 			}
-			p.renderDrawer()
+			p.renderOne(d)
 		})
 	}
 	signIn := func(u *url.URL) {
-		if err := d.openURL(u); err != nil {
+		if err := p.kit.openURL(u); err != nil {
 			say(view.VPNSaid(vpnNoBrowser, true), false)
 			return
 		}
@@ -118,8 +117,8 @@ func (p *Panel) pressVPN(ask, action, name string) {
 }
 
 // confirmed reports whether this press answers the question standing on its row.
-func (p *Panel) confirmed(ask string) bool {
-	v := &p.drawer.vpn
+func (p *Panel) confirmed(dr *drawer, ask string) bool {
+	v := &dr.vpn
 	return v.asking == ask && time.Since(v.askedAt) < vpnConfirmLapse
 }
 
@@ -127,7 +126,7 @@ func (p *Panel) confirmed(ask string) bool {
 // desktop panel's: the section offers them, and a terminal has no drawer to press
 // them in (spec 085 R20). A row to press starts with an arrow, because in every other
 // way it looks like the readings under it.
-func (p *Panel) withVPNControls(d view.Detail) view.Detail {
+func (p *Panel) withVPNControls(dr *drawer, d view.Detail) view.Detail {
 	if d.ID != view.DetailVPN {
 		return d
 	}
@@ -136,14 +135,14 @@ func (p *Panel) withVPNControls(d view.Detail) view.Detail {
 	for i, part := range d.Parts {
 		var lines []view.DetailLine
 		for _, c := range part.Controls {
-			if p.confirmed(c.Open) {
+			if p.confirmed(dr, c.Open) {
 				c.Value, c.Status = confirmLabel, view.Warn
 			}
 			c.Name = marker + c.Name
 			lines = append(lines, c)
 		}
 		name := strings.TrimPrefix(part.ID, view.DetailVPN+"/")
-		if said, ok := p.drawer.vpn.said[name]; ok {
+		if said, ok := dr.vpn.said[name]; ok {
 			lines = append(lines, said)
 		}
 		part.Lines = append(lines, part.Lines...)
