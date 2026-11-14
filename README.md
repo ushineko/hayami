@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.14.1
+**Version**: 0.14.2
 
 *a chart you read at a glance*
 
@@ -703,7 +703,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.14.2 (2026-11-14)
 
 - **Fixed**: a Claude login the server refused left the usage section showing
   old figures with nothing saying why (spec 089, #325). The account now says
