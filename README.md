@@ -83,8 +83,16 @@ The usage drawer is not a list. When every account does not fit the cards'
 height it scrolls inside the drawer, by the wheel or by Up, Down, Page Up,
 Page Down, Home and End, and the panel stays the height it was.
 
+**Several at once.** Shift-click a card to open its drawer beside the ones
+already open; on the cooler card each Shift-click opens the next of its
+lists, CPU, then GPU, then Mem. Shift-click a card whose drawer is open to
+close just that one, or Shift-click a choice in a drawer's switch to open it
+in a drawer of its own. A plain click with several open closes them all.
+The drawers go as far as the screen has room; after that a Shift-click shows
+the new detail in the outermost drawer.
+
 Nothing here is read until the drawer is open, and it stops when the drawer
-closes. The drawer opens on whichever side of the panel the screen has room
+closes. The drawers open on whichever side of the panel the screen has room
 on; Preferences, Window can name a side.
 
 The network list is partial and says so under the list:
@@ -690,6 +698,16 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: several drawers at once (spec 088, #320). Shift-click a card to
+  open its detail beside the drawers already out, or to close its own; on the
+  cooler card each Shift-click opens the next of its lists. Shift-click a
+  choice in a drawer's switch to open it beside. A plain click with several
+  out closes them all. The row stops where the screen does, and the outermost
+  takes the next detail. Each drawer has its own reading, pause, drill and
+  filter. fynedesygn 0.1.116.
 
 ### 0.13.1 (2026-11-06)
 
