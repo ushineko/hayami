@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.14.0
+**Version**: 0.14.1
 
 *a chart you read at a glance*
 
@@ -698,6 +698,12 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.14.1 (2026-11-14)
+
+- **Fixed**: on Windows the panel moved a pixel to the left each time several
+  drawers on the left closed at once, and the saved place followed it (#323).
+  fynedesygn 0.1.118 (fynedesygn #238).
 
 ### 0.14.0 (2026-11-14)
 
