@@ -52,8 +52,21 @@ type Drawer struct {
 	mu   sync.Mutex
 	conn *dbus.Conn
 	room chan [2]int32
-	held bool
+
+	// holding is the edge the hold script loaded under holdName keeps:
+	// edgeNone, edgeRight for drawers on the left, edgeLeft for drawers on
+	// the right.
+	holding edge
 }
+
+// edge is which of the window's edges the hold script keeps.
+type edge int
+
+const (
+	edgeNone edge = iota
+	edgeRight
+	edgeLeft
+)
 
 // NewDrawer builds the helper for the window of the app with the title.
 // Nothing is asked of the compositor until a method is called.
@@ -136,29 +149,38 @@ func (d *Drawer) Room(ctx context.Context) (left, right float32, ok bool) {
 }
 
 /*
-HoldEdge loads or unloads the script that keeps the window's right edge where
-it is when its width changes, and reports whether the edge is held now. It is
-loaded only while the drawer is on the left: loaded for one on the right it
-would make that grow leftwards too.
+HoldEdge loads the script that keeps the edge away from the drawers where it
+is when the window's width changes, and reports whether the right edge is
+held now, which is what a drawer on the left needs to open there.
+
+left says the drawers are on the left: the right edge is held and the window
+grows leftwards. Otherwise the left edge is held and it grows rightwards. A
+right drawer needed nothing on Plasma 6.7, which left x alone; Plasma 6.8
+keeps a window's centre as it grows, and the cards moved by half of each
+drawer (fynedesygn #236). One script at a time, under one name: the right
+edge's loaded for a drawer on the right would make it grow leftwards too.
 */
-func (d *Drawer) HoldEdge(ctx context.Context, on bool) bool {
+func (d *Drawer) HoldEdge(ctx context.Context, left bool) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if on == d.held {
-		return d.held
+	want, script := edgeLeft, kwin.HoldLeftEdgeScript(d.target)
+	if left {
+		want, script = edgeRight, kwin.HoldRightEdgeScript(d.target)
+	}
+	if want == d.holding {
+		return d.holding == edgeRight
 	}
 	if d.connect() != nil {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, scriptWait)
 	defer cancel()
-	if !on {
-		d.unload(ctx, holdName)
-		d.held = false
-		return false
+	// run unloads what was loaded under the name before it loads this.
+	d.holding = edgeNone
+	if d.run(ctx, holdName, script, true) == nil {
+		d.holding = want
 	}
-	d.held = d.run(ctx, holdName, kwin.HoldRightEdgeScript(d.target), true) == nil
-	return d.held
+	return d.holding == edgeRight
 }
 
 // Yield gives the keyboard back to the window a person was in before they
@@ -188,7 +210,7 @@ func (d *Drawer) Stop() {
 		d.unload(ctx, name)
 	}
 	_ = d.conn.Close()
-	d.conn, d.held = nil, false
+	d.conn, d.holding = nil, edgeNone
 }
 
 // run loads a script under a name and runs it, and unloads it again unless

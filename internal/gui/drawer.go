@@ -128,7 +128,9 @@ type Desk interface {
 	// window can do all three itself, on Windows, nothing is asked.
 	Asks() bool
 	Room(ctx context.Context) (left, right float32, ok bool)
-	HoldEdge(ctx context.Context, on bool) bool
+	// HoldEdge holds the edge away from the drawers, the right one when
+	// they are on the left, and reports whether the right edge is held.
+	HoldEdge(ctx context.Context, left bool) bool
 	Yield(ctx context.Context)
 	Stop()
 }

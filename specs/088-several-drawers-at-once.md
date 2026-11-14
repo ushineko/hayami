@@ -2,7 +2,16 @@
 
 **Issue**: #320
 
-## Status: INCOMPLETE
+## Status: COMPLETE
+
+## Executive Summary
+
+A Shift-click opens a card's detail in a drawer beside the ones out, or
+closes one; a plain click with several out closes them all, and the row
+stops where the screen does. Each drawer has its own reading, pause, drill
+and filter. Testing it on the desk found three faults in the design system,
+fixed in fynedesygn 0.1.116 and 0.1.117. A reviewer should look first at
+`tapped`, `shiftTapped` and `addDrawer` in `internal/gui/drawer.go`.
 
 ## Context
 
@@ -130,13 +139,18 @@ ydotool and Shift held by key events:
   every step, the right edge is held, and the cards' screen position,
   recovered from the window's geometry and the cards' place in each grab,
   never moved (x 3711.0 throughout). **Shift reaches the panel on Wayland.**
-- [ ] Drawers on the right: not verified. Moving the panel with kdotool to
-  give it room on the right left Fyne's idea of the pointer stale and the
-  clicks did not register (quirk 48), and each opening moved the window by
-  half a drawer: Plasma 6.8 keeps a window's centre when it grows, and only
-  a left drawer has a script holding an edge. The glance-monitor example
-  built from fynedesygn `main` does the same with one drawer, so this is not
-  this spec's; it is a gap of fynedesygn spec 071 on the right side.
+- [x] Drawers on the right (the panel started at x 300 on the main screen):
+  one to five drawers (the room fitted five), a plain click closing all,
+  one opened and closed: the width is the cards' and whole drawers at every
+  step and the cards' screen position never moved (x 300.0 throughout).
+  The first try failed, and not on this spec's account: each opening moved
+  the window by half a drawer, because Plasma 6.8 keeps a window's centre
+  when it grows and only a left drawer had a script holding an edge. The
+  glance-monitor example built from fynedesygn `main` did the same with one
+  drawer. Filed and fixed as fynedesygn #236 (0.1.117,
+  `kwin.HoldLeftEdgeScript`): `desktop.Drawer.HoldEdge` now loads the left
+  edge's script for drawers on the right and the right edge's for drawers on
+  the left. The left side, run again after it: the right edge held.
 
 Found on the real window and fixed in fynedesygn 0.1.116 (spec 079, "Found
 after release"): closing several drawers one at a time left the window as
@@ -158,8 +172,16 @@ put the old x back after the close, moving the cards. hayami closes them with
 
 ## Threat model delta
 
-No boundary touched: the details read are the ones already read, by the same
-readers; only how many are shown at once changes.
+The details read are the ones already read, by the same readers; only how
+many are shown at once changes.
+
+B5 (what hayami does outside itself): the compositor is now given a KWin
+script for drawers on the right as well as on the left
+(`kwin.HoldLeftEdgeScript`, fynedesygn #236). It goes the way every KWin
+script of hayami's goes, written to a new file of mode `0600` before KWin is
+told its path, its strings quoted, and it moves only the panel's own window.
+Nothing changes for an attacker; the threat model's B5 defence names that
+path and covers it unchanged.
 
 ## E2E Test Plan
 
@@ -175,6 +197,15 @@ On the desk, installed with fynstall (Plasma, Wayland):
    cards were (R14).
 
 On the Windows VM: steps 1–3.
+
+Results, 2026-11-14, Plasma 6.8 on Wayland, the installed panel driven with
+ydotool (recorded under the acceptance criteria above):
+
+- Steps 1–4: passed on both sides; the cards never moved.
+- Step 5: not run on the desk. `TestThePlaceIsTheCardsWithTwoDrawersOnTheLeft`
+  covers the place saved with two drawers out; the panel's saved place was
+  the cards' after every run above.
+- Windows VM: not run. CI runs the tests on Windows.
 
 ### Prod visibility
 
