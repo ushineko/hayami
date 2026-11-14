@@ -159,25 +159,64 @@ func TestTheLineGoesWhenANewerReadingArrives(t *testing.T) {
 	assert.Equal(t, "5h", sec.Meters[0].Window, "the new reading's five hours are drawn again")
 }
 
-// A failure that is not a login, behind figures, is a hover note and no line:
-// a minute without a network must not move the panel.
-func TestAnotherFailureBehindFiguresIsAnAside(t *testing.T) {
-	d := newDeadLogin(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	})
-	u := panel.NewUsage()
-	panel.SetUsageNow(u, func() time.Time { return d.now })
-	_, err := u.Poll(t.Context())
+// A second viewer, a pane beside the window or a panel started again, never
+// fetched while the gate was closed. It says "needs a login" too, from the
+// cache: the desk's real window lacked the line when doctor had fetched first.
+func TestAViewerThatDidNotFetchSaysItToo(t *testing.T) {
+	d := newDeadLogin(t, invalidGrant)
+	first := panel.NewUsage()
+	panel.SetUsageNow(first, func() time.Time { return d.now })
+	_, err := first.Poll(t.Context())
 	require.NoError(t, err)
 
-	sec := u.Section()
-	r := find(t, sec, "not refreshed")
-	assert.True(t, r.Aside)
-	assert.Equal(t, view.Warn, r.Status)
-	assert.Contains(t, r.Detail, "500")
-	for _, l := range lines(sec) {
-		assert.NotContains(t, l, "not refreshed")
+	second := panel.NewUsage()
+	panel.SetUsageNow(second, func() time.Time { return d.now.Add(10 * time.Second) })
+	_, err = second.Poll(t.Context())
+	require.NoError(t, err)
+	find(t, second.Section(), "needs a login")
+	assert.Equal(t, int32(1), d.asked.Load(), "the second viewer fetched through a closed gate")
+}
+
+func serverError(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusInternalServerError)
+}
+
+// Review of spec 089, path 1: a cache file that says it was read in the future
+// is not a newer reading. Taken as one, it cleared the failure on every poll
+// but the fetch's.
+func TestAReadingFromTheFutureDoesNotClearTheFailure(t *testing.T) {
+	d := newDeadLogin(t, serverError)
+	d.write(t, d.now.Add(100*365*24*time.Hour), 1)
+	u := panel.NewUsage()
+	panel.SetUsageNow(u, func() time.Time { return d.now })
+	for range 3 {
+		_, err := u.Poll(t.Context())
+		require.NoError(t, err)
+		find(t, u.Section(), "not refreshed")
 	}
+}
+
+// A failure that is not a login, behind figures, is a hover note and no line:
+// a minute without a network must not move the panel. It stays across the
+// polls between fetches, as the fetch reported it.
+func TestAnotherFailureBehindFiguresIsAnAside(t *testing.T) {
+	d := newDeadLogin(t, serverError)
+	u := panel.NewUsage()
+	panel.SetUsageNow(u, func() time.Time { return d.now })
+	for range 3 {
+		_, err := u.Poll(t.Context())
+		require.NoError(t, err)
+
+		sec := u.Section()
+		r := find(t, sec, "not refreshed")
+		assert.True(t, r.Aside)
+		assert.Equal(t, view.Warn, r.Status)
+		assert.Contains(t, r.Detail, "500")
+		for _, l := range lines(sec) {
+			assert.NotContains(t, l, "not refreshed")
+		}
+	}
+	assert.Equal(t, int32(1), d.asked.Load())
 }
 
 // An account whose every window started over since its reading says so,

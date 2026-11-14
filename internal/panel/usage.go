@@ -161,7 +161,7 @@ func gather(ctx context.Context, now time.Time, last *fetches) ([]view.UsageWind
 		// changes until a person signs in; any other failure behind figures
 		// is an aside, because a minute without a network must not add a line.
 		switch {
-		case errors.Is(ferr, claude.ErrNeedsLogin):
+		case errors.Is(ferr, claude.ErrNeedsLogin) || result.LoginRefused:
 			reasons = append(reasons, needsLogin(label))
 		case len(windows) > 0:
 			if ferr != nil {
@@ -276,7 +276,9 @@ func (f *fetches) settle(key string, now time.Time, r usage.Result, err error) e
 	if !ok {
 		return nil
 	}
-	if r.Fresh || r.FetchedAt.After(prev.at) {
+	// A reading from the future is a forged or broken file, not a newer one:
+	// taking it as newer cleared the failure on every poll but the fetch's.
+	if r.Fresh || (r.FetchedAt.After(prev.at) && !r.FetchedAt.After(now)) {
 		delete(f.last, key)
 		return nil
 	}

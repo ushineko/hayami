@@ -29,6 +29,14 @@ type Entry struct {
 	// Data is the last successful payload. A failed fetch never replaces it.
 	Data json.RawMessage `json:"data"`
 
+	// LoginRefusedAt is when a fetch was refused because the account needs a
+	// login (spec 089), so every viewer says so and not only the one that
+	// fetched. Absent otherwise. It is hayami's: the Python tools read keys
+	// they know and write their entries whole, so they ignore it and a write
+	// of theirs drops it, which is right after a success and costs a viewer
+	// the line until hayami's next fetch after a failure.
+	LoginRefusedAt *float64 `json:"login_refused_at,omitempty"`
+
 	// written is when the file was last written, from its modification
 	// time; zero for an entry that was not read from a file.
 	written time.Time

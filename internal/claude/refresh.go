@@ -36,6 +36,23 @@ func wasRefused(token string) bool {
 	return ok
 }
 
+/*
+refusal is the endpoint turning down the refresh token used, which is
+remembered.
+
+Claude Code may have refreshed while the request was out: the token it spent
+is the one refused, and the store already holds its successor. Then nobody
+needs to sign in, and c takes the store's tokens, as writeBack does.
+*/
+func refusal(s Store, c *Credentials, used string) error {
+	refuse(used)
+	if now, err := readSettled(s); err == nil && now.RefreshToken != used {
+		*c = *now
+		return nil
+	}
+	return ErrNeedsLogin
+}
+
 // errorCode is the OAuth error a refusal names: RFC 6749's string field,
 // `{"error": "invalid_grant"}`, or the object Anthropic's APIs answer with,
 // `{"error": {"type": "invalid_grant"}}`. Empty when the body says neither.
@@ -64,17 +81,17 @@ func errorCode(body io.Reader) string {
 	return printable(code)
 }
 
-// printable keeps a code to what an OAuth error code may contain (RFC 6749
-// §5.2: printable ASCII, no quote or backslash) and to a length a code has,
-// so a hostile reply cannot put a paragraph or a control character into a
-// line the panel shows.
+// printable keeps a code to the shape OAuth's codes have (`invalid_grant`,
+// `unsupported_grant_type`: lower-case letters and underscores) and to a
+// length a code has, so a hostile reply cannot put a sentence of its own, or a
+// control character, into what the panel shows.
 func printable(code string) string {
 	const longest = 64
 	if len(code) > longest {
 		return ""
 	}
 	for _, r := range code {
-		if r < 0x20 || r > 0x7e || r == '"' || r == '\\' {
+		if (r < 'a' || r > 'z') && r != '_' {
 			return ""
 		}
 	}
@@ -150,14 +167,16 @@ func Refresh(ctx context.Context, client *http.Client, s Store, c *Credentials) 
 	defer func() { _ = resp.Body.Close() }()
 
 	switch {
-	case resp.StatusCode == http.StatusUnauthorized, resp.StatusCode == http.StatusForbidden:
-		refuse(used)
+	case resp.StatusCode == http.StatusUnauthorized:
+		return refusal(s, c, used)
+	case resp.StatusCode == http.StatusForbidden:
+		// Not remembered: a proxy or a challenge page answers 403 too, and a
+		// token that still works must not be given up on for one of those.
 		return ErrNeedsLogin
 	case resp.StatusCode == http.StatusBadRequest:
 		code := errorCode(resp.Body)
 		if code == "invalid_grant" {
-			refuse(used)
-			return ErrNeedsLogin
+			return refusal(s, c, used)
 		}
 		if code != "" {
 			return fmt.Errorf("the token endpoint answered %d (%s)", resp.StatusCode, code)

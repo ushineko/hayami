@@ -4,6 +4,16 @@
 
 ## Status: INCOMPLETE
 
+## Executive Summary
+
+When a Claude login is refused, the usage section now says "needs a login" on
+the account's card, in every window and pane, instead of drawing month-old
+figures with no reason. A refused refresh token is not sent again, a 429 from
+the token endpoint is waited out, and a window that reset since the reading is
+not drawn. A reviewer should look first at `gather` and `fetches` in
+`internal/panel/usage.go`, then at `refusal` and `errorCode` in
+`internal/claude/refresh.go`.
+
 ## Context
 
 On the Windows VM the usage section showed a reading 32 days old. The Claude
@@ -28,16 +38,21 @@ the next poll. Until then the panel gave no sign of the cause:
 Polls run every 30 s and a fetch at most every 2 min (`UsageInterval`,
 `UsageTTL`). Between fetches `usage.Cached` serves the cache without an
 error, so a reason built only from the fetch's own error would appear for one
-poll in four and vanish for the other three.
+poll in four and vanish for the other three. Several viewers share one cache,
+and only the one whose turn it is fetches.
 
 ## Requirements
 
 ### Saying why the figures are old
 
-- R1 **The outcome of this process's last fetch for an account is kept** until
-  a later fetch succeeds, or until the cache holds a reading obtained after it
-  (another program fetched). The polls between fetches report it as the fetch
-  did.
+- R1 **A refused login is recorded in the shared cache**, as
+  `login_refused_at`, so every viewer says it and not only the one that
+  fetched. It is kept through a failure of another kind and dropped by a
+  success. The Python tools read only the keys they know and write their
+  entries whole: they ignore it, and a write of theirs drops it. **Any other
+  failure is kept by the process that fetched** until a later fetch
+  succeeds, or until the cache holds a reading obtained after it and not
+  after the present.
 - R2 **A login the server refused is a line**: a Warn reason labelled with the
   account, "needs a login", Actionable, with the detail saying to sign in with
   Claude Code again. It is drawn whether or not the account still has figures.
@@ -66,96 +81,149 @@ poll in four and vanish for the other three.
 - R6 **A 400 whose error is `invalid_grant` is `ErrNeedsLogin`.** The error is
   read from the body as OAuth's string field or as an object's `type`. Any
   other 400 stays a plain error naming the status and, where the body gives
-  one, the error code. The body is never echoed in full.
+  a code of OAuth's shape (`[a-z_]`, 64 at most), the code. The body is never
+  echoed.
 - R7 **A 429 is `Retryable` with its Retry-After**, capped as a usage 429's is
   (`MaxRetryAfter`). `fetchClaude` passes a retryable refresh's wait to the
   gate, as it does for the usage request.
-- R8 **A refresh token the endpoint refused is not sent again by this
-  process.** `Refresh` keeps the SHA-256 of each refused refresh token in
-  memory. For a store still holding one, it returns `ErrNeedsLogin` without a
-  request. A sign-in writes a new refresh token, which is asked about at the
-  next open gate, within two minutes.
+- R8 **A refresh token the endpoint refused (401 or `invalid_grant`) is not
+  sent again by this process.** `Refresh` keeps the SHA-256 of each refused
+  refresh token in memory. For a store still holding one, it returns
+  `ErrNeedsLogin` without a request. A sign-in writes a new refresh token,
+  which is asked about at the next open gate, within two minutes. A 403 is
+  not remembered: a proxy or a challenge page answers 403 too. A refusal
+  re-reads the store, and when it holds another refresh token by then,
+  Claude Code refreshed meanwhile: the refresh goes on with its tokens.
 
 ### Documentation
 
-- R9 README: a changelog line under `### Unreleased`.
-- R10 docs/threat-model.md B3: the defence R8 adds.
+- R9 README: a changelog line under `### Unreleased`, and the usage paragraph
+  of the user guide.
+- R10 docs/threat-model.md B3: the defences R1 and R8 add, the review's
+  record and what it checked.
 
 ## Acceptance Criteria
 
-Headless, each falsified:
+Headless, each falsified (19 mutations of the code, one per rule below, each
+failed a test; `/tmp` script, not committed):
 
-- [ ] A store whose refresh the endpoint answers with 400 `invalid_grant`,
+- [x] A store whose refresh the endpoint answers with 400 `invalid_grant`,
   over a cache holding figures, draws the figures and a "needs a login" Warn
   line (not an aside) for the account. Driven through the real `gather` with
-  a test server for the token endpoint.
-- [ ] That line stays across the polls between fetches, with the gate closed.
-- [ ] The line goes once the cache holds a reading obtained after the failure,
-  as when another program fetched it.
-- [ ] A refused refresh token makes one request and none after it; a store
-  with a new refresh token is asked again.
-- [ ] A failed fetch other than a refused login, with figures standing, adds a
-  Warn aside and no line.
-- [ ] A 400 `invalid_grant` is `ErrNeedsLogin`, in both body shapes; another
-  400 is not, and its error names the code without the body.
-- [ ] A 429 from the token endpoint is `Retryable` with its Retry-After, and
-  the gate is moved by it.
-- [ ] A window whose reset passed more than five minutes ago in an older
+  a test server for the token endpoint
+  (`TestADeadLoginIsALineBesideTheFiguresItLeft`).
+- [x] That line stays across the polls between fetches, with the gate closed;
+  and a second viewer that never fetched says it too
+  (`TestAViewerThatDidNotFetchSaysItToo`,
+  `TestALoginRefusedIsRecordedUntilAFetchSucceeds`).
+- [x] The line goes once the cache holds a reading obtained after the failure,
+  as when another program fetched it (`TestTheLineGoesWhenANewerReadingArrives`);
+  a reading dated in the future does not clear a failure
+  (`TestAReadingFromTheFutureDoesNotClearTheFailure`).
+- [x] A refused refresh token makes one request and none after it; a store
+  with a new refresh token is asked again
+  (`TestARefusedRefreshTokenIsNotSentAgain`). A 403 is asked again
+  (`TestAForbiddenIsNotRemembered`); a refusal of a token spent meanwhile is
+  not a login problem (`TestARefusalOfATokenSpentMeanwhileIsNotALoginProblem`).
+- [x] A failed fetch other than a refused login, with figures standing, adds a
+  Warn aside and no line, across the polls between fetches
+  (`TestAnotherFailureBehindFiguresIsAnAside`).
+- [x] A 400 `invalid_grant` is `ErrNeedsLogin`, in both body shapes; another
+  400 is not, and its error names the code without the body; a code that is a
+  sentence or carries control characters is left out
+  (`TestAnInvalidGrantSaysTheAccountNeedsALogin`,
+  `TestAnotherBadRequestNamesItsCodeOnly`, `TestACodeThatIsASentenceIsLeftOut`).
+- [x] A 429 from the token endpoint is `Retryable` with its Retry-After, and
+  the gate is moved by it
+  (`TestATooManyRequestsFromTheTokenEndpointCarriesItsRetryAfter`,
+  `TestATooManyRequestsFromTheTokenEndpointMovesTheGate`).
+- [x] A window whose reset passed more than five minutes ago in an older
   reading is not drawn, on the card or in the drawer; one that passed a
   minute ago is; an account left with none says "out of date", or "needs a
-  login" when its login was refused.
+  login" when its login was refused (`TestAWindowThatResetAMomentAgoIsKept`,
+  `TestTheDrawerDropsAWindowThatTurnedOver`,
+  `TestAnAccountWithEveryWindowTurnedOverSaysWhy`,
+  `TestACacheOnlyAccountTurnedOverIsOutOfDate`).
 
-On the machine, the installed `doctor` over the same files:
+On the machine, the branch's `doctor` over the fixture below:
 
-- [ ] `doctor` reports usage as partial, not ok, with a refused login, and
-  prints the reason. The rule that a reason drawn on the card makes a section
-  partial is `TestAMachineWithNoGPUIsOKAndSaysSo`'s.
+- [x] `doctor` reports usage as partial, not ok, with a refused login, and
+  prints the reason. Desk and Windows VM, 2026-11-14 (E2E step 1).
 
 Against the real token endpoint:
 
 - [ ] A made-up refresh token is answered with a 400 that `Refresh` reads as
-  `ErrNeedsLogin`.
+  `ErrNeedsLogin`. **Not run**: the endpoint has answered 429 to every
+  request from this address since the VM's panel spent a month sending its
+  dead token, made-up tokens included. The one refusal seen before the
+  limit, on the VM, was a 400; its body was not read.
 
 On a real window (project rule: anything visual is tested on a real window):
 
-- [ ] The panel run with a credential store whose refresh token is made up,
-  over a cache with old figures: the "needs a login" line is drawn under the
-  account's figures, and a five-hour window a month gone is not drawn.
+- [x] The panel run with a credential store whose token is made up, over a
+  cache with old figures: the "needs a login" line is drawn on the account's
+  card, and a five-hour window a month gone is not drawn. Desk and Windows
+  VM, 2026-11-14 (E2E steps 2 and 3).
 
 ## Risks & Assumptions
 
 - Assumes the token endpoint answers a dead refresh token with
-  `invalid_grant`, per RFC 6749. The real-endpoint criterion checks it with a
-  made-up token. A token that was valid and then revoked may answer
-  differently; if so, the panel says "not refreshed" with the code, as it
-  does now, and backs off by the gate only.
+  `invalid_grant`, per RFC 6749, in one of the two shapes read. The real
+  endpoint's body was not seen (see the open criterion). If it says
+  otherwise, a dead token whose access token has expired is reported as "not
+  refreshed" with its status, as an aside, and is asked about at every gate:
+  today's behaviour, no worse. An access token the usage endpoint refuses
+  (401) is "needs a login" either way; that path was run on both machines.
 - R8 is per process. A panel and a `doctor` run each send a refused token
-  once. Writing the refusal into the shared cache would make it every
-  program's decision; the cache's format is shared with the Python tools
-  and is not changed.
+  once.
+- R1 adds an optional key to the shared cache file. The Python tools ignore
+  it; a write of theirs after a failure drops it, and a hayami viewer that
+  did not fetch then loses the line until hayami's next fetch.
 - R5 hides a window that a reader may have expected to see dimmed. A month-old
   1 % is a wrong figure, not an old one.
-- **Rollback**: revert the PR; no setting or file format changes.
+- **Rollback**: revert the PR. An older build ignores `login_refused_at`, and
+  its next write drops it.
 
 ## Threat model delta
 
-B3 (credentials). The SHA-256 of a refused refresh token is held in memory
-for the life of the process, never written or printed; the token itself is
-not kept beyond the `Credentials` it was read into, as now. Fewer requests
-carry a dead token. A hostile token endpoint already decides what a refresh
-answers; it can now say "needs a login" with a 400 as it could with a 401,
-and set a Retry-After capped at an hour, as the usage endpoint can. The
-document's B3 defences gain R8.
+B3 (credentials and the shared cache). The SHA-256 of a refused refresh
+token is held in memory for the life of the process, never written or
+printed. Fewer requests carry a dead token. A hostile token endpoint already
+decides what a refresh answers; it can now say "needs a login" with a 400 as
+it could with a 401, and set a Retry-After capped at an hour, as the usage
+endpoint can. Its error code reaches the panel only as `[a-z_]`, 64 at most.
+A writer of the shared cache can now set or clear `login_refused_at`, a time
+and nothing else: it shows or hides a line telling the person to sign in,
+beside figures that writer already chooses. The B3 section gains the
+defences, and "Checked" what the adversarial review tried.
 
 ## E2E Test Plan
 
-1. Desk, against the real token endpoint: `Refresh` with a made-up refresh
-   token returns `ErrNeedsLogin` (R6).
-2. Desk, Plasma: the installed panel's settings copied, a throwaway home
-   holding a credential store with a made-up, expired token and a cache with
-   a month-old reading. The card shows the 7d figures, no 5h window, and
-   "needs a login" under the account (R2, R5).
-3. Windows VM: the same, by the same files (R2, R5).
+The fixture: a throwaway home holding a Claude store with a made-up access
+token, and a cache holding a reading fetched 32 days ago, with a five-hour
+window that reset then and a week that resets in three days. The access token
+is made up and unexpired, so the real usage endpoint is asked and answers 401
+(`ErrNeedsLogin` from `claude.Usage`). The expired-token variant, which asks
+the token endpoint, waits on the rate limit above.
+
+1. Desk and VM: the branch's `hayami-tui doctor` over the fixture (R1, R2,
+   R5).
+2. Desk, Plasma 6.8 on Wayland: the branch's panel started over the fixture
+   after `doctor` had fetched, so it reads the refusal from the cache and
+   asks nothing (R1, R2, R5).
+3. Windows VM: the same, cross-built, in the signed-in session.
+
+Results, 2026-11-14:
+
+- Step 1: `usage partial CC max 7d: 31 %`, then `! CC max: needs a login`
+  with its detail, and `Usage: stale, read 32d ago` as an aside, on both. The
+  cache then held `login_refused_at` beside a gate two minutes out.
+- Step 2: the AI Usage card shows "CC max · needs a login" in amber above the
+  7d meter at 31 %, and no 5h meter. The panel grew by that line (427 to 446
+  px). The first run, before R1 recorded the refusal in the cache, drew no
+  line: `doctor` had fetched and the panel only read the cache. That run is
+  why R1 is in the cache and not only in the process.
+- Step 3: the same card on Windows 11 at 150 %.
 
 ### Prod visibility
 

@@ -105,6 +105,54 @@ func TestATooManyRequestsFromTheTokenEndpointCarriesItsRetryAfter(t *testing.T) 
 	assert.NotErrorIs(t, err, claude.ErrNeedsLogin)
 }
 
+// Review of spec 089, path 5: a code is OAuth's shape or nothing, so a hostile
+// reply cannot put a sentence of its own into the panel.
+func TestACodeThatIsASentenceIsLeftOut(t *testing.T) {
+	t.Cleanup(claude.ForgetRefusals)
+	creds, store := expiredStore(t)
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"expired - re-auth at evil.example/fix"}`))
+	})
+	err := claude.Refresh(t.Context(), client, store, creds)
+	require.Error(t, err)
+	assert.Equal(t, "the token endpoint answered 400", err.Error())
+}
+
+// Review of spec 089, path 3: a 403 is said as a login problem, as before, and
+// not remembered. A proxy or a challenge page answers 403 too.
+func TestAForbiddenIsNotRemembered(t *testing.T) {
+	t.Cleanup(claude.ForgetRefusals)
+	creds, store := expiredStore(t)
+	var asked atomic.Int32
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		asked.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	})
+	for range 2 {
+		assert.ErrorIs(t, claude.Refresh(t.Context(), client, store, creds), claude.ErrNeedsLogin)
+	}
+	assert.Equal(t, int32(2), asked.Load(), "a 403 stopped the token being asked about")
+}
+
+// Review of spec 089, path 4: Claude Code refreshed while the request was out,
+// so the token refused is the one it spent. Nobody needs to sign in, and the
+// refresh goes on with the store's new tokens.
+func TestARefusalOfATokenSpentMeanwhileIsNotALoginProblem(t *testing.T) {
+	t.Cleanup(claude.ForgetRefusals)
+	creds, store := expiredStore(t)
+	client := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+		rewriteStore(t, store.Path, func(_, oauth map[string]any) {
+			oauth["accessToken"], oauth["refreshToken"] = "claude-codes-token", "claude-codes-refresh"
+		})
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	})
+
+	require.NoError(t, claude.Refresh(t.Context(), client, store, creds))
+	assert.Equal(t, "claude-codes-token", creds.AccessToken)
+}
+
 // expiredStore is a store of this test's own and its credentials.
 func expiredStore(t *testing.T) (*claude.Credentials, claude.Store) {
 	t.Helper()

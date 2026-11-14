@@ -26,7 +26,7 @@ const UsageTTL = 2 * time.Minute
 // credential store, and the one call that can damage something outside this
 // program should be visible at the place it is decided.
 func fetchClaude(ctx context.Context, store claude.Store) usage.Fetch {
-	return func() (json.RawMessage, time.Duration, error) {
+	fetch := func() (json.RawMessage, time.Duration, error) {
 		creds, err := claude.Read(store)
 		if err != nil {
 			return nil, 0, err
@@ -54,7 +54,22 @@ func fetchClaude(ctx context.Context, store claude.Store) usage.Fetch {
 		// would neither fix it nor be polite.
 		return nil, 0, err
 	}
+	return func() (json.RawMessage, time.Duration, error) {
+		body, wait, err := fetch()
+		if errors.Is(err, claude.ErrNeedsLogin) {
+			err = loginRefused{err}
+		}
+		return body, wait, err
+	}
 }
+
+// loginRefused is Claude's needs-a-login as the shared cache records it, so
+// every viewer says so and not only the one that fetched (spec 089). Its
+// text is the error's own.
+type loginRefused struct{ error }
+
+func (e loginRefused) Unwrap() error      { return e.error }
+func (loginRefused) Is(target error) bool { return target == usage.ErrLoginRefused }
 
 // waited is how long a server asked to be left alone, from either endpoint;
 // nothing when it did not say.

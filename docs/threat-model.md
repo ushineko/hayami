@@ -219,7 +219,12 @@ providers' APIs are reached over TLS.
   refusal's error code reaches the panel only as printable ASCII of at most
   64 characters, and the rest of the body never does. A 429 from the token
   endpoint is waited out under the same one-hour cap (`refused`, `errorCode`,
-  `internal/claude/refresh.go`; spec 089).
+  `internal/claude/refresh.go`; spec 089). A 403 is not remembered, since a
+  proxy or a challenge page answers one too; a refusal of a token Claude
+  Code spent meanwhile takes the store's new tokens (`refusal`).
+- A refusal is recorded in the shared cache as `login_refused_at`, a time
+  and nothing else, so every viewer says "needs a login" (`Cached`,
+  `internal/usage/cached.go`; spec 089).
 
 **Accepted.** A write by Claude Code between hayami's second read and its
 rename can still be lost: milliseconds, where it was a network round trip.
@@ -529,6 +534,7 @@ the goal of a working proof of concept.
 | 2026-11-01 | B7 | The adversarial review of #264 (spec 075): one reviewer given the code and the attackers, then a separate refutation pass. Read-only on GitHub; experiments on a desk and against published releases. | Nothing refuted outright. #268–#272, and the tag limit under B7's "Not yet known". Two private advisories, both fixed in 0.11.14: GHSA-g9rj-2f3c-8cv4 (the Go cache) and GHSA-j38w-g54m-r8mh (the release build's rights). |
 | 2026-11-01 | B7 | The adversarial review of specs 079 and 080 before they were pushed: one reviewer, then a refutation pass. Read-only; local experiments. | A tag named `origin/main` passing the `main` check; artifacts taken by name; a re-run able to publish a partial draft; gaps in both structure tests and the binary check. All fixed before merge. Limits recorded under B7's "Not yet known". |
 | 2026-11-03 | B7 | The adversarial review of spec 084 (the Fyne fork, #293): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. | No way found to change what builds without a reviewed `go.mod` change. `make vuln` went blind to Fyne under the `replace`: fixed before merge with a second scan. The fork reaching the privileged paths and skipping the cooldown held, both accepted in the section above. |
+| 2026-11-14 | B3 | The adversarial review of spec 089 (a dead login, #325): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Five paths, none across a boundary. Fixed before merge: a future `fetched_at` clearing the remembered failure; a 403 remembered as a refusal; a token Claude Code spent meanwhile read as a dead login; an error code carrying a sentence. Accepted: a cache writer hiding the line, as it could already hide every figure. |
 | 2026-11-03 | B3 | The adversarial review of spec 083 (the plan read from the usage reading, #288): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | No exploit path: a label and a badge are all it gives a writer of the cache, who already sets every number beside them. A caption collision with a cache-only account fixed before merge; the drawer asking for a stale caption filed as #289. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
@@ -715,6 +721,25 @@ Others were filed: #305 (on the network path), #306 (a hold outlasting a panel) 
 - A name in a path or a `systemctl` argument: names are map keys, and those arguments are
   constants.
 - A PID or name race: the helper acts on no PID and re-reads bus paths per action.
+
+### B3, spec 089, 2026-11-14
+
+- A future `fetched_at` written into the cache clearing the remembered
+  failure on every poll: a reading after `now` is not taken as newer
+  (`settle`, `internal/panel/usage.go`).
+- A spurious 403 or 401 giving up on a working refresh token for the life of
+  the process: a 403 is not remembered; a 401 or `invalid_grant` needs the
+  fixed HTTPS token endpoint to say so, and a new refresh token in the store
+  is always asked about (`refusal`, `internal/claude/refresh.go`).
+- A sentence or a link in a refusal's error code: only `[a-z_]`, 64 at most
+  (`printable`).
+- `refusal` adopting the store's tokens: they are the store's own, read as
+  every fetch reads them, sent only to the fixed usage endpoint, and nothing
+  is written.
+- The refused set growing: 32 bytes per refused token, one round trip each.
+- A cache writer hiding or forcing "needs a login": accepted. It already sets
+  every figure and the gate; `login_refused_at` is a time and nothing else,
+  and forcing it shows a line telling the person to sign in.
 
 ### B3, spec 083, 2026-11-03
 
