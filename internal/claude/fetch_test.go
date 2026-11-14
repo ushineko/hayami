@@ -155,12 +155,14 @@ func TestARefreshThatFailsLeavesTheStoreByteForByte(t *testing.T) {
 	require.NoError(t, err)
 	before, err := os.ReadFile(path)
 	require.NoError(t, err)
+	t.Cleanup(claude.ForgetRefusals)
 
+	// The refusal is last: after it the token is not sent again (spec 089).
 	for _, reply := range []http.HandlerFunc{
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) },
-		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) },
 		func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{}`)) },
 		func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`not json`)) },
+		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) },
 	} {
 		err := claude.Refresh(t.Context(), serve(t, reply), store, creds)
 		require.Error(t, err)

@@ -34,7 +34,7 @@ func fetchClaude(ctx context.Context, store claude.Store) usage.Fetch {
 
 		if creds.Expired(time.Now()) {
 			if err := claude.Refresh(ctx, httpClient(), store, creds); err != nil {
-				return nil, 0, err
+				return nil, waited(err), err
 			}
 		}
 
@@ -45,9 +45,8 @@ func fetchClaude(ctx context.Context, store claude.Store) usage.Fetch {
 
 		// A server that said how long to wait is obeyed; the cache's gate does
 		// the waiting for every reader, not only this one.
-		var retry *claude.Retryable
-		if errors.As(err, &retry) {
-			return nil, retry.After, err
+		if after := waited(err); after > 0 {
+			return nil, after, err
 		}
 
 		// A rejected token is a person having to log in. It is still a failure
@@ -55,6 +54,16 @@ func fetchClaude(ctx context.Context, store claude.Store) usage.Fetch {
 		// would neither fix it nor be polite.
 		return nil, 0, err
 	}
+}
+
+// waited is how long a server asked to be left alone, from either endpoint;
+// nothing when it did not say.
+func waited(err error) time.Duration {
+	var retry *claude.Retryable
+	if errors.As(err, &retry) {
+		return retry.After
+	}
+	return 0
 }
 
 // fetchCodex asks the app-server, and reshapes the reply into what the cache

@@ -2,6 +2,8 @@ package panel
 
 import (
 	"context"
+	"net/http"
+	"testing"
 	"time"
 
 	"github.com/ushineko/hayami/internal/core"
@@ -68,6 +70,14 @@ func Vendors(platform string) []Vendor {
 		out = append(out, Vendor{Name: v.name, Absent: v.absent(), Quiet: v.quiet, Drivers: names})
 	}
 	return out
+}
+
+// SetHTTPClient makes c the client every request goes out on, for the length
+// of the test, so the usage fetch reaches a test's server and not Anthropic.
+func SetHTTPClient(t testing.TB, c *http.Client) {
+	old := httpClient
+	httpClient = func() *http.Client { return c }
+	t.Cleanup(func() { httpClient = old })
 }
 
 // SetUsageRead replaces the gather, so a test can drive the usage section's

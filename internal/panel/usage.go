@@ -54,8 +54,9 @@ type Usage struct {
 func NewUsage() *Usage {
 	u := &Usage{now: time.Now}
 	u.breakdown = cachedBreakdown(func() time.Time { return u.now() })
+	last := &fetches{last: map[string]failure{}}
 	u.read = func(ctx context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error) {
-		return gather(ctx, u.now())
+		return gather(ctx, u.now(), last)
 	}
 	return u
 }
@@ -120,7 +121,7 @@ func (u *Usage) Data() any {
 // The oldest reading decides the age shown: a section is as stale as its
 // stalest number, and reporting the freshest would claim the panel is more
 // current than it is.
-func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, []view.Reason, error) {
+func gather(ctx context.Context, now time.Time, last *fetches) ([]view.UsageWindow, time.Time, []view.Reason, error) {
 	accounts, err := usage.Accounts()
 	if err != nil {
 		return nil, time.Time{}, nil, err
@@ -139,7 +140,9 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 	var reasons []view.Reason
 	var oldest time.Time
 	for _, a := range accounts {
+		label := accountLabel(a, states)
 		result, ferr := refresh(ctx, now, a, states)
+		ferr = last.settle(a.Provider+"/"+a.Name, now, result, ferr)
 
 		windows, err := usage.Decode(now, a, result.Data)
 		if err != nil {
@@ -147,16 +150,37 @@ func gather(ctx context.Context, now time.Time) ([]view.UsageWindow, time.Time, 
 			// section. The canary in internal/usage reports a format change;
 			// a pane should still draw the accounts that do decode.
 			reasons = append(reasons, reason(view.Reason{
-				Label: accountLabel(a, states), Text: "unreadable reading", Status: view.Warn,
+				Label: label, Text: "unreadable reading", Status: view.Warn,
 			}, err))
 			continue
 		}
-		if len(windows) == 0 {
-			reasons = append(reasons, silence(now, a, accountLabel(a, states), ferr))
+		windows, turned := current(now, result.FetchedAt, windows)
+
+		// Why this account's figures are missing or old (spec 089). A refused
+		// login is said whether or not old figures stand, because nothing
+		// changes until a person signs in; any other failure behind figures
+		// is an aside, because a minute without a network must not add a line.
+		switch {
+		case errors.Is(ferr, claude.ErrNeedsLogin):
+			reasons = append(reasons, needsLogin(label))
+		case len(windows) > 0:
+			if ferr != nil {
+				reasons = append(reasons, reason(view.Reason{
+					Label: label, Text: "not refreshed", Status: view.Warn, Aside: true,
+				}, ferr))
+			}
+		case turned && ferr == nil:
+			reasons = append(reasons, view.Reason{
+				Label: label, Text: "out of date", Status: view.Info,
+				Detail: "read " + result.FetchedAt.Local().Format("2006-01-02 15:04") +
+					"; every window has started over since",
+			})
+		default:
+			reasons = append(reasons, silence(now, a, label, ferr))
 		}
 		for _, w := range windows {
 			out = append(out, view.UsageWindow{
-				Account:  accountLabel(a, states),
+				Account:  label,
 				Badge:    states[a.Provider].badges[a.Name],
 				Name:     w.Name,
 				Fraction: w.Fraction,
@@ -207,6 +231,81 @@ func silence(now time.Time, a usage.Account, label string, err error) view.Reaso
 	return view.Reason{
 		Label: label, Text: "nothing fetched yet", Status: view.Info,
 	}
+}
+
+// needsLogin is an account whose sign-in the server refused: a line, because
+// it holds until a person acts (spec 089 R2).
+func needsLogin(label string) view.Reason {
+	return view.Reason{
+		Label: label, Text: "needs a login", Status: view.Warn, Actionable: true,
+		Detail: "the server refused this account's sign-in; sign in with Claude Code again",
+	}
+}
+
+/*
+fetches are what this process's last fetch for each account came to, so the
+polls between fetches can say it too (spec 089 R1).
+
+A fetch is made at most once a gate, two minutes, and the polls are every
+thirty seconds; between fetches the cache is served without an error. A
+reason built from the fetch's own error alone was drawn for one poll in four,
+and a line that comes and goes moves the panel each time.
+*/
+type fetches struct {
+	mu   sync.Mutex
+	last map[string]failure
+}
+
+// failure is a fetch that failed and when it was asked for.
+type failure struct {
+	err error
+	at  time.Time
+}
+
+// settle records a fetch's outcome and returns the error that stands for the
+// account: this fetch's, or the last one's while nothing newer has been read.
+// A reading obtained after the failure, by this process or another, clears it.
+func (f *fetches) settle(key string, now time.Time, r usage.Result, err error) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err != nil {
+		f.last[key] = failure{err: err, at: now}
+		return err
+	}
+	prev, ok := f.last[key]
+	if !ok {
+		return nil
+	}
+	if r.Fresh || r.FetchedAt.After(prev.at) {
+		delete(f.last, key)
+		return nil
+	}
+	return prev.err
+}
+
+/*
+turnedOver reports whether a window resetting at resets has started over
+since a reading fetched at fetched, by more than the stale margin (spec 089
+R5).
+
+The fraction then describes a window that is gone: the machine this came
+from drew a five-hour window at 1 % with its reset a month past. The margin
+is the panel's stale threshold, so a window does not vanish for the minutes
+between its reset and the next fetch.
+*/
+func turnedOver(now, fetched, resets time.Time) bool {
+	return !resets.IsZero() && resets.Before(now.Add(-view.UsageStale)) && fetched.Before(resets)
+}
+
+// current is the windows that have not turned over, and whether any had.
+func current(now, fetched time.Time, windows []usage.Window) ([]usage.Window, bool) {
+	out := make([]usage.Window, 0, len(windows))
+	for _, w := range windows {
+		if !turnedOver(now, fetched, w.ResetsAt) {
+			out = append(out, w)
+		}
+	}
+	return out, len(out) < len(windows)
 }
 
 // refresh asks the cache for one account, fetching when its gate is open and
@@ -529,10 +628,15 @@ func cachedBreakdown(now func() time.Time) func(label string) (view.UsageBreakdo
 			if entry == nil {
 				break
 			}
-			b, err := usage.Lookup(a.Provider).Breakdown(now(), usage.Served(*entry).Data)
+			served := usage.Served(*entry)
+			b, err := usage.Lookup(a.Provider).Breakdown(now(), served.Data)
 			if err != nil {
 				return view.UsageBreakdown{}, err
 			}
+			// The drawer drops what the card drops (spec 089 R5).
+			b.Limits = slices.DeleteFunc(b.Limits, func(l usage.Limit) bool {
+				return turnedOver(now(), served.FetchedAt, l.ResetsAt)
+			})
 			return breakdownView(label, b), nil
 		}
 		return view.UsageBreakdown{}, fmt.Errorf("nothing in the usage cache for %s", label)

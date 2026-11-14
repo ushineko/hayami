@@ -214,6 +214,12 @@ providers' APIs are reached over TLS.
 - A refresh reads Claude Code's credential file again just before writing
   it, leaves it alone if Claude Code refreshed meanwhile, and keeps every key
   written meanwhile (`writeBack`, `internal/claude/refresh.go`; spec 077).
+- A refresh token the endpoint refused (401, 403, or 400 `invalid_grant`) is
+  not sent again by the process; only its SHA-256 is kept, in memory. A
+  refusal's error code reaches the panel only as printable ASCII of at most
+  64 characters, and the rest of the body never does. A 429 from the token
+  endpoint is waited out under the same one-hour cap (`refused`, `errorCode`,
+  `internal/claude/refresh.go`; spec 089).
 
 **Accepted.** A write by Claude Code between hayami's second read and its
 rename can still be lost: milliseconds, where it was a network round trip.
