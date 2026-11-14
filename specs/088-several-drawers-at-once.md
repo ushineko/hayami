@@ -205,7 +205,22 @@ ydotool (recorded under the acceptance criteria above):
 - Step 5: not run on the desk. `TestThePlaceIsTheCardsWithTwoDrawersOnTheLeft`
   covers the place saved with two drawers out; the panel's saved place was
   the cards' after every run above.
-- Windows VM: not run. CI runs the tests on Windows.
+- Windows VM, 2026-11-14, Windows 11 at 150 % (3840×2160), 0.14.0 installed
+  from the release's command-line installer, clicked with injected input in
+  the signed-in session and read from in-session grabs: steps 1–3 passed.
+  Shift reaches the panel; Shift-clicks on Hardware and Network opened CPU,
+  Memory and Bandwidth in three drawers outward from the cards; a Shift-click
+  on "Peers" opened it in a fourth and a second closed only it; a plain click
+  closed all. With the panel at x 1100 the drawers opened on the right, four
+  fitted the room read from the work area, and a Shift-click at the cap put
+  Peers in the outermost drawer with the width unchanged (R8, R9).
+- Found there: with drawers on the left, each close of several left the panel
+  a pixel further left (x 3464, 3463, 3462, 3461), and the saved place
+  followed (#323). The design system moved the window by each drawer's width
+  rounded on its own (fynedesygn #238). With fynedesygn 0.1.118 (hayami
+  0.14.1), cross-built and run on the same desk: two then three drawers and a
+  close of all, twice each, the right edge at 3838 at every step and x back
+  at 3468 after each close.
 
 ### Prod visibility
 
