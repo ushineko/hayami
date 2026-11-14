@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.13.1
+**Version**: 0.14.0
 
 *a chart you read at a glance*
 
@@ -699,7 +699,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.14.0 (2026-11-14)
 
 - **Added**: several drawers at once (spec 088, #320). Shift-click a card to
   open its detail beside the drawers already out, or to close its own; on the
