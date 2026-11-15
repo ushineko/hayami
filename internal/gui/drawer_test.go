@@ -645,6 +645,7 @@ type compositor struct {
 	answers     bool
 	rooms       int
 	held        []bool
+	corners     []bool
 }
 
 func (d *compositor) Asks() bool { return true }
@@ -661,6 +662,13 @@ func (d *compositor) HoldEdge(_ context.Context, on bool) bool {
 	defer d.mu.Unlock()
 	d.held = append(d.held, on)
 	return on
+}
+
+func (d *compositor) HoldCorner(_ context.Context, right bool) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.corners = append(d.corners, right)
+	return true
 }
 
 func (d *compositor) Yield(context.Context) {}

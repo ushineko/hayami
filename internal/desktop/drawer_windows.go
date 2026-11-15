@@ -26,6 +26,9 @@ func (*Drawer) Room(context.Context) (left, right float32, ok bool) { return 0, 
 // HoldEdge holds nothing: the window moves itself.
 func (*Drawer) HoldEdge(context.Context, bool) bool { return false }
 
+// HoldCorner holds nothing: the window moves itself.
+func (*Drawer) HoldCorner(context.Context, bool) bool { return false }
+
 // Yield does nothing: the design system hands the foreground back.
 func (*Drawer) Yield(context.Context) {}
 

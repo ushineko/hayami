@@ -95,6 +95,21 @@ in a drawer of its own. A plain click with several open closes them all.
 The drawers go as far as the screen has room; after that a Shift-click shows
 the new detail in the outermost drawer.
 
+**Fill.** Once the drawers reach the edge of the screen's room, the outermost
+offers **Fill**, which widens every open drawer by the same amount until the
+panel reaches the screen's edge; the cards stay as they are. Press it again
+to put the drawers back. Opening or closing a drawer ends it. Where hayami
+cannot learn the room beside the panel (a desktop other than Plasma or
+Windows) Fill is not offered.
+
+**Tuck it away.** Hover over the cards and a small button appears in their
+top-right corner. Click it and the panel tucks into a small square with
+hayami's icon, at the cards' bottom corner nearest the screen's edge. Click
+the square to bring the panel back where it was, drawers and all. While
+tucked nothing is read. The square moves the way the panel does (Meta-drag
+on Plasma, a drag on Windows), and the panel unfolds from wherever it is put,
+kept inside the screen. A restart always opens the panel, not the square.
+
 Nothing here is read until the drawer is open, and it stops when the drawer
 closes. The drawers open on whichever side of the panel the screen has room
 on; Preferences, Window can name a side.
@@ -702,6 +717,16 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: Fill. When the drawers reach the edge of the screen's room, the
+  outermost offers Fill, which widens every open drawer to the same width
+  until the panel reaches the screen's edge, a padding pixel or two making up
+  what does not divide (spec 090, #327).
+- **Added**: the panel tucks into a small square with hayami's icon at its
+  corner, from a button that appears over the cards, and comes back where it
+  was with a click; nothing is read while it is tucked (spec 091, #328).
 
 ### 0.14.2 (2026-11-14)
 

@@ -298,7 +298,11 @@ something else between hayami reading it and acting on it.
   (`endAll`, `internal/gui/kill_unix.go`; `internal/gui/kill_windows.go`).
   The kernel refuses another account's processes.
 - The KWin script is written to a new file with mode `0600` before KWin is
-  told its path (`writeScript`, `internal/desktop/script.go`).
+  told its path (`writeScript`, `internal/desktop/script.go`). The scripts
+  that stay loaded, the position watch and the hold scripts (an edge for the
+  drawers, a corner while the panel is tucked, spec 091), act only on the
+  window whose class and title are the panel's, with both quoted into the
+  script, and only move or resize it.
 - VPN health checks send one ICMP echo and look up one name per check, at the
   interval chosen, only for a tunnel that is connected and only to a target in the
   settings (`internal/core/vpncheck_linux.go`, spec 085). A settings file aiming a

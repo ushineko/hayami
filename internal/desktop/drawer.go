@@ -66,6 +66,10 @@ const (
 	edgeNone edge = iota
 	edgeRight
 	edgeLeft
+	// cornerRight and cornerLeft are the corner script's (HoldCorner),
+	// loaded under the same name as the edge's in its place.
+	cornerRight
+	cornerLeft
 )
 
 // NewDrawer builds the helper for the window of the app with the title.
@@ -181,6 +185,39 @@ func (d *Drawer) HoldEdge(ctx context.Context, left bool) bool {
 		d.holding = want
 	}
 	return d.holding == edgeRight
+}
+
+/*
+HoldCorner loads the script that keeps a bottom corner of the window where it
+is while the window tucks into its square and unfolds again (spec 091,
+fynedesygn spec 081), the right corner when right is set, and reports whether
+it is held.
+
+It is loaded under the edge script's name and so in its place: the corner
+script holds the bottom edge as well, and a panel whose cards change while it
+is loaded would grow upwards. HoldEdge puts the edge's back after the panel
+unfolds.
+*/
+func (d *Drawer) HoldCorner(ctx context.Context, right bool) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	want := cornerLeft
+	if right {
+		want = cornerRight
+	}
+	if want == d.holding {
+		return true
+	}
+	if d.connect() != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, scriptWait)
+	defer cancel()
+	d.holding = edgeNone
+	if d.run(ctx, holdName, kwin.HoldCornerScript(d.target, right), true) == nil {
+		d.holding = want
+	}
+	return d.holding == want
 }
 
 // Yield gives the keyboard back to the window a person was in before they

@@ -662,3 +662,38 @@ func DrawerPlot(p *Panel, part int, trace string) (time.Duration, []float64, boo
 	}
 	return plot.Drift(), plot.Samples(trace), true
 }
+
+// Spec 090. FillOffered is whether the outermost drawer offers Fill, Filled
+// whether the row is filled, and PressFill the press on it.
+func FillOffered(p *Panel) bool { return p.win.Panel().Fillable() }
+func Filled(p *Panel) bool      { return p.win.Panel().Filled() }
+func PressFill(p *Panel)        { p.toggleFill() }
+
+// DrawersWidth is what the open drawers add to the window.
+func DrawersWidth(p *Panel) float32 { return p.win.Panel().DrawersWidth() }
+
+// SettleRoomAtOnce asks the compositor for the room straight after the row
+// changes, and the edge back straight after unfolding, for a test that has
+// no resize to wait for.
+func SettleRoomAtOnce(t interface{ Cleanup(func()) }) {
+	room, edge := roomSettles, edgeReturns
+	roomSettles, edgeReturns = 0, 0
+	t.Cleanup(func() { roomSettles, edgeReturns = room, edge })
+}
+
+// Spec 091. AskTuck is a click on the tuck glyph, Untuck one on the square,
+// and Tucked whether the panel is tucked.
+func AskTuck(p *Panel)          { p.askTuck() }
+func Untuck(p *Panel)           { p.win.Panel().Untuck() }
+func Tucked(p *Panel) bool      { return p.win.Panel().Tucked() }
+func TuckOffered(p *Panel) bool { return p.win.Panel().Tuckable() }
+
+// Woken is whether a section's poll has a wake waiting; it takes the wake.
+func Woken(p *Panel, key string) bool {
+	select {
+	case <-p.wake[key]:
+		return true
+	default:
+		return false
+	}
+}
