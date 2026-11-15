@@ -118,6 +118,11 @@ type Panel struct {
 	kit       drawerKit
 	drawerOut atomic.Bool
 
+	// tucked is whether the panel is tucked into its square (spec 091),
+	// for the polls and the position watcher, which run on other
+	// goroutines.
+	tucked atomic.Bool
+
 	// do hands a poll's result to the UI thread. It is fyne.Do; a test with
 	// more than one poller replaces it, because the test driver runs fyne.Do
 	// on the caller's goroutine and two pollers would then draw at once.
@@ -1036,6 +1041,10 @@ on Windows, and there a move with the drawer out is still not remembered.
 Called from the watcher's goroutine; the widths are the UI thread's to read.
 */
 func (p *Panel) moved(store *config.Store, x, y, width int) {
+	// The square's place is not the panel's (spec 091 R5).
+	if p.tucked.Load() {
+		return
+	}
 	if width <= 0 {
 		if p.drawerOut.Load() {
 			return
@@ -1063,6 +1072,14 @@ func (p *Panel) drawerShift(width float32) int {
 	dr := pn.Drawer()
 	extra, reach := width-pn.CardsSize().Width, dr.Reach()
 	if dr.Side() != glance.Left || reach <= 0 {
+		return 0
+	}
+	// A filled row is the drawers' width now, not a number of Reaches
+	// (spec 090 R5).
+	if pn.Filled() {
+		if have := pn.DrawersWidth(); extra >= have-2 && extra <= have+2 {
+			return int(extra + 0.5)
+		}
 		return 0
 	}
 	// The compositor's widths are whole pixels and these are not: two of
@@ -1453,6 +1470,10 @@ func (p *Panel) restyle() {
 
 // isShown is whether the settings show a section, for its poll.
 func (p *Panel) isShown(key string) bool {
+	// A tucked panel shows nothing, and reads nothing (spec 091 R3).
+	if p.tucked.Load() {
+		return false
+	}
 	p.shownMu.Lock()
 	defer p.shownMu.Unlock()
 	return p.shown[key]

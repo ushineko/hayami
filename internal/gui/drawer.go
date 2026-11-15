@@ -103,6 +103,10 @@ type drawerKit struct {
 	name float32
 	desk Desk
 
+	// fillGen counts changes of the row, so a room asked for an older row
+	// is not taken for this one's (offerFill).
+	fillGen int
+
 	// openURL gives a sign-in address to the person's browser; a test
 	// replaces it, so no test opens one.
 	openURL func(*url.URL) error
@@ -131,6 +135,10 @@ type Desk interface {
 	// HoldEdge holds the edge away from the drawers, the right one when
 	// they are on the left, and reports whether the right edge is held.
 	HoldEdge(ctx context.Context, left bool) bool
+	// HoldCorner holds a bottom corner of the window, the right one when
+	// right is set, in place of the edge, while the panel tucks and
+	// unfolds (spec 091), and reports whether it is held.
+	HoldCorner(ctx context.Context, right bool) bool
 	Yield(ctx context.Context)
 	Stop()
 }
@@ -153,6 +161,7 @@ type noDesk struct{}
 func (noDesk) Asks() bool                                    { return false }
 func (noDesk) Room(context.Context) (float32, float32, bool) { return 0, 0, false }
 func (noDesk) HoldEdge(context.Context, bool) bool           { return false }
+func (noDesk) HoldCorner(context.Context, bool) bool         { return false }
 func (noDesk) Yield(context.Context)                         {}
 func (noDesk) Stop()                                         {}
 
@@ -178,6 +187,7 @@ func (p *Panel) buildDrawer(a fyne.App, o Options) {
 	}
 	p.newDrawer(p.win.Panel().Drawer())
 	p.win.Panel().OnTapped = p.tapped
+	p.buildTuck()
 }
 
 // newDrawer gives one of the panel's drawers its pieces, built once; a
@@ -540,6 +550,7 @@ func (p *Panel) showDetail(d *drawer, src panel.Detailer, section, id string) {
 		p.drawerOut.Store(true)
 		p.renderOne(d)
 		p.pollDetail(d, src, id)
+		p.offerFill()
 	}
 	// Only the first drawer out settles the side and the held edge; the
 	// rest go beyond it, on its side.
@@ -690,6 +701,7 @@ func (p *Panel) closeDrawer(d *drawer) {
 	d.section, d.id = "", ""
 	d.dr.SetOpen(false)
 	p.drawerOut.Store(p.win.Panel().Opened() > 0)
+	p.offerFill()
 }
 
 // closeAll pushes every drawer back in one change of shape. Closed one at a
@@ -702,6 +714,7 @@ func (p *Panel) closeAll() {
 	}
 	p.win.Panel().CloseDrawers()
 	p.drawerOut.Store(false)
+	p.offerFill()
 }
 
 // applyDrawer brings the drawers into line with the settings: their side,
