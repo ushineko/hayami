@@ -2,7 +2,7 @@
 
 **Issue**: #328
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
@@ -11,7 +11,7 @@ the cards' bottom corner on the screen-edge side; a click on the square
 brings it back where it was, or where the square was moved to, drawers and
 all. While tucked nothing is read and the square's place is not saved. On
 Plasma the corner is held by fynedesygn's corner script, loaded in place of
-the edge's. Tried on Plasma; the Windows check is still to run. A reviewer
+the edge's. Tried on Plasma and on Windows 11. A reviewer
 should look first at `internal/gui/tuck.go`.
 
 ## Context
@@ -78,7 +78,7 @@ left and on the main screen with drawers on the right:
   drawers are back (results below).
 - [x] Plasma: the square moved by Meta-drag unfolds the panel from its new
   place, and into the screen's top corner unfolds it inside the work area.
-- [ ] Windows VM: the same, with a press-drag on the square.
+- [x] Windows VM: the same, with a press-drag on the square (results below).
 
 ## Risks & Assumptions
 
@@ -140,7 +140,16 @@ of the installed panel, clicked with ydotool, places from KWin's geometry:
 - Step 2 (nothing read while tucked) and step 5 (restart while tucked):
   covered by the headless tests; a restart during the run, with the panel
   tucked, opened it untucked at its saved place.
-- Windows VM: not run.
+- Windows VM, 2026-11-15, Windows 11 at 150 %, 0.15.0, input through
+  QEMU's tablet: the panel at (1100, 1620), 370 x 449, with more room on
+  the right; the glyph tucked it into a 45-pixel square at (1100, 2024), its
+  bottom-left corner the cards' (1100, 2069); a click on it unfolded the
+  panel to (1100, 1620). With Bandwidth by peer and CPU out on the right,
+  the same, and the same two drawers came back. Tucked, the square dragged
+  to (1978, 978) did not unfold on the drag; a click then unfolded the
+  panel at (1978, 574), drawers and all. Dragged to (3758, 1978) near the
+  bottom-right corner, a click unfolded it at (2483, 1574): 3840 less its
+  1357, inside the screen.
 
 ### Prod visibility
 
