@@ -6,7 +6,13 @@
 
 ## Executive Summary
 
-(Filled in before the PR.)
+A button over the cards tucks the panel into a square with hayami's icon at
+the cards' bottom corner on the screen-edge side; a click on the square
+brings it back where it was, or where the square was moved to, drawers and
+all. While tucked nothing is read and the square's place is not saved. On
+Plasma the corner is held by fynedesygn's corner script, loaded in place of
+the edge's. Tried on Plasma; the Windows check is still to run. A reviewer
+should look first at `internal/gui/tuck.go`.
 
 ## Context
 

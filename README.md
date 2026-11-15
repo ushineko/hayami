@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.14.2
+**Version**: 0.15.0
 
 *a chart you read at a glance*
 
@@ -718,7 +718,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.15.0 (2026-11-14)
 
 - **Added**: Fill. When the drawers reach the edge of the screen's room, the
   outermost offers Fill, which widens every open drawer to the same width

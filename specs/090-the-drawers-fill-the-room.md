@@ -6,7 +6,12 @@
 
 ## Executive Summary
 
-(Filled in before the PR.)
+At the drawers' cap the outermost drawer offers Fill, which widens every open
+drawer to the same width until the panel reaches the screen's edge; the cards
+do not move, and any change of the row ends it. The room is asked of the
+compositor a moment after each change, so the answer is the window's after
+its resize. Tried on Plasma at 1.5 on both sides; the Windows check is still
+to run. A reviewer should look first at `internal/gui/fill.go`.
 
 ## Context
 
