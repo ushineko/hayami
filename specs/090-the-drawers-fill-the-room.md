@@ -2,7 +2,7 @@
 
 **Issue**: #327
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
@@ -10,8 +10,7 @@ At the drawers' cap the outermost drawer offers Fill, which widens every open
 drawer to the same width until the panel reaches the screen's edge; the cards
 do not move, and any change of the row ends it. The room is asked of the
 compositor a moment after each change, so the answer is the window's after
-its resize. Tried on Plasma at 1.5 on both sides; the Windows check is still
-to run. A reviewer should look first at `internal/gui/fill.go`.
+its resize. Tried on Plasma at 1.5 on both sides and on Windows 11 at 150 %. A reviewer should look first at `internal/gui/fill.go`.
 
 ## Context
 
@@ -73,7 +72,7 @@ installed panel:
   filled: the window's outer edge is the work area's, the drawers' widths
   recovered from the grab are equal, the cards did not move. Unfilled: back
   to the drawers' own widths, the cards did not move (results below).
-- [ ] Windows VM: the same.
+- [x] Windows VM: the same (results below).
 
 ## Risks & Assumptions
 
@@ -126,7 +125,17 @@ grab:
   pixels as the drawers are.
 - Step 5 (quit filled, start again): not run; `TestThePlaceIsTheCardsWithAFilledRow`
   covers the place saved.
-- Windows VM: not run.
+- Windows VM, 2026-11-15, Windows 11 at 150 % (3840x2160), 0.15.0 installed
+  from the release's command-line installer, input sent through QEMU's
+  tablet and read from in-session grabs: the panel at x 1100, Shift-clicks
+  opened Bandwidth by process and by peer, Memory and CPU; at four the room
+  left was 396 pixels and the outermost offered Fill. Filled, the window
+  went from 2344 to 2740 pixels wide, its right edge on the screen's at
+  3840, the cards at x 1100 throughout; the drawers' headings stood 592,
+  592 and 591 pixels apart, as 579-pixel drawers and 13-pixel gaps make
+  (unfilled, 494, 493 and 493: the pixel is where each heading's text
+  starts). Unfilled: 2344 again. Filled, then a plain click: 370 wide at x
+  1100 (steps 1-4).
 
 ### Prod visibility
 
