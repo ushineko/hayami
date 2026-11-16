@@ -162,7 +162,9 @@ func AsPage(d view.Detail) view.Detail {
 		ID:      d.ID,
 		Title:   title,
 		Lines:   rest,
+		Columns: d.Columns,
 	}}
+	d.Columns = nil
 	d.Lines = nil
 	return d
 }

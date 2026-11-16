@@ -357,6 +357,10 @@ bug report someone pasted `doctor` or `readings --json` into.
 - A VPN's address, gateway and routes are read only for the drawer and `detail`.
   They are not on the card, in `readings` or in `doctor`, which is what gets pasted
   into a bug report (`DetailInfo.OnRequest`, spec 085).
+- A process list's columns (a count, a share, a byte count; spec 092) are
+  numbers hayami formats; the name is still the one process-supplied text
+  on a line, and no process attribute beyond those of spec 060 is read.
+  They pass through `safetext.Printable` with the rest of the line.
 - `tools/screenshot.sh` runs the panel from a throwaway copy of the
   settings, so no path of the user's is shown.
 - Tokens are never printed (B3).

@@ -482,6 +482,13 @@ func DrawerSubject(p *Panel) (section, id string) { return p.first().section, p.
 func DrawerLines(p *Panel) []string     { return shownRows(p.first().rows) }
 func DrawerNoteLines(p *Panel) []string { return shownRows(p.first().notes) }
 
+// DrawerHeads is the line naming the first drawer's columns, and whether it
+// is shown (spec 092 R6).
+func DrawerHeads(p *Panel) (string, bool) {
+	h := p.first().heads
+	return strings.Join(visibleTexts(h.Object()), "|"), h.Shown()
+}
+
 func shownRows(rows []*glance.Row) []string {
 	var out []string
 	for _, r := range rows {

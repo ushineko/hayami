@@ -541,7 +541,7 @@ func (c *Cooler) DetailInterval(string) time.Duration { return ProcessInterval }
 func (c *Cooler) CloseDetail(string) {}
 
 // coolerDetails is how each of the lists is read, by ID.
-var coolerDetails = map[string]func(*Cooler, context.Context) ([]view.ProcessUse, string, error){
+var coolerDetails = map[string]func(*Cooler, context.Context) ([]pidUse, string, error){
 	view.DetailCPU:    (*Cooler).cpuUse,
 	view.DetailMemory: (*Cooler).memoryUse,
 	view.DetailGPU:    (*Cooler).gpuUse,
@@ -562,7 +562,11 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 	if err != nil {
 		return unread(key, id, view.ProcessTitle(id), err), err
 	}
-	d := view.Processes(key, id, uses)
+	named := make([]view.ProcessUse, len(uses))
+	for i, u := range uses {
+		named[i] = u.ProcessUse
+	}
+	d := view.Processes(key, id, named)
 	// Every row leads to the processes behind its name. The row carries
 	// what it asks for; what a click does with it is the shell's.
 	for i, l := range d.Lines {
@@ -575,36 +579,73 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 	return d, nil
 }
 
-// cpuUse is each process's share of the processors since the last reading.
-func (c *Cooler) cpuUse(ctx context.Context) ([]view.ProcessUse, string, error) {
+/*
+pidUse is one process's figures in whichever list it was read from, with the
+PID the lists throw away: a list is of names, because a browser is forty
+processes and a person asks about the browser (spec 060 R6). A drill is the
+other question -- which of the forty -- so it reads the same lists and keeps
+what they drop.
+*/
+type pidUse struct {
+	PID int
+	view.ProcessUse
+}
+
+// readProcesses is one reading of the processes and the memory's total, which
+// a share of it is of.
+func (c *Cooler) readProcesses(ctx context.Context) ([]core.Process, uint64, error) {
 	if c.processes == nil {
-		return nil, "", errNoProcesses
+		return nil, 0, errNoProcesses
 	}
 	processes, err := c.processes.Read(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("reading the processes: %w", err)
+		return nil, 0, fmt.Errorf("reading the processes: %w", err)
 	}
-	uses := make([]view.ProcessUse, 0, len(processes))
+	c.mu.Lock()
+	total := c.reading.MemoryTotal
+	c.mu.Unlock()
+	return processes, total, nil
+}
+
+// figures are every figure one process reading has of a process, for the
+// lists' columns (spec 092); the list sets which of them it is ordered by.
+func figures(p core.Process, total uint64) pidUse {
+	return pidUse{PID: p.PID, ProcessUse: view.ProcessUse{
+		Name:   p.Name,
+		CPU:    view.Maybe(p.CPU, p.HasCPU),
+		Memory: view.Some(float64(p.Memory)),
+		Share:  view.Maybe(100*float64(p.Memory)/float64(total), total > 0),
+	}}
+}
+
+// cpuUse is each process's share of the processors since the last reading.
+func (c *Cooler) cpuUse(ctx context.Context) ([]pidUse, string, error) {
+	processes, total, err := c.readProcesses(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	uses := make([]pidUse, 0, len(processes))
 	for _, p := range processes {
 		if p.HasCPU {
-			uses = append(uses, view.ProcessUse{Name: p.Name, Value: p.CPU})
+			u := figures(p, total)
+			u.Value = p.CPU
+			uses = append(uses, u)
 		}
 	}
 	return uses, "share of every processor together", nil
 }
 
 // memoryUse is the memory each process holds.
-func (c *Cooler) memoryUse(ctx context.Context) ([]view.ProcessUse, string, error) {
-	if c.processes == nil {
-		return nil, "", errNoProcesses
-	}
-	processes, err := c.processes.Read(ctx)
+func (c *Cooler) memoryUse(ctx context.Context) ([]pidUse, string, error) {
+	processes, total, err := c.readProcesses(ctx)
 	if err != nil {
-		return nil, "", fmt.Errorf("reading the processes: %w", err)
+		return nil, "", err
 	}
-	uses := make([]view.ProcessUse, 0, len(processes))
+	uses := make([]pidUse, 0, len(processes))
 	for _, p := range processes {
-		uses = append(uses, view.ProcessUse{Name: p.Name, Value: float64(p.Memory)})
+		u := figures(p, total)
+		u.Value = float64(p.Memory)
+		uses = append(uses, u)
 	}
 	c.mu.Lock()
 	state := c.reading
@@ -618,8 +659,17 @@ func (c *Cooler) memoryUse(ctx context.Context) ([]view.ProcessUse, string, erro
 	return uses, note, nil
 }
 
-// gpuUse is each process's use of the card the row is about.
-func (c *Cooler) gpuUse(ctx context.Context) ([]view.ProcessUse, string, error) {
+/*
+gpuUse is each process's use of the card the row is about.
+
+The card's reader knows a process by its PID and its load and nothing else,
+so its other figures come from a reading of the processes joined by PID
+(spec 092 R3). A process that reading lacks -- gone between the two, or
+another account's on Windows -- keeps its load and has no other figure: the
+empty form, not a zero. A reading of the processes that fails costs the
+columns and not the list.
+*/
+func (c *Cooler) gpuUse(ctx context.Context) ([]pidUse, string, error) {
 	if c.gpuProcesses == nil {
 		return nil, "", errNoProcesses
 	}
@@ -630,9 +680,22 @@ func (c *Cooler) gpuUse(ctx context.Context) ([]view.ProcessUse, string, error) 
 	if err != nil {
 		return nil, "", err //nolint:wrapcheck // the reader's own account of the absence
 	}
-	uses := make([]view.ProcessUse, 0, len(processes))
-	for _, p := range processes {
-		uses = append(uses, view.ProcessUse{Name: p.Name, Value: p.Load})
+	byPID := map[int]core.Process{}
+	var total uint64
+	if all, t, err := c.readProcesses(ctx); err == nil {
+		total = t
+		for _, p := range all {
+			byPID[p.PID] = p
+		}
+	}
+	uses := make([]pidUse, 0, len(processes))
+	for _, gp := range processes {
+		u := pidUse{PID: gp.PID}
+		if p, ok := byPID[gp.PID]; ok && gp.PID != 0 {
+			u = figures(p, total)
+		}
+		u.Name, u.Value = gp.Name, gp.Load
+		uses = append(uses, u)
 	}
 	return uses, "each program's busiest engine", nil
 }
