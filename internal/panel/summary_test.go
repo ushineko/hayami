@@ -74,3 +74,69 @@ func TestOnlyTheMemoryListHasASummary(t *testing.T) {
 		assert.Nil(t, part.Summary)
 	}
 }
+
+// processorCooler is a cooler whose processor reads two online cores and an
+// offline one between them, and rest; its load is read as loads in turn,
+// polled once per load.
+func processorCooler(t *testing.T, rest core.Processor, loads ...float64) *panel.Cooler {
+	t.Helper()
+	h := detailHost(stepping([]core.ProcessSample{{PID: 1, Name: "editor", CPUSeconds: 1}}), &gpuReader{}, "")
+	sample := 0.0
+	h.Processor = func() *core.ProcessorReader {
+		return core.NewProcessorReader(func() ([]core.ProcessorTimes, error) {
+			sample++
+			return []core.ProcessorTimes{
+				{Busy: 50 * sample, Idle: 50 * sample, Online: true}, {},
+				{Busy: 10 * sample, Idle: 90 * sample, Online: true},
+			}, nil
+		}, func(context.Context) core.Processor { return rest })
+	}
+	c := panel.NewCoolerOn(h, noScan)
+	call := 0
+	panel.SetProcessors(c, func() (float64, bool) {
+		v := loads[min(call, len(loads)-1)]
+		call++
+		return v, true
+	}, func(context.Context) core.Graphics { return core.Graphics{} })
+	for range loads {
+		_, _ = c.Poll(t.Context())
+	}
+	return c
+}
+
+// Spec 095 R1, R3. The CPU list carries the summary: the load and its plot
+// from the cooler's polls, so the plot has its history when the drawer
+// opens; each core's load, an offline one in its place; the rest read now.
+// A drill page under it has none.
+func TestTheCPUListSumsUpTheProcessor(t *testing.T) {
+	c := processorCooler(t, core.Processor{
+		Clock: 3000, MaxClock: 5700, HasClock: true,
+		LoadAvg: [3]float64{1, 2, 3}, HasLoadAvg: true,
+		Processes: 10, Threads: 100, HasTasks: true,
+	}, 10, 20, 30)
+
+	d, err := c.PollDetail(t.Context(), view.DetailCPU)
+	require.NoError(t, err)
+	require.NotNil(t, d.Summary)
+	assert.InDelta(t, 0.3, d.Summary.Meters[0].Fraction, 1e-9, "the last poll's load")
+	assert.Equal(t, []float64{10, 20, 30}, d.Summary.Trails[0].Samples, "every poll's")
+	require.NotNil(t, d.Summary.Heat)
+	assert.Equal(t, []float64{0.5, -1, 0.1}, d.Summary.Heat.Values)
+	assert.Equal(t, view.LoadAverage, d.Summary.Lines[1].Name)
+	assert.Empty(t, d.Reasons)
+
+	page, err := c.PollDetail(t.Context(), "cpu/editor")
+	require.NoError(t, err)
+	assert.Nil(t, page.Summary)
+}
+
+// D1. A machine with a queue names the line for it even when it was not
+// read: the shape is the machine's, not the reading's.
+func TestAQueueMachineKeepsItsLine(t *testing.T) {
+	c := processorCooler(t, core.Processor{Queues: true}, 10)
+
+	d, err := c.PollDetail(t.Context(), view.DetailCPU)
+	require.NoError(t, err)
+	assert.Equal(t, view.LoadQueue, d.Summary.Lines[1].Name)
+	assert.Equal(t, view.NoQuantity(), d.Summary.Lines[1].Value)
+}

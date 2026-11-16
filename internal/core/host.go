@@ -37,6 +37,11 @@ type Host struct {
 	CPULoad func() *CPULoad
 	CPUName func() string
 
+	// Processor builds the reader of the CPU drawer's summary, which keeps
+	// its own previous sample of each core (spec 095); nil where this
+	// platform reads none.
+	Processor func() *ProcessorReader
+
 	// Counters reads the interface table; Wireless describes the Wi-Fi
 	// interfaces, nothing on a machine with none.
 	Counters func() (map[string]Counters, error)

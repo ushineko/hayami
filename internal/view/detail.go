@@ -202,7 +202,8 @@ func (d Detail) printable() Detail {
 	d.Meters = meters
 	d.Lines = printableLines(d.Lines, p)
 	if d.Summary != nil {
-		s := Summary{Meters: make([]Meter, len(d.Summary.Meters)), Lines: printableLines(d.Summary.Lines, p), Covers: d.Summary.Covers}
+		s := *d.Summary
+		s.Meters, s.Lines = make([]Meter, len(d.Summary.Meters)), printableLines(d.Summary.Lines, p)
 		for i, m := range d.Summary.Meters {
 			m.Label, m.Caption = p(m.Label), p(m.Caption)
 			s.Meters[i] = m
@@ -257,6 +258,15 @@ func (d Detail) Text() string {
 	if s := d.Summary; s != nil {
 		for _, m := range s.Meters {
 			b.WriteString("  " + strings.TrimRight(padRight(truncate(m.Name(), DetailNameWidth), DetailNameWidth)+"  "+m.Caption, " ") + "\n")
+		}
+		for _, t := range s.Trails {
+			if len(t.Samples) > 0 {
+				b.WriteString("  " + padRight("", DetailNameWidth) + "  " +
+					Sparkline(t.Samples, min(len(t.Samples), detailTrailWidth), SparkMinSpan) + "\n")
+			}
+		}
+		if s.Heat != nil {
+			b.WriteString("  " + padRight(s.Heat.Name, DetailNameWidth) + "  " + s.Heat.Text() + "\n")
 		}
 		for _, l := range s.Lines {
 			b.WriteString("  " + strings.TrimRight(padRight(l.Name, DetailNameWidth)+"  "+l.figure(), " ") + "\n")

@@ -119,6 +119,13 @@ or "none". It is drawn whole where the drawer keeps at least ten lines of the
 list under it, and not at all otherwise; a reading never draws or hides it.
 `hayami-tui detail cooler/memory` prints it above the list.
 
+The CPU drawer does the same for the processor: the load with a bar and a
+plot of the last five minutes, a row of cells, one per core, each brighter
+the busier it is (an offline core is an empty outline in its place), the
+average clock of the highest a core reaches, the load average (on Windows,
+which has none, the processor queue), and how many processes and threads
+there are.
+
 **Tuck it away.** Hover over the cards and a small button appears in their
 top-right corner. Click it and the panel tucks into a small square with
 hayami's icon, at the cards' bottom corner nearest the screen's edge. Click
@@ -745,6 +752,12 @@ MIT. See
   or the page file in use of its size. It is drawn where the drawer keeps
   ten lines of the list under it, and `detail cooler/memory` prints it
   (spec 094, #333).
+- **Added**: the CPU drawer sums up the processor over its list: the load
+  with a bar and a plot of the last five minutes, a cell per core coloured
+  by its load, the clock, the load average (the processor queue on
+  Windows), and the processes and threads. Drawn by the Memory summary's
+  rule; `detail cooler/cpu` prints it, a character per core (spec 095,
+  #333; fynedesygn spec 083).
 
 ### 0.16.0 (2026-11-15)
 

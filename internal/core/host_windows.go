@@ -27,6 +27,7 @@ func NewHost(cfg HostConfig) Host {
 		Graphics:       windowsGraphics(nativeGraphics(), NvidiaSMI),
 		GPUMissing:     windowsGPUMissing,
 		CPULoad:        systemTimesLoad,
+		Processor:      windowsProcessor,
 		CPUName:        registryCPUName,
 		Counters:       ReadCounters,
 		Wireless:       ReadWireless,
