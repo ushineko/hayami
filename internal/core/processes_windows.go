@@ -120,5 +120,59 @@ func globalMemory(context.Context) (Memory, error) {
 	if m.AvailPhys > m.TotalPhys {
 		return Memory{}, errors.New("GlobalMemoryStatusEx: more memory available than there is")
 	}
-	return Memory{Used: m.TotalPhys - m.AvailPhys, Total: m.TotalPhys}, nil
+	out := Memory{Used: m.TotalPhys - m.AvailPhys, Total: m.TotalPhys, SwapName: "page file"}
+	// The cache and the page file are the summary's (spec 094 R7). Either
+	// failing costs its own line, not the memory in use.
+	var pi performanceInformation
+	pi.Cb = uint32(unsafe.Sizeof(pi))
+	if r, _, _ := procGetPerformanceInfo.Call(uintptr(unsafe.Pointer(&pi)), uintptr(pi.Cb)); r != 0 && pi.PageSize > 0 {
+		out.Cache, out.HasCache = uint64(pi.SystemCache)*uint64(pi.PageSize), true
+		if buf, err := pageFileTable(); err == nil {
+			if used, total, err := pageFiles(buf, uint64(pi.PageSize)); err == nil {
+				out.SwapUsed, out.SwapTotal, out.HasSwap = used, total, true
+			}
+		}
+	}
+	return out, nil
+}
+
+var procGetPerformanceInfo = windows.NewLazySystemDLL("kernel32.dll").NewProc("K32GetPerformanceInfo")
+
+// performanceInformation is PERFORMANCE_INFORMATION; the sizes and counts in
+// pages are SIZE_T.
+type performanceInformation struct {
+	Cb                uint32
+	CommitTotal       uintptr
+	CommitLimit       uintptr
+	CommitPeak        uintptr
+	PhysicalTotal     uintptr
+	PhysicalAvailable uintptr
+	SystemCache       uintptr
+	KernelTotal       uintptr
+	KernelPaged       uintptr
+	KernelNonpaged    uintptr
+	PageSize          uintptr
+	HandleCount       uint32
+	ProcessCount      uint32
+	ThreadCount       uint32
+}
+
+// pageFileTable is NtQuerySystemInformation(SystemPageFileInformation): the
+// page files, as long as the call says, and empty for none.
+func pageFileTable() ([]byte, error) {
+	size := uint32(4096)
+	for range 4 {
+		b := make([]byte, size)
+		var need uint32
+		err := windows.NtQuerySystemInformation(windows.SystemPageFileInformation,
+			unsafe.Pointer(&b[0]), size, &need)
+		if err == nil {
+			return b[:min(need, size)], nil
+		}
+		if !errors.Is(err, windows.STATUS_INFO_LENGTH_MISMATCH) && !errors.Is(err, windows.STATUS_BUFFER_TOO_SMALL) {
+			return nil, fmt.Errorf("NtQuerySystemInformation: %w", err)
+		}
+		size = max(need, size) * 2
+	}
+	return nil, errors.New("NtQuerySystemInformation: the page file information kept growing")
 }

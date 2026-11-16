@@ -166,3 +166,34 @@ func TestReadingsPrintsTheDetails(t *testing.T) {
 	assert.Empty(t, got["usage"].Details)
 	assert.Equal(t, map[string]int{"cpu": 1, "memory": 1}, src.closed)
 }
+
+// Spec 094 R9. The Memory list prints its summary above the list's heading,
+// and --json carries it.
+func TestDetailPrintsTheMemorysSummary(t *testing.T) {
+	src := coolerStub()
+	memory := view.Processes("cooler", view.DetailMemory, []view.ProcessUse{{Name: "editor", Value: 3 << 30, Count: 1}})
+	memory.Columns = []view.Column{{Key: view.ColumnCount, Heading: "procs", Width: 6}}
+	memory.Lines[0].Cells = []string{"    ×1"}
+	s, _ := view.MemorySummary(view.MemoryFigures{Used: 12 << 30, Total: 32 << 30, Cache: view.Some(3.0 * (1 << 30)),
+		Swap: view.Some(0.0), SwapName: "swap"})
+	memory.Summary = &s
+	src.readings["memory"] = []view.Detail{memory}
+	var out bytes.Buffer
+
+	require.NoError(t, cli.Detail(t.Context(), &out, []panel.Source{src}, "cooler/memory", false, time.Millisecond))
+	assert.Equal(t, "Memory by process\n"+
+		"  used                   12.0 GiB of  32.0 GiB\n"+
+		"  available              20.0 GiB\n"+
+		"  cache                   3.0 GiB\n"+
+		"  swap                   none\n"+
+		"                                    procs\n"+
+		"  editor                  3.0 GiB      ×1\n", out.String())
+
+	out.Reset()
+	require.NoError(t, cli.Detail(t.Context(), &out, []panel.Source{src}, "cooler/memory", true, time.Millisecond))
+	var got view.Detail
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	require.NotNil(t, got.Summary)
+	assert.Len(t, got.Summary.Lines, 3)
+	assert.Equal(t, "available", got.Summary.Lines[0].Name)
+}

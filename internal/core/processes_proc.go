@@ -135,7 +135,18 @@ func ProcMemory(path string) (Memory, error) {
 	if !ok1 || !ok2 || available > total {
 		return Memory{}, fmt.Errorf("%s: %w", path, errNoMemory)
 	}
-	return Memory{Used: total - available, Total: total}, nil
+	m := Memory{Used: total - available, Total: total, SwapName: "swap"}
+	// What free calls buff/cache. An older kernel has no SReclaimable, and
+	// the cache is what the rest says (spec 094 R6).
+	if cached, ok := fields["Cached"]; ok {
+		m.Cache, m.HasCache = fields["Buffers"]+cached+fields["SReclaimable"], true
+	}
+	swapTotal, ok1 := fields["SwapTotal"]
+	swapFree, ok2 := fields["SwapFree"]
+	if ok1 && ok2 && swapFree <= swapTotal {
+		m.SwapUsed, m.SwapTotal, m.HasSwap = swapTotal-swapFree, swapTotal, true
+	}
+	return m, nil
 }
 
 var errNoMemory = errors.New("no MemTotal and MemAvailable")

@@ -32,6 +32,11 @@ type Detail struct {
 	Meters []Meter      `json:"meters,omitempty"`
 	Lines  []DetailLine `json:"lines,omitempty"`
 
+	// Summary is the part as a whole, over the list (spec 094); nil for a
+	// detail without one, which is every list but the Memory drawer's
+	// and every drill page.
+	Summary *Summary `json:"summary,omitempty"`
+
 	// Columns are the extra columns the lines carry cells for, in the order
 	// a narrowing shell drops them, last first (spec 092). A shell shows as
 	// many as its width fits; the command line prints them all.
@@ -195,16 +200,15 @@ func (d Detail) printable() Detail {
 		meters[i] = m
 	}
 	d.Meters = meters
-	lines := make([]DetailLine, len(d.Lines))
-	for i, l := range d.Lines {
-		l.Name, l.Value, l.Unit = p(l.Name), p(l.Value), p(l.Unit)
-		l.Cells = slices.Clone(l.Cells)
-		for j := range l.Cells {
-			l.Cells[j] = p(l.Cells[j])
+	d.Lines = printableLines(d.Lines, p)
+	if d.Summary != nil {
+		s := Summary{Meters: make([]Meter, len(d.Summary.Meters)), Lines: printableLines(d.Summary.Lines, p), Covers: d.Summary.Covers}
+		for i, m := range d.Summary.Meters {
+			m.Label, m.Caption = p(m.Label), p(m.Caption)
+			s.Meters[i] = m
 		}
-		lines[i] = l
+		d.Summary = &s
 	}
-	d.Lines = lines
 	reasons := make([]Reason, len(d.Reasons))
 	for i, r := range d.Reasons {
 		r.Label, r.Text, r.Detail = p(r.Label), p(r.Text), p(r.Detail)
@@ -212,6 +216,20 @@ func (d Detail) printable() Detail {
 	}
 	d.Reasons = reasons
 	return d
+}
+
+// printableLines is a copy of lines with every string made safe by p.
+func printableLines(in []DetailLine, p func(string) string) []DetailLine {
+	lines := make([]DetailLine, len(in))
+	for i, l := range in {
+		l.Name, l.Value, l.Unit = p(l.Name), p(l.Value), p(l.Unit)
+		l.Cells = slices.Clone(l.Cells)
+		for j := range l.Cells {
+			l.Cells[j] = p(l.Cells[j])
+		}
+		lines[i] = l
+	}
+	return lines
 }
 
 // Text is the detail as plain lines, for the command line: the heading, the
@@ -232,6 +250,16 @@ func (d Detail) Text() string {
 		if len(t.Samples) > 0 {
 			b.WriteString("  " + padRight(truncate(t.Name, DetailNameWidth), DetailNameWidth) + "  " +
 				Sparkline(t.Samples, min(len(t.Samples), detailTrailWidth), SparkMinSpan) + "\n")
+		}
+	}
+	// The summary is printed whole, above the list's heading line (spec 094
+	// R9): a terminal has the room a drawer may not.
+	if s := d.Summary; s != nil {
+		for _, m := range s.Meters {
+			b.WriteString("  " + strings.TrimRight(padRight(truncate(m.Name(), DetailNameWidth), DetailNameWidth)+"  "+m.Caption, " ") + "\n")
+		}
+		for _, l := range s.Lines {
+			b.WriteString("  " + strings.TrimRight(padRight(l.Name, DetailNameWidth)+"  "+l.figure(), " ") + "\n")
 		}
 	}
 	// Every column is printed: a terminal's line is as long as it needs

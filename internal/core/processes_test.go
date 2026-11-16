@@ -158,7 +158,54 @@ func TestMemoryInUseIsTotalLessAvailable(t *testing.T) {
 
 	m, err := ProcMemory(path)
 	require.NoError(t, err)
-	assert.Equal(t, Memory{Used: 12000000 * 1024, Total: 32000000 * 1024}, m)
+	assert.Equal(t, Memory{Used: 12000000 * 1024, Total: 32000000 * 1024, SwapName: "swap"}, m)
+}
+
+// meminfo writes a meminfo file of body and reads it.
+func meminfo(t *testing.T, body string) Memory {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "meminfo")
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	m, err := ProcMemory(path)
+	require.NoError(t, err)
+	return m
+}
+
+// The cache is what free calls buff/cache, and the swap is in use of its
+// size (spec 094 R6).
+func TestTheCacheAndTheSwapAreReadFromMeminfo(t *testing.T) {
+	m := meminfo(t, "MemTotal: 32000 kB\nMemAvailable: 20000 kB\nBuffers: 100 kB\nCached: 3000 kB\n"+
+		"SwapCached: 7 kB\nSReclaimable: 400 kB\nSwapTotal: 8000 kB\nSwapFree: 6000 kB\n")
+
+	assert.True(t, m.HasCache)
+	assert.Equal(t, uint64(3500*1024), m.Cache)
+	assert.True(t, m.HasSwap)
+	assert.Equal(t, uint64(2000*1024), m.SwapUsed)
+	assert.Equal(t, uint64(8000*1024), m.SwapTotal)
+	assert.Equal(t, "swap", m.SwapName)
+}
+
+// A machine without swap reads a swap of none, which is a reading and not a
+// missing one.
+func TestNoSwapIsReadAsNone(t *testing.T) {
+	m := meminfo(t, "MemTotal: 32000 kB\nMemAvailable: 20000 kB\nCached: 3000 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n")
+
+	assert.True(t, m.HasSwap)
+	assert.Zero(t, m.SwapTotal)
+}
+
+// An older kernel has no SReclaimable: the cache is what the rest says. A
+// file without the cache or the swap lines still reads the memory in use.
+func TestAShorterMeminfoGivesWhatItHas(t *testing.T) {
+	m := meminfo(t, "MemTotal: 32000 kB\nMemAvailable: 20000 kB\nBuffers: 100 kB\nCached: 3000 kB\n")
+	assert.True(t, m.HasCache)
+	assert.Equal(t, uint64(3100*1024), m.Cache)
+	assert.False(t, m.HasSwap)
+
+	m = meminfo(t, "MemTotal: 32000 kB\nMemAvailable: 20000 kB\nSwapTotal: 10 kB\nSwapFree: 20 kB\n")
+	assert.False(t, m.HasCache)
+	assert.False(t, m.HasSwap, "more swap free than there is")
+	assert.Equal(t, uint64(12000*1024), m.Used)
 }
 
 // A meminfo without the two lines, or with nonsense in them, is an error

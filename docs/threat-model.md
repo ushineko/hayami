@@ -253,6 +253,11 @@ sending reports, a helper sending lines, a provider's API.
   `internal/core/netdev.go`); `sock_diag` replies are length-checked before
   each field (`parseInetDiag`, `internal/core/netprocs_linux.go`).
 - The helper's lines are bounded (B1).
+- The page files' answer from `NtQuerySystemInformation` is walked from its
+  bytes, each entry and offset checked against the buffer, and a figure that
+  does not add up is an absence (`pageFiles`, `internal/core/pagefile.go`;
+  spec 094). `/proc/meminfo`'s cache and swap lines come through the parser
+  that already read its memory lines.
 - The VPN health store is bounded, 0600, read to a size limit and tolerates a cut
   line (`loadVPNPoints`, `internal/panel/vpnhealth.go`). `/proc/net/route` lines that
   do not parse are skipped (`ParseRouteTable`, fuzzed).
@@ -277,8 +282,8 @@ the settings, which are the user's own; hayami then fetches that URL.
   (`FuzzParseInetDiag`), LibreHardwareMonitor's tree and values
   (`FuzzLHMTree`, `FuzzParseLHMValue`), the Claude and Codex payloads and
   breakdowns (`FuzzClaudePayload`, `FuzzCodexPayload`), the shared cache
-  file (`FuzzCacheFile`), Codex's reply (`FuzzNormalise`) and the settings
-  file (`FuzzSettingsFile`).
+  file (`FuzzCacheFile`), Codex's reply (`FuzzNormalise`), the page files'
+  answer (`FuzzPageFiles`) and the settings file (`FuzzSettingsFile`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
 (ushineko/sanshoku#67).

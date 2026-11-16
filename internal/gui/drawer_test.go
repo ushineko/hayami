@@ -148,11 +148,20 @@ func coolerSection() view.Section {
 // queued for the test to run. await runs them until cond holds.
 func drawerPanel(t *testing.T, sources ...panel.Source) (p *gui.Panel, await func(what string, cond func() bool)) {
 	t.Helper()
-	a := test.NewTempApp(t)
 	// A drawer is as tall as the cards, and one card of four rows has room
 	// for four lines. A second card of many rows gives a list room to be
 	// read, as a panel of every section does.
-	sources = append(sources, tall())
+	return drawerPanelOver(t, tall(), sources...)
+}
+
+// drawerPanelOver is drawerPanel with card under the sources for the height,
+// or none for nil.
+func drawerPanelOver(t *testing.T, card panel.Source, sources ...panel.Source) (p *gui.Panel, await func(what string, cond func() bool)) {
+	t.Helper()
+	a := test.NewTempApp(t)
+	if card != nil {
+		sources = append(sources, card)
+	}
 	p = gui.New(a, gui.Options{Sources: sources, Title: "hayami"})
 	drain := gui.QueueDraws(p)
 	for _, s := range sources {
@@ -179,9 +188,12 @@ func drawerPanel(t *testing.T, sources ...panel.Source) (p *gui.Panel, await fun
 }
 
 // tall is a card with enough rows to make the panel a real one's height.
-func tall() panel.Source {
+func tall() panel.Source { return cardOf(16) }
+
+// cardOf is a card of n rows.
+func cardOf(n int) panel.Source {
 	sec := view.Section{Key: "tall", Title: "Tall"}
-	for i := range 16 {
+	for i := range n {
 		sec.Rows = append(sec.Rows, view.Row{ID: fmt.Sprintf("r%d", i), Label: fmt.Sprintf("Reading %d", i), Value: "  1.0"})
 	}
 	return plain{detailSourceless{key: "tall", section: sec}}

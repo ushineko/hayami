@@ -197,6 +197,7 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	if c.memory != nil {
 		if m, err := c.memory(ctx); err == nil {
 			out.Memory, out.MemoryTotal, out.HasMemory = m.Used, m.Total, true
+			out.memory = m
 		} else {
 			// Aside: a machine whose memory cannot be read has a card without
 			// the row, and the hover note and doctor say why.
@@ -459,6 +460,11 @@ type coolerState struct {
 
 	// gpuVia is the provider this poll's reading of the card came from.
 	gpuVia string
+
+	// memory is the whole of this poll's reading of the memory, which the
+	// Memory drawer's summary says (spec 094 R8): the card's line and the
+	// summary are one reading, and never disagree.
+	memory core.Memory
 }
 
 // The probes' IDs: one of each part this source reads.
@@ -576,6 +582,19 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 		d.Lines[i].Open = DrillUnder(id, l.Name)
 	}
 	d.Note = note
+	if id == view.DetailMemory {
+		c.mu.Lock()
+		m := c.reading.memory
+		c.mu.Unlock()
+		summary, reasons := view.MemorySummary(view.MemoryFigures{
+			Used: float64(m.Used), Total: float64(m.Total),
+			Cache: view.Maybe(float64(m.Cache), m.HasCache),
+			Swap:  view.Maybe(float64(m.SwapUsed), m.HasSwap), SwapTotal: float64(m.SwapTotal),
+			SwapName: m.SwapName,
+		})
+		d.Summary = &summary
+		d.Reasons = append(d.Reasons, reasons...)
+	}
 	return d, nil
 }
 

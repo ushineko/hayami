@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -54,6 +55,11 @@ type drawer struct {
 	// heads names the list's columns over it, where the width shows any
 	// (spec 092).
 	heads *glance.Row
+
+	// sumMeters and sumRows are the summary over the list (spec 094), always
+	// in the content and drawn only where the list keeps its room.
+	sumMeters []*glance.Meter
+	sumRows   []*glance.Row
 
 	// notes are the lines under the list: its reasons and its note. They are
 	// rows of their own because a line of the list has its name column
@@ -198,6 +204,17 @@ const DrawerMeters = 8
 // its note.
 const DrawerNotes = 4
 
+// SummaryMeters and SummaryRows are how many meters and lines the drawer has
+// for a summary (spec 094): more than any part's.
+const (
+	SummaryMeters = 2
+	SummaryRows   = 6
+)
+
+// SummaryKeepsLines is how many lines the list, its reasons and its note
+// keep under a summary, or the summary is not drawn (spec 094 R3).
+const SummaryKeepsLines = 10
+
 // buildDrawer makes the first drawer's pieces and points the panel's clicks
 // at the drawers. More are made as Shift-clicks ask for them.
 func (p *Panel) buildDrawer(a fyne.App, o Options) {
@@ -234,6 +251,16 @@ func (p *Panel) newDrawer(dr *glance.Drawer) *drawer {
 	}
 	for range DrawerMeters {
 		d.meters = append(d.meters, glance.NewMeter("", MeterLabelWidth))
+	}
+	for range SummaryMeters {
+		m := glance.NewMeter("", MeterLabelWidth)
+		m.Object().Hide()
+		d.sumMeters = append(d.sumMeters, m)
+	}
+	for range SummaryRows {
+		r := glance.NewRowWidth("", "", p.kit.name)
+		r.SetShown(false)
+		d.sumRows = append(d.sumRows, r)
 	}
 	dr.SetFilter(d.filter)
 	dr.SetSwitch(d.sw)
@@ -819,6 +846,12 @@ func (p *Panel) renderOne(d *drawer) {
 		for _, m := range d.meters[:meters] {
 			pieces = append(pieces, m)
 		}
+		for _, m := range d.sumMeters {
+			pieces = append(pieces, m)
+		}
+		for _, r := range d.sumRows {
+			pieces = append(pieces, r)
+		}
 		pieces = append(pieces, d.heads)
 		for _, r := range d.rows {
 			pieces = append(pieces, r)
@@ -844,6 +877,12 @@ func (p *Panel) renderOne(d *drawer) {
 		above = append(above, m)
 	}
 	above = append(above, d.heads)
+	summary := p.setSummary(d, detail, above)
+	above = append(above, summary...)
+	// A note that says what the summary says goes while the summary is drawn.
+	if len(summary) > 0 && detail.Summary.Covers {
+		detail.Note = ""
+	}
 	tail := tailLines(detail)
 	fit := dr.Fit(d.rows[0], above...)
 	// A heading line over no line of the list names columns nobody can see,
@@ -878,6 +917,53 @@ func (p *Panel) renderOne(d *drawer) {
 		r.SetLabel(tail[i])
 		r.SetShown(true)
 	}
+}
+
+/*
+setSummary draws a detail's summary over its list where the list keeps
+SummaryKeepsLines lines under it, and hides it otherwise; it returns the
+pieces it drew, which stand above the list (spec 094 R3).
+
+All of it or none of it: a summary cut short would say less than it seems
+to. What decides is the drawer's height and what stands above the list,
+which are the drawer's and the list's kind's, not the reading's: the
+reasons and the note are counted among the lines kept, so a reason coming
+or going does not draw or hide the summary.
+*/
+func (p *Panel) setSummary(d *drawer, detail view.Detail, above []glance.Piece) []glance.Piece {
+	meters, rows := 0, 0
+	if s := detail.Summary; s != nil {
+		meters, rows = min(len(s.Meters), len(d.sumMeters)), min(len(s.Lines), len(d.sumRows))
+		for i, m := range s.Meters[:meters] {
+			setMeter(d.sumMeters[i], m)
+		}
+		for i, l := range s.Lines[:rows] {
+			p.setLine(d.sumRows[i], l, 0)
+		}
+	}
+	show := func(meters, rows int) []glance.Piece {
+		var pieces []glance.Piece
+		for i, m := range d.sumMeters {
+			if i < meters {
+				m.Object().Show()
+				pieces = append(pieces, m)
+			} else {
+				m.Object().Hide()
+			}
+		}
+		for i, r := range d.sumRows {
+			r.SetShown(i < rows)
+			if i < rows {
+				pieces = append(pieces, r)
+			}
+		}
+		return pieces
+	}
+	pieces := show(meters, rows)
+	if len(pieces) > 0 && d.dr.Fit(d.rows[0], append(slices.Clone(above), pieces...)...) < SummaryKeepsLines {
+		pieces = show(0, 0)
+	}
+	return pieces
 }
 
 // setMeter draws a detail's meter on one of the drawer's.

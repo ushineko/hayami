@@ -135,10 +135,26 @@ func Names(processes []Process) map[int]string {
 }
 
 // Memory is the machine's physical memory: how much is in use and how much
-// there is, in bytes.
+// there is, in bytes. What is not in use is available. The cache and the swap
+// are what the Memory drawer's summary adds (spec 094), each with whether it
+// was read: a reading with the two figures above and not these is still a
+// reading.
 type Memory struct {
 	Used  uint64 `json:"used"`
 	Total uint64 `json:"total"`
+
+	// Cache is what the system holds as cache and can give back: Linux's
+	// buff/cache, Windows's system cache.
+	Cache    uint64 `json:"cache,omitempty"`
+	HasCache bool   `json:"has_cache,omitempty"`
+
+	// SwapUsed of SwapTotal is the swap, or the page file, in use. A
+	// SwapTotal of zero read is a machine without one. SwapName is what the
+	// system calls it.
+	SwapUsed  uint64 `json:"swap_used,omitempty"`
+	SwapTotal uint64 `json:"swap_total,omitempty"`
+	HasSwap   bool   `json:"has_swap,omitempty"`
+	SwapName  string `json:"swap_name,omitempty"`
 }
 
 // GPUProcess is one process's use of the graphics card since the previous

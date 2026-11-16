@@ -482,6 +482,17 @@ func DrawerSubject(p *Panel) (section, id string) { return p.first().section, p.
 func DrawerLines(p *Panel) []string     { return shownRows(p.first().rows) }
 func DrawerNoteLines(p *Panel) []string { return shownRows(p.first().notes) }
 
+// DrawerSummary is the summary the drawer draws over its list: its lines,
+// and how many of its meters are shown (spec 094).
+func DrawerSummary(p *Panel) (lines []string, meters int) {
+	for _, m := range p.first().sumMeters {
+		if m.Object().Visible() {
+			meters++
+		}
+	}
+	return shownRows(p.first().sumRows), meters
+}
+
 // DrawerWidths are the open drawers' own widths in ems, from the cards
 // outwards (spec 093).
 func DrawerWidths(p *Panel) []float32 {

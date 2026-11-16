@@ -112,6 +112,13 @@ order; filling gives it the rest. A drawer's width is decided when it opens,
 so no reading resizes it. `hayami-tui detail cooler/cpu` prints every
 column, and `--json` carries them.
 
+The Memory drawer sums up the machine over its list: the memory used of the
+total, with a bar, what is available, the cache (buff/cache on Linux, the
+system cache on Windows), and the swap or the page file in use of its size,
+or "none". It is drawn whole where the drawer keeps at least ten lines of the
+list under it, and not at all otherwise; a reading never draws or hides it.
+`hayami-tui detail cooler/memory` prints it above the list.
+
 **Tuck it away.** Hover over the cards and a small button appears in their
 top-right corner. Click it and the panel tucks into a small square with
 hayami's icon, at the cards' bottom corner nearest the screen's edge. Click
@@ -733,6 +740,11 @@ MIT. See
 - **Changed**: the CPU, GPU and Memory drawers open wide enough for their
   columns, without filling, where the screen has the room; other drawers are
   the width they were (spec 093, #335; fynedesygn spec 082).
+- **Added**: the Memory drawer sums up the machine over its list: the memory
+  used of the total, with a bar, what is available, the cache, and the swap
+  or the page file in use of its size. It is drawn where the drawer keeps
+  ten lines of the list under it, and `detail cooler/memory` prints it
+  (spec 094, #333).
 
 ### 0.16.0 (2026-11-15)
 
