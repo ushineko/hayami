@@ -45,6 +45,11 @@ type Cooler struct {
 	cpu     *view.Averaged
 	gpu     *view.Averaged
 
+	// load is the processor's load over the last CoolerTrail polls, which
+	// the CPU drawer's summary plots (spec 095 R3): fed by the poll, so the
+	// plot has its minutes when the drawer opens.
+	loadTrail *view.Series
+
 	// gone marks a cooler that was answering and has stopped. The reading is
 	// kept as it was and drawn dim rather than being emptied, which is the
 	// monitor's rule and the reason it gives for it: a blip must not make the
@@ -91,6 +96,7 @@ type Cooler struct {
 	// the card came from, which the list of its processes is chosen by
 	// (spec 060).
 	memory       func(context.Context) (core.Memory, error)
+	processor    *core.ProcessorReader
 	processes    *core.ProcessList
 	gpuProcesses core.GPUProcessReader
 	gpuVia       string
@@ -108,6 +114,9 @@ func NewCooler(h *core.Host, scan Scan) *Cooler {
 	c.graphics = h.ReadGraphics
 	c.cpuName = h.CPUName
 	c.memory = h.ReadMemory
+	if h.Processor != nil {
+		c.processor = h.Processor()
+	}
 	if h.Processes != nil {
 		c.processes = h.Processes()
 	}
@@ -125,11 +134,13 @@ func newCooler(scan Scan, sensor func(context.Context) (float64, error)) *Cooler
 // newCoolerOn is newCooler with the host whose words a missing reading gets.
 func newCoolerOn(h *core.Host, scan Scan, sensor func(context.Context) (float64, error)) *Cooler {
 	return &Cooler{
-		trail:  view.NewSeries(CoolerTrail),
-		cpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
-		gpu:    view.NewAveraged(CoolerTrail, CPUAverageWindow),
-		sensor: sensor,
-		held:   newHeld(scan, h.Permission),
+		trail: view.NewSeries(CoolerTrail),
+		cpu:   view.NewAveraged(CoolerTrail, CPUAverageWindow),
+		gpu:   view.NewAveraged(CoolerTrail, CPUAverageWindow),
+
+		loadTrail: view.NewSeries(CoolerTrail),
+		sensor:    sensor,
+		held:      newHeld(scan, h.Permission),
 
 		load:      func() (float64, bool) { return 0, false },
 		graphics:  func(context.Context) (core.Graphics, error) { return core.Graphics{}, nil },
@@ -373,11 +384,15 @@ func (c *Cooler) record(out coolerState) bool {
 	if out.HasCPU && !c.gone {
 		c.cpu.Add(out.CPU)
 	}
+	if out.HasCPULoad {
+		c.loadTrail.Add(out.CPULoad)
+	}
 	if out.HasGPU && !out.GPUStale && !c.gone {
 		c.gpu.Add(out.GPU)
 	}
 	out.Trail = c.trail.Samples()
 	out.CPUTrail = c.cpu.Mean()
+	out.loadTrail = c.loadTrail.Samples()
 	out.GPUTrail = c.gpu.Mean()
 
 	if out.HasGPU && !out.GPUStale {
@@ -465,6 +480,10 @@ type coolerState struct {
 	// Memory drawer's summary says (spec 094 R8): the card's line and the
 	// summary are one reading, and never disagree.
 	memory core.Memory
+
+	// loadTrail is the processor's load over the recent polls, for the CPU
+	// drawer's plot (spec 095).
+	loadTrail []float64
 }
 
 // The probes' IDs: one of each part this source reads.
@@ -582,6 +601,11 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 		d.Lines[i].Open = DrillUnder(id, l.Name)
 	}
 	d.Note = note
+	if id == view.DetailCPU && c.processor != nil {
+		summary, reasons := c.cpuSummary(ctx)
+		d.Summary = &summary
+		d.Reasons = append(d.Reasons, reasons...)
+	}
 	if id == view.DetailMemory {
 		c.mu.Lock()
 		m := c.reading.memory
@@ -721,3 +745,23 @@ func (c *Cooler) gpuUse(ctx context.Context) ([]pidUse, string, error) {
 
 // errNoProcesses is a source built without a process reader: a test's.
 var errNoProcesses = errors.New("this source reads no processes")
+
+// cpuSummary is the CPU drawer's summary (spec 095): the load and its plot
+// from the poll, the cores, the clock, the waiting and the tasks read now.
+func (c *Cooler) cpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
+	p := c.processor.Read(ctx)
+	c.mu.Lock()
+	state := c.reading
+	c.mu.Unlock()
+	kind := view.LoadAverage
+	if p.Queues {
+		kind = view.LoadQueue
+	}
+	return view.CPUSummary(view.CPUFigures{
+		Load: view.Maybe(state.CPULoad, state.HasCPULoad), Trail: state.loadTrail, TrailEvery: CoolerInterval,
+		Cores: p.Cores, HasCores: p.HasCores,
+		Clock: view.Maybe(p.Clock, p.HasClock), MaxClock: p.MaxClock,
+		LoadKind: kind, LoadAvg: view.Maybe(p.LoadAvg, p.HasLoadAvg), Queue: view.Maybe(p.Queue, p.HasQueue),
+		Processes: p.Processes, Threads: p.Threads, HasTasks: p.HasTasks,
+	})
+}

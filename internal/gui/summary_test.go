@@ -1,6 +1,7 @@
 package gui_test
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -126,4 +127,79 @@ func TestAReadingNeitherDrawsNorHidesTheSummary(t *testing.T) {
 		assert.Len(t, after, len(before), "card %v", card)
 		assert.Equal(t, meters, metersAfter, "card %v", card)
 	}
+}
+
+// cpuSummed is a CPU list of n programs under the processor's summary, its
+// load at load percent and its cores at cores (negative offline).
+func cpuSummed(n int, load float64, cores ...float64) view.Detail {
+	d := processes(view.DetailCPU, n, 1)
+	s, _ := view.CPUSummary(view.CPUFigures{
+		Load: view.Some(load), Trail: []float64{load / 2, load},
+		Cores: cores, HasCores: true, Clock: view.Some(3000.0), MaxClock: 5700,
+		LoadKind: view.LoadAverage, LoadAvg: view.Some([3]float64{1, 2, 3}),
+		Processes: 10, Threads: 100, HasTasks: true,
+	})
+	d.Summary = &s
+	return d
+}
+
+func cpuSource(d view.Detail) *detailSource {
+	return newDetailSource("cooler", coolerSection(), map[string]view.Detail{view.DetailCPU: d})
+}
+
+// Spec 095 R1, R7, R8. With room, the CPU list's summary is its meter, the
+// plot of the load, a cell per core with an offline one empty, and its
+// lines, and the list keeps its ten lines under it.
+func TestTheCPUSummaryDrawsItsPlotAndItsCores(t *testing.T) {
+	p, await := drawerPanelOver(t, cardOf(30), cpuSource(cpuSummed(200, 40, 90, -1, 10)))
+	gui.Tap(p, "cooler", view.DetailCPU, -1)
+	await("the summary", func() bool { lines, _ := gui.DrawerSummary(p); return len(lines) > 0 })
+
+	lines, meters := gui.DrawerSummary(p)
+	assert.Equal(t, 1, meters)
+	assert.Len(t, lines, 3)
+	plotted, samples := gui.DrawerSummaryPlot(p)
+	assert.True(t, plotted)
+	assert.Equal(t, 2, samples)
+	cells, shown := gui.DrawerSummaryHeat(p)
+	assert.True(t, shown)
+	require.Len(t, cells, 3)
+	assert.InDelta(t, 0.9, cells[0], 1e-9)
+	assert.True(t, math.IsNaN(cells[1]), "the offline core")
+	assert.GreaterOrEqual(t, kept(p), gui.SummaryKeepsLines)
+}
+
+// R2, R3. A drawer too short for all of it draws none of it: no plot, no
+// strip, no line.
+func TestAShortDrawerHasNoCPUSummary(t *testing.T) {
+	p, await := drawerPanelOver(t, cardOf(6), cpuSource(cpuSummed(200, 40, 90, 10)))
+	gui.Tap(p, "cooler", view.DetailCPU, -1)
+	await("the list", func() bool { return len(gui.DrawerLines(p)) > 0 })
+
+	lines, meters := gui.DrawerSummary(p)
+	assert.Empty(t, lines)
+	assert.Zero(t, meters)
+	plotted, _ := gui.DrawerSummaryPlot(p)
+	assert.False(t, plotted)
+	_, shown := gui.DrawerSummaryHeat(p)
+	assert.False(t, shown)
+}
+
+// R2. A core going offline, and every figure changing, moves no line: the
+// list keeps its length.
+func TestACoreGoingOfflineMovesNothing(t *testing.T) {
+	src := cpuSource(cpuSummed(200, 40, 90, 50, 10))
+	p, await := drawerPanelOver(t, cardOf(30), src)
+	gui.Tap(p, "cooler", view.DetailCPU, -1)
+	await("the summary", func() bool { lines, _ := gui.DrawerSummary(p); return len(lines) > 0 })
+	before := len(gui.DrawerLines(p))
+
+	src.set(view.DetailCPU, cpuSummed(200, 95, 100, -1, 100))
+	await("the new reading", func() bool {
+		cells, _ := gui.DrawerSummaryHeat(p)
+		return len(cells) == 3 && math.IsNaN(cells[1])
+	})
+	assert.Equal(t, before, len(gui.DrawerLines(p)))
+	lines, _ := gui.DrawerSummary(p)
+	assert.Len(t, lines, 3)
 }

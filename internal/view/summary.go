@@ -1,5 +1,9 @@
 package view
 
+import (
+	"time"
+)
+
 /*
 Summary is what a part is doing as a whole, over the list of what each program
 does with it (spec 094). It is meters and lines, a fixed number of each for its
@@ -10,8 +14,18 @@ The detail says what is in it; whether it is drawn is the shell's, which has
 the room to weigh it against.
 */
 type Summary struct {
-	Meters []Meter      `json:"meters,omitempty"`
-	Lines  []DetailLine `json:"lines,omitempty"`
+	Meters []Meter `json:"meters,omitempty"`
+
+	// Trails are a plot under the meters, and TrailEvery the time between
+	// their samples, as a detail's (spec 095).
+	Trails     []Trail       `json:"trails,omitempty"`
+	TrailEvery time.Duration `json:"-"`
+
+	// Heat is a row of cells under the plot, each a proportion: a
+	// processor's cores (spec 095).
+	Heat *Heat `json:"heat,omitempty"`
+
+	Lines []DetailLine `json:"lines,omitempty"`
 
 	// Covers marks a summary that says what its detail's note says, so a
 	// shell that draws the summary leaves the note out: the memory in use.

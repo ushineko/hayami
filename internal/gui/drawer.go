@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"slices"
 	"sort"
@@ -59,6 +60,8 @@ type drawer struct {
 	// sumMeters and sumRows are the summary over the list (spec 094), always
 	// in the content and drawn only where the list keeps its room.
 	sumMeters []*glance.Meter
+	sumPlot   drawerPart
+	sumHeat   *glance.HeatStrip
 	sumRows   []*glance.Row
 
 	// notes are the lines under the list: its reasons and its note. They are
@@ -257,6 +260,11 @@ func (p *Panel) newDrawer(dr *glance.Drawer) *drawer {
 		m.Object().Hide()
 		d.sumMeters = append(d.sumMeters, m)
 	}
+	d.sumPlot = drawerPart{plot: glance.NewSparkline(SparkCapacity), traces: map[string]bool{}}
+	d.sumPlot.plot.SetHeight(DrawerPlotHeight)
+	d.sumPlot.plot.Hide()
+	d.sumHeat = glance.NewHeatStrip("", p.kit.name)
+	d.sumHeat.Object().Hide()
 	for range SummaryRows {
 		r := glance.NewRowWidth("", "", p.kit.name)
 		r.SetShown(false)
@@ -849,6 +857,7 @@ func (p *Panel) renderOne(d *drawer) {
 		for _, m := range d.sumMeters {
 			pieces = append(pieces, m)
 		}
+		pieces = append(pieces, plotPiece{d.sumPlot.plot}, d.sumHeat)
 		for _, r := range d.sumRows {
 			pieces = append(pieces, r)
 		}
@@ -931,39 +940,75 @@ reasons and the note are counted among the lines kept, so a reason coming
 or going does not draw or hide the summary.
 */
 func (p *Panel) setSummary(d *drawer, detail view.Detail, above []glance.Piece) []glance.Piece {
-	meters, rows := 0, 0
-	if s := detail.Summary; s != nil {
-		meters, rows = min(len(s.Meters), len(d.sumMeters)), min(len(s.Lines), len(d.sumRows))
-		for i, m := range s.Meters[:meters] {
-			setMeter(d.sumMeters[i], m)
-		}
-		for i, l := range s.Lines[:rows] {
-			p.setLine(d.sumRows[i], l, 0)
-		}
+	// Every piece a summary could take, in the order they stand, and whether
+	// this detail's has it.
+	type piece struct {
+		glance.Piece
+		wanted bool
 	}
-	show := func(meters, rows int) []glance.Piece {
-		var pieces []glance.Piece
-		for i, m := range d.sumMeters {
-			if i < meters {
-				m.Object().Show()
-				pieces = append(pieces, m)
-			} else {
-				m.Object().Hide()
-			}
+	var all []piece
+	s := detail.Summary
+	if s == nil {
+		s = &view.Summary{}
+	}
+	for i, m := range d.sumMeters {
+		if i < len(s.Meters) {
+			setMeter(m, s.Meters[i])
 		}
-		for i, r := range d.sumRows {
-			r.SetShown(i < rows)
-			if i < rows {
-				pieces = append(pieces, r)
+		all = append(all, piece{m, i < len(s.Meters)})
+	}
+	if len(s.Trails) > 0 {
+		p.drawPlot(&d.sumPlot, view.Detail{Trails: s.Trails, TrailEvery: s.TrailEvery})
+	}
+	all = append(all, piece{plotPiece{d.sumPlot.plot}, len(s.Trails) > 0})
+	if s.Heat != nil {
+		d.sumHeat.SetLabel(s.Heat.Name)
+		d.sumHeat.Set(heatValues(s.Heat.Values))
+	}
+	all = append(all, piece{d.sumHeat, s.Heat != nil})
+	for i, r := range d.sumRows {
+		if i < len(s.Lines) {
+			p.setLine(r, s.Lines[i], 0)
+		}
+		all = append(all, piece{r, i < len(s.Lines)})
+	}
+
+	show := func(on bool) []glance.Piece {
+		var pieces []glance.Piece
+		for _, pc := range all {
+			shown := on && pc.wanted
+			switch r, ok := pc.Piece.(*glance.Row); {
+			case ok:
+				r.SetShown(shown)
+			case shown:
+				pc.Object().Show()
+			default:
+				pc.Object().Hide()
+			}
+			if shown {
+				pieces = append(pieces, pc.Piece)
 			}
 		}
 		return pieces
 	}
-	pieces := show(meters, rows)
+	pieces := show(true)
 	if len(pieces) > 0 && d.dr.Fit(d.rows[0], append(slices.Clone(above), pieces...)...) < SummaryKeepsLines {
-		pieces = show(0, 0)
+		pieces = show(false)
 	}
 	return pieces
+}
+
+// heatValues are a summary's cells as the strip draws them: a negative value,
+// a core that is not there, is NaN.
+func heatValues(in []float64) []float64 {
+	out := make([]float64, len(in))
+	for i, v := range in {
+		out[i] = v
+		if v < 0 {
+			out[i] = math.NaN()
+		}
+	}
+	return out
 }
 
 // setMeter draws a detail's meter on one of the drawer's.
@@ -1145,6 +1190,10 @@ func (p *Panel) restyleDrawer() {
 		for _, m := range d.meters {
 			m.Restyle()
 		}
+		for _, m := range d.sumMeters {
+			m.Restyle()
+		}
+		d.sumHeat.Restyle()
 		for _, part := range d.parts {
 			for _, m := range part.meters {
 				m.Restyle()

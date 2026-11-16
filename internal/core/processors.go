@@ -112,18 +112,9 @@ func procStat(path string) (busy, idle float64, err error) {
 		if len(fields) < 5 || fields[0] != "cpu" {
 			continue
 		}
-		for i, field := range fields[1:] {
-			v, err := strconv.ParseFloat(field, 64)
-			if err != nil {
-				return 0, 0, fmt.Errorf("%s is not what it was: %w", path, err)
-			}
-			switch {
-			case i == 3 || i == 4: // idle, iowait
-				idle += v
-			case i >= 8: // guest, guest_nice: already counted
-			default:
-				busy += v
-			}
+		busy, idle, err := statTimes(fields[1:])
+		if err != nil {
+			return 0, 0, fmt.Errorf("%s: %w", path, err)
 		}
 		return busy, idle, nil
 	}

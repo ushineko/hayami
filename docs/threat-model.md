@@ -258,6 +258,11 @@ sending reports, a helper sending lines, a provider's API.
   does not add up is an absence (`pageFiles`, `internal/core/pagefile.go`;
   spec 094). `/proc/meminfo`'s cache and swap lines come through the parser
   that already read its memory lines.
+- The processor table from `NtQuerySystemInformation` is walked from its
+  bytes and checked whole (`ParseProcessorTimes`); `/proc/loadavg` and the
+  cpufreq files are single numbers, and a core number in `/proc/stat` is
+  bounded (`maxCores`), so no file sizes an allocation
+  (`internal/core/processor.go`; spec 095).
 - The VPN health store is bounded, 0600, read to a size limit and tolerates a cut
   line (`loadVPNPoints`, `internal/panel/vpnhealth.go`). `/proc/net/route` lines that
   do not parse are skipped (`ParseRouteTable`, fuzzed).
@@ -283,7 +288,8 @@ the settings, which are the user's own; hayami then fetches that URL.
   (`FuzzLHMTree`, `FuzzParseLHMValue`), the Claude and Codex payloads and
   breakdowns (`FuzzClaudePayload`, `FuzzCodexPayload`), the shared cache
   file (`FuzzCacheFile`), Codex's reply (`FuzzNormalise`), the page files'
-  answer (`FuzzPageFiles`) and the settings file (`FuzzSettingsFile`).
+  answer (`FuzzPageFiles`), the processor table (`FuzzParseProcessorTimes`), the
+  load average (`FuzzParseLoadAvg`) and the settings file (`FuzzSettingsFile`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
 (ushineko/sanshoku#67).

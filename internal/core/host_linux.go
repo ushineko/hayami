@@ -19,11 +19,16 @@ func NewHost(HostConfig) Host {
 		GPUMissing:     linuxGPUMissing(hwmon.Root),
 		CPULoad:        func() *CPULoad { return NewCPULoad(ProcStatPath) },
 		CPUName:        func() string { return CPUName(CPUInfoPath) },
-		Counters:       ReadCounters,
-		Wireless:       ReadWireless,
-		Memory:         linuxMemory(MemInfoPath),
-		MemoryMissing:  memoryMissing,
-		Processes:      func() *ProcessList { return NewProcessList(processes) },
+		Processor: func() *ProcessorReader {
+			return LinuxProcessor(ProcessorPaths{
+				Stat: ProcStatPath, Possible: CPUPossiblePath, CPUDir: CPUDir, LoadAvg: LoadAvgPath, Proc: ProcPath,
+			})
+		},
+		Counters:      ReadCounters,
+		Wireless:      ReadWireless,
+		Memory:        linuxMemory(MemInfoPath),
+		MemoryMissing: memoryMissing,
+		Processes:     func() *ProcessList { return NewProcessList(processes) },
 		GPUProcesses: &gpuProcesses{
 			chain:   linuxGPUProcesses(NewFDInfoGPU(ProcPath).Read, pmonProcesses(NvidiaPMON)),
 			samples: processes,

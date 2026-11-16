@@ -493,6 +493,22 @@ func DrawerSummary(p *Panel) (lines []string, meters int) {
 	return shownRows(p.first().sumRows), meters
 }
 
+// DrawerSummaryPlot reports whether the summary's plot is drawn, and with
+// how many samples of its first trace; DrawerSummaryHeat the strip's cells,
+// and whether it is drawn (spec 095).
+func DrawerSummaryPlot(p *Panel) (bool, int) {
+	d := p.first()
+	return d.sumPlot.plot.Visible(), len(d.sumPlot.plot.Samples("load"))
+}
+
+func DrawerSummaryHeat(p *Panel) ([]float64, bool) {
+	h := p.first().sumHeat
+	return h.Values(), h.Object().Visible()
+}
+
+// DrawerHeight is the first drawer's content height as laid out.
+func DrawerHeight(p *Panel) float32 { return p.first().dr.Available().Height }
+
 // DrawerWidths are the open drawers' own widths in ems, from the cards
 // outwards (spec 093).
 func DrawerWidths(p *Panel) []float32 {
