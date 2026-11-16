@@ -406,7 +406,13 @@ func TestTheListIsAsLongAsTheHeightFits(t *testing.T) {
 	fit := gui.DrawerFit(p)
 	require.Positive(t, fit)
 	require.Less(t, fit, 200, "the drawer claims room for two hundred lines")
-	assert.Len(t, gui.DrawerLines(p), fit-1)
+	// The note takes a line, and so does the line naming the columns where
+	// any is shown (spec 093).
+	heads := 0
+	if _, shown := gui.DrawerHeads(p); shown {
+		heads = 1
+	}
+	assert.Len(t, gui.DrawerLines(p), fit-1-heads)
 	assert.Equal(t, []string{"share of every processor together"}, gui.DrawerNoteLines(p))
 	assert.True(t, strings.HasPrefix(gui.DrawerLines(p)[0], "p00|"))
 }
@@ -836,8 +842,7 @@ func TestThePanelIsRememberedWhereItsCardsAre(t *testing.T) {
 		gui.Moved(p, s, x, y, width)
 		await("the move to be taken", func() bool { return true })
 	}
-	cards, reach := int(gui.CardsWidth(p)+0.5), int(gui.DrawerReach(p)+0.5)
-	require.Greater(t, reach, 100)
+	cards := int(gui.CardsWidth(p) + 0.5)
 
 	moved(3700, 2037, cards)
 	require.Equal(t, [2]int{3700, 2037}, placed(s), "a move with the drawer closed is remembered")
@@ -845,6 +850,10 @@ func TestThePanelIsRememberedWhereItsCardsAre(t *testing.T) {
 	gui.Tap(p, "cooler", "", -1)
 	await("the drawer to open", func() bool { return gui.DrawerOpen(p) })
 	require.Equal(t, glance.Left, gui.DrawerOnSide(p))
+	// The reach of the drawer as it opened, which is its list's width
+	// (spec 093), not the usual one.
+	reach := int(gui.DrawerReach(p) + 0.5)
+	require.Greater(t, reach, 100)
 	moved(3700-reach, 2037, cards+reach) // the corner, a drawer's reach to the left
 	assert.Equal(t, [2]int{3700, 2037}, placed(s), "the drawer's corner was saved as the panel's place")
 

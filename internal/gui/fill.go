@@ -29,6 +29,7 @@ var roomSettles = 250 * time.Millisecond
 func (p *Panel) offerFill() {
 	pn := p.win.Panel()
 	p.kit.fillGen++
+	p.noteRowWidth(pn.DrawersWidth())
 	if pn.Opened() == 0 || p.tucked.Load() {
 		pn.SetFillable(false, nil)
 		return
@@ -58,6 +59,25 @@ func (p *Panel) offerFill() {
 			pn.SetFillable(!pn.Fits(left, right), p.toggleFill)
 		})
 	}()
+}
+
+// rowWidthsKept is how many of the row's recent widths drawerShift knows.
+const rowWidthsKept = 8
+
+// noteRowWidth remembers a width the open drawers added to the window.
+func (p *Panel) noteRowWidth(w float32) {
+	if w <= 0 {
+		return
+	}
+	ws := p.kit.rowWidths
+	if n := len(ws); n > 0 && ws[n-1] == w {
+		return
+	}
+	ws = append(ws, w)
+	if len(ws) > rowWidthsKept {
+		ws = ws[len(ws)-rowWidthsKept:]
+	}
+	p.kit.rowWidths = ws
 }
 
 // toggleFill fills the row or puts it back, and draws the drawers again at

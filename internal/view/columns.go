@@ -146,6 +146,24 @@ func OfferColumns(detail string, uses []ProcessUse, count bool) []Column {
 	return out
 }
 
+/*
+ColumnsWant is how many characters a list's value takes with every column
+its kind can carry: the figure, then each column and its gap (spec 093 R1).
+It is the kind's, not a reading's, so no reading changes it; a list without
+columns wants none, and its drawer the usual width.
+*/
+func ColumnsWant(detail string) int {
+	kind := processKinds[detail]
+	if len(kind.columns) == 0 {
+		return 0
+	}
+	w := kind.figure
+	for _, key := range kind.columns {
+		w += FigureGap + columnWidths[key]
+	}
+	return w
+}
+
 // Cells are a use's cells under columns, each at its column's width.
 func Cells(columns []Column, u ProcessUse) []string {
 	if len(columns) == 0 {

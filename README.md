@@ -102,12 +102,15 @@ to put the drawers back. Opening or closing a drawer ends it. Where hayami
 cannot learn the room beside the panel (a desktop other than Plasma or
 Windows) Fill is not offered.
 
-Filled, the CPU, GPU and Memory lists use the width: each program also shows
-how many processes share its name, the list's other figures (memory in the
-CPU list, the processor share in the Memory list, both in the GPU list) and,
-where the memory's total is known, its share of all memory, under a line
-naming each column. As many columns are shown as fit whole, in that order.
-`hayami-tui detail cooler/cpu` prints every column, and `--json` carries them.
+The CPU, GPU and Memory drawers open as wide as their lists need, where the
+screen has the room: each program also shows how many processes share its
+name, the list's other figures (memory in the CPU list, the processor share
+in the Memory list, both in the GPU list) and, where the memory's total is
+known, its share of all memory, under a line naming each column. With less
+room the drawer is narrower and shows as many columns as fit whole, in that
+order; filling gives it the rest. A drawer's width is decided when it opens,
+so no reading resizes it. `hayami-tui detail cooler/cpu` prints every
+column, and `--json` carries them.
 
 **Tuck it away.** Hover over the cards and a small button appears in their
 top-right corner. Click it and the panel tucks into a small square with
@@ -724,6 +727,12 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Changed**: the CPU, GPU and Memory drawers open wide enough for their
+  columns, without filling, where the screen has the room; other drawers are
+  the width they were (spec 093, #335; fynedesygn spec 082).
 
 ### 0.16.0 (2026-11-15)
 

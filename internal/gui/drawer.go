@@ -111,6 +111,21 @@ type drawerKit struct {
 	// is not taken for this one's (offerFill).
 	fillGen int
 
+	// room is the widest drawer the screen took, in ems, as the compositor
+	// last said before a drawer was given a detail, and roomKnown whether it
+	// said (spec 093 R3). It is used once.
+	room      float32
+	roomKnown bool
+	// margins is a drawer's width less its Available, as last read
+	// (wantEms).
+	margins float32
+
+	// rowWidths are the widths the open drawers have added to the window
+	// lately, newest last, so that a window the compositor puts back to one
+	// of them is known for the drawers' and not taken for a drag (spec 093:
+	// drawers of different widths are not a number of one drawer's reach).
+	rowWidths []float32
+
 	// openURL gives a sign-in address to the person's browser; a test
 	// replaces it, so no test opens one.
 	openURL func(*url.URL) error
@@ -406,6 +421,7 @@ func (p *Panel) addDrawer(det panel.Detailer, section, id string) {
 			fits := pn.Opened() < glance.DrawersWithoutRoom
 			if ok {
 				fits = pn.Fits(left, right)
+				p.kit.room, p.kit.roomKnown = pn.Room(left, right), true
 			}
 			p.placeNew(fits, det, section, id)
 		})
@@ -553,6 +569,7 @@ func (p *Panel) showDetail(d *drawer, src panel.Detailer, section, id string) {
 			p.kit.seq++
 			d.seq = p.kit.seq
 		}
+		p.sizeDrawer(d, src, id)
 		dr.SetOpen(true)
 		p.drawerOut.Store(true)
 		p.renderOne(d)
@@ -593,6 +610,7 @@ func (p *Panel) placeDrawer(d *drawer, open func()) {
 		p.do(func() {
 			if asked {
 				dr.Choose(left, right)
+				p.kit.room, p.kit.roomKnown = p.win.Panel().Room(left, right), true
 			}
 			side <- dr.Side()
 		})
@@ -828,6 +846,15 @@ func (p *Panel) renderOne(d *drawer) {
 	above = append(above, d.heads)
 	tail := tailLines(detail)
 	fit := dr.Fit(d.rows[0], above...)
+	// A heading line over no line of the list names columns nobody can see,
+	// and takes the list's last row: a drawer as short as a row of cards
+	// fits two lines, which a filter and the heading would take. Without
+	// a line to stand over, the columns go (spec 093 R6).
+	if cells > 0 && fit-min(len(tail), len(d.notes)) < 1 {
+		cells = 0
+		p.setHeads(d.heads, detail, 0)
+		fit = dr.Fit(d.rows[0], above...)
+	}
 	tail = tail[:min(len(tail), len(d.notes), max(fit, 0))]
 	lines := detail.Top(min(max(fit-len(tail), 0), len(d.rows))).Lines
 
