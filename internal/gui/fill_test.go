@@ -2,6 +2,7 @@ package gui_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,8 +29,13 @@ func TestTheFillButtonAtTheCap(t *testing.T) {
 
 	gui.Tap(p, "cooler", "", -1)
 	await("the drawer", func() bool { return gui.DrawerOpen(p) })
-	assert.Never(t, func() bool { await("draws", func() bool { return true }); return gui.FillOffered(p) },
-		100e6, 5e6, "Fill offered with room for another drawer")
+	// Watched on this goroutine and not with assert.Never, whose condition
+	// runs on one of its own: a tick still running the queued draws when
+	// Never returned raced the draws below.
+	for end := time.Now().Add(100 * time.Millisecond); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
+		await("draws", func() bool { return true })
+		require.False(t, gui.FillOffered(p), "Fill offered with room for another drawer")
+	}
 
 	// No room for another: the Shift-click puts the next detail in the
 	// outermost, and the row is at its cap.
