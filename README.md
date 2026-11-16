@@ -126,6 +126,12 @@ average clock of the highest a core reaches, the load average (on Windows,
 which has none, the processor queue), and how many processes and threads
 there are.
 
+The GPU drawer sums up the card: its memory used of its total, with a bar,
+its graphics and memory clocks, and the power it draws of its limit. These
+come from nvidia-smi on an NVIDIA card, run only while the GPU list is shown,
+and on Linux from an AMD card's driver; another card shows the lines with
+"--" and says why.
+
 **Tuck it away.** Hover over the cards and a small button appears in their
 top-right corner. Click it and the panel tucks into a small square with
 hayami's icon, at the cards' bottom corner nearest the screen's edge. Click
@@ -758,6 +764,12 @@ MIT. See
   Windows), and the processes and threads. Drawn by the Memory summary's
   rule; `detail cooler/cpu` prints it, a character per core (spec 095,
   #333; fynedesygn spec 083).
+- **Added**: the GPU drawer sums up the card over its list: its memory used
+  of its total with a bar, its graphics and memory clocks, and the power it
+  draws of its limit. An NVIDIA card is read through nvidia-smi, while the
+  GPU list is shown; an AMD card on Linux through its driver's files, which
+  have been tested on the kernel's documented layout and not yet on a card.
+  Other cards show the lines empty (spec 096, #333).
 
 ### 0.16.0 (2026-11-15)
 
