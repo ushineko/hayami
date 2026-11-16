@@ -50,6 +50,10 @@ type Cooler struct {
 	// plot has its minutes when the drawer opens.
 	loadTrail *view.Series
 
+	// readTrail and writeTrail are the disks' rates over the same polls,
+	// for the IO drawer's plot (spec 097).
+	readTrail, writeTrail *view.Series
+
 	// gone marks a cooler that was answering and has stopped. The reading is
 	// kept as it was and drawn dim rather than being emptied, which is the
 	// monitor's rule and the reason it gives for it: a blip must not make the
@@ -98,6 +102,7 @@ type Cooler struct {
 	memory       func(context.Context) (core.Memory, error)
 	processor    *core.ProcessorReader
 	card         core.CardReader
+	disks        *core.DiskReader
 	processes    *core.ProcessList
 	gpuProcesses core.GPUProcessReader
 	gpuVia       string
@@ -119,6 +124,9 @@ func NewCooler(h *core.Host, scan Scan) *Cooler {
 		c.processor = h.Processor()
 	}
 	c.card = h.Card
+	if h.Disks != nil {
+		c.disks = h.Disks()
+	}
 	if h.Processes != nil {
 		c.processes = h.Processes()
 	}
@@ -140,9 +148,11 @@ func newCoolerOn(h *core.Host, scan Scan, sensor func(context.Context) (float64,
 		cpu:   view.NewAveraged(CoolerTrail, CPUAverageWindow),
 		gpu:   view.NewAveraged(CoolerTrail, CPUAverageWindow),
 
-		loadTrail: view.NewSeries(CoolerTrail),
-		sensor:    sensor,
-		held:      newHeld(scan, h.Permission),
+		loadTrail:  view.NewSeries(CoolerTrail),
+		readTrail:  view.NewSeries(CoolerTrail),
+		writeTrail: view.NewSeries(CoolerTrail),
+		sensor:     sensor,
+		held:       newHeld(scan, h.Permission),
 
 		load:      func() (float64, bool) { return 0, false },
 		graphics:  func(context.Context) (core.Graphics, error) { return core.Graphics{}, nil },
@@ -218,6 +228,13 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 				Label: "Memory", Text: "not read", Status: view.Info, Aside: true,
 			}, err))
 		}
+	}
+
+	// The disks are read on the card's poll, for the IO row (spec 097 R1):
+	// one file on Linux, the counters already open on Windows.
+	if c.disks != nil {
+		out.disks = c.disks.Read(ctx)
+		out.IORead, out.IOWrite, out.HasIO = out.disks.Read, out.disks.Write, out.disks.HasRates
 	}
 
 	status, name, why, err := c.liquid(ctx)
@@ -395,6 +412,11 @@ func (c *Cooler) record(out coolerState) bool {
 	out.Trail = c.trail.Samples()
 	out.CPUTrail = c.cpu.Mean()
 	out.loadTrail = c.loadTrail.Samples()
+	if out.HasIO {
+		c.readTrail.Add(out.IORead)
+		c.writeTrail.Add(out.IOWrite)
+	}
+	out.readTrail, out.writeTrail = c.readTrail.Samples(), c.writeTrail.Samples()
 	out.GPUTrail = c.gpu.Mean()
 
 	if out.HasGPU && !out.GPUStale {
@@ -402,7 +424,7 @@ func (c *Cooler) record(out coolerState) bool {
 	}
 
 	c.reading = out
-	return out.HasCPU || out.HasCPULoad || out.HasGPU || out.HasLiquid || out.HasMemory
+	return out.HasCPU || out.HasCPULoad || out.HasGPU || out.HasLiquid || out.HasMemory || out.HasIO
 }
 
 // keepName is a row's name, or the one it had when this poll brought none.
@@ -486,6 +508,15 @@ type coolerState struct {
 	// loadTrail is the processor's load over the recent polls, for the CPU
 	// drawer's plot (spec 095).
 	loadTrail []float64
+
+	// IORead and IOWrite are the disks' rates in bytes per second, kept with
+	// the reading so a cached card has its IO row from the first draw
+	// (spec 097); disks is the whole of the poll's reading of them, and
+	// readTrail and writeTrail their recent history.
+	IORead, IOWrite       float64
+	HasIO                 bool
+	disks                 core.Disks
+	readTrail, writeTrail []float64
 }
 
 // The probes' IDs: one of each part this source reads.
@@ -493,6 +524,7 @@ const (
 	probeCPU     = "cpu"
 	probeGPU     = "gpu"
 	probeMemory  = "memory"
+	probeIO      = "io"
 	probeCoolant = "coolant"
 	probeFan     = "fan"
 	probePump    = "pump"
@@ -524,6 +556,10 @@ func (s coolerState) probes() view.CoolerReading {
 			p.Load = view.Some(100 * float64(s.Memory) / float64(s.MemoryTotal))
 		}
 		out = append(out, p)
+	}
+	if s.HasIO {
+		out = append(out, view.Probe{ID: probeIO, Role: view.RoleIO,
+			Read: view.Some(s.IORead), Write: view.Some(s.IOWrite)})
 	}
 	if s.HasLiquid {
 		out = append(out, view.Probe{
@@ -557,6 +593,9 @@ func (c *Cooler) Details() []view.DetailInfo {
 	if c.processes != nil && c.reading.HasMemory {
 		out = append(out, view.ProcessInfo(view.DetailMemory))
 	}
+	if c.processes != nil && c.reading.HasIO {
+		out = append(out, view.ProcessInfo(view.DetailIO))
+	}
 	return out
 }
 
@@ -572,6 +611,7 @@ var coolerDetails = map[string]func(*Cooler, context.Context) ([]pidUse, string,
 	view.DetailCPU:    (*Cooler).cpuUse,
 	view.DetailMemory: (*Cooler).memoryUse,
 	view.DetailGPU:    (*Cooler).gpuUse,
+	view.DetailIO:     (*Cooler).ioUse,
 }
 
 // PollDetail reads one list of processes. Only names and figures leave here:
@@ -610,6 +650,11 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 	}
 	if id == view.DetailGPU && c.card != nil {
 		summary, reasons := c.gpuSummary(ctx)
+		d.Summary = &summary
+		d.Reasons = append(d.Reasons, reasons...)
+	}
+	if id == view.DetailIO {
+		summary, reasons := c.ioSummary()
 		d.Summary = &summary
 		d.Reasons = append(d.Reasons, reasons...)
 	}
@@ -788,5 +833,67 @@ func (c *Cooler) gpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
 		VRAM: card.VRAMUsed, VRAMTotal: card.VRAMTotal, HasVRAM: card.HasVRAM,
 		Clock: view.Maybe(card.Clock, card.HasClock), MemClock: view.Maybe(card.MemClock, card.HasMemClock),
 		Power: view.Maybe(card.Power, card.HasPower), PowerLimit: card.PowerLimit,
+	})
+}
+
+/*
+ioUse is each process's read and write rates since the last reading (spec
+097 R2). On Linux a process this account may not trace has no figure, and
+what the disks did beyond what the readable processes account for is one
+line of its own, the list's "other" (R3), never below nothing. On Windows a
+process's figure is every transfer, files, network and devices, which is not
+a share of the disks' rates, so there is no "other" and the note says so.
+*/
+func (c *Cooler) ioUse(ctx context.Context) ([]pidUse, string, error) {
+	processes, total, err := c.readProcesses(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	c.mu.Lock()
+	disks := c.reading.disks
+	c.mu.Unlock()
+	uses := make([]pidUse, 0, len(processes))
+	var read, write float64
+	for _, p := range processes {
+		if !p.HasIO {
+			continue
+		}
+		u := figures(p, total)
+		u.Value, u.Second = p.IORead, p.IOWrite
+		read, write = read+p.IORead, write+p.IOWrite
+		uses = append(uses, u)
+	}
+	if disks.AllIO {
+		return uses, "all IO: files, network and devices", nil
+	}
+	if disks.HasRates {
+		other := pidUse{ProcessUse: view.ProcessUse{
+			Value: max(disks.Read-read, 0), Second: max(disks.Write-write, 0),
+		}}
+		uses = append(uses, other)
+	}
+	return uses, "to and from the disks; other: what this account cannot see", nil
+}
+
+// ioSummary is the IO drawer's summary (spec 097): every figure from the
+// card's poll, so the row and the summary are one reading.
+func (c *Cooler) ioSummary() (view.Summary, []view.Reason) {
+	c.mu.Lock()
+	s := c.reading
+	c.mu.Unlock()
+	d := s.disks
+	busy := make([]float64, len(d.Busy))
+	for i, b := range d.Busy {
+		busy[i] = b
+		if b < 0 {
+			busy[i] = -1
+		}
+	}
+	return view.IOSummary(view.IOFigures{
+		Read: view.Maybe(d.Read, d.HasRates), Write: view.Maybe(d.Write, d.HasRates),
+		ReadTrail: s.readTrail, WriteTrail: s.writeTrail, TrailEvery: CoolerInterval,
+		Busy: busy, HasBusy: d.HasBusy,
+		Queues: d.Queues, Pressure: view.Maybe(d.Pressure, d.HasPressure), Queue: view.Maybe(d.Queue, d.HasQueue),
+		SwapIn: d.SwapIn, SwapOut: d.SwapOut, HasSwap: d.HasSwap,
 	})
 }

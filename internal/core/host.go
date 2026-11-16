@@ -59,6 +59,10 @@ type Host struct {
 	Processes    func() *ProcessList
 	GPUProcesses GPUProcessReader
 
+	// Disks builds the reader of the disks' IO, which keeps its own previous
+	// sample (spec 097); nil where this platform reads none.
+	Disks func() *DiskReader
+
 	// Card reads the GPU drawer's summary of the card, while the GPU list is
 	// shown (spec 096); nil where this platform reads none.
 	Card         CardReader

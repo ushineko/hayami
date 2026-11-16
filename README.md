@@ -132,6 +132,15 @@ come from nvidia-smi on an NVIDIA card, run only while the GPU list is shown,
 and on Linux from an AMD card's driver; another card shows the lines with
 "--" and says why.
 
+The IO drawer is iotop's view without iotop's root: each program's reads
+from and writes to the disks, a cell per disk coloured by how busy it is,
+the read and write rates with a plot, the IO pressure (on Windows the disk
+queue) and the rates swapped in and out. On Linux a program reads only the
+IO of the programs it could trace, its owner's ordinary ones, so the rest
+of what the disks did is one line, "other". On Windows every program's
+figure is all of its IO, files, network and devices together, and the note
+under the list says so.
+
 **Tuck it away.** Hover over the cards and a small button appears in their
 top-right corner. Click it and the panel tucks into a small square with
 hayami's icon, at the cards' bottom corner nearest the screen's edge. Click
@@ -770,6 +779,13 @@ MIT. See
   GPU list is shown; an AMD card on Linux through its driver's files, which
   have been tested on the kernel's documented layout and not yet on a card.
   Other cards show the lines empty (spec 096, #333).
+- **Added**: IO, a fourth hardware drawer (spec 097, #340). The Hardware
+  card has an IO row with the disks' read and write rates; the switch is
+  CPU GPU Mem IO (key `i`). The list is each program's reads and writes,
+  as iotop's DISK READ and DISK WRITE, with what this account cannot see as
+  "other" on Linux and every transfer, files, network and devices, on
+  Windows. Its summary is the rates with a plot, a cell per disk by how busy
+  it is, the IO pressure (the disk queue on Windows) and the swap.
 
 ### 0.16.0 (2026-11-15)
 

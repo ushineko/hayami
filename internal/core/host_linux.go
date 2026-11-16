@@ -18,8 +18,11 @@ func NewHost(HostConfig) Host {
 		Graphics:       linuxGraphics(hwmon.Root, BusyGlob, PCIIDsPath, NvidiaSMI),
 		GPUMissing:     linuxGPUMissing(hwmon.Root),
 		Card:           linuxCard(BusyGlob, NvidiaSMICard),
-		CPULoad:        func() *CPULoad { return NewCPULoad(ProcStatPath) },
-		CPUName:        func() string { return CPUName(CPUInfoPath) },
+		Disks: func() *DiskReader {
+			return LinuxDisks(DiskPaths{DiskStats: DiskStatsPath, VMStat: VMStatPath, Pressure: IOPressurePath, SysBlock: SysBlockPath})
+		},
+		CPULoad: func() *CPULoad { return NewCPULoad(ProcStatPath) },
+		CPUName: func() string { return CPUName(CPUInfoPath) },
 		Processor: func() *ProcessorReader {
 			return LinuxProcessor(ProcessorPaths{
 				Stat: ProcStatPath, Possible: CPUPossiblePath, CPUDir: CPUDir, LoadAvg: LoadAvgPath, Proc: ProcPath,

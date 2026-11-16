@@ -57,10 +57,45 @@ func ProcProcesses(root string) func(context.Context) ([]ProcessSample, error) {
 			if statm, err := os.ReadFile(filepath.Join(root, e.Name(), "statm")); err == nil { //nolint:gosec // as above
 				s.Memory = parseStatm(string(statm)) * page
 			}
+			// A process this account may not trace has no readable io: the
+			// IO list's "other" carries it (spec 097 R3).
+			if io, err := os.ReadFile(filepath.Join(root, e.Name(), "io")); err == nil { //nolint:gosec // as above
+				s.IORead, s.IOWrite, s.HasIO = ParseProcIO(string(io))
+			}
 			out = append(out, s)
 		}
 		return out, nil
 	}
+}
+
+/*
+ParseProcIO reads a process's io file for what it took from and gave to the
+block layer, read_bytes and write_bytes: iotop's DISK READ and DISK WRITE.
+rchar and wchar count the page cache too, and a program re-reading a cached
+file would head the list without touching a disk.
+*/
+func ParseProcIO(body string) (read, write float64, ok bool) {
+	var gotRead, gotWrite bool
+	for line := range strings.SplitSeq(body, "\n") {
+		key, value, found := strings.Cut(line, ":")
+		if !found {
+			continue
+		}
+		v, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || v < 0 {
+			continue
+		}
+		switch key {
+		case "read_bytes":
+			read, gotRead = v, true
+		case "write_bytes":
+			write, gotWrite = v, true
+		}
+	}
+	if !gotRead || !gotWrite {
+		return 0, 0, false
+	}
+	return read, write, true
 }
 
 /*

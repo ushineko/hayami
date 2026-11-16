@@ -38,6 +38,9 @@ func systemProcesses(context.Context) ([]ProcessSample, error) {
 				Name:       programName(p.ImageName.String()),
 				CPUSeconds: float64(p.UserTime+p.KernelTime) / filetimeSecond,
 				Memory:     uint64(p.WorkingSetPrivateSize), //nolint:gosec // a size is not negative
+				// Every transfer, files, network and devices: what Windows
+				// gives any account of another's process (spec 097 D2).
+				IORead: float64(p.ReadTransferCount), IOWrite: float64(p.WriteTransferCount), HasIO: true,
 			})
 		}
 	})
