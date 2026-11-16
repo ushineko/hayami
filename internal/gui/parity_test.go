@@ -31,12 +31,11 @@ the shell that lacks it and the fact, with the reason. Small on purpose: an
 entry is a decision, not a difference that crept in.
 */
 //
-// A section's details (spec 060) are not among the facts compared. The window
-// draws one in its drawer when a card is clicked; the pane has no detail view
-// and no keys to ask for one with, and prints the same view.Detail from
-// `hayami-tui detail`. That is a difference of what each shell can be asked,
-// not of what a section says, so it is stated here and has no entry: an entry
-// excuses a fact one shell draws, and neither draws a detail on a card.
+// A section's details (spec 060) are not among the facts compared here: each
+// shell draws one in a drawer, not on a card, and the two drawers are compared
+// by TestTheWindowAndTheTerminalDrawersShowTheSameFacts (spec 098). The
+// terminal's drawer reads and does not act, which is a difference of what each
+// shell can be asked to do, not of what a section says.
 var parityAllowed = map[string]string{
 	// In row the terminal draws a usage meter as the usage widget's --tui line
 	// (spec 019): "10%" and "resets Oct 7", where the window's line keeps the

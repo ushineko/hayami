@@ -1,6 +1,18 @@
 package view
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
+
+// PadVisible pads a painted line with spaces to width characters on screen,
+// for a shell that lays painted text beside other text (spec 098).
+func PadVisible(s string, width int) string {
+	if n := width - visibleLen(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
+}
 
 // runeLen counts characters, not bytes. An interface named in anything but
 // ASCII is unusual and a column that counted bytes would still be wrong.

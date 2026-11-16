@@ -16,10 +16,11 @@ type Heat struct {
 
 // heatBlocks are the characters a terminal draws a heat cell in, emptiest
 // first.
-var heatBlocks = []rune(" ▁▂▃▄▅▆▇█")
+var heatBlocks = []rune("▁▂▃▄▅▆▇█")
 
 // Text is the row as a terminal draws it: one character per cell, its height
-// its proportion, and a dot for a cell that is not there.
+// its proportion from ▁ for an idle one, so every cell is seen, and a dot
+// for a cell that is not there.
 func (h Heat) Text() string {
 	var b strings.Builder
 	for _, v := range h.Values {
