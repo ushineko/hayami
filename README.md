@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.16.0
+**Version**: 0.17.0
 
 *a chart you read at a glance*
 
@@ -757,7 +757,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.17.0 (2026-11-15)
 
 - **Changed**: the CPU, GPU and Memory drawers open wide enough for their
   columns, without filling, where the screen has the room; other drawers are
@@ -786,8 +786,6 @@ MIT. See
   "other" on Linux and every transfer, files, network and devices, on
   Windows. Its summary is the rates with a plot, a cell per disk by how busy
   it is, the IO pressure (the disk queue on Windows) and the swap.
-
-### 0.16.0 (2026-11-15)
 
 - **Added**: filled, the CPU, GPU and Memory drawers show more columns per
   program: how many processes share the name, the list's other figures, and
