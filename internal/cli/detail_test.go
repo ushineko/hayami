@@ -87,8 +87,9 @@ func TestDetailPrintsTheSecondReadingAsText(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "CPU by process\n"+
-		"  editor                 12.5 %\n"+
-		"  browser                 3.0 %\n"+
+		"                                 procs\n"+
+		"  editor                 12.5 %     ×1\n"+
+		"  browser                 3.0 %     ×1\n"+
 		"  share of every processor together\n", out.String())
 	assert.Equal(t, 2, polled, "a section's rate is a difference too: it is polled before and after the settle")
 	assert.Equal(t, 2, src.reads["cpu"])

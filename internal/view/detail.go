@@ -32,6 +32,11 @@ type Detail struct {
 	Meters []Meter      `json:"meters,omitempty"`
 	Lines  []DetailLine `json:"lines,omitempty"`
 
+	// Columns are the extra columns the lines carry cells for, in the order
+	// a narrowing shell drops them, last first (spec 092). A shell shows as
+	// many as its width fits; the command line prints them all.
+	Columns []Column `json:"columns,omitempty"`
+
 	// Trails are a plot over the lines, against one scale, for a detail that is
 	// a part of another: each VPN's own.
 	Trails []Trail `json:"trails,omitempty"`
@@ -88,6 +93,10 @@ type DetailLine struct {
 
 	// Heading marks a line that names the lines under it and has no value.
 	Heading bool `json:"heading,omitempty"`
+
+	// Cells are the line's extra figures, one under each of its detail's
+	// Columns and at its width (spec 092).
+	Cells []string `json:"cells,omitempty"`
 
 	// Open is what a click on the line asks for: the ID of the detail it
 	// leads to, or one of the Act names below. Empty for a line that is
@@ -189,6 +198,10 @@ func (d Detail) printable() Detail {
 	lines := make([]DetailLine, len(d.Lines))
 	for i, l := range d.Lines {
 		l.Name, l.Value, l.Unit = p(l.Name), p(l.Value), p(l.Unit)
+		l.Cells = slices.Clone(l.Cells)
+		for j := range l.Cells {
+			l.Cells[j] = p(l.Cells[j])
+		}
 		lines[i] = l
 	}
 	d.Lines = lines
@@ -221,14 +234,23 @@ func (d Detail) Text() string {
 				Sparkline(t.Samples, min(len(t.Samples), detailTrailWidth), SparkMinSpan) + "\n")
 		}
 	}
+	// Every column is printed: a terminal's line is as long as it needs
+	// (spec 092 R9), and the heading over them names them.
+	figure := FigureWidth(d.Lines)
+	if len(d.Columns) > 0 && figure > 0 {
+		b.WriteString("  " + strings.TrimRight(padRight("", DetailNameWidth)+"  "+ColumnHeads(figure, d.Columns, len(d.Columns)), " ") + "\n")
+	}
 	for _, l := range d.Lines {
 		if l.Heading {
 			b.WriteString("  " + l.Name + "\n")
 			continue
 		}
-		value := l.Value
-		if l.Unit != "" {
-			value += " " + l.Unit
+		value := l.figure()
+		if len(l.Cells) > 0 {
+			value = padRight(value, figure)
+			for _, c := range l.Cells {
+				value += strings.Repeat(" ", FigureGap) + c
+			}
 		}
 		b.WriteString("  " + strings.TrimRight(padRight(l.Name, DetailNameWidth)+"  "+value, " ") + "\n")
 	}
@@ -264,6 +286,16 @@ type ProcessUse struct {
 	// list with two, the up rate beside the down.
 	Value  float64
 	Second float64
+
+	// Count is how many processes the use is, once uses of one name are
+	// summed; zero for a use read from one process, which is one.
+	Count int
+
+	// CPU, Memory and Share are the use's other figures, for a list's
+	// columns (spec 092): the share of the processors, the bytes held, and
+	// those bytes as a percentage of all memory. Each is absent where it
+	// was not read.
+	CPU, Memory, Share Opt[float64]
 }
 
 // processKind is how one kind of process list is drawn.
@@ -276,6 +308,9 @@ type processKind struct {
 	format func(ProcessUse) DetailLine
 	// order is what the list is sorted by, greatest first.
 	order func(ProcessUse) float64
+	// columns are the list's extra columns, in the order a narrowing
+	// drawer drops them, last first (spec 092).
+	columns []string
 }
 
 // The process lists, by the detail's ID (rule 2 of docs/architecture.md: a
@@ -289,9 +324,12 @@ const (
 )
 
 var processKinds = map[string]processKind{
-	DetailCPU:    {title: "CPU by process", label: "CPU", key: "c", format: percentLine, order: first},
-	DetailGPU:    {title: "GPU by process", label: "GPU", key: "g", format: percentLine, order: first},
-	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first},
+	DetailCPU: {title: "CPU by process", label: "CPU", key: "c", format: percentLine, order: first,
+		columns: []string{ColumnCount, ColumnMemory, ColumnShare}},
+	DetailGPU: {title: "GPU by process", label: "GPU", key: "g", format: percentLine, order: first,
+		columns: []string{ColumnCount, ColumnCPU, ColumnMemory}},
+	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first,
+		columns: []string{ColumnCount, ColumnCPU, ColumnShare}},
 	// Both of the bandwidth lists carry a label, because a switch is drawn
 	// only from the choices that have one and only when the open detail is
 	// among them (gui.choices). With one of the two unlabelled there was no
@@ -338,14 +376,14 @@ func Processes(section, id string, uses []ProcessUse) Detail {
 		if name == "" {
 			name = OtherProcesses
 		}
+		u.Name = name
 		s, ok := sums[name]
 		if !ok {
-			s = &ProcessUse{Name: name}
-			sums[name] = s
+			sums[name] = &u
 			names = append(names, name)
+			continue
 		}
-		s.Value += u.Value
-		s.Second += u.Second
+		*s = s.plus(u)
 	}
 	sort.Slice(names, func(i, j int) bool {
 		a, b := kind.order(*sums[names[i]]), kind.order(*sums[names[j]])
@@ -354,9 +392,11 @@ func Processes(section, id string, uses []ProcessUse) Detail {
 		}
 		return names[i] < names[j]
 	})
+	d.Columns = OfferColumns(id, uses, true)
 	for _, name := range names {
 		line := kind.format(*sums[name])
 		line.Name = truncate(name, DetailNameWidth)
+		line.Cells = Cells(d.Columns, *sums[name])
 		d.Lines = append(d.Lines, line)
 	}
 	return d

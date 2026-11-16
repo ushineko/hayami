@@ -197,7 +197,8 @@ func TestADetailPrintsAsText(t *testing.T) {
 	d.Reasons = []view.Reason{{Text: "not available", Detail: "tried one thing"}}
 
 	assert.Equal(t, "Memory by process\n"+
-		"  editor                  3.0 GiB\n"+
+		"                                   procs\n"+
+		"  editor                  3.0 GiB     ×1\n"+
 		"  9.0 GiB of 32.0 GiB in use\n"+
 		"  not available\n"+
 		"    tried one thing\n", d.Text())

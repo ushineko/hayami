@@ -37,72 +37,6 @@ func (c *Cooler) Drills(id string) bool {
 // list it is in.
 func (c *Cooler) DrillUp(id string) string { return DrillOut(id) }
 
-/*
-coolerPIDs is each list's processes with their PIDs, which the lists
-themselves throw away: a list is of names, because a browser is forty
-processes and a person asks about the browser (spec 060 R6). A drill is the
-other question -- which of the forty -- so it reads the same source and
-keeps what the list dropped.
-*/
-func (c *Cooler) coolerPIDs(ctx context.Context, root string) ([]pidUse, string, error) {
-	switch root {
-	case view.DetailCPU:
-		if c.processes == nil {
-			return nil, "", errNoProcesses
-		}
-		processes, err := c.processes.Read(ctx)
-		if err != nil {
-			return nil, "", err //nolint:wrapcheck // the reader's own account
-		}
-		var out []pidUse
-		for _, p := range processes {
-			if p.HasCPU {
-				out = append(out, pidUse{PID: p.PID, Name: p.Name, Value: p.CPU})
-			}
-		}
-		return out, "share of every processor together", nil
-
-	case view.DetailMemory:
-		if c.processes == nil {
-			return nil, "", errNoProcesses
-		}
-		processes, err := c.processes.Read(ctx)
-		if err != nil {
-			return nil, "", err //nolint:wrapcheck // the reader's own account
-		}
-		var out []pidUse
-		for _, p := range processes {
-			out = append(out, pidUse{PID: p.PID, Name: p.Name, Value: float64(p.Memory)})
-		}
-		return out, "resident set", nil
-
-	case view.DetailGPU:
-		if c.gpuProcesses == nil {
-			return nil, "", errNoProcesses
-		}
-		c.mu.Lock()
-		via := c.gpuVia
-		c.mu.Unlock()
-		processes, err := c.gpuProcesses.Read(ctx, via)
-		if err != nil {
-			return nil, "", err //nolint:wrapcheck // the reader's own account
-		}
-		var out []pidUse
-		for _, p := range processes {
-			out = append(out, pidUse{PID: p.PID, Name: p.Name, Value: p.Load})
-		}
-		return out, "each program's busiest engine", nil
-	}
-	return nil, "", errNoProcesses
-}
-
-// pidUse is one process's figure in whichever list it was read from.
-type pidUse struct {
-	PID   int
-	Name  string
-	Value float64
-}
-
 // coolerDrill is a drill-down of one of the cooler's lists.
 func (c *Cooler) coolerDrill(ctx context.Context, id string) (view.Detail, error) {
 	root, steps := DrillRoot(id)
@@ -110,9 +44,14 @@ func (c *Cooler) coolerDrill(ctx context.Context, id string) (view.Detail, error
 	d := view.Detail{Section: c.Key(), ID: id, Title: view.ProcessTitle(root)}
 	d.Lines = Trail(view.ProcessTitle(root), id)
 
-	all, note, err := c.coolerPIDs(ctx, root)
+	all, note, err := coolerDetails[root](c, ctx)
 	if err != nil {
 		return unread(c.Key(), id, view.ProcessTitle(root), err), err
+	}
+	if root == view.DetailMemory {
+		// The list's note is the whole machine's; a page of one program's
+		// processes says what each figure is.
+		note = "resident set"
 	}
 	d.Note = note
 
@@ -134,13 +73,21 @@ func (c *Cooler) coolerDrill(ctx context.Context, id string) (view.Detail, error
 		return view.DrillLine(root, name, indent, view.ProcessUse{Value: v})
 	}
 	if len(steps) == 1 {
-		var total float64
-		for _, p := range mine {
-			total += p.Value
+		// The list's columns but the count: each of these is one process
+		// (spec 092 R2).
+		uses := make([]view.ProcessUse, len(mine))
+		for i, p := range mine {
+			uses[i] = p.ProcessUse
 		}
-		d.Lines = append(d.Lines, format("all", 0, total))
+		d.Columns = view.OfferColumns(root, uses, false)
+		withCells := func(name string, indent int, u view.ProcessUse) view.DetailLine {
+			line := view.DrillLine(root, name, indent, u)
+			line.Cells = view.Cells(d.Columns, u)
+			return line
+		}
+		d.Lines = append(d.Lines, withCells("all", 0, view.Sum(uses)))
 		for _, p := range mine {
-			line := format(PIDLabel(p.PID), 1, p.Value)
+			line := withCells(PIDLabel(p.PID), 1, p.ProcessUse)
 			if p.PID != 0 {
 				line.Open = DrillUnder(id, strconv.Itoa(p.PID))
 			}

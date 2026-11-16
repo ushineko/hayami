@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.15.0
+**Version**: 0.16.0
 
 *a chart you read at a glance*
 
@@ -101,6 +101,13 @@ panel reaches the screen's edge; the cards stay as they are. Press it again
 to put the drawers back. Opening or closing a drawer ends it. Where hayami
 cannot learn the room beside the panel (a desktop other than Plasma or
 Windows) Fill is not offered.
+
+Filled, the CPU, GPU and Memory lists use the width: each program also shows
+how many processes share its name, the list's other figures (memory in the
+CPU list, the processor share in the Memory list, both in the GPU list) and,
+where the memory's total is known, its share of all memory, under a line
+naming each column. As many columns are shown as fit whole, in that order.
+`hayami-tui detail cooler/cpu` prints every column, and `--json` carries them.
 
 **Tuck it away.** Hover over the cards and a small button appears in their
 top-right corner. Click it and the panel tucks into a small square with
@@ -717,6 +724,13 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### 0.16.0 (2026-11-15)
+
+- **Added**: filled, the CPU, GPU and Memory drawers show more columns per
+  program: how many processes share the name, the list's other figures, and
+  the share of all memory, as many as the width fits; `detail` prints them
+  all (spec 092, #332).
 
 ### 0.15.0 (2026-11-14)
 

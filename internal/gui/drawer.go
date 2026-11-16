@@ -51,6 +51,10 @@ type drawer struct {
 	meters []*glance.Meter
 	rows   []*glance.Row
 
+	// heads names the list's columns over it, where the width shows any
+	// (spec 092).
+	heads *glance.Row
+
 	// notes are the lines under the list: its reasons and its note. They are
 	// rows of their own because a line of the list has its name column
 	// pinned, and a sentence in a pinned column is cut to a name's width.
@@ -147,6 +151,7 @@ type Desk interface {
 // its meters, its lines, and the lines for its reasons and its note.
 type drawerPart struct {
 	head   *glance.Row
+	heads  *glance.Row
 	plot   *glance.Sparkline
 	traces map[string]bool
 	meters []*glance.Meter
@@ -200,6 +205,8 @@ func (p *Panel) newDrawer(dr *glance.Drawer) *drawer {
 	d.sw.OnShifted = func(id string) { p.shiftChosen(d, id) }
 	// Every line starts hidden: a line is shown when a detail has something
 	// to put on it.
+	d.heads = glance.NewRowWidth("", "", p.kit.name)
+	d.heads.SetShown(false)
 	for range DrawerRows {
 		r := glance.NewRowWidth("", "", p.kit.name)
 		r.SetShown(false)
@@ -794,6 +801,7 @@ func (p *Panel) renderOne(d *drawer) {
 		for _, m := range d.meters[:meters] {
 			pieces = append(pieces, m)
 		}
+		pieces = append(pieces, d.heads)
 		for _, r := range d.rows {
 			pieces = append(pieces, r)
 		}
@@ -805,6 +813,8 @@ func (p *Panel) renderOne(d *drawer) {
 	for i, m := range detail.Meters[:meters] {
 		setMeter(d.meters[i], m)
 	}
+	cells := p.cellsShown(dr, detail)
+	p.setHeads(d.heads, detail, cells)
 
 	// What stands above the list, and the lines under it that are always
 	// drawn: the reasons and the note come out of the room the list has.
@@ -815,6 +825,7 @@ func (p *Panel) renderOne(d *drawer) {
 	for _, m := range d.meters[:meters] {
 		above = append(above, m)
 	}
+	above = append(above, d.heads)
 	tail := tailLines(detail)
 	fit := dr.Fit(d.rows[0], above...)
 	tail = tail[:min(len(tail), len(d.notes), max(fit, 0))]
@@ -825,7 +836,7 @@ func (p *Panel) renderOne(d *drawer) {
 			r.SetShown(false)
 			continue
 		}
-		p.setLine(r, lines[i])
+		p.setLine(r, lines[i], cells)
 		r.SetShown(true)
 	}
 	// A list of lines is clickable on the same terms a breakdown of parts
@@ -850,11 +861,12 @@ func setMeter(to *glance.Meter, m view.Meter) {
 	to.SetStats(m.StatsLeft, m.StatsRight)
 }
 
-// setLine draws a detail's line on one of the drawer's rows.
-func (p *Panel) setLine(r *glance.Row, l view.DetailLine) {
+// setLine draws a detail's line on one of the drawer's rows, with its first
+// cells cells after its figure (spec 092).
+func (p *Panel) setLine(r *glance.Row, l view.DetailLine, cells int) {
 	r.SetID(l.Open)
 	r.SetLabel(l.Name)
-	r.Set(p.value(view.Row{Value: l.Value, Unit: l.Unit, Parts: l.Parts, Status: l.Status}))
+	r.Set(p.value(l.Row(cells)))
 }
 
 // plotPiece is the sparkline as the drawer takes its content. The library's
@@ -928,7 +940,7 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 
 	shape := ""
 	for _, part := range detail.Parts {
-		shape += fmt.Sprintf("%d/%d/%d/%t;", len(part.Meters), len(part.Lines), len(tailLines(part)), len(part.Trails) > 0)
+		shape += fmt.Sprintf("%d/%d/%d/%t/%t;", len(part.Meters), len(part.Lines), len(tailLines(part)), len(part.Trails) > 0, len(part.Columns) > 0)
 	}
 	if shape != d.partsShape {
 		// A rebuild starts the content again at the top. A live breakdown
@@ -965,6 +977,10 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 				built.meters = append(built.meters, m)
 				pieces = append(pieces, m)
 			}
+			if len(part.Columns) > 0 {
+				built.heads = glance.NewRowWidth("", "", p.kit.name)
+				pieces = append(pieces, built.heads)
+			}
 			for range part.Lines {
 				r := glance.NewRowWidth("", "", p.kit.name)
 				built.rows = append(built.rows, r)
@@ -997,8 +1013,12 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 		for j, m := range part.Meters {
 			setMeter(built.meters[j], m)
 		}
+		cells := p.cellsShown(dr, part)
+		if built.heads != nil {
+			p.setHeads(built.heads, part, cells)
+		}
 		for j, l := range part.Lines {
-			p.setLine(built.rows[j], l)
+			p.setLine(built.rows[j], l, cells)
 		}
 		for j, text := range tailLines(part) {
 			built.notes[j].SetLabel(text)
