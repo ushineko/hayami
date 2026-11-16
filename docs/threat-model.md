@@ -263,6 +263,10 @@ sending reports, a helper sending lines, a provider's API.
   cpufreq files are single numbers, and a core number in `/proc/stat` is
   bounded (`maxCores`), so no file sizes an allocation
   (`internal/core/processor.go`; spec 095).
+- The GPU summary's nvidia-smi answer is parsed field by field, a field
+  that is not a number being that part absent (`ParseSMICard`); an AMD
+  card's files are single numbers and labels read by name under its device
+  (`AMDCard`, `internal/core/card.go`; spec 096).
 - The VPN health store is bounded, 0600, read to a size limit and tolerates a cut
   line (`loadVPNPoints`, `internal/panel/vpnhealth.go`). `/proc/net/route` lines that
   do not parse are skipped (`ParseRouteTable`, fuzzed).
@@ -288,7 +292,8 @@ the settings, which are the user's own; hayami then fetches that URL.
   (`FuzzLHMTree`, `FuzzParseLHMValue`), the Claude and Codex payloads and
   breakdowns (`FuzzClaudePayload`, `FuzzCodexPayload`), the shared cache
   file (`FuzzCacheFile`), Codex's reply (`FuzzNormalise`), the page files'
-  answer (`FuzzPageFiles`), the processor table (`FuzzParseProcessorTimes`), the
+  answer (`FuzzPageFiles`), the processor table (`FuzzParseProcessorTimes`), the card's answer
+  (`FuzzParseSMICard`), the
   load average (`FuzzParseLoadAvg`) and the settings file (`FuzzSettingsFile`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
@@ -337,8 +342,10 @@ something else between hayami reading it and acting on it.
   if it is `https` with a host (`SignInURL`, `internal/core/vpn.go`). It is not logged,
   printed, drawn or carried in an error, since such an address can hold a one-time token.
 - hayami runs one program to read: `nvidia-smi`, with a timeout
-  (`internal/core/processors.go`, `internal/core/gpuprocs.go`), found on the
-  user's `PATH`, as the user.
+  (`internal/core/processors.go`, `internal/core/gpuprocs.go`,
+  `internal/core/card.go`), found on the user's `PATH`, as the user, with
+  constant arguments. The GPU drawer's summary runs it once more per drawer
+  poll while the GPU list is shown (spec 096).
 
 **Accepted.** A PID can be reused between the drill and the press; the
 window between them is a person's reaction time, and the signal is the

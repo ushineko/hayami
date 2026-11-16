@@ -25,6 +25,7 @@ func NewHost(cfg HostConfig) Host {
 		CPUTemperature: windowsCPUTemperature(NewLHM(cfg.LHM).CPUTemperature),
 		CPUMissing:     windowsCPUMissing,
 		Graphics:       windowsGraphics(nativeGraphics(), NvidiaSMI),
+		Card:           windowsCard(NvidiaSMICard),
 		GPUMissing:     windowsGPUMissing,
 		CPULoad:        systemTimesLoad,
 		Processor:      windowsProcessor,

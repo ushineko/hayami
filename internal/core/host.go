@@ -58,6 +58,10 @@ type Host struct {
 	// Each is asked only while its list is shown.
 	Processes    func() *ProcessList
 	GPUProcesses GPUProcessReader
+
+	// Card reads the GPU drawer's summary of the card, while the GPU list is
+	// shown (spec 096); nil where this platform reads none.
+	Card         CardReader
 	NetProcesses func() NetReader
 
 	// VPNs are the systems that keep VPN connections (spec 085). None on a

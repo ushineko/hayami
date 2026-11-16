@@ -17,6 +17,7 @@ func NewHost(HostConfig) Host {
 		CPUMissing:     linuxCPUMissing(hwmon.Root),
 		Graphics:       linuxGraphics(hwmon.Root, BusyGlob, PCIIDsPath, NvidiaSMI),
 		GPUMissing:     linuxGPUMissing(hwmon.Root),
+		Card:           linuxCard(BusyGlob, NvidiaSMICard),
 		CPULoad:        func() *CPULoad { return NewCPULoad(ProcStatPath) },
 		CPUName:        func() string { return CPUName(CPUInfoPath) },
 		Processor: func() *ProcessorReader {

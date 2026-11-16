@@ -97,6 +97,7 @@ type Cooler struct {
 	// (spec 060).
 	memory       func(context.Context) (core.Memory, error)
 	processor    *core.ProcessorReader
+	card         core.CardReader
 	processes    *core.ProcessList
 	gpuProcesses core.GPUProcessReader
 	gpuVia       string
@@ -117,6 +118,7 @@ func NewCooler(h *core.Host, scan Scan) *Cooler {
 	if h.Processor != nil {
 		c.processor = h.Processor()
 	}
+	c.card = h.Card
 	if h.Processes != nil {
 		c.processes = h.Processes()
 	}
@@ -606,6 +608,11 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 		d.Summary = &summary
 		d.Reasons = append(d.Reasons, reasons...)
 	}
+	if id == view.DetailGPU && c.card != nil {
+		summary, reasons := c.gpuSummary(ctx)
+		d.Summary = &summary
+		d.Reasons = append(d.Reasons, reasons...)
+	}
 	if id == view.DetailMemory {
 		c.mu.Lock()
 		m := c.reading.memory
@@ -763,5 +770,23 @@ func (c *Cooler) cpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
 		Clock: view.Maybe(p.Clock, p.HasClock), MaxClock: p.MaxClock,
 		LoadKind: kind, LoadAvg: view.Maybe(p.LoadAvg, p.HasLoadAvg), Queue: view.Maybe(p.Queue, p.HasQueue),
 		Processes: p.Processes, Threads: p.Threads, HasTasks: p.HasTasks,
+	})
+}
+
+// gpuSummary is the GPU drawer's summary (spec 096), read now from the card
+// the list is about, by the route its reading came from. A card that could
+// not be read is every line's empty form, and its reasons.
+func (c *Cooler) gpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
+	c.mu.Lock()
+	via := c.gpuVia
+	c.mu.Unlock()
+	card, err := c.card(ctx, via)
+	if err != nil {
+		card = core.Card{}
+	}
+	return view.GPUSummary(view.GPUFigures{
+		VRAM: card.VRAMUsed, VRAMTotal: card.VRAMTotal, HasVRAM: card.HasVRAM,
+		Clock: view.Maybe(card.Clock, card.HasClock), MemClock: view.Maybe(card.MemClock, card.HasMemClock),
+		Power: view.Maybe(card.Power, card.HasPower), PowerLimit: card.PowerLimit,
 	})
 }

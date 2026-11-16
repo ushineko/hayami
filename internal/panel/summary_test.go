@@ -2,6 +2,7 @@ package panel_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -139,4 +140,55 @@ func TestAQueueMachineKeepsItsLine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, view.LoadQueue, d.Summary.Lines[1].Name)
 	assert.Equal(t, view.NoQuantity(), d.Summary.Lines[1].Value)
+}
+
+// cardCooler is a cooler over a card read through via, whose summary reads
+// card and records the route it was asked by.
+func cardCooler(t *testing.T, via string, card func(string) (core.Card, error)) (*panel.Cooler, *[]string) {
+	t.Helper()
+	h := detailHost(stepping([]core.ProcessSample{{PID: 1, Name: "editor"}}), &gpuReader{}, via)
+	var asked []string
+	h.Card = func(_ context.Context, via string) (core.Card, error) {
+		asked = append(asked, via)
+		return card(via)
+	}
+	c := panel.NewCoolerOn(h, noScan)
+	panel.SetProcessors(c, func() (float64, bool) { return 12, true }, func(context.Context) core.Graphics {
+		return core.Graphics{Temperature: 40, HasTemperature: true, Load: 9, HasLoad: true, Via: via}
+	})
+	_, _ = c.Poll(t.Context())
+	return c, &asked
+}
+
+// Spec 096 R1, R3. The GPU list carries the card's summary, read by the route
+// the card's reading came from, and only when the GPU list is read.
+func TestTheGPUListSumsUpTheCard(t *testing.T) {
+	c, asked := cardCooler(t, "nvidia-smi", func(string) (core.Card, error) {
+		return core.Card{VRAMUsed: 1 << 30, VRAMTotal: 4 << 30, HasVRAM: true, Clock: 1680, HasClock: true}, nil
+	})
+
+	_, err := c.PollDetail(t.Context(), view.DetailCPU)
+	require.NoError(t, err)
+	assert.Empty(t, *asked, "the card is not read for another list")
+
+	d, err := c.PollDetail(t.Context(), view.DetailGPU)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"nvidia-smi"}, *asked)
+	require.NotNil(t, d.Summary)
+	assert.InDelta(t, 0.25, d.Summary.Meters[0].Fraction, 1e-9)
+	assert.Equal(t, " 1680", d.Summary.Lines[0].Value)
+	assert.Len(t, d.Reasons, 2, "the memory clock and the power were not read")
+}
+
+// R2. A card that cannot be read keeps the summary's lines, empty, with a
+// reason for each.
+func TestACardThatCannotBeReadKeepsItsLines(t *testing.T) {
+	c, _ := cardCooler(t, "", func(string) (core.Card, error) { return core.Card{}, errors.New("no nvidia-smi") })
+
+	d, err := c.PollDetail(t.Context(), view.DetailGPU)
+	require.NoError(t, err)
+	require.NotNil(t, d.Summary)
+	assert.Len(t, d.Summary.Lines, 3)
+	assert.Equal(t, view.NoQuantity(), d.Summary.Meters[0].Caption)
+	assert.Len(t, d.Reasons, 4, "a reason for each line")
 }
