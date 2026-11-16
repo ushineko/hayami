@@ -267,6 +267,13 @@ sending reports, a helper sending lines, a provider's API.
   that is not a number being that part absent (`ParseSMICard`); an AMD
   card's files are single numbers and labels read by name under its device
   (`AMDCard`, `internal/core/card.go`; spec 096).
+- The IO readers parse `/proc/<pid>/io`, `/proc/diskstats`, `/proc/vmstat`
+  and `/proc/pressure/io` line by line, a field that is not a number being
+  absent (`ParseProcIO`, `ParseDiskStats`, `ParseVMStatSwap`,
+  `ParsePressure`, `internal/core/disks.go`; spec 097). A process's io is
+  read only where the kernel's ptrace check lets this account, so hayami
+  learns nothing of another's IO but what the disks' totals already say.
+  Disk names are not drawn: the strip's cells are unlabelled.
 - The VPN health store is bounded, 0600, read to a size limit and tolerates a cut
   line (`loadVPNPoints`, `internal/panel/vpnhealth.go`). `/proc/net/route` lines that
   do not parse are skipped (`ParseRouteTable`, fuzzed).
@@ -293,7 +300,8 @@ the settings, which are the user's own; hayami then fetches that URL.
   breakdowns (`FuzzClaudePayload`, `FuzzCodexPayload`), the shared cache
   file (`FuzzCacheFile`), Codex's reply (`FuzzNormalise`), the page files'
   answer (`FuzzPageFiles`), the processor table (`FuzzParseProcessorTimes`), the card's answer
-  (`FuzzParseSMICard`), the
+  (`FuzzParseSMICard`), the disks and a process's IO (`FuzzParseDiskStats`,
+  `FuzzParseProcIO`, `FuzzParsePressure`), the
   load average (`FuzzParseLoadAvg`) and the settings file (`FuzzSettingsFile`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed

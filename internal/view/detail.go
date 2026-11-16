@@ -360,6 +360,7 @@ const (
 	DetailCPU       = "cpu"
 	DetailGPU       = "gpu"
 	DetailMemory    = "memory"
+	DetailIO        = "io"
 	DetailProcesses = "processes"
 	DetailPeers     = "peers"
 )
@@ -371,6 +372,12 @@ var processKinds = map[string]processKind{
 		columns: []string{ColumnCount, ColumnCPU, ColumnMemory}, figure: percentWidth},
 	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first,
 		columns: []string{ColumnCount, ColumnCPU, ColumnShare}, figure: sizeWidth},
+	// The IO list's figure is two rates, wider than the others' one, so it
+	// carries the count alone and the drawer is the width the other three
+	// want (spec 097 R2).
+	DetailIO: {title: "IO by process", label: "IO", key: "i", format: ioLine,
+		order:   func(p ProcessUse) float64 { return p.Value + p.Second },
+		columns: []string{ColumnCount}, figure: ioWidth},
 	// Both of the bandwidth lists carry a label, because a switch is drawn
 	// only from the choices that have one and only when the open detail is
 	// among them (gui.choices). With one of the two unlabelled there was no
@@ -453,6 +460,27 @@ func sizeLine(p ProcessUse) DetailLine {
 	n, u := Size(p.Value)
 	return DetailLine{Value: n, Unit: PadUnit(u, UnitWidth(byteUnits...))}
 }
+
+// ioLine is a read and a write rate on one line, as ratesLine draws a
+// network's, in the plain colour of a fact: a disk has no band a rate is a
+// verdict on.
+func ioLine(p ProcessUse) DetailLine {
+	width := bandwidthUnitWidth()
+	parts := []Part{
+		{Text: "↓ ", Status: Info},
+		{Text: rate(p.Value, true, width), Status: Info},
+		{Text: " ↑ ", Status: Info},
+		{Text: rate(p.Second, true, width), Status: Info},
+	}
+	line := DetailLine{Parts: parts}
+	for _, part := range parts {
+		line.Value += part.Text
+	}
+	return line
+}
+
+// ioWidth is the width of an IO line's figure.
+var ioWidth = runeLen(ioLine(ProcessUse{}).Value)
 
 // ratesLine is a down and an up rate on one line, each in its own band, as an
 // interface's row draws them and closer together: a drawer is narrower than

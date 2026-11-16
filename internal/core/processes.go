@@ -26,6 +26,13 @@ type ProcessSample struct {
 	// Memory is what the process holds in physical memory, in bytes: its
 	// resident set on Linux, its private working set on Windows.
 	Memory uint64
+
+	// IORead and IOWrite are the bytes the process has read and written since
+	// it started, where this account may know them (spec 097): on Linux what
+	// it took from and gave to the block layer, on Windows every transfer,
+	// files, network and devices alike.
+	IORead, IOWrite float64
+	HasIO           bool
 }
 
 // Process is one process's use of the machine since the previous reading.
@@ -40,6 +47,13 @@ type Process struct {
 	HasCPU bool    `json:"has_cpu"`
 
 	Memory uint64 `json:"memory"`
+
+	// IORead and IOWrite are the bytes per second the process read and wrote
+	// since the previous reading (spec 097); HasIO is false where they could
+	// not be read or the process is first seen.
+	IORead  float64 `json:"io_read,omitempty"`
+	IOWrite float64 `json:"io_write,omitempty"`
+	HasIO   bool    `json:"has_io,omitempty"`
 }
 
 /*
@@ -57,7 +71,7 @@ type ProcessList struct {
 	// sample reads the processes: this platform's, or a test's.
 	sample func(context.Context) ([]ProcessSample, error)
 
-	last   map[int]float64
+	last   map[int]ProcessSample
 	lastAt time.Time
 
 	// cpus is how many processors a second of processor time is shared
@@ -98,15 +112,20 @@ func (l *ProcessList) Read(ctx context.Context) ([]Process, error) {
 		return nil, err
 	}
 	now := l.now()
-	elapsed := now.Sub(l.lastAt).Seconds() * float64(max(l.cpus, 1))
+	seconds := now.Sub(l.lastAt).Seconds()
+	elapsed := seconds * float64(max(l.cpus, 1))
 
 	out := make([]Process, 0, len(samples))
 	for _, s := range samples {
 		p := Process{PID: s.PID, Name: s.Name, Memory: s.Memory}
 		// A process ID is reused. One whose time went backwards is another
 		// process under an old number, and has no share yet.
-		if was, ok := l.last[s.PID]; ok && elapsed > 0 && s.CPUSeconds >= was {
-			p.CPU, p.HasCPU = 100*(s.CPUSeconds-was)/elapsed, true
+		was, ok := l.last[s.PID]
+		if ok && elapsed > 0 && s.CPUSeconds >= was.CPUSeconds {
+			p.CPU, p.HasCPU = 100*(s.CPUSeconds-was.CPUSeconds)/elapsed, true
+			if s.HasIO && was.HasIO && s.IORead >= was.IORead && s.IOWrite >= was.IOWrite {
+				p.IORead, p.IOWrite, p.HasIO = (s.IORead-was.IORead)/seconds, (s.IOWrite-was.IOWrite)/seconds, true
+			}
 		}
 		out = append(out, p)
 	}
@@ -117,9 +136,9 @@ func (l *ProcessList) Read(ctx context.Context) ([]Process, error) {
 func (l *ProcessList) remember(samples []ProcessSample) { l.rememberAt(samples, l.now()) }
 
 func (l *ProcessList) rememberAt(samples []ProcessSample, at time.Time) {
-	l.last = make(map[int]float64, len(samples))
+	l.last = make(map[int]ProcessSample, len(samples))
 	for _, s := range samples {
-		l.last[s.PID] = s.CPUSeconds
+		l.last[s.PID] = s
 	}
 	l.lastAt = at
 }

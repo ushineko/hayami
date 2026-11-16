@@ -3,6 +3,8 @@ package panel_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -191,4 +193,96 @@ func TestACardThatCannotBeReadKeepsItsLines(t *testing.T) {
 	assert.Len(t, d.Summary.Lines, 3)
 	assert.Equal(t, view.NoQuantity(), d.Summary.Meters[0].Caption)
 	assert.Len(t, d.Reasons, 4, "a reason for each line")
+}
+
+// ioCooler is a cooler whose disks read disks, and whose processes are a
+// copy, a browser and one that cannot be read, each polled twice so the
+// rates exist.
+func ioCooler(t *testing.T, disks core.Disks) *panel.Cooler {
+	t.Helper()
+	h := detailHost(stepping(
+		[]core.ProcessSample{
+			{PID: 1, Name: "copy", CPUSeconds: 1, IORead: 0, IOWrite: 0, HasIO: true},
+			{PID: 2, Name: "browser", CPUSeconds: 1, IORead: 0, IOWrite: 0, HasIO: true},
+			{PID: 3, Name: "daemon", CPUSeconds: 1},
+		},
+		[]core.ProcessSample{
+			{PID: 1, Name: "copy", CPUSeconds: 2, IORead: 1 << 30, IOWrite: 0, HasIO: true},
+			{PID: 2, Name: "browser", CPUSeconds: 2, IORead: 0, IOWrite: 1 << 20, HasIO: true},
+			{PID: 3, Name: "daemon", CPUSeconds: 2},
+		},
+	), &gpuReader{}, "")
+	h.Disks = func() *core.DiskReader {
+		return core.NewDiskReader(func(context.Context) core.Disks { return disks })
+	}
+	c := panel.NewCoolerOn(h, noScan)
+	panel.SetProcessors(c, func() (float64, bool) { return 12, true }, func(context.Context) core.Graphics { return core.Graphics{} })
+	_, _ = c.Poll(t.Context())
+	return c
+}
+
+// lineOf is the line of d named name.
+func lineOf(t *testing.T, d view.Detail, name string) view.DetailLine {
+	t.Helper()
+	for _, l := range d.Lines {
+		if l.Name == name {
+			return l
+		}
+	}
+	require.Failf(t, "no line", "%q in %v", name, lineNames(d))
+	return view.DetailLine{}
+}
+
+// Spec 097 R1, R2, R3. The card has an IO row and offers the IO list; the list
+// is each readable program's rates, and what the disks did beyond them is
+// "other", never below nothing. A process that cannot be read is not listed.
+func TestTheIOListAccountsForTheDisks(t *testing.T) {
+	c := ioCooler(t, core.Disks{Read: 1 << 31, Write: 0, HasRates: true, Names: []string{"sda"}, Busy: []float64{0.5}, HasBusy: true})
+
+	rows := c.Section().Rows
+	require.True(t, slices.ContainsFunc(rows, func(r view.Row) bool { return r.ID == "io" }), "no IO row")
+	ids := []string{}
+	for _, info := range c.Details() {
+		ids = append(ids, info.ID)
+	}
+	assert.Contains(t, ids, view.DetailIO)
+
+	d, err := c.PollDetail(t.Context(), view.DetailIO)
+	require.NoError(t, err)
+	assert.NotContains(t, lineNames(d), "daemon")
+	copyRate := lineOf(t, d, "copy")
+	other := lineOf(t, d, view.OtherProcesses)
+	assert.Contains(t, copyRate.Value, "↓")
+	assert.Contains(t, d.Note, "other")
+	// The copy read a GiB over the reading's interval; the disks read two
+	// GiB a second. Whatever the interval, other is the disks less the
+	// listed, and the browser's write is more than the disks' none: zero.
+	_, up, _ := strings.Cut(other.Value, "↑")
+	assert.Equal(t, "0 B/s", strings.Join(strings.Fields(up), " "))
+	require.NotNil(t, d.Summary)
+	assert.Equal(t, []float64{0.5}, d.Summary.Heat.Values)
+}
+
+// D2. On Windows a process's IO is every transfer, not a share of the disks:
+// no "other", and the note says what the figures are.
+func TestWindowsIOIsAllIOAndHasNoOther(t *testing.T) {
+	c := ioCooler(t, core.Disks{Read: 1 << 31, HasRates: true, AllIO: true, Queues: true})
+
+	d, err := c.PollDetail(t.Context(), view.DetailIO)
+	require.NoError(t, err)
+	assert.NotContains(t, lineNames(d), view.OtherProcesses)
+	assert.Equal(t, "all IO: files, network and devices", d.Note)
+	assert.Equal(t, view.IOQueue, d.Summary.Lines[2].Name)
+}
+
+// R1. A machine whose disks cannot be read has no IO row and no IO list.
+func TestNoDisksIsNoIORow(t *testing.T) {
+	c := ioCooler(t, core.Disks{})
+
+	for _, r := range c.Section().Rows {
+		assert.NotEqual(t, "io", r.ID)
+	}
+	for _, info := range c.Details() {
+		assert.NotEqual(t, view.DetailIO, info.ID)
+	}
 }

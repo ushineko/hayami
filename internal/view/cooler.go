@@ -27,6 +27,7 @@ const (
 	RoleCPU     Role = "cpu"
 	RoleGPU     Role = "gpu"
 	RoleMemory  Role = "memory"
+	RoleIO      Role = "io"
 	RoleCoolant Role = "coolant"
 	RoleFan     Role = "fan"
 	RolePump    Role = "pump"
@@ -70,6 +71,10 @@ type Probe struct {
 	Bytes Opt[float64] `json:"bytes,omitzero"`
 	Of    Opt[float64] `json:"of,omitzero"`
 
+	// Read and Write are rates in bytes per second: the disks' (spec 097).
+	Read  Opt[float64] `json:"read,omitzero"`
+	Write Opt[float64] `json:"write,omitzero"`
+
 	// Trail is the probe's recent samples for the plot, oldest first: the
 	// coolant raw, a processor's already averaged (the monitor's sixty-second
 	// mean -- a processor swings thirty-five degrees on a compile and the raw
@@ -99,6 +104,9 @@ const (
 	// kindAmount is a share and the amount it is, uncoloured: the memory in
 	// use, in the columns a processor's load and temperature take.
 	kindAmount
+	// kindRates is a read and a write rate, as a network row draws a pair:
+	// the disks' IO (spec 097).
+	kindRates
 	// kindSpeed is a speed, drawn with every other speed on the one Speeds
 	// row: a fan and a pump are two numbers of the same kind and a panel
 	// 260 px wide has better uses for a second row.
@@ -135,6 +143,7 @@ var coolerRoles = []roleSpec{
 	{role: RoleCPU, label: "CPU", kind: kindProcessor, series: true},
 	{role: RoleGPU, label: "GPU", kind: kindProcessor, series: true},
 	{role: RoleMemory, label: "Memory", kind: kindAmount},
+	{role: RoleIO, label: "IO", kind: kindRates},
 	{role: RoleCoolant, label: "Coolant", kind: kindTemperature, bands: &CoolantBands},
 	{role: RoleFan, label: "Fan", kind: kindSpeed, word: "fan"},
 	{role: RolePump, label: "Pump", kind: kindSpeed, word: "pump"},
@@ -205,6 +214,11 @@ func Cooler(r CoolerReading) Section {
 				continue
 			}
 			row = amount(in.label, in.Load.V, in.Load.OK, in.Bytes.V, unit)
+		case kindRates:
+			if !in.Read.OK && !in.Write.OK {
+				continue
+			}
+			row = ioRates(in.label, in.Read, in.Write)
 		case kindSpeed:
 			if in.RPM.OK {
 				speeds = append(speeds, in.spec.word+" "+strings.TrimSpace(Count(in.RPM.V)))
@@ -242,6 +256,23 @@ func Cooler(r CoolerReading) Section {
 		series++
 	}
 	return s
+}
+
+/*
+ioRates is the disks' read and write rates on one line, "↓  1.2 MiB/s ↑ 340.0
+KiB/s", each at the fixed width a rate takes, so no reading widens the row.
+The rates are plain: a disk has no band a rate is a verdict on.
+*/
+func ioRates(label string, read, write Opt[float64]) Row {
+	width := bandwidthUnitWidth()
+	row := JoinedRow([]Part{
+		{Text: "↓ ", Status: Info},
+		{Text: rate(read.V, read.OK, width), Status: Info},
+		{Text: " ↑ ", Status: Info},
+		{Text: rate(write.V, write.OK, width), Status: Info},
+	})
+	row.Label, row.Status = label, Info
+	return row
 }
 
 // verdict is the colour of a value of this role: its bands', or Info.

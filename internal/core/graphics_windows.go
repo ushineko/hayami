@@ -288,10 +288,14 @@ func (e *engineLoad) open() bool {
 //
 // The array is asked for its size and then filled, and is asked again if it
 // grew in between: the instances are processes, which come and go.
-func (e *engineLoad) values() map[string]float64 {
+func (e *engineLoad) values() map[string]float64 { return pdhArray(e.counter) }
+
+// pdhArray is a wildcard counter's last collection, instance name to value,
+// each instance whose value is valid.
+func pdhArray(counter uintptr) map[string]float64 {
 	for range 3 {
 		var size, count uint32
-		r, _, _ := procPdhFormattedArray.Call(e.counter, pdhFmtDouble|pdhFmtNoCap100,
+		r, _, _ := procPdhFormattedArray.Call(counter, pdhFmtDouble|pdhFmtNoCap100,
 			uintptr(unsafe.Pointer(&size)), uintptr(unsafe.Pointer(&count)), 0)
 		if uint32(r) != pdhMoreData || size == 0 { //nolint:gosec // PDH_STATUS is 32 bits
 			return nil
@@ -301,7 +305,7 @@ func (e *engineLoad) values() map[string]float64 {
 		// in bytes.
 		itemSize := uint32(unsafe.Sizeof(pdhItem{}))
 		buf := make([]pdhItem, (size+itemSize-1)/itemSize)
-		r, _, _ = procPdhFormattedArray.Call(e.counter, pdhFmtDouble|pdhFmtNoCap100,
+		r, _, _ = procPdhFormattedArray.Call(counter, pdhFmtDouble|pdhFmtNoCap100,
 			uintptr(unsafe.Pointer(&size)), uintptr(unsafe.Pointer(&count)), uintptr(unsafe.Pointer(&buf[0])))
 		switch {
 		case uint32(r) == pdhMoreData: //nolint:gosec // PDH_STATUS is 32 bits

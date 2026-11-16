@@ -54,7 +54,7 @@ func (d *detailSource) Details() []view.DetailInfo {
 	var out []view.DetailInfo
 	listed := map[string]bool{}
 	for _, id := range []string{
-		view.DetailCPU, view.DetailGPU, view.DetailMemory, view.DetailProcesses, view.DetailPeers, view.DetailAccounts,
+		view.DetailCPU, view.DetailGPU, view.DetailMemory, view.DetailIO, view.DetailProcesses, view.DetailPeers, view.DetailAccounts,
 	} {
 		if detail, ok := d.details[id]; ok {
 			info := view.ProcessInfo(id)

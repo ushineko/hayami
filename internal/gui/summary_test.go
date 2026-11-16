@@ -203,3 +203,25 @@ func TestACoreGoingOfflineMovesNothing(t *testing.T) {
 	lines, _ := gui.DrawerSummary(p)
 	assert.Len(t, lines, 3)
 }
+
+// Spec 097 R1, R2. The cooler's switch offers IO beside the others, and
+// offering it does not widen the drawer: the IO list wants no more than the
+// CPU list does.
+func TestTheSwitchOffersIOAtTheSameWidth(t *testing.T) {
+	gui.SettleRoomAtOnce(t)
+	widths := map[bool][]float32{}
+	for _, withIO := range []bool{false, true} {
+		details := map[string]view.Detail{view.DetailCPU: columnsOf(view.DetailCPU, 1)}
+		if withIO {
+			details[view.DetailIO] = columnsOf(view.DetailIO, 1)
+		}
+		p, await := deskPanel(t, roomy(), newDetailSource("cooler", coolerSection(), details))
+		gui.Tap(p, "cooler", "", -1)
+		await("the list", func() bool { return len(gui.DrawerLines(p)) > 0 })
+		widths[withIO] = gui.DrawerWidths(p)
+		if withIO {
+			assert.Contains(t, gui.DrawerChoices(p), "IO")
+		}
+	}
+	assert.Equal(t, widths[false], widths[true])
+}
