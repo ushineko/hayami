@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.15.0
+**Version**: 0.16.0
 
 *a chart you read at a glance*
 
@@ -725,7 +725,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.16.0 (2026-11-15)
 
 - **Added**: filled, the CPU, GPU and Memory drawers show more columns per
   program: how many processes share the name, the list's other figures, and
