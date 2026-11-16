@@ -77,7 +77,7 @@ func TestACPUSummaryOfNothingKeepsItsShape(t *testing.T) {
 // R9. A terminal draws the cores one character each, a dot for an offline
 // one, under the plot; the JSON carries the cells.
 func TestTheCoresPrintAsACharacterEach(t *testing.T) {
-	assert.Equal(t, "▇ ·▄", Heat{Values: []float64{0.9, 0, -1, 0.5}}.Text())
+	assert.Equal(t, "▇▁·▅", Heat{Values: []float64{0.9, 0, -1, 0.5}}.Text())
 
 	s, _ := CPUSummary(someCPU())
 	text := Detail{Title: "CPU by process", Summary: &s}.Text()
@@ -85,7 +85,7 @@ func TestTheCoresPrintAsACharacterEach(t *testing.T) {
 	require.GreaterOrEqual(t, len(lines), 7, text)
 	assert.Contains(t, lines[1], "load")
 	assert.Contains(t, lines[3], "cores")
-	assert.Contains(t, lines[3], "▇ ·▃")
+	assert.Contains(t, lines[3], "▇▁·▄")
 	assert.Contains(t, lines[4], "clock")
 
 	raw, err := json.Marshal(Detail{Summary: &s})

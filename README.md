@@ -168,8 +168,15 @@ The network list is partial and says so under the list:
   [The network helper](#the-network-helper)). Without it the drawer says
   "needs hayami's helper". With it, the list counts TCP and UDP.
 
-The terminal panel has no drawer. `hayami-tui detail` prints the same detail
-once.
+The terminal panel has the drawer too, read-only. Tab (or the arrows) chooses a card
+with something behind it and Enter opens it; inside, the list's letter
+switches lists (c g m i, p e), `f` filters, the arrows or j/k mark a line and Enter
+drills into it, space pauses the reading, PgUp and PgDn scroll the usage
+breakdown, and Esc goes back a step: up from a program's page, out of the
+filter, then the drawer closes. Where the pane is wide enough the drawer
+stands beside the cards; otherwise, and in `row`, it takes the pane until
+Esc. It turns no VPN on or off and ends no process; the window does those.
+`hayami-tui detail` prints the same detail once.
 
 ## Screenshots
 
@@ -756,6 +763,19 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: the terminal panel has the drawer, read-only (spec 098, #346).
+  Tab chooses a card and Enter opens what is behind it: the lists with their
+  columns, the CPU, GPU, Memory and IO summaries, a program's processes and
+  the usage breakdown, as the window draws them. The lists' keys, the filter,
+  a marked line to drill into, space to pause and Esc to go back work as they
+  do in the window. Wide, the drawer stands beside the cards; narrow, it
+  takes the pane.
+- **Changed**: a row of cells in the terminal draws an idle cell as the
+  lowest block and not a space, so an idle machine's cores and disks are
+  seen.
 
 ### 0.17.0 (2026-11-15)
 

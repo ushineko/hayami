@@ -106,7 +106,8 @@ of details (`Detail.Parts`), for a section that shows everything it has at
 once: every account's usage. A detail is read only while a shell shows it,
 never on the section's own poll. The window draws one in the design system's drawer, and
 several side by side where a Shift-click asks (spec 088); the
-terminal prints one from `hayami-tui detail`. A process in a detail is its
+terminal draws the same detail in a drawer of text in the pane (spec 098,
+`view.RenderDetail`), read-only, and prints one from `hayami-tui detail`. A process in a detail is its
 name and nothing else: no command line, path or owner is read.
 
 ### 4. A sensor source is a provider in a chain
@@ -250,7 +251,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
-| A detail behind a reading | `Details`, `PollDetail`, `DetailInterval` and `CloseDetail` on the section's source (`panel.Detailer`), a builder in `view` that returns a `view.Detail`, and `Opens` on the section that asks for it; a `Label` and a `Key` on each `DetailInfo` where there is more than one to choose between | It appears in the window's drawer, `hayami-tui detail`, `readings` and `doctor`. It is not polled until shown |
+| A detail behind a reading | `Details`, `PollDetail`, `DetailInterval` and `CloseDetail` on the section's source (`panel.Detailer`), a builder in `view` that returns a `view.Detail`, and `Opens` on the section that asks for it; a `Label` and a `Key` on each `DetailInfo` where there is more than one to choose between | It appears in the window's drawer, the terminal's drawer, `hayami-tui detail`, `readings` and `doctor`. It is not polled until shown |
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | A `config.Setting` in `internal/config/sections.go`, read by the section's builder from `Env.Settings` | A `sectionPrefs` widget in `internal/prefs/sections.go`, if a person would change it more than once |

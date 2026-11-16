@@ -214,9 +214,9 @@ const (
 	SummaryRows   = 6
 )
 
-// SummaryKeepsLines is how many lines the list, its reasons and its note
-// keep under a summary, or the summary is not drawn (spec 094 R3).
-const SummaryKeepsLines = 10
+// SummaryKeepsLines is the view's: the terminal's drawer draws by it too
+// (spec 098).
+const SummaryKeepsLines = view.SummaryKeepsLines
 
 // buildDrawer makes the first drawer's pieces and points the panel's clicks
 // at the drawers. More are made as Shift-clicks ask for them.

@@ -11,6 +11,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -48,8 +49,15 @@ const WatchInterval = 2 * time.Second
 
 // Model is the panel's state.
 type Model struct {
-	opts  Options
-	width int
+	opts          Options
+	width, height int
+
+	// chosen is the card Tab has chosen, dr the drawer open beside or over
+	// the cards, nil when none is, and last the list each card last showed
+	// (spec 098).
+	chosen string
+	dr     *paneDrawer
+	last   map[string]string
 
 	// paint is how a status becomes colour. Nil in a terminal that has none,
 	// and nil is also what Render expects when nothing should be painted.
@@ -77,6 +85,8 @@ func New(o Options) Model {
 	m := Model{
 		opts:     o,
 		width:    80,
+		height:   24,
+		last:     map[string]string{},
 		drawn:    map[string]bool{},
 		reported: map[string]bool{},
 		paint:    Painter(),
@@ -183,14 +193,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Width > 0 {
 			m.width = msg.Width
 		}
+		if msg.Height > 0 {
+			m.height = msg.Height
+		}
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c", "esc":
-			return m, tea.Quit
-		}
-		return m, nil
+		return m.key(msg)
+
+	case detailRead:
+		return m, m.read(msg)
+
+	case detailTick:
+		return m, m.tickDetail(msg)
 
 	case polled:
 		m.drawn[msg.key] = msg.drawn
@@ -246,6 +261,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// key handles a keypress: the drawer's first where one is open, then the
+// pane's own. q, Ctrl+C, and Esc with nothing open quit, as they always have.
+func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Keys typed faster than the terminal is read arrive as one message of
+	// several runes: "fhay" is f, then h, a and y into the filter it opened.
+	// Each is taken as it would have been alone; a filter takes them whole.
+	if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && (m.dr == nil || !m.dr.filtering) {
+		var cmds []tea.Cmd
+		var next tea.Model = m
+		for i, r := range msg.Runes {
+			if mm := next.(Model); mm.dr != nil && mm.dr.filtering {
+				rest := tea.KeyMsg{Type: tea.KeyRunes, Runes: msg.Runes[i:]}
+				next, cmd := mm.key(rest)
+				return next, tea.Batch(append(cmds, cmd)...)
+			}
+			var cmd tea.Cmd
+			next, cmd = next.(Model).key(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			cmds = append(cmds, cmd)
+		}
+		return next, tea.Batch(cmds...)
+	}
+	if m.dr != nil {
+		if cmd, handled := m.drawerKey(msg); handled {
+			return m, cmd
+		}
+	}
+	switch msg.String() {
+	case "q", "ctrl+c", "esc":
+		m.closeDrawer()
+		return m, tea.Quit
+	case "tab", "down", "j":
+		m.choose(1)
+	case "shift+tab", "up", "k":
+		m.choose(-1)
+	case "enter":
+		if m.chosen == "" {
+			m.choose(1)
+		}
+		if d, ok := m.detailer(m.chosen); ok {
+			root := m.opensOn(m.chosen, d)
+			return m, m.open(m.chosen, root, root)
+		}
+	}
+	return m, nil
+}
+
 // source finds a source by key.
 func (m Model) source(key string) panel.Source {
 	for _, s := range m.opts.Sources {
@@ -271,15 +332,50 @@ func (m Model) Sections() []view.Section {
 
 // View draws the panel.
 func (m Model) View() string {
-	lines := view.RenderWith(m.Sections(), m.opts.Arrangement, m.width, m.paint)
-	out := ""
-	for i, l := range lines {
-		if i > 0 {
-			out += "\n"
+	return strings.Join(m.Lines(), "\n")
+}
+
+/*
+Lines are the panel as drawn (spec 098): the cards, the chosen one's title
+marked, and an open drawer beside them where the pane is wide enough for both
+and in their place where it is not, or in row. The split is decided by the
+width alone, so no reading moves it.
+*/
+func (m Model) Lines() []string {
+	sections := m.Sections()
+	for i, s := range sections {
+		if s.Key == m.chosen {
+			sections[i].Title = "▸ " + s.Title
 		}
-		out += l
+	}
+	if m.dr == nil {
+		return view.RenderWith(sections, m.opts.Arrangement, m.width, m.paint)
+	}
+	drawer := m.drawerWidth()
+	cards := m.width - drawer - 3
+	if m.opts.Arrangement == view.ArrangeRow || cards < CardsMinWidth {
+		return m.drawerLines(m.width, m.height)
+	}
+	left := view.RenderWith(sections, m.opts.Arrangement, cards, m.paint)
+	right := m.drawerLines(drawer, m.height)
+	out := make([]string, max(len(left), len(right)))
+	for i := range out {
+		l, r := "", ""
+		if i < len(left) {
+			l = left[i]
+		}
+		if i < len(right) {
+			r = right[i]
+		}
+		out[i] = view.PadVisible(l, cards) + " │ " + r
 	}
 	return out
+}
+
+// Side reports whether an open drawer stands beside the cards rather than in
+// their place, for a test.
+func (m Model) Side() bool {
+	return m.dr != nil && m.opts.Arrangement != view.ArrangeRow && m.width-m.drawerWidth()-3 >= CardsMinWidth
 }
 
 // Start runs the panel until it is told to stop.
