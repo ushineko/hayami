@@ -75,6 +75,7 @@ func paritySections(t *testing.T) []view.Section {
 		{ID: "cpu", Role: view.RoleCPU, Name: "AMD Ryzen 5 2600X", Load: view.Some(12.0), Temp: view.Some(51.5)},
 		{ID: "gpu", Role: view.RoleGPU, Name: "NVIDIA GeForce RTX 3060 Ti", Load: view.Some(4.0), Temp: view.Some(43.0)},
 		{ID: "memory", Role: view.RoleMemory, Load: view.Some(46.0), Bytes: view.Some(18.2 * (1 << 30)), Of: view.Some(39.9 * (1 << 30))},
+		{ID: "io", Role: view.RoleIO, Read: view.Some(1.5 * (1 << 20)), Write: view.Some(340.0 * (1 << 10))},
 		{ID: "coolant", Role: view.RoleCoolant, Name: "NZXT Kraken Elite V2", Temp: view.Some(31.4)},
 		{ID: "pump", Role: view.RolePump, RPM: view.Some(2100)},
 		{ID: "fan", Role: view.RoleFan, RPM: view.Some(900)},
