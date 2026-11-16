@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,6 +81,11 @@ func TestEachListHasItsColumns(t *testing.T) {
 	assert.Equal(t, "9.4 %", cell(t, cpu, "browser", view.ColumnShare))
 	assert.Equal(t, "×1", cell(t, cpu, "editor", view.ColumnCount))
 
+	// The memory's list reads the processes again. Read in the same tick of
+	// Windows's clock, which can be 16 ms, the two readings are no time apart
+	// and no process has a share of the processors, so no CPU column: the
+	// lists are read seconds apart in a panel, and here a tick apart.
+	time.Sleep(50 * time.Millisecond)
 	memory, err := c.PollDetail(t.Context(), view.DetailMemory)
 	require.NoError(t, err)
 	assert.Equal(t, []string{view.ColumnCount, view.ColumnCPU, view.ColumnShare}, keys(memory.Columns))
