@@ -482,6 +482,19 @@ func DrawerSubject(p *Panel) (section, id string) { return p.first().section, p.
 func DrawerLines(p *Panel) []string     { return shownRows(p.first().rows) }
 func DrawerNoteLines(p *Panel) []string { return shownRows(p.first().notes) }
 
+// DrawerWidths are the open drawers' own widths in ems, from the cards
+// outwards (spec 093).
+func DrawerWidths(p *Panel) []float32 {
+	var out []float32
+	for _, d := range p.openDrawers() {
+		out = append(out, d.dr.WidthInEms())
+	}
+	return out
+}
+
+// WindowWidth is the panel window's width.
+func WindowWidth(p *Panel) float32 { return p.win.Window().Canvas().Size().Width }
+
 // DrawerHeads is the line naming the first drawer's columns, and whether it
 // is shown (spec 092 R6).
 func DrawerHeads(p *Panel) (string, bool) {

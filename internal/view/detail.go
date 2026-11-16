@@ -311,6 +311,9 @@ type processKind struct {
 	// columns are the list's extra columns, in the order a narrowing
 	// drawer drops them, last first (spec 092).
 	columns []string
+	// figure is the width of a line's figure, value and unit, for a list
+	// with columns (spec 093).
+	figure int
 }
 
 // The process lists, by the detail's ID (rule 2 of docs/architecture.md: a
@@ -325,11 +328,11 @@ const (
 
 var processKinds = map[string]processKind{
 	DetailCPU: {title: "CPU by process", label: "CPU", key: "c", format: percentLine, order: first,
-		columns: []string{ColumnCount, ColumnMemory, ColumnShare}},
+		columns: []string{ColumnCount, ColumnMemory, ColumnShare}, figure: percentWidth},
 	DetailGPU: {title: "GPU by process", label: "GPU", key: "g", format: percentLine, order: first,
-		columns: []string{ColumnCount, ColumnCPU, ColumnMemory}},
+		columns: []string{ColumnCount, ColumnCPU, ColumnMemory}, figure: percentWidth},
 	DetailMemory: {title: "Memory by process", label: "Mem", key: "m", format: sizeLine, order: first,
-		columns: []string{ColumnCount, ColumnCPU, ColumnShare}},
+		columns: []string{ColumnCount, ColumnCPU, ColumnShare}, figure: sizeWidth},
 	// Both of the bandwidth lists carry a label, because a switch is drawn
 	// only from the choices that have one and only when the open detail is
 	// among them (gui.choices). With one of the two unlabelled there was no

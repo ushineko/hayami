@@ -46,21 +46,31 @@ func NoSize() (number, unit string) { return pad(Blank), "" }
 // scale picks the unit from the size of the value, then formats the number.
 // The unit never sets the width: B, KiB and MiB are different widths and the
 // column is not.
+//
+// It steps up when the number would be wider than NumberWidth as well as at
+// 1024, as glance's scale does: from 1000 to 1023.9 of a unit the number is
+// "1008.0", six characters, and a process at 1008 KiB widened its list's
+// figure and dropped a column at a reading (spec 093). It reads "1.0 MiB".
 func scale(v float64, units []string) (string, string) {
 	if v < 0 {
 		v = 0
 	}
 	i := 0
-	for v >= 1024 && i < len(units)-1 {
+	for i < len(units)-1 && (v >= 1024 || runeLen(scaled(v, i)) > NumberWidth) {
 		v /= 1024
 		i++
 	}
-	// Below the first step the value is a count of bytes and a decimal point
-	// on it is noise; above it, one decimal is what keeps the width fixed.
+	return scaled(v, i), units[i]
+}
+
+// scaled is a value in the i-th unit: below the first step a count of bytes,
+// where a decimal point is noise; above it, one decimal, which is what keeps
+// the width fixed.
+func scaled(v float64, i int) string {
 	if i == 0 {
-		return fmt.Sprintf("%.0f", v), units[i]
+		return fmt.Sprintf("%.0f", v)
 	}
-	return fmt.Sprintf("%.1f", v), units[i]
+	return fmt.Sprintf("%.1f", v)
 }
 
 // pad right-aligns a number in the fixed column.

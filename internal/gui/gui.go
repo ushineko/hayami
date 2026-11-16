@@ -1083,7 +1083,13 @@ func (p *Panel) drawerShift(width float32) int {
 		return 0
 	}
 	// The compositor's widths are whole pixels and these are not: two of
-	// them rounded are within two of the difference.
+	// them rounded are within two of the difference. Drawers of different
+	// widths (spec 093) are known by the widths the row has had.
+	for _, w := range p.kit.rowWidths {
+		if extra >= w-2 && extra <= w+2 {
+			return int(extra + 0.5)
+		}
+	}
 	n := float32(int(extra/reach + 0.5))
 	if n < 1 || extra < n*reach-2 || extra > n*reach+2 {
 		return 0

@@ -234,21 +234,26 @@ func TestThePlaceIsTheCardsWithTwoDrawersOnTheLeft(t *testing.T) {
 		gui.Moved(p, s, x, y, width)
 		await("the move to be taken", func() bool { return true })
 	}
-	cards, reach := int(gui.CardsWidth(p)+0.5), int(gui.DrawerReach(p)+0.5)
+	cards := int(gui.CardsWidth(p) + 0.5)
 	moved(3700, 2037, cards)
 
 	gui.Tap(p, "cooler", "", -1)
 	await("one", func() bool { return gui.DrawerOpen(p) })
 	require.Equal(t, glance.Left, gui.DrawerOnSide(p))
+	// The processor's list is wider than the usual drawer the network's is
+	// (spec 093), so two drawers are not twice either reach.
+	first := int(gui.DrawerReach(p) + 0.5)
 	gui.ShiftTapSection(p, "net")
 	await("two", func() bool { return len(gui.OpenDrawers(p)) == 2 })
+	both := int(gui.WindowWidth(p)+0.5) - cards
+	require.NotEqual(t, 2*first, both, "the two drawers are one width")
 
-	moved(3700-2*reach, 2037, cards+2*reach)
+	moved(3700-both, 2037, cards+both)
 	assert.Equal(t, [2]int{3700, 2037}, placed(s), "two drawers' corner was saved as the panel's place")
-	moved(3700-reach, 2037, cards+reach)
+	moved(3700-first, 2037, cards+first)
 	assert.Equal(t, [2]int{3700, 2037}, placed(s))
 
 	// Half a drawer more is a width somebody dragged.
-	moved(2500, 2100, cards+reach+reach/2)
+	moved(2500, 2100, cards+first+first/2)
 	assert.Equal(t, [2]int{2500, 2100}, placed(s))
 }

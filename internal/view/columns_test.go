@@ -20,6 +20,25 @@ func columnUses() []view.ProcessUse {
 	}
 }
 
+// Spec 093 R1. A list's want is its figure and every column its kind can
+// carry, which is a line's widest: the same whatever the list reads, and
+// none for a list without columns.
+func TestAListWantsItsWidestLine(t *testing.T) {
+	for _, id := range []string{view.DetailCPU, view.DetailGPU, view.DetailMemory} {
+		big := view.ProcessUse{Name: "x", Value: 999 * (1 << 30), Count: 999,
+			CPU: view.Some(999.9), Memory: view.Some(999.0 * (1 << 30)), Share: view.Some(99.9)}
+		small := view.ProcessUse{Name: "y", Value: 0.1, CPU: view.Some(0.0), Memory: view.Some(1.0), Share: view.Some(0.0)}
+		for _, uses := range [][]view.ProcessUse{{big}, {small}} {
+			d := view.Processes("cooler", id, uses)
+			require.NotEmpty(t, d.Columns, id)
+			got := view.ColumnsWidth(view.FigureWidth(d.Lines), d.Columns, len(d.Columns))
+			assert.Equal(t, view.ColumnsWant(id), got, "%s: the want is not a line with every column", id)
+		}
+	}
+	assert.Zero(t, view.ColumnsWant(view.DetailProcesses))
+	assert.Zero(t, view.ColumnsWant(view.DetailPeers))
+}
+
 // Spec 092 R1, R2. Uses of one name are one line of their count and their
 // figures summed; a use with no other figure is the empty form at the same
 // width, never a zero.
