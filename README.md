@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.17.0
+**Version**: 0.18.0
 
 *a chart you read at a glance*
 
@@ -764,7 +764,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.18.0 (2026-11-17)
 
 - **Added**: the Hardware card says how long the machine has been up
   (spec 099, #348). An Uptime row under Speeds, `3d 04h 12m`, from
