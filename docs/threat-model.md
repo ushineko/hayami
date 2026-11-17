@@ -274,6 +274,10 @@ sending reports, a helper sending lines, a provider's API.
   read only where the kernel's ptrace check lets this account, so hayami
   learns nothing of another's IO but what the disks' totals already say.
   Disk names are not drawn: the strip's cells are unlabelled.
+- `/proc/uptime` is its first field, a number that is not finite and
+  non-negative being an error rather than a zero (`ParseUptime`, fuzzed,
+  `internal/core/uptime.go`; spec 099). Windows' is GetTickCount64, which
+  takes no input.
 - The VPN health store is bounded, 0600, read to a size limit and tolerates a cut
   line (`loadVPNPoints`, `internal/panel/vpnhealth.go`). `/proc/net/route` lines that
   do not parse are skipped (`ParseRouteTable`, fuzzed).

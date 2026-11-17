@@ -2,6 +2,7 @@ package view_test
 
 import (
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
@@ -218,4 +219,47 @@ func TestAnUnknownRoleIsNotDrawn(t *testing.T) {
 	s := view.Cooler(r)
 
 	assert.Len(t, s.Rows, 3)
+}
+
+// Spec 099 R1, R3. The uptime is the card's last row, below the speeds, and
+// uncoloured.
+func TestTheUptimeIsTheLastRow(t *testing.T) {
+	r := processors()
+	r.Probes = append(r.Probes, view.Probe{ID: "fan", Role: view.RoleFan, RPM: view.Some(1200)})
+	r.Uptime = view.Some(3*24*time.Hour + 4*time.Hour + 12*time.Minute)
+	s := view.Cooler(r)
+
+	last := s.Rows[len(s.Rows)-1]
+	assert.Equal(t, view.UptimeID, last.ID)
+	assert.Equal(t, "Uptime", last.Label)
+	assert.Equal(t, " 3d 04h 12m", last.Value)
+	assert.Equal(t, view.Info, last.Status)
+	assert.Equal(t, view.SpeedsID, s.Rows[len(s.Rows)-2].ID)
+}
+
+// Spec 099 R4. A reading without an uptime has no row.
+func TestNoUptimeIsNoRow(t *testing.T) {
+	for _, row := range view.Cooler(processors()).Rows {
+		assert.NotEqual(t, view.UptimeID, row.ID)
+	}
+}
+
+// Spec 099 R2. Every form is the one width, a processor's load and
+// temperature, so the minute turning over never widens the row.
+func TestAnUptimeIsTheSameWidthInEveryForm(t *testing.T) {
+	const day = 24 * time.Hour
+	for d, want := range map[time.Duration]string{
+		0:                                       "    00h 00m",
+		-time.Minute:                            "    00h 00m",
+		59*time.Second + 59*time.Minute:         "    00h 59m",
+		23*time.Hour + 5*time.Minute:            "    23h 05m",
+		day:                                     " 1d 00h 00m",
+		99*day + 23*time.Hour + 59*time.Minute:  "99d 23h 59m",
+		100 * day:                               "   100d 00h",
+		1234*day + 7*time.Hour + 30*time.Minute: "  1234d 07h",
+	} {
+		got := view.Uptime(d)
+		assert.Equal(t, want, got, "%v", d)
+		assert.Equal(t, view.UptimeWidth, utf8.RuneCountInString(got), "%v", d)
+	}
 }

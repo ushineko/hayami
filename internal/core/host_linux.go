@@ -21,6 +21,7 @@ func NewHost(HostConfig) Host {
 		Disks: func() *DiskReader {
 			return LinuxDisks(DiskPaths{DiskStats: DiskStatsPath, VMStat: VMStatPath, Pressure: IOPressurePath, SysBlock: SysBlockPath})
 		},
+		Uptime:  ProcUptime(UptimePath),
 		CPULoad: func() *CPULoad { return NewCPULoad(ProcStatPath) },
 		CPUName: func() string { return CPUName(CPUInfoPath) },
 		Processor: func() *ProcessorReader {

@@ -766,6 +766,9 @@ MIT. See
 
 ### Unreleased
 
+- **Added**: the Hardware card says how long the machine has been up
+  (spec 099, #348). An Uptime row under Speeds, `3d 04h 12m`, from
+  `/proc/uptime` on Linux and GetTickCount64 on Windows, in both panels.
 - **Added**: the terminal panel has the drawer, read-only (spec 098, #346).
   Tab chooses a card and Enter opens what is behind it: the lists with their
   columns, the CPU, GPU, Memory and IO summaries, a program's processes and
