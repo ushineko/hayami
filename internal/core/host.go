@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"time"
 )
 
 /*
@@ -62,6 +63,10 @@ type Host struct {
 	// Disks builds the reader of the disks' IO, which keeps its own previous
 	// sample (spec 097); nil where this platform reads none.
 	Disks func() *DiskReader
+
+	// Uptime is how long the machine has been up (spec 099); nil where this
+	// platform reads none.
+	Uptime func(context.Context) (time.Duration, error)
 
 	// Card reads the GPU drawer's summary of the card, while the GPU list is
 	// shown (spec 096); nil where this platform reads none.

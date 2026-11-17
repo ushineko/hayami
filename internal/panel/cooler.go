@@ -103,6 +103,7 @@ type Cooler struct {
 	processor    *core.ProcessorReader
 	card         core.CardReader
 	disks        *core.DiskReader
+	uptime       func(context.Context) (time.Duration, error)
 	processes    *core.ProcessList
 	gpuProcesses core.GPUProcessReader
 	gpuVia       string
@@ -127,6 +128,7 @@ func NewCooler(h *core.Host, scan Scan) *Cooler {
 	if h.Disks != nil {
 		c.disks = h.Disks()
 	}
+	c.uptime = h.Uptime
 	if h.Processes != nil {
 		c.processes = h.Processes()
 	}
@@ -235,6 +237,18 @@ func (c *Cooler) Poll(ctx context.Context) (bool, error) {
 	if c.disks != nil {
 		out.disks = c.disks.Read(ctx)
 		out.IORead, out.IOWrite, out.HasIO = out.disks.Read, out.disks.Write, out.disks.HasRates
+	}
+
+	// The uptime is the card's last row (spec 099). Aside, as the memory's:
+	// the row is kept from the last poll, and the hover note says why.
+	if c.uptime != nil {
+		if d, err := c.uptime(ctx); err == nil {
+			out.Uptime, out.HasUptime = d, true
+		} else {
+			reasons = append(reasons, reason(view.Reason{
+				Label: "Uptime", Text: "not read", Status: view.Info, Aside: true,
+			}, err))
+		}
 	}
 
 	status, name, why, err := c.liquid(ctx)
@@ -386,6 +400,12 @@ func (c *Cooler) record(out coolerState) bool {
 		out.GPUStale = true
 	}
 
+	// An uptime that was read and is not is kept, so the row does not leave
+	// and come back (spec 099 R5). It is a minute behind at worst.
+	if !out.HasUptime && c.reading.HasUptime {
+		out.Uptime, out.HasUptime = c.reading.Uptime, true
+	}
+
 	// A name, once heard, is kept by a row that is still there: a poll that
 	// read the temperature and not the name (nvidia-smi's answer cut short)
 	// should not put "GPU" back for five seconds and move nothing but the
@@ -517,6 +537,11 @@ type coolerState struct {
 	HasIO                 bool
 	disks                 core.Disks
 	readTrail, writeTrail []float64
+
+	// Uptime is how long the machine has been up (spec 099). It does not make
+	// the card present: record's answer is about the hardware.
+	Uptime    time.Duration
+	HasUptime bool
 }
 
 // The probes' IDs: one of each part this source reads.
@@ -573,7 +598,7 @@ func (s coolerState) probes() view.CoolerReading {
 	if s.HasPump {
 		out = append(out, view.Probe{ID: probePump, Role: view.RolePump, Name: s.CoolerName, RPM: view.Some(s.PumpRPM)})
 	}
-	return view.CoolerReading{Probes: out}
+	return view.CoolerReading{Probes: out, Uptime: view.Maybe(s.Uptime, s.HasUptime)}
 }
 
 // Details are the lists this reading has: the processor's and the memory's

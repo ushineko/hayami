@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // The coolant's bands, in degrees.
@@ -91,6 +92,10 @@ type Probe struct {
 // and not yet formatted: whatever probes it has, in no particular order.
 type CoolerReading struct {
 	Probes []Probe `json:"probes"`
+
+	// Uptime is how long the machine has been up (spec 099). It is not a
+	// probe: it is no part's, and it has no role, colour or trace.
+	Uptime Opt[time.Duration] `json:"uptime,omitzero"`
 }
 
 // rowKind is how a role's probe is drawn.
@@ -152,6 +157,9 @@ var coolerRoles = []roleSpec{
 // SpeedsID is the Speeds row's ID: one row for every speed, whoever measured
 // it.
 const SpeedsID = "speeds"
+
+// UptimeID is the Uptime row's ID.
+const UptimeID = "uptime"
 
 // instance is each probe of r with the label its row and trace take: the
 // role's own for the first of a role, "GPU 2" for the second.
@@ -232,6 +240,9 @@ func Cooler(r CoolerReading) Section {
 	if len(speeds) > 0 {
 		s.Rows = append(s.Rows, Row{ID: SpeedsID, Label: "Speeds", Value: strings.Join(speeds, "  "), Unit: PadUnit("rpm", unit)})
 	}
+	if r.Uptime.OK {
+		s.Rows = append(s.Rows, Row{ID: UptimeID, Label: "Uptime", Value: Uptime(r.Uptime.V), Unit: PadUnit("", unit), Status: Info})
+	}
 
 	// The banded traces first, because a plot draws its series in the order
 	// it is given them and the coolant is the primary trace: it is what the
@@ -281,6 +292,35 @@ func (s roleSpec) verdict(v float64) Status {
 		return Info
 	}
 	return s.bands.Of(v)
+}
+
+// UptimeWidth is the width an uptime takes: a processor's load and
+// temperature, so the row's value ends in the column theirs does.
+const UptimeWidth = LoadWidth + 1 + NumberWidth
+
+/*
+Uptime is how long the machine has been up, at UptimeWidth: " 3d 04h 12m",
+"    04h 12m" under a day, "123d 04h" from a hundred days, when the minutes
+no longer fit and no longer matter (spec 099). The width is the same in every
+form, so the minute turning over never widens the row.
+*/
+func Uptime(d time.Duration) string {
+	const day = 24 * time.Hour
+	d = max(d, 0)
+	days, hours, minutes := int(d/day), int(d%day/time.Hour), int(d%time.Hour/time.Minute)
+	var s string
+	switch {
+	case days == 0:
+		s = fmt.Sprintf("%02dh %02dm", hours, minutes)
+	case days < 100:
+		s = fmt.Sprintf("%dd %02dh %02dm", days, hours, minutes)
+	default:
+		s = fmt.Sprintf("%dd %02dh", days, hours)
+	}
+	if n := UptimeWidth - len(s); n > 0 {
+		s = strings.Repeat(" ", n) + s
+	}
+	return s
 }
 
 // LoadWidth is the width a load takes in a processor's row: "100 %".

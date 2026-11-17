@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -27,6 +29,7 @@ func NewHost(cfg HostConfig) Host {
 		Graphics:       windowsGraphics(nativeGraphics(), NvidiaSMI),
 		Card:           windowsCard(NvidiaSMICard),
 		Disks:          windowsDisks,
+		Uptime:         sinceBoot,
 		GPUMissing:     windowsGPUMissing,
 		CPULoad:        systemTimesLoad,
 		Processor:      windowsProcessor,
@@ -41,6 +44,10 @@ func NewHost(cfg HostConfig) Host {
 		Permission:     PermissionAbsence,
 	}
 }
+
+// sinceBoot is how long Windows has been up: GetTickCount64, Task Manager's
+// "Up time" (spec 099). It cannot fail.
+func sinceBoot(context.Context) (time.Duration, error) { return windows.DurationSinceBoot(), nil }
 
 // systemTimesLoad is this machine's processor load: GetSystemTimes, which is
 // Windows' /proc/stat. It needs no privilege.
