@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.18.0
+**Version**: 0.18.1
 
 *a chart you read at a glance*
 
@@ -764,7 +764,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.18.1 (2026-11-19)
 
 - **Fixed**: the usage drawer of an account on a budget, which reports a
   spend and no limits, draws the spend as a bar with its amount and when it
