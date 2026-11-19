@@ -4,7 +4,9 @@ package desktop
 
 import (
 	"fmt"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -31,6 +33,10 @@ const (
 	placeName = "hayami-place"
 )
 
+// keepEvery is how often the panel of record asks KWin whether its watch is
+// still loaded (spec 100). A variable, so a test does not wait for it.
+var keepEvery = 30 * time.Second
+
 /*
 Position watches where the panel is and puts it back.
 
@@ -50,6 +56,8 @@ type Position struct {
 	conn    *dbus.Conn
 	settle  *settler
 	watched bool
+	// done stops the keeper.
+	done chan struct{}
 }
 
 // NewPosition builds the watcher for the window of the app with the title.
@@ -142,12 +150,41 @@ func (p *Position) Watch(onMove func(x, y, width int)) error {
 		return fmt.Errorf("%w: taking the bus name: %w", ErrNoKWin, err)
 	}
 
-	if err := p.load(watchName, kwin.WatchGeometryScript(
-		p.target, geometryService, geometryPath, geometryIface, geometryMethod)); err != nil {
+	if err := p.load(watchName, p.watchScript()); err != nil {
 		return err
 	}
 	p.watched = true
+	p.done = make(chan struct{})
+	go p.keep(p.done)
 	return nil
+}
+
+func (p *Position) watchScript() string {
+	return kwin.WatchGeometryScript(p.target, geometryService, geometryPath, geometryIface, geometryMethod)
+}
+
+/*
+keep puts the watch back when it has gone from the compositor while this is
+the panel of record (spec 100). Another panel that quit took it: before spec
+100 every panel unloaded the names on its way out, and a build from before
+then still does. Without the watch the panel stops remembering where it is
+put, and nothing says so.
+*/
+func (p *Position) keep(done chan struct{}) {
+	t := time.NewTicker(keepEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+		}
+		p.mu.Lock()
+		if p.conn != nil && !anotherPanel(p.conn) && !loaded(p.conn, watchName) {
+			_ = p.load(watchName, p.watchScript())
+		}
+		p.mu.Unlock()
+	}
 }
 
 /*
@@ -176,17 +213,21 @@ func (p *Position) Restore(x, y int) error {
 //
 // A script left loaded is untidy rather than broken -- it reports to a bus
 // name nobody answers on -- but a program that tidies up after itself is one
-// somebody can run twice.
+// somebody can run twice. A second panel leaves the scripts alone: the names
+// are the compositor's, one for the desk, and what is loaded under them is
+// the panel of record's (spec 100).
 func (p *Position) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.conn == nil {
 		return
 	}
-	unload := kwin.UnloadScriptCall()
-	for _, name := range []string{watchName, placeName} {
-		_ = p.conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
-			Call(unload.Interface+"."+unload.Method, 0, name).Err
+	if p.done != nil {
+		close(p.done)
+		p.done = nil
+	}
+	if !anotherPanel(p.conn) {
+		unloadAll(p.conn, watchName, placeName)
 	}
 	p.settle.stop()
 	_, _ = p.conn.ReleaseName(geometryService)
@@ -212,9 +253,7 @@ func (p *Position) load(name, body string) error {
 	}
 	defer remove(path)
 
-	unload := kwin.UnloadScriptCall()
-	_ = p.conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
-		Call(unload.Interface+"."+unload.Method, 0, name).Err
+	unloadAll(p.conn, name)
 
 	call := kwin.LoadScriptCall()
 	var id int
@@ -229,4 +268,44 @@ func (p *Position) load(name, body string) error {
 		return fmt.Errorf("%w: running the %s script: %w", ErrNoKWin, name, err)
 	}
 	return nil
+}
+
+/*
+anotherPanel reports whether the panel's bus name belongs to another process:
+a panel of record that is not this one (spec 100).
+
+KWin's script names are global, and every panel loads the same ones, so a
+second panel -- a checkout's build, a screenshot run -- that unloaded them on
+its way out took the panel of record's hold and watch with it, and that panel
+went on as if they were there. The name is the one Watch takes, which a
+second panel cannot. A name nobody holds is nobody's: a panel without a
+watch still tidies up.
+*/
+func anotherPanel(conn *dbus.Conn) bool {
+	var pid uint32
+	err := conn.BusObject().Call("org.freedesktop.DBus.GetConnectionUnixProcessID", 0, geometryService).Store(&pid)
+	return err == nil && int(pid) != os.Getpid()
+}
+
+// loaded reports whether KWin has a script loaded under the name. A
+// compositor that does not answer is taken to have it: nothing is loaded
+// again into a compositor that is not listening.
+func loaded(conn *dbus.Conn, name string) bool {
+	call := kwin.LoadScriptCall()
+	var is bool
+	if err := conn.Object(call.Destination, dbus.ObjectPath(call.Path)).
+		Call(call.Interface+".isScriptLoaded", 0, name).Store(&is); err != nil {
+		return true
+	}
+	return is
+}
+
+// unloadAll takes scripts out of the compositor by name. One that is not
+// loaded is answered false and nothing else.
+func unloadAll(conn *dbus.Conn, names ...string) {
+	unload := kwin.UnloadScriptCall()
+	for _, name := range names {
+		_ = conn.Object(unload.Destination, dbus.ObjectPath(unload.Path)).
+			Call(unload.Interface+"."+unload.Method, 0, name).Err
+	}
 }

@@ -764,6 +764,15 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: on Plasma, once a second hayami panel had quit (a checkout's
+  build, a screenshot run), opening a drawer moved the cards by half the
+  drawer's width, and the panel stopped remembering where it was put,
+  until it was restarted. A second panel now leaves the panel's KWin
+  scripts loaded, and the panel loads its edge hold at each opening and
+  puts its position watch back when it has gone (#355, spec 100).
+
 ### 0.18.1 (2026-11-19)
 
 - **Fixed**: the usage drawer of an account on a budget, which reports a
