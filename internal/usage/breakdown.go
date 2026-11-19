@@ -139,7 +139,7 @@ var claudeLimitNames = map[string]string{
 }
 
 // ClaudeBreakdown reads the breakdown out of a Claude payload.
-func ClaudeBreakdown(_ time.Time, data json.RawMessage) (Breakdown, error) {
+func ClaudeBreakdown(now time.Time, data json.RawMessage) (Breakdown, error) {
 	var out Breakdown
 	if len(data) == 0 {
 		return out, nil
@@ -188,13 +188,24 @@ func ClaudeBreakdown(_ time.Time, data json.RawMessage) (Breakdown, error) {
 	if part(p, "extra_usage", &extra) {
 		out.Facts = append(out.Facts, Fact{Name: "Extra usage", Value: extraUsage(extra)})
 	}
+	// A spend that is on is a budget being used up, and the card draws it
+	// as a bar; the drawer does too. An account on a budget has no other
+	// limit, and with the spend as a line its drawer had no bar at all. A
+	// spend that is off is only a line.
 	var sp claudeSpend
 	if part(p, "spend", &sp) && sp.Used != nil {
 		value := sp.Used.String()
 		if sp.Limit != nil {
 			value += " of " + sp.Limit.String()
 		}
-		out.Facts = append(out.Facts, Fact{Name: "Spend", Value: value})
+		if sp.Enabled {
+			out.Limits = append(out.Limits, Limit{
+				Name: "Spend", Fraction: sp.Percent / 100, ResetsAt: NextMonth(now),
+				Severity: sp.Severity, Amount: value,
+			})
+		} else {
+			out.Facts = append(out.Facts, Fact{Name: "Spend", Value: value})
+		}
 	}
 	return out, nil
 }

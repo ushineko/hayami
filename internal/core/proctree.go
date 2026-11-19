@@ -59,6 +59,7 @@ func ReadProc(root string, pid int) ProcInfo {
 			info.Threads, _ = strconv.Atoi(value)
 		}
 	}
+	info.Name = FullProcName(dir, info.Name)
 	if b, err := os.ReadFile(filepath.Join(dir, "cmdline")); err == nil {
 		info.Cmdline = strings.TrimSpace(strings.ReplaceAll(string(b), "\x00", " "))
 	}
@@ -72,7 +73,8 @@ func ReadProc(root string, pid int) ProcInfo {
 	}
 	if info.PPID > 0 {
 		if b, err := os.ReadFile(filepath.Join(root, strconv.Itoa(info.PPID), "comm")); err == nil {
-			info.Parent = fmt.Sprintf("%s (%d)", strings.TrimSpace(string(b)), info.PPID)
+			parent := filepath.Join(root, strconv.Itoa(info.PPID))
+			info.Parent = fmt.Sprintf("%s (%d)", FullProcName(parent, strings.TrimSpace(string(b))), info.PPID)
 		}
 	}
 	return info
@@ -105,7 +107,7 @@ func ProcChildren(root string, pid int) Children {
 			}
 		}
 		if ppid == pid {
-			out = append(out, fmt.Sprintf("%s (%d)", name, child))
+			out = append(out, fmt.Sprintf("%s (%d)", FullProcName(filepath.Join(root, e.Name()), name), child))
 		}
 	}
 	return out

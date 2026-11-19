@@ -764,6 +764,16 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: the usage drawer of an account on a budget, which reports a
+  spend and no limits, draws the spend as a bar with its amount and when it
+  resets, as the card does. It was a line, and the drawer had no bar at all.
+- **Fixed**: a process whose name the kernel cut at fifteen characters is
+  listed by its program's whole name, taken from its command line and cut to
+  the drawer's column: `qemu-system-x86_64`, not `qemu-system-x86`. Only the
+  program's file name is read, never its arguments.
+
 ### 0.18.0 (2026-11-17)
 
 - **Added**: the Hardware card says how long the machine has been up
