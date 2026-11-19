@@ -52,25 +52,7 @@ type Drawer struct {
 	mu   sync.Mutex
 	conn *dbus.Conn
 	room chan [2]int32
-
-	// holding is the edge the hold script loaded under holdName keeps:
-	// edgeNone, edgeRight for drawers on the left, edgeLeft for drawers on
-	// the right.
-	holding edge
 }
-
-// edge is which of the window's edges the hold script keeps.
-type edge int
-
-const (
-	edgeNone edge = iota
-	edgeRight
-	edgeLeft
-	// cornerRight and cornerLeft are the corner script's (HoldCorner),
-	// loaded under the same name as the edge's in its place.
-	cornerRight
-	cornerLeft
-)
 
 // NewDrawer builds the helper for the window of the app with the title.
 // Nothing is asked of the compositor until a method is called.
@@ -163,28 +145,18 @@ right drawer needed nothing on Plasma 6.7, which left x alone; Plasma 6.8
 keeps a window's centre as it grows, and the cards moved by half of each
 drawer (fynedesygn #236). One script at a time, under one name: the right
 edge's loaded for a drawer on the right would make it grow leftwards too.
+
+It is loaded again at each asking, never taken as still there from the last
+(spec 100): the name is the compositor's, and another panel, or a build from
+before spec 100 quitting, can unload it or leave its own edge's under it. A
+load is a millisecond or two, at a drawer's first opening and an unfolding.
 */
 func (d *Drawer) HoldEdge(ctx context.Context, left bool) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	want, script := edgeLeft, kwin.HoldLeftEdgeScript(d.target)
+	script := kwin.HoldLeftEdgeScript(d.target)
 	if left {
-		want, script = edgeRight, kwin.HoldRightEdgeScript(d.target)
+		script = kwin.HoldRightEdgeScript(d.target)
 	}
-	if want == d.holding {
-		return d.holding == edgeRight
-	}
-	if d.connect() != nil {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(ctx, scriptWait)
-	defer cancel()
-	// run unloads what was loaded under the name before it loads this.
-	d.holding = edgeNone
-	if d.run(ctx, holdName, script, true) == nil {
-		d.holding = want
-	}
-	return d.holding == edgeRight
+	return d.hold(ctx, script) && left
 }
 
 /*
@@ -199,25 +171,21 @@ is loaded would grow upwards. HoldEdge puts the edge's back after the panel
 unfolds.
 */
 func (d *Drawer) HoldCorner(ctx context.Context, right bool) bool {
+	return d.hold(ctx, kwin.HoldCornerScript(d.target, right))
+}
+
+// hold loads a script that stays under holdName, in place of whatever is
+// loaded there, and reports whether it loaded. run unloads what was there
+// first.
+func (d *Drawer) hold(ctx context.Context, script string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	want := cornerLeft
-	if right {
-		want = cornerRight
-	}
-	if want == d.holding {
-		return true
-	}
 	if d.connect() != nil {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, scriptWait)
 	defer cancel()
-	d.holding = edgeNone
-	if d.run(ctx, holdName, kwin.HoldCornerScript(d.target, right), true) == nil {
-		d.holding = want
-	}
-	return d.holding == want
+	return d.run(ctx, holdName, script, true) == nil
 }
 
 // Yield gives the keyboard back to the window a person was in before they
@@ -234,20 +202,23 @@ func (d *Drawer) Yield(ctx context.Context) {
 	_ = d.run(ctx, yieldName, kwin.YieldFocusScript(d.target), false)
 }
 
-// Stop unloads what was left loaded.
+// Stop unloads what was left loaded, unless another process is the panel of
+// record: what is loaded under the names is then that panel's (spec 100).
 func (d *Drawer) Stop() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.conn == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), scriptWait)
-	defer cancel()
-	for _, name := range []string{holdName, roomName, yieldName} {
-		d.unload(ctx, name)
+	if !anotherPanel(d.conn) {
+		ctx, cancel := context.WithTimeout(context.Background(), scriptWait)
+		defer cancel()
+		for _, name := range []string{holdName, roomName, yieldName} {
+			d.unload(ctx, name)
+		}
 	}
 	_ = d.conn.Close()
-	d.conn, d.holding = nil, edgeNone
+	d.conn = nil
 }
 
 // run loads a script under a name and runs it, and unloads it again unless

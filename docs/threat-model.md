@@ -330,7 +330,12 @@ something else between hayami reading it and acting on it.
   that stay loaded, the position watch and the hold scripts (an edge for the
   drawers, a corner while the panel is tucked, spec 091), act only on the
   window whose class and title are the panel's, with both quoted into the
-  script, and only move or resize it.
+  script, and only move or resize it. A panel unloads them when it quits
+  only if no other process holds the panel's bus name `io.ushineko.hayami`
+  (spec 100), so a process of the same account that took the name first
+  keeps a quitting panel from tidying up: the scripts stay loaded and still
+  act only on the panel's window. Such a process can already load and
+  unload KWin scripts itself, so nothing is gained by it.
 - VPN health checks send one ICMP echo and look up one name per check, at the
   interval chosen, only for a tunnel that is connected and only to a target in the
   settings (`internal/core/vpncheck_linux.go`, spec 085). A settings file aiming a
