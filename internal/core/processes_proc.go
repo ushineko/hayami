@@ -53,6 +53,7 @@ func ProcProcesses(root string) func(context.Context) ([]ProcessSample, error) {
 			if !ok {
 				continue
 			}
+			name = FullProcName(filepath.Join(root, e.Name()), name)
 			s := ProcessSample{PID: pid, Name: name, CPUSeconds: seconds}
 			if statm, err := os.ReadFile(filepath.Join(root, e.Name(), "statm")); err == nil { //nolint:gosec // as above
 				s.Memory = parseStatm(string(statm)) * page
@@ -125,6 +126,40 @@ func ParseProcStat(line string) (name string, seconds float64, ok bool) {
 		return "", 0, false
 	}
 	return name, (u + s) / userHZ, true
+}
+
+// commLen is the longest name the kernel keeps for a process: TASK_COMM_LEN
+// less its terminating zero. A name this long may have been cut.
+const commLen = 15
+
+/*
+FullProcName is a process's name as its program is called, where the
+kernel's was cut: "chromium-browser" rather than the kernel's
+"chromium-browse", which is the name stat, status and comm all give.
+
+A name shorter than the kernel's limit is whole and is returned as it is.
+One at the limit is checked against the program in the command line, which
+any account can read: the file name of its first word. A word and not the
+whole first argument, because a program that rewrote its command line as one
+string carries its arguments there, and a process list shows names and
+nothing else. It is used only when it begins with the kernel's name, so a
+process that set its own name keeps it, and one with no command line (a
+kernel thread, a zombie) keeps the kernel's.
+*/
+func FullProcName(dir, comm string) string {
+	if len(comm) < commLen {
+		return comm
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "cmdline")) //nolint:gosec // procfs, or a test's tree
+	if err != nil {
+		return comm
+	}
+	argv0, _, _ := strings.Cut(string(b), "\x00")
+	word, _, _ := strings.Cut(argv0, " ")
+	if name := filepath.Base(word); len(name) > len(comm) && strings.HasPrefix(name, comm) {
+		return name
+	}
+	return comm
 }
 
 // parseStatm is the resident set, in pages: the second field of statm.

@@ -90,6 +90,49 @@ func TestAProcessThatHasGoneIsLeftOut(t *testing.T) {
 	assert.Equal(t, "here", got[0].Name)
 }
 
+// The kernel keeps fifteen characters of a name. A name cut there is the
+// program's from the command line, and only its first word's file name: a
+// program that rewrote its command line as one string keeps its arguments to
+// itself. A name the command line does not continue is the kernel's.
+func TestANameTheKernelCutIsTheProgramsWhole(t *testing.T) {
+	names := map[int]string{
+		8:  "chromium-browse", // cut: the program's file name completes it
+		9:  "electron-applic", // cut, and its command line is one string
+		10: "kthread-worker1", // fifteen and whole: no command line
+		11: "renamed-process", // fifteen, set by the process: python runs it
+		12: "editor",          // short, so whole whatever the command line says
+	}
+	cmdlines := map[int]string{
+		8:  "/usr/lib/chromium/chromium-browser\x00--type=renderer\x00",
+		9:  "electron-application --profile=private-notes\x00",
+		10: "",
+		11: "/usr/bin/python3\x00renamed-process-script.py\x00",
+		12: "/usr/bin/editor-with-a-longer-name\x00",
+	}
+	stats := map[int]string{}
+	for pid, name := range names {
+		stats[pid] = statLine(pid, name, 1, 1)
+	}
+	root := procTree(t, stats)
+	for pid, cmdline := range cmdlines {
+		require.NoError(t, os.WriteFile(filepath.Join(root, strconv.Itoa(pid), "cmdline"), []byte(cmdline), 0o600))
+	}
+
+	got, err := ProcProcesses(root)(t.Context())
+	require.NoError(t, err)
+	byPID := map[int]string{}
+	for _, p := range got {
+		byPID[p.PID] = p.Name
+	}
+	assert.Equal(t, map[int]string{
+		8:  "chromium-browser",
+		9:  "electron-application",
+		10: "kthread-worker1",
+		11: "renamed-process",
+		12: "editor",
+	}, byPID)
+}
+
 // R7. A share is processor time since the last reading over the time that
 // passed on every processor: one of four processors busy is 25.
 func TestAShareIsOfTheWholeMachine(t *testing.T) {

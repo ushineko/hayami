@@ -251,3 +251,19 @@ func TestTheRealCacheFilesDecodeToABreakdown(t *testing.T) {
 	}
 	t.Logf("decoded %d payloads under %s", checked, filepath.Base(dir))
 }
+
+// An account on a budget has no limits but its spend, and a spend that is on
+// is a bar in the drawer as it is on the card: with the spend as a line, the
+// drawer of such an account had no bar at all.
+func TestASpendThatIsOnIsALimitInTheBreakdown(t *testing.T) {
+	now := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+	b, err := usage.ClaudeBreakdown(now, json.RawMessage(claudeSpend))
+	require.NoError(t, err)
+
+	require.Len(t, b.Limits, 1)
+	assert.Equal(t, usage.Limit{
+		Name: "Spend", Fraction: 0.42, ResetsAt: usage.NextMonth(now),
+		Severity: "normal", Amount: "$42.00 of $100.00",
+	}, b.Limits[0])
+	assert.Empty(t, b.Facts, "the spend is the bar, not a line under it as well")
+}

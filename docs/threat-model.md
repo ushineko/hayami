@@ -391,6 +391,11 @@ bug report someone pasted `doctor` or `readings --json` into.
   numbers hayami formats; the name is still the one process-supplied text
   on a line, and no process attribute beyond those of spec 060 is read.
   They pass through `safetext.Printable` with the rest of the line.
+- A process's name is the kernel's, cut at fifteen characters, and on Linux
+  a name at that length is completed from the command line: the file name of
+  its first word, and only when it begins with the kernel's name
+  (`core.FullProcName`). The arguments are never taken, including from a
+  program that rewrote its command line as one string.
 - `tools/screenshot.sh` runs the panel from a throwaway copy of the
   settings, so no path of the user's is shown.
 - Tokens are never printed (B3).
