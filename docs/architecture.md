@@ -203,12 +203,18 @@ adds a table, not a ladder.
 
 ### 9. What hayami may run and reach
 
-- **No subprocess reads a device.** The one subprocess is `nvidia-smi`, for an
-  NVIDIA card on Linux, where the driver offers no kernel interface. On
-  Windows it is only the fallback behind D3DKMT.
-- **Network:** the usage providers' APIs, and LibreHardwareMonitor's
-  `data.json` over loopback. A new network destination needs a Discussion
-  first.
+- **No subprocess reads a device.** The one subprocess that reads one is
+  `nvidia-smi`, for an NVIDIA card on Linux, where the driver offers no
+  kernel interface. On Windows it is only the fallback behind D3DKMT. The
+  others ask a tool for a credential: `codex` for its usage, and `gh` and
+  `glab` for a forge's key (spec 102), each with fixed arguments and a
+  timeout.
+- **Network:** the usage providers' APIs, LibreHardwareMonitor's `data.json`
+  over loopback, and the forges a person switched on in the Development
+  drawer (spec 102): `api.github.com` and the GitLab host they name, read
+  only while the drawer shows them, through `forge.NewClient`. A new network
+  destination needs a Discussion first; while Discussions are off on this
+  repository, its issue is where the decision is recorded (#360).
 - **No elevation of its own.** The panel never runs as an administrator and
   never asks to. The one reading Windows keeps for an administrator, the
   network by process, comes from the network helper (`internal/nethelper`,
@@ -299,6 +305,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | VPN systems as a table on the host, read over the system bus | 2, 5 | In place | #298 |
 | VPN health checks as a table, one set of probes across panels | 2, 5 | In place | #298 |
 | VPN keepalive rules as a pure engine, with a helper to run them | 2 | In place | #298 |
+| Forges read headless in `internal/forge`, drawn from plain values | 9 | In place | #360 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a

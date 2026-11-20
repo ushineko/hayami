@@ -39,6 +39,8 @@ type paneDrawer struct {
 	filtering bool
 	marked    int
 	scroll    int
+	// day is the cell marked on a strip of days, -1 for today (spec 102).
+	day int
 }
 
 // detailRead carries a detail's reading back to the model.
@@ -162,7 +164,7 @@ func (m *Model) open(key, root, id string) tea.Cmd {
 		}
 		m.release()
 	}
-	m.dr = &paneDrawer{section: key, root: root, id: id, gen: gen, marked: -1, filter: filter,
+	m.dr = &paneDrawer{section: key, root: root, id: id, gen: gen, marked: -1, day: -1, filter: filter,
 		detail: view.Detail{Title: title(d, id)}}
 	m.chosen, m.last[key] = key, root
 	return readDetail(d, id, gen)
@@ -286,8 +288,36 @@ func (m *Model) drawerKey(msg tea.KeyMsg) (cmd tea.Cmd, handled bool) {
 			}
 		}
 		lines := view.Selectable(m.visible())
-		if dr.marked >= 0 && dr.marked < len(lines) && lines[dr.marked].Open != "" {
-			return m.open(dr.section, dr.root, lines[dr.marked].Open), true
+		if dr.marked < 0 || dr.marked >= len(lines) {
+			return nil, true
+		}
+		line := lines[dr.marked]
+		if opens := line.DayOpens; len(opens) > 0 {
+			return m.open(dr.section, dr.root, opens[view.MarkedDay(dr.day, len(opens))]), true
+		}
+		// A heading that reads its part again (spec 102 R9): it starts, and
+		// the page is read at once so it says so.
+		if rf, ok := src.(panel.Refresher); ok && line.Open != "" && rf.Refresh(line.Open) {
+			dr.gen++
+			return readDetail(src, dr.id, dr.gen), true
+		}
+		if line.Open != "" {
+			return m.open(dr.section, dr.root, line.Open), true
+		}
+		return nil, true
+	case "left", "right":
+		// ←/→ move the marked day while a strip of days is marked.
+		lines := view.Selectable(m.visible())
+		if dr.marked >= 0 && dr.marked < len(lines) {
+			if n := len(lines[dr.marked].DayOpens); n > 0 {
+				day := view.MarkedDay(dr.day, n)
+				if msg.String() == "left" {
+					day = max(day-1, 0)
+				} else {
+					day = min(day+1, n-1)
+				}
+				dr.day = day
+			}
 		}
 		return nil, true
 	case "down", "j":
@@ -383,7 +413,7 @@ func (m Model) drawerWidth() int {
 func (m Model) drawerLines(width, height int) []string {
 	shape := view.DrawerShape{
 		Shown: m.dr.root, Filter: m.dr.filter, Filtering: m.dr.filtering,
-		Marked: m.dr.marked, Paused: m.dr.paused, Scroll: m.dr.scroll,
+		Marked: m.dr.marked, Paused: m.dr.paused, Scroll: m.dr.scroll, Day: m.dr.day,
 	}
 	if d, ok := m.detailer(m.dr.section); ok {
 		shape.Choices = choices(d, m.dr.root)

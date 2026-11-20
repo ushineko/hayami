@@ -25,6 +25,22 @@ func TestOnlyTheWordsReachTheTerminal(t *testing.T) {
 	}
 }
 
+// #361. The bidirectional format characters are taken out, each class of
+// them: they reorder a line in a terminal that does bidi, so a title could
+// read as something it is not. A zero-width joiner, which emoji are made
+// with, stays.
+func TestBidiCannotReorderALine(t *testing.T) {
+	for in, want := range map[string]string{
+		"fix\u202Egnp.exe":       "fixgnp.exe",  // override
+		"a\u202Ab\u202Cc":        "abc",         // embedding and pop
+		"x\u2066y\u2069z":        "xyz",         // isolate
+		"l\u200Er\u200Fa\u061Cb": "lrab",        // marks
+		"👩\u200D💻 ok":            "👩\u200D💻 ok", // ZWJ stays
+	} {
+		assert.Equal(t, want, safetext.Printable(in, 0), "%q", in)
+	}
+}
+
 // A limit is in bytes and never splits a character.
 func TestALimitCutsBetweenCharacters(t *testing.T) {
 	assert.Equal(t, "ab", safetext.Printable("abcdef", 2))

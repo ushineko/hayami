@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
+	"github.com/ushineko/hayami/internal/forge"
 	"github.com/ushineko/hayami/internal/view"
 )
 
@@ -133,3 +135,9 @@ func SetUsageBreakdown(u *Usage, read func(label string) (view.UsageBreakdown, e
 // ForgetVPNReadTime has the next poll read the VPNs, in place of waiting out the
 // interval.
 func (b *Bandwidth) ForgetVPNReadTime() { b.vpns.Refresh() }
+
+// SetForgeRead replaces how the forges are read, so a test reads none
+// (spec 102).
+func SetForgeRead(u *Usage, read func(ctx context.Context, provider string, s config.UsageSettings) (forge.Activity, error)) {
+	u.dev.read = read
+}

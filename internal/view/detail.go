@@ -72,6 +72,15 @@ type Detail struct {
 	// but its heading, and a shell that cannot fit them scrolls.
 	Parts []Detail `json:"parts,omitempty"`
 
+	// Open is what a click on the heading asks for, as a line's Open: an
+	// account's own page, a forge read again (spec 102). Empty for a
+	// heading that is only read.
+	Open string `json:"-"`
+
+	// Days is a row of cells under the heading, each a choice: a forge's
+	// fortnight, a day each (spec 102). Nil for every other detail.
+	Days *DayStrip `json:"days,omitempty"`
+
 	// Controls are lines a shell that can act may offer, each with what a press
 	// on it asks for in Open. They are in no text and no JSON, and only the
 	// desktop panel reads them (spec 085 R20).
@@ -98,6 +107,15 @@ type DetailLine struct {
 
 	// Heading marks a line that names the lines under it and has no value.
 	Heading bool `json:"heading,omitempty"`
+
+	// DayOpens are a strip's cells' details, on the line a terminal marks
+	// for the strip (Selectable); nil on every other line.
+	DayOpens []string `json:"-"`
+
+	// Wide marks a line whose name is a title and may take the room its
+	// short value leaves, rather than DetailNameWidth: a pull request on a
+	// day's page (spec 102). Its name is cut to DevWideNameWidth.
+	Wide bool `json:"wide,omitempty"`
 
 	// Cells are the line's extra figures, one under each of its detail's
 	// Columns and at its width (spec 092).
@@ -216,6 +234,22 @@ func (d Detail) printable() Detail {
 		reasons[i] = r
 	}
 	d.Reasons = reasons
+	titleParts := make([]Part, len(d.TitleParts))
+	for i, tp := range d.TitleParts {
+		tp.Text = p(tp.Text)
+		titleParts[i] = tp
+	}
+	d.TitleParts = titleParts
+	// A detail's parts are made safe as it is: a forge's day puts titles
+	// other people wrote into them (spec 102 review, F1), and a shell that
+	// draws the parts must not be handed what a terminal would obey.
+	if len(d.Parts) > 0 {
+		parts := make([]Detail, len(d.Parts))
+		for i, part := range d.Parts {
+			parts[i] = part.printable()
+		}
+		d.Parts = parts
+	}
 	return d
 }
 
@@ -271,6 +305,11 @@ func (d Detail) Text() string {
 		for _, l := range s.Lines {
 			b.WriteString("  " + strings.TrimRight(padRight(l.Name, DetailNameWidth)+"  "+l.figure(), " ") + "\n")
 		}
+	}
+	// A strip of days is printed with its initials under it (spec 102 R14).
+	if d.Days != nil {
+		cells, initials := dayCells(*d.Days, -1)
+		b.WriteString("  " + cells + "\n  " + strings.TrimRight(initials, " ") + "\n")
 	}
 	// Every column is printed: a terminal's line is as long as it needs
 	// (spec 092 R9), and the heading over them names them.

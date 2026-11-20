@@ -20,12 +20,12 @@ import (
 )
 
 // Printable is text with every control character taken out, C0, C1 and DEL,
-// and invalid UTF-8 with it, at most n bytes long; n <= 0 is no limit. Text
-// that has none is returned as it is.
+// the bidirectional format characters, and invalid UTF-8, at most n bytes
+// long; n <= 0 is no limit. Text that has none is returned as it is.
 func Printable(text string, n int) string {
 	clean := true
 	for _, r := range text {
-		if r == utf8.RuneError || unicode.IsControl(r) {
+		if unsafe(r) {
 			clean = false
 			break
 		}
@@ -38,12 +38,33 @@ func Printable(text string, n int) string {
 		if n > 0 && b.Len()+utf8.RuneLen(r) > n {
 			break
 		}
-		if r == utf8.RuneError || unicode.IsControl(r) {
+		if unsafe(r) {
 			continue
 		}
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+/*
+unsafe is a rune a terminal would act on rather than draw: a control
+character, invalid UTF-8, or a bidirectional format character (#361). The
+last reorder the line they are on in a terminal that does bidi, so a title
+someone else wrote could be made to read as something it is not: the
+embeddings and overrides (U+202A–U+202E), the isolates (U+2066–U+2069), the
+marks (U+200E, U+200F, U+061C). The zero-width joiner stays; emoji are built
+with it.
+*/
+func unsafe(r rune) bool {
+	switch {
+	case r == utf8.RuneError, unicode.IsControl(r):
+		return true
+	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:
+		return true
+	case r == 0x200E, r == 0x200F, r == 0x061C:
+		return true
+	}
+	return false
 }
 
 /*

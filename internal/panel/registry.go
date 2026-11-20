@@ -102,7 +102,7 @@ being a section the settings can name and nothing draws.
 */
 var builders = map[string]func(Env) Source{
 	view.BandwidthInfo.Key:   Env.bandwidth,
-	view.UsageInfo.Key:       func(Env) Source { return NewUsage() },
+	view.UsageInfo.Key:       Env.usage,
 	view.CoolerInfo.Key:      func(e Env) Source { return NewCooler(e.Host, e.scan()) },
 	view.PeripheralsInfo.Key: func(e Env) Source { return NewPeripherals(e.scan(), e.Host) },
 }

@@ -174,7 +174,10 @@ type Desk interface {
 // drawerPart is one part of a detail made of details, as drawn: its heading,
 // its meters, its lines, and the lines for its reasons and its note.
 type drawerPart struct {
-	head   *glance.Row
+	head *glance.Row
+	// days is a forge's fortnight under the heading (spec 102), nil for
+	// every other part.
+	days   *glance.HeatStrip
 	heads  *glance.Row
 	plot   *glance.Sparkline
 	traces map[string]bool
@@ -716,6 +719,10 @@ func (p *Panel) pollDetail(d *drawer, src panel.Detailer, id string) {
 			if ctx.Err() != nil {
 				return
 			}
+			// The interval is asked again each time: a section reading
+			// something in the background asks for a shorter one until it
+			// lands (spec 102 R9).
+			t.Reset(src.DetailInterval(id))
 			p.do(func() {
 				if d.gen != gen {
 					return
@@ -1098,7 +1105,8 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 
 	shape := ""
 	for _, part := range detail.Parts {
-		shape += fmt.Sprintf("%d/%d/%d/%t/%t;", len(part.Meters), len(part.Lines), len(tailLines(part)), len(part.Trails) > 0, len(part.Columns) > 0)
+		shape += fmt.Sprintf("%d/%d/%d/%t/%t/%t/%s;", len(part.Meters), len(part.Lines), len(tailLines(part)), len(part.Trails) > 0, len(part.Columns) > 0,
+			part.Days != nil, wideShape(part.Lines))
 	}
 	if shape != d.partsShape {
 		// A rebuild starts the content again at the top. A live breakdown
@@ -1123,6 +1131,10 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 			}
 			built := drawerPart{head: glance.NewRow("", "")}
 			pieces = append(pieces, built.head)
+			if part.Days != nil {
+				built.days = glance.NewHeatStrip("", 0)
+				pieces = append(pieces, built.days)
+			}
 			if len(part.Trails) > 0 {
 				built.plot = glance.NewSparkline(SparkCapacity)
 				built.plot.SetHeight(DrawerPlotHeight)
@@ -1139,8 +1151,13 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 				built.heads = glance.NewRowWidth("", "", p.kit.name)
 				pieces = append(pieces, built.heads)
 			}
-			for range part.Lines {
+			for _, l := range part.Lines {
+				// A wide line's name is a title, which takes what its short
+				// value leaves (spec 102); the view cut it to fit.
 				r := glance.NewRowWidth("", "", p.kit.name)
+				if l.Wide {
+					r = glance.NewRow("", "")
+				}
 				built.rows = append(built.rows, r)
 				pieces = append(pieces, r)
 			}
@@ -1154,14 +1171,26 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 		dr.SetScrolling(true)
 		dr.SetContent(pieces...)
 		var taps []*glance.Row
-		for _, built := range d.parts {
+		var strips []*glance.HeatStrip
+		for i, built := range d.parts {
+			if detail.Parts[i].Open != "" {
+				taps = append(taps, built.head)
+			}
 			taps = append(taps, built.rows...)
+			if built.days != nil {
+				strips = append(strips, built.days)
+			}
 		}
 		dr.SetRowTapped(func(r *glance.Row) { p.tappedRow(d, r) }, taps...)
+		dr.SetCellTapped(func(h *glance.HeatStrip, i int) { p.tappedCell(d, h, i) }, strips...)
 	}
 	for i, part := range detail.Parts {
 		built := d.parts[i]
 		built.head.SetLabel(part.Title)
+		built.head.SetID(part.Open)
+		if built.days != nil && part.Days != nil {
+			setDays(built.days, *part.Days)
+		}
 		if len(part.TitleParts) > 0 {
 			built.head.Set(p.value(view.JoinedRow(part.TitleParts)))
 		}
@@ -1195,10 +1224,63 @@ func (p *Panel) restyleDrawer() {
 		}
 		d.sumHeat.Restyle()
 		for _, part := range d.parts {
+			if part.days != nil {
+				part.days.Restyle()
+			}
 			for _, m := range part.meters {
 				m.Restyle()
 			}
 		}
 	}
 	p.renderDrawer()
+}
+
+// wideShape is which of a part's lines are wide, for the shape a rebuild is
+// decided by: a wide line is a different row.
+func wideShape(lines []view.DetailLine) string {
+	b := make([]byte, len(lines))
+	for i, l := range lines {
+		b[i] = '-'
+		if l.Wide {
+			b[i] = 'w'
+		}
+	}
+	return string(b)
+}
+
+// setDays draws a forge's fortnight on its strip (spec 102 R4): a day with
+// nothing is an empty cell in its place, each cell has its day's initial,
+// and the day whose page is open is marked.
+func setDays(h *glance.HeatStrip, s view.DayStrip) {
+	values := make([]float64, len(s.Values))
+	for i, v := range s.Values {
+		values[i] = v
+		if v < 0 {
+			values[i] = math.NaN()
+		}
+	}
+	h.Set(values)
+	h.SetCellLabels(s.Labels)
+	h.SetSelected(s.Selected)
+}
+
+// rereadDrawers reads again, at once, what the open drawers show of a source,
+// for a settings change that changes it: a forge switched off is not left
+// drawn until the next reading (spec 102 R12). A page no longer offered, the
+// day of a forge switched off, goes back to where it was reached from.
+func (p *Panel) rereadDrawers(src panel.Source) {
+	det, ok := src.(panel.Detailer)
+	if !ok {
+		return
+	}
+	for _, d := range p.openDrawers() {
+		if d.section != src.Key() {
+			continue
+		}
+		id := d.id
+		if !panel.Offers(src, id) {
+			id = p.drillUp(d, id)
+		}
+		p.showDetail(d, det, d.section, id)
+	}
 }

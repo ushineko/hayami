@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ushineko/hayami/internal/claude"
+	"github.com/ushineko/hayami/internal/config"
 
 	"github.com/ushineko/hayami/internal/usage"
 	"github.com/ushineko/hayami/internal/view"
@@ -48,11 +49,15 @@ type Usage struct {
 	// breakdown reads one account's breakdown by its label, replaced by a
 	// test for the reason read is.
 	breakdown func(label string) (view.UsageBreakdown, error)
+
+	// dev are the drawer's git parts (spec 102).
+	dev *forges
 }
 
 // NewUsage builds the usage source.
 func NewUsage() *Usage {
 	u := &Usage{now: time.Now}
+	u.dev = newForges(func() time.Time { return u.now() })
 	u.breakdown = cachedBreakdown(func() time.Time { return u.now() })
 	last := &fetches{last: map[string]failure{}}
 	u.read = func(ctx context.Context) ([]view.UsageWindow, time.Time, []view.Reason, error) {
@@ -542,15 +547,19 @@ var codexInstalled = sync.OnceValue(func() bool {
 	return err == nil
 })
 
-// Details are every account's breakdown as one detail, which is what the
-// card opens (spec 062 R9), and then each account's own, by the label its
-// meter carries.
+// SetDevelopment takes the Development section's settings (spec 102): which
+// parts the drawer draws, and how the forges are read.
+func (u *Usage) SetDevelopment(s config.UsageSettings) { u.dev.setSettings(s) }
+
+// Details are the drawer's overview, which is what the card opens (spec 062
+// R9, spec 102 R2), and then each account's own, by the label its meter
+// carries. A forge's days are drills under the overview, not listed.
 func (u *Usage) Details() []view.DetailInfo {
 	accounts := u.accounts()
-	if len(accounts) == 0 {
+	if len(accounts) == 0 && len(u.dev.shown()) == 0 {
 		return nil
 	}
-	out := []view.DetailInfo{{ID: view.DetailAccounts, Title: view.AccountsTitle}}
+	out := []view.DetailInfo{{ID: view.DetailAccounts, Title: view.DevTitle}}
 	for _, account := range accounts {
 		out = append(out, view.DetailInfo{ID: account, Title: account})
 	}
@@ -574,8 +583,59 @@ func (u *Usage) accounts() []string {
 }
 
 // DetailInterval is UsageInterval: a breakdown is the same cache entry the
-// meters are read from.
-func (u *Usage) DetailInterval(string) time.Duration { return UsageInterval }
+// meters are read from. While a forge is being read it is a second, so the
+// reading is drawn when it lands rather than a poll later (spec 102 R9).
+func (u *Usage) DetailInterval(string) time.Duration {
+	if u.dev.reading() {
+		return forgePollInterval
+	}
+	return UsageInterval
+}
+
+// forgePollInterval is how often an open drawer looks for a forge reading in
+// flight.
+const forgePollInterval = time.Second
+
+// Drills reports whether an ID is a forge's day (spec 102 R6).
+func (u *Usage) Drills(id string) bool {
+	p, _, ok := view.ParseDevDayID(id)
+	return ok && u.dev.shows(p)
+}
+
+// DrillUp is the overview, from a day and from an account's own page alike.
+func (u *Usage) DrillUp(id string) string {
+	if id == view.DetailAccounts {
+		return id
+	}
+	return view.DetailAccounts
+}
+
+// Settle waits for the forges' readings in flight, for a command that prints
+// once (spec 102 R14).
+func (u *Usage) Settle(ctx context.Context) {
+	for u.dev.reading() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// Still says there is nothing to pause: an account's quota and a forge's
+// fortnight do not move under a reader as a list of processes does.
+func (u *Usage) Still() bool { return true }
+
+// Refresh reads a forge again now, for a click on its heading (spec 102 R9),
+// and reports whether ask was one this section answers.
+func (u *Usage) Refresh(ask string) bool {
+	p, ok := view.ParseRefresh(ask)
+	if !ok || !u.dev.shows(p) {
+		return false
+	}
+	u.dev.refresh(p)
+	return true
+}
 
 // CloseDetail has nothing to let go of.
 func (u *Usage) CloseDetail(string) {}
@@ -593,14 +653,28 @@ func (u *Usage) PollDetail(ctx context.Context, id string) (view.Detail, error) 
 	if id == view.DetailAccounts {
 		var parts []view.Detail
 		var failed []error
-		for _, account := range u.accounts() {
-			part, err := u.PollDetail(ctx, account)
-			if err != nil {
-				failed = append(failed, err)
+		if u.dev.aiShown() {
+			for _, account := range u.accounts() {
+				part, err := u.PollDetail(ctx, account)
+				if err != nil {
+					failed = append(failed, err)
+				}
+				parts = append(parts, view.UsageOverview(part))
 			}
-			parts = append(parts, part)
 		}
-		return view.UsageAccounts(parts), errors.Join(failed...)
+		u.dev.due()
+		var forges []view.Detail
+		for _, p := range u.dev.shown() {
+			forges = append(forges, view.DevPart(u.dev.viewOf(p), u.now(), -1))
+		}
+		return view.Development(parts, forges), errors.Join(failed...)
+	}
+	if p, date, ok := view.ParseDevDayID(id); ok {
+		if !u.dev.shows(p) {
+			return unread(u.Key(), id, view.DevTitle, errors.New("switched off")), nil
+		}
+		u.dev.due()
+		return view.DevDayPage(u.dev.viewOf(p), u.now(), date), nil
 	}
 	b, err := u.breakdown(id)
 	if err != nil {

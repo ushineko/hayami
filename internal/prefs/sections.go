@@ -48,6 +48,7 @@ than it was worth once the list was short enough to read.
 var sectionPrefs = map[string]func(*Window, *shell.Shell) fyne.CanvasObject{
 	view.BandwidthInfo.Key:   (*Window).buildNetwork,
 	view.PeripheralsInfo.Key: (*Window).buildPeripherals,
+	view.UsageInfo.Key:       (*Window).buildDevelopment,
 }
 
 // sectionSettings is each section's own preferences, in section order, each

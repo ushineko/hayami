@@ -424,6 +424,10 @@ func (p *Panel) Apply(c config.Config) {
 			b.SetInterfaces(settings.Interfaces)
 			b.SetVPNs(settings)
 		}
+		if u, ok := s.(*panel.Usage); ok {
+			u.SetDevelopment(config.Usage.Get(c))
+			p.rereadDrawers(u)
+		}
 	}
 }
 

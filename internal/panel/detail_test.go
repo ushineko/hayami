@@ -440,7 +440,7 @@ func TestUsageOffersABreakdownPerAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []view.DetailInfo{
-		{ID: view.DetailAccounts, Title: view.AccountsTitle}, {ID: "CC desk", Title: "CC desk"}, {ID: "CX", Title: "CX"},
+		{ID: view.DetailAccounts, Title: view.DevTitle}, {ID: "CC desk", Title: "CC desk"}, {ID: "CX", Title: "CX"},
 	}, u.Details())
 	assert.Equal(t, panel.UsageInterval, u.DetailInterval("CX"))
 
@@ -463,7 +463,7 @@ func TestUsageOffersABreakdownPerAccount(t *testing.T) {
 	// whole.
 	all, err := u.PollDetail(t.Context(), view.DetailAccounts)
 	require.Error(t, err, "the account that failed is in the log")
-	assert.Equal(t, view.AccountsTitle, all.Title)
+	assert.Equal(t, view.DevTitle, all.Title)
 	require.Len(t, all.Parts, 2)
 	assert.Equal(t, "CC desk", all.Parts[0].Title)
 	require.Len(t, all.Parts[0].Meters, 1)

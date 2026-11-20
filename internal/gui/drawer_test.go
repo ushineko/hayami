@@ -479,7 +479,7 @@ func accounts(now time.Time, limits int, fraction float64, broken bool) view.Det
 	if broken {
 		second = view.Detail{Section: "usage", ID: "CX", Title: "CX", Reasons: []view.Reason{{Text: "not available"}}}
 	}
-	d := view.UsageAccounts([]view.Detail{breakdown("CC desk", limits), second})
+	d := view.Development([]view.Detail{breakdown("CC desk", limits), second}, nil)
 	d.Title = "Usage by account"
 	return d
 }
