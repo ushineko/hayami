@@ -11,13 +11,22 @@ temporary directory read the real cache instead.
 */
 package testenv
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ushineko/hayami/internal/claude"
+)
 
 // Home makes dir the user's home directory.
 func Home(t testing.TB, dir string) {
 	t.Helper()
 	t.Setenv("HOME", dir)
 	t.Setenv("USERPROFILE", dir)
+	// The macOS login Keychain is not under HOME, so taking the credential file
+	// away with HOME alone still finds the real Claude Code store there. Point
+	// the keychain store at a service that does not exist, so discovery finds
+	// none and a test reaches only the file it laid down.
+	t.Setenv(claude.KeychainServiceEnv, "hayami-test-absent-credentials")
 }
 
 // Cache makes dir the user's cache directory. LOCALAPPDATA is emptied rather

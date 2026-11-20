@@ -269,18 +269,18 @@ func readSettled(s Store) (*Credentials, error) {
 	return now, err
 }
 
-// write puts the credentials back, keeping every key the file had.
+// encode re-encodes the credentials, keeping every key the store had.
 //
 // The object this package understands is re-encoded from the object that was
 // read, not built fresh: a field inside claudeAiOauth that this build has
 // never heard of — scopes, rateLimitTier, whatever is added next — survives,
 // because it is decoded into a map and only the three keys that changed are
 // replaced.
-func write(s Store, c *Credentials) error {
+func encode(c *Credentials) ([]byte, error) {
 	inner := map[string]json.RawMessage{}
 	if body, ok := c.raw[oauthKey]; ok {
 		if err := json.Unmarshal(body, &inner); err != nil {
-			return fmt.Errorf("a credential store's %s does not parse: %w", oauthKey, err)
+			return nil, fmt.Errorf("a credential store's %s does not parse: %w", oauthKey, err)
 		}
 	}
 	for key, value := range map[string]any{
@@ -290,14 +290,14 @@ func write(s Store, c *Credentials) error {
 	} {
 		b, err := json.Marshal(value)
 		if err != nil {
-			return fmt.Errorf("encoding a credential: %w", err)
+			return nil, fmt.Errorf("encoding a credential: %w", err)
 		}
 		inner[key] = b
 	}
 
 	body, err := json.Marshal(inner)
 	if err != nil {
-		return fmt.Errorf("encoding the credentials: %w", err)
+		return nil, fmt.Errorf("encoding the credentials: %w", err)
 	}
 	out := map[string]json.RawMessage{}
 	for k, v := range c.raw {
@@ -307,7 +307,21 @@ func write(s Store, c *Credentials) error {
 
 	encoded, err := json.Marshal(out)
 	if err != nil {
-		return fmt.Errorf("encoding the credential store: %w", err)
+		return nil, fmt.Errorf("encoding the credential store: %w", err)
+	}
+	return encoded, nil
+}
+
+// write puts the credentials back where they came from: the Keychain item, or
+// the file via a temporary-file rename.
+func write(s Store, c *Credentials) error {
+	encoded, err := encode(c)
+	if err != nil {
+		return err
+	}
+
+	if s.Keychain {
+		return keychainWrite(s.Service, s.Account, encoded)
 	}
 
 	// A temporary file beside the real one, then a rename: a reader never sees
