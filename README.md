@@ -42,7 +42,7 @@ section is not polled at all.
 | Peripherals | Battery level and charging state of mice, keyboards, headsets and game controllers, a cell per kind of device | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, the DualSense over USB or Bluetooth, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
 | Network | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
 | Hardware | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
-| AI Usage | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools |
+| Development | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex. Its drawer adds, once switched on in Preferences, two weeks of your GitHub and GitLab activity, a day per cell, and each day's pull requests, merge requests, issues and pushes by repository | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools. GitHub's GraphQL API with `gh`'s sign-in, and a GitLab host's API with `GITLAB_TOKEN` from `~/.secrets.env` or `glab`'s, or keys given in Preferences |
 
 The sections can be laid out three ways, in either panel:
 
@@ -763,6 +763,20 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: the AI Usage card is now **Development** (its key is still
+  `usage`). Its drawer can show two weeks of your GitHub and GitLab
+  activity, a day per cell coloured against the busiest day; a click on a
+  day opens what happened that day by repository, and a click on a forge's
+  heading reads it again. Each part is switched on or off in Preferences,
+  the forges are off until switched on, and they are read every 10 minutes
+  (or as set) and only while the drawer shows them. GitHub uses `gh`'s
+  sign-in; GitLab a key from `~/.secrets.env` (`GITLAB_TOKEN`,
+  `GITLAB_HOST`) or `glab`'s, or ones given in Preferences. The accounts'
+  plan, spend and week by use move to each account's own page
+  (spec 102, #360).
 
 ### 0.19.0 (2026-11-19)
 

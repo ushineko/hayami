@@ -62,6 +62,12 @@ func Detail(ctx context.Context, w io.Writer, sources []panel.Source, subject st
 
 	defer d.CloseDetail(id)
 	detail, _ := d.PollDetail(ctx, id)
+	// A detail read in the background is waited for, then read again: a
+	// forge's fortnight (spec 102).
+	if s, ok := src.(panel.Settler); ok {
+		s.Settle(ctx)
+		detail, _ = d.PollDetail(ctx, id)
+	}
 	if len(detail.Reasons) == 0 {
 		select {
 		case <-ctx.Done():

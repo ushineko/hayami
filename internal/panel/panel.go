@@ -104,6 +104,28 @@ func unread(section, id, title string, err error) view.Detail {
 	}}
 }
 
+// Refresher is a source a person can ask to read part of a detail again now,
+// rather than at its interval: a forge, from its heading (spec 102 R9).
+type Refresher interface {
+	// Refresh starts the reading an action asks for, and reports whether
+	// the action was one of this source's.
+	Refresh(ask string) bool
+}
+
+// Settler is a source whose details are read in the background, so a command
+// that prints one detail and exits waits for the reading first (spec 102).
+type Settler interface {
+	// Settle returns once nothing is being read, or ctx is done.
+	Settle(ctx context.Context)
+}
+
+// Still is a Driller whose pages do not move under a reader, so a shell
+// offers no pause on them: an account's quota, a forge's fortnight
+// (spec 102).
+type Still interface {
+	Still() bool
+}
+
 // Driller is a source whose details lead to further details: a row opened
 // for what is behind it. The path is carried in the detail's ID, so a drill
 // is polled, closed and offered exactly as any other detail is.

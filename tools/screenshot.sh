@@ -112,7 +112,10 @@ trap cleanup EXIT INT TERM
 # compositor places this panel rather than on top of the user's own, which
 # sits exactly there.
 SETTINGS="$SCRATCH/settings.yaml"
-sed -e '/^  placed:/d' -e '/^  x:/d' -e '/^  "y":/d' -- "$SETTINGS_SRC" >"$SETTINGS"
+# The Development drawer's GitLab host and keys are left out too (spec 102):
+# a host is a work's name, and a key is never photographed, masked or not.
+sed -e '/^  placed:/d' -e '/^  x:/d' -e '/^  "y":/d' \
+    -e '/^ *gitlabHost:/d' -e '/^ *githubToken:/d' -e '/^ *gitlabToken:/d' -- "$SETTINGS_SRC" >"$SETTINGS"
 
 # An opaque terminal for the pane shots, keeping the user's font and colours
 # when there is a config to import them from.

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/ushineko/hayami/internal/view"
 )
@@ -162,6 +163,59 @@ type PeripheralsSettings struct {
 // so there is no root field to read or write.
 var Peripherals = Setting[PeripheralsSettings]{Key: view.PeripheralsInfo.Key}
 
+/*
+UsageSettings are the Development section's (spec 102): which of the
+drawer's parts are drawn, how often the forges are read, and a person's own
+GitLab host and keys where they want them rather than the ones found.
+
+The zero value is the default: AI usage shown, the forges off. Each forge is
+a network destination, so it is reached only once a person asks for it
+(spec 102, #360).
+
+The tokens are kept here, in the settings file, which is written 0600 and is
+the same account's as ~/.secrets.env; nothing prints a configuration.
+*/
+type UsageSettings struct {
+	HideAI bool `json:"hideAI,omitempty"`
+	GitHub bool `json:"github,omitempty"`
+	GitLab bool `json:"gitlab,omitempty"`
+
+	// RefreshMinutes is how old a forge's reading may be before an open
+	// drawer reads it again; zero is DefaultRefreshMinutes.
+	RefreshMinutes int `json:"refreshMinutes,omitempty"`
+
+	// GitLabHost is the GitLab to read, empty for the one found
+	// (GITLAB_HOST in ~/.secrets.env, else glab's).
+	GitLabHost string `json:"gitlabHost,omitempty"`
+
+	// GitHubToken and GitLabToken are a person's own, empty for the ones
+	// found (gh's; ~/.secrets.env's, else glab's).
+	GitHubToken string `json:"githubToken,omitempty"`
+	GitLabToken string `json:"gitlabToken,omitempty"`
+}
+
+// DefaultRefreshMinutes is how often a shown forge is read when the settings
+// do not say (spec 102 R9).
+const DefaultRefreshMinutes = 10
+
+// RefreshChoices are the intervals Preferences offers, in minutes.
+func RefreshChoices() []int { return []int{5, 10, 15, 30, 60} }
+
+// Refresh is how old a forge's reading may be.
+func (u UsageSettings) Refresh() time.Duration {
+	m := u.RefreshMinutes
+	if m <= 0 {
+		m = DefaultRefreshMinutes
+	}
+	return time.Duration(m) * time.Minute
+}
+
+// Usage is the Development section's setting. It is newer than spec 046, so
+// there is no root field to read or write.
+var Usage = Setting[UsageSettings]{Key: view.UsageInfo.Key}
+
 // SettingKeys are the sections that declare a setting, for the test that
 // holds each to a section this build has.
-func SettingKeys() []string { return []string{Bandwidth.Key, Cooler.Key, Peripherals.Key} }
+func SettingKeys() []string {
+	return []string{Bandwidth.Key, Cooler.Key, Peripherals.Key, Usage.Key}
+}

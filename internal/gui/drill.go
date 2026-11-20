@@ -53,6 +53,12 @@ func (p *Panel) tappedRow(d *drawer, r *glance.Row) {
 	if !isDetailer {
 		return
 	}
+	// A heading that reads its part again (spec 102 R9): the reading starts,
+	// and the page is asked for again at once so it says so.
+	if rf, ok := src.(panel.Refresher); ok && rf.Refresh(ask) {
+		p.showDetail(d, det, d.section, d.id)
+		return
+	}
 	switch ask {
 	case view.ActPause:
 		p.setPaused(d, !d.paused.Load())
@@ -100,6 +106,7 @@ under a still pointer would be the panel twitching at them.
 */
 func (p *Panel) setControls(d *drawer) {
 	dr := d.dr
+	src, _ := p.source(d.section)
 	if !p.drills(d.section) {
 		dr.SetButtons()
 		dr.SetLeadButton(nil)
@@ -108,7 +115,6 @@ func (p *Panel) setControls(d *drawer) {
 	}
 	words := p.words()
 	if up := p.drillUp(d, d.id); up != d.id {
-		src, _ := p.source(d.section)
 		det, _ := src.(panel.Detailer)
 		dr.SetLeadButton(&glance.DrawerSpec{
 			Label: words.back,
@@ -120,6 +126,13 @@ func (p *Panel) setControls(d *drawer) {
 		})
 	} else {
 		dr.SetLeadButton(nil)
+	}
+	// A page that does not move has nothing to pause, and no process to end
+	// (spec 102).
+	if st, ok := src.(panel.Still); ok && st.Still() {
+		dr.SetHighlight(true)
+		dr.SetButtons()
+		return
 	}
 
 	pause := glance.DrawerSpec{
@@ -366,5 +379,35 @@ func (p *Panel) words() buttonWords {
 		resume: fdtheme.FirstDrawable(th, plain, fdtheme.ForwardGlyphs...) + " Resume",
 		back:   fdtheme.FirstDrawable(th, plain, fdtheme.BackGlyphs...) + " Back",
 		press:  fdtheme.FirstDrawable(th, plain, fdtheme.ForwardGlyphs...) + " ",
+	}
+}
+
+/*
+tappedCell opens the day a cell of a forge's fortnight stands for (spec 102
+R6), or goes back to the overview when the day is the one already open.
+*/
+func (p *Panel) tappedCell(d *drawer, h *glance.HeatStrip, i int) {
+	for j, built := range d.parts {
+		if built.days != h || j >= len(d.detail.Parts) {
+			continue
+		}
+		days := d.detail.Parts[j].Days
+		if days == nil || i >= len(days.Opens) {
+			return
+		}
+		src, ok := p.source(d.section)
+		if !ok {
+			return
+		}
+		det, ok := src.(panel.Detailer)
+		if !ok {
+			return
+		}
+		ask := days.Opens[i]
+		if i == days.Selected {
+			ask = p.drillUp(d, d.id)
+		}
+		p.showDetail(d, det, d.section, ask)
+		return
 	}
 }

@@ -550,16 +550,6 @@ type UsageFact struct {
 // account's breakdown, one under another (spec 062 R9).
 const DetailAccounts = "accounts"
 
-// AccountsTitle is the heading of the usage section's whole detail.
-const AccountsTitle = "Usage by account"
-
-// UsageAccounts is the usage section's whole detail: each account's own, in
-// the order given, as its parts. An account that could not be read is a part
-// too, with its reason in it (spec 062 R10).
-func UsageAccounts(accounts []Detail) Detail {
-	return Detail{Section: UsageInfo.Key, ID: DetailAccounts, Title: AccountsTitle, Parts: accounts}
-}
-
 // UsageDetail turns a breakdown into a detail: a meter per limit, the shares
 // as a list under their heading, then the facts (spec 060 R15).
 func UsageDetail(now time.Time, b UsageBreakdown) Detail {

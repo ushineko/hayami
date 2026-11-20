@@ -29,6 +29,10 @@ type DrawerShape struct {
 	Marked    int
 	Paused    bool
 	Scroll    int
+
+	// Day is the cell marked on a strip of days while the strip's line is
+	// marked (spec 102 R13); -1 is the last, today.
+	Day int
 }
 
 // FilterMatcher is how a typed filter matches a name, as the window's does:
@@ -78,7 +82,9 @@ func withoutActions(lines []DetailLine) []DetailLine {
 }
 
 // Selectable are the lines a person can mark, in the order they are drawn:
-// every line that is not a heading, the parts' after one another.
+// every line that is not a heading, the parts' after one another. A part's
+// heading that opens something is one (spec 102), and so is its strip of
+// days, as a line whose DayOpens are its cells'.
 func Selectable(d Detail) []DetailLine {
 	var out []DetailLine
 	add := func(lines []DetailLine) {
@@ -90,9 +96,48 @@ func Selectable(d Detail) []DetailLine {
 	}
 	add(d.Lines)
 	for _, p := range d.Parts {
+		if p.Open != "" {
+			out = append(out, DetailLine{Name: p.Title, Open: p.Open})
+		}
+		if p.Days != nil {
+			out = append(out, DetailLine{Name: p.Title, DayOpens: p.Days.Opens})
+		}
 		add(p.Lines)
 	}
 	return out
+}
+
+// MarkedDay is the cell a strip's Day picks among n: -1, or past the end, is
+// the last.
+func MarkedDay(day, n int) int {
+	if day < 0 || day >= n {
+		return n - 1
+	}
+	return day
+}
+
+// dayCells are a strip as a terminal draws it: three characters a day, the
+// glyph between spaces, the day marked between brackets and the day whose
+// page is open between parentheses; and under it the days' initials.
+func dayCells(s DayStrip, marked int) (cells, initials string) {
+	glyphs := []rune(s.Text())
+	var c, i strings.Builder
+	for n, g := range glyphs {
+		open, shut := " ", " "
+		switch n {
+		case marked:
+			open, shut = "[", "]"
+		case s.Selected:
+			open, shut = "(", ")"
+		}
+		c.WriteString(open + string(g) + shut)
+		label := " "
+		if n < len(s.Labels) {
+			label = s.Labels[n]
+		}
+		i.WriteString(" " + label + " ")
+	}
+	return c.String(), i.String()
 }
 
 /*
@@ -300,7 +345,24 @@ func partsLines(d Detail, width, height int, s DrawerShape) []string {
 			all = append(all, "")
 		}
 		if p.Title != "" {
-			all = append(all, p.Title)
+			head := p.Title
+			if row := JoinedRow(p.TitleParts); row.Value != "" {
+				head = padRight(head, max(width-runeLen(row.Value), runeLen(head)+2)) + row.Value
+			}
+			if p.Open != "" {
+				head = markText(head, marked == s.Marked)
+				marked++
+			}
+			all = append(all, head)
+		}
+		if p.Days != nil {
+			day := -1
+			if marked == s.Marked {
+				day = MarkedDay(s.Day, len(p.Days.Values))
+			}
+			cells, initials := dayCells(*p.Days, day)
+			all = append(all, markText(cells, marked == s.Marked), "  "+initials)
+			marked++
 		}
 		for _, m := range p.Meters {
 			all = append(all, meterLine(m, width))
@@ -315,6 +377,13 @@ func partsLines(d Detail, width, height int, s DrawerShape) []string {
 			all = append(all, "  "+padRight("", DetailNameWidth)+"  "+ColumnHeads(figure, p.Columns, cells))
 		}
 		for _, l := range p.Lines {
+			if l.Wide {
+				all = append(all, wideText(l, width, !l.Heading && marked == s.Marked))
+				if !l.Heading {
+					marked++
+				}
+				continue
+			}
 			all = append(all, lineText(l, figure, cells, !l.Heading && marked == s.Marked))
 			if !l.Heading {
 				marked++
@@ -340,4 +409,19 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// markText is a part's own line, marked as a list's line is.
+func markText(text string, marked bool) string {
+	if marked {
+		return "› " + text
+	}
+	return "  " + text
+}
+
+// wideText is a wide line (spec 102): its name takes what its value leaves.
+func wideText(l DetailLine, width int, marked bool) string {
+	value := l.Value
+	room := max(width-2-runeLen(value)-2, 1)
+	return markText(padRight(truncate(l.Name, room), room)+"  "+value, marked)
 }

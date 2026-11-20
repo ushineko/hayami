@@ -301,14 +301,14 @@ func TestEveryAccountIsADetailOfParts(t *testing.T) {
 	failed := view.Detail{Section: "usage", ID: "CX", Title: "CX",
 		Reasons: []view.Reason{{Text: "not available", Detail: "nothing in the usage cache for CX"}}}
 
-	d := view.UsageAccounts([]view.Detail{desk, failed})
+	d := view.Development([]view.Detail{desk, failed}, nil)
 
 	assert.Equal(t, "usage", d.Section)
 	assert.Equal(t, view.DetailAccounts, d.ID)
 	assert.Equal(t, []view.Detail{desk, failed}, d.Parts)
 	assert.False(t, d.Filterable)
 	assert.False(t, d.Quiet())
-	assert.True(t, view.UsageAccounts(nil).Quiet())
-	assert.Equal(t, view.AccountsTitle+"\n\n"+desk.Text()+"\n"+failed.Text(), d.Text())
+	assert.True(t, view.Development(nil, nil).Quiet())
+	assert.Equal(t, view.DevTitle+"\n\n"+desk.Text()+"\n"+failed.Text(), d.Text())
 	assert.Contains(t, d.Text(), "CX\n  not available\n    nothing in the usage cache for CX\n")
 }

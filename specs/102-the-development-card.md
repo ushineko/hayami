@@ -2,11 +2,18 @@
 
 **Issue**: [#360](https://github.com/ushineko/hayami/issues/360)
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
-(Filled in before the PR.)
+The AI Usage card is now Development, and its drawer can show a fortnight of
+a person's GitHub and GitLab activity as a strip of days, each opening that
+day's work by repository. The forges are off until switched on, are read only
+while the drawer shows them, through one guarded HTTP client, with keys from
+gh, `~/.secrets.env` or glab bound to the host they belong to. Reviewers
+should look first at `internal/forge/creds.go` and `http.go` (the credential
+and network boundary), then `internal/panel/development.go` (when a forge is
+read), and `Detail.printable` in `internal/view/detail.go` (review F1).
 
 ## Context
 
@@ -67,8 +74,9 @@ which is already written 0600.
   meters keeps its first line in the overview so it is not empty.
 - **R4** A git part is a heading, a strip and a sum:
   - the heading names the provider ("GitHub", "GitLab"; never the host,
-    rule 9 privacy) and says when it was read ("⟳ 3m ago", "⟳ reading…",
-    "⟳ failed"); a click on it reads that part again (R9);
+    rule 9 privacy) and says when it was read ("↻ 3m ago", "↻ reading…",
+    "↻ failed"); a click on it reads that part again (R9). (⟳ was the
+    spike's glyph; the panel's monospace font lacks it, ↻ it has);
   - the strip is fourteen cells, oldest left, today right, each labelled
     with its day's initial; a day with nothing is an outlined empty cell, a
     day with something is coloured by its count against the fortnight's
@@ -82,9 +90,11 @@ which is already written 0600.
 
 ### A day
 
-- **R6** A click on a cell opens that day's page: a Back line, the part's
-  heading and strip with the day marked, a rule, the date and its count,
-  then the day by repository. A click on another cell moves to that day; a
+- **R6** A click on a cell opens that day's page, a drill under the overview
+  (`accounts/<forge>/<date>`): the drawer's own Back button, the part's
+  heading and strip with the day marked, the date and its count, then the
+  day by repository. An account's own page has the same Back. A page that
+  does not move offers no Pause (`panel.Still`). A click on another cell moves to that day; a
   click on the marked cell goes back to the overview.
 - **R7** A repository is a heading, its name without its owner (rule 9: an
   owner is a user name), with its counts in a fixed order and short
@@ -95,7 +105,8 @@ which is already written 0600.
   branch.
 - **R8** GitHub's private contributions it will not itemise
   (`restrictedContributionsCount`) are counted in the strip and said on the
-  day page as one line ("12 private contributions not listed").
+  day page as one line ("12 private contributions not listed"): the
+  fortnight's, since GitHub does not say which day they were.
 
 ### Reading
 
@@ -111,7 +122,12 @@ which is already written 0600.
   Preferences; `GITLAB_HOST` in `~/.secrets.env`; the first host in glab's
   config that glab has a token for. `~/.secrets.env` is read as `KEY=value`
   lines (optional `export`, optional quotes), never run by a shell, and only
-  the three names above are kept.
+  the three names above are kept. **A key found goes only to the host it was
+  found with** (review F2): the secrets file's key only to its `GITLAB_HOST`,
+  glab's only to the host glab keeps it for, and glab is run without the
+  token variables it would otherwise answer for any host from. A key typed
+  into Preferences goes to the host chosen. The host field is taken on Enter
+  or Apply, not at each key.
 - **R11** A token is held in memory for the reading and nowhere else: never
   logged, printed, put in an error, a reason or a cache. Requests go over
   HTTPS only, to `api.github.com` and to the GitLab host's `/api/v4` and
@@ -133,7 +149,8 @@ which is already written 0600.
   ←/→ move the marked day when the strip's line is marked, Enter opens it,
   Esc goes back; a heading's line refreshes on Enter.
 - **R14** `hayami-tui detail usage` prints the overview with the strips;
-  `hayami-tui detail usage/github/2026-11-17` prints a day. A day page is
+  `hayami-tui detail usage/accounts/github/2026-11-17` prints a day, having
+  waited for a reading in flight (`panel.Settler`). A day page is
   `OnRequest`, so `readings` and `doctor`, which are pasted into bug reports,
   never carry repository names or titles.
 - **R15** Titles, branch names and repository names are printed through
@@ -141,43 +158,58 @@ which is already written 0600.
 
 ## Acceptance Criteria
 
-- [ ] AC1 The card and the drawer say "Development"; a settings file naming
+- [x] AC1 The card and the drawer say "Development"; a settings file naming
   `usage` still shows it (R1). Unit.
-- [ ] AC2 The overview's parts follow the switches, in order, and a switched
+  — `TestTheOverviewFollowsTheSwitches`.
+- [x] AC2 The overview's parts follow the switches, in order, and a switched
   off part is not read (R2, R9, R12). Unit, with a counting fake reader.
-- [ ] AC3 The AI usage part carries meters only; the account page carries
+  — `TestTheOverviewFollowsTheSwitches`.
+- [x] AC3 The AI usage part carries meters only; the account page carries
   the lines it lost, including "Week by use" (R3). Unit on the view.
-- [ ] AC4 GitHub: a recorded GraphQL response becomes fourteen days whose
+  — `TestAnAccountKeepsItsMetersInTheOverview`, `TestUsageOverviewKeepsTheMeters`.
+- [x] AC4 GitHub: a recorded GraphQL response becomes fourteen days whose
   counts are the calendar's, items by day and repository, and the private
   count (R4, R8). Unit against a fixture of invented data.
-- [ ] AC5 GitLab: recorded event pages become fourteen days counting each
+  — `TestGitHubReadsAFortnightInOneQuery`, `FuzzGitHubResponse`.
+- [x] AC5 GitLab: recorded event pages become fourteen days counting each
   event once, pushes grouped by branch, MRs at their furthest state, project
   paths looked up once each (R4, R7). Unit against fixtures.
-- [ ] AC6 A day page: repositories without owners, counts in the fixed
+  — `TestGitLabCountsEachEventOnce`, `FuzzGitLabEvent`.
+- [x] AC6 A day page: repositories without owners, counts in the fixed
   order, one line per thing, cut to the drawer's widths (R6, R7). Unit.
-- [ ] AC7 Credentials: the order in R10 for each provider, with
+  — `TestADayIsItsRepositories`, `TestADayOutsideTheFortnight`.
+- [x] AC7 Credentials: the order in R10 for each provider, with
   `~/.secrets.env` parsed without a shell and only the named keys kept; no
   token in any error, reason or log line (R10, R11). Unit, with fake
   subprocesses and a temp HOME.
-- [ ] AC8 HTTP: no redirect followed, a body over the limit refused, http://
+  — `TestGitHubTokenOrder`, `TestGitLabHostAndKeyOrder`, `TestTheSecretsFileIsParsedNotRun`, `TestNoTokenInAFailure`, `FuzzParseLine`.
+- [x] AC8 HTTP: no redirect followed, a body over the limit refused, http://
   refused, a timeout honoured (R11). Unit against `httptest`.
-- [ ] AC9 Refresh: a reading younger than the interval is reused; a click on
+  — `TestARedirectIsNotFollowed`, `TestALongResponseIsRefused`, `TestOnlyHTTPSAndBoundedInTime`.
+- [x] AC9 Refresh: a reading younger than the interval is reused; a click on
   the heading reads again; a closed drawer reads nothing (R9). Unit.
-- [ ] AC10 Reasons: no credential, 401, network failure and a rate limit
+  — `TestAForgeIsReadWhenItsReadingIsOld`, `TestAReadingInFlightIsDrawnAndWatched`.
+- [x] AC10 Reasons: no credential, 401, network failure and a rate limit
   each give their reason, with the last reading kept (R5). Unit.
-- [ ] AC11 The terminal drawer draws the strips and moves, opens and leaves
+  — `TestAFailedReadingSaysWhy`, `TestGitHubFailuresAreTyped`, `TestGitLabFailuresSayNoHost`.
+- [x] AC11 The terminal drawer draws the strips and moves, opens and leaves
   a day with ←/→, Enter, Esc (R13). Unit on the model.
-- [ ] AC12 `detail usage/github/<date>` prints a day; `readings` and
+  — `TestTheTerminalWalksTheDays`, `TestATerminalDrawsTheStrip`.
+- [x] AC12 `detail usage/github/<date>` prints a day; `readings` and
   `doctor` carry no day page (R14). Unit on the CLI.
-- [ ] AC13 Integration: against the real GitHub API and the real GitLab
+  — `TestDetailPrintsADay`, `TestADayIsADrillUnderTheOverview` (a day is not in `Details`, which `readings` and `doctor` read).
+- [x] AC13 Integration: against the real GitHub API and the real GitLab
   host, with the desk's credentials, a reading returns fourteen days and the
   counts match the spike's (R4, R10). Skipped without
   `HAYAMI_DEV_E2E=1`.
-- [ ] AC14 Real window: the drawer on Plasma at 1.5 shows the three parts
+  — `TestLiveForges`, passed on the desk 2026-11-19 (2.4 s, both forges).
+- [x] AC14 Real window: the drawer on Plasma at 1.5 shows the three parts
   inside the drawer's width, a real click on a cell opens the day and marks
   it, a click on Back and on a heading do what R6 and R9 say (R4, R6, R9).
   Screenshots, geometry read from them.
-- [ ] AC15 Each test falsified by breaking what it covers.
+  — the desk's panel at 1.5, a throwaway copy of its settings with both forges on: the drawer 581 px wide beside 252 px of cards, the three parts inside it; a real click (ydotool) on a GitHub day opened its page with the cell outlined and its initial bold, Back in the heading and no Pause; a click on the GitLab heading drew "reading…" and then "now".
+- [x] AC15 Each test falsified by breaking what it covers.
+  — 22 breakages, each failing a test: an empty day drawn, opened outranking merged, the owner kept, pushes not counted, the overview keeping its lines, a reading never or always old, a rate limit ignored, a failure dropping the reading, every forge shown, no quick poll while reading, a switched-off forge's day offered, the CLI not waiting, ←/→ and Enter on a heading doing nothing, the key and host order, the GitHub override, no size limit, redirects followed, plain HTTP, a push counting its commits, the host in an error.
 
 ## Threat model delta
 
@@ -214,6 +246,30 @@ touched the PR gets the document's adversarial review.
 and says an issue serves where Discussions are off; its Status table gains
 the row.
 
+### Adversarial review (2026-11-19)
+
+One reviewer given the change and the attackers, then a separate refutation
+pass; nothing was refuted. Fixed before merge, each with a regression test
+that fails when the fix is broken:
+
+- **F1** Titles other people write reached the terminal drawer with their
+  escapes: `Detail.printable` did not descend into parts. It does now, and
+  the panel cleans forge text as it takes it
+  (`TestATitleCannotDriveTheTerminal`).
+- **F2** The secrets file's GitLab key went to whichever host was found, and
+  a host half typed in Preferences was read (`TestAKeyIsNotLentToAnotherHost`,
+  `TestGlabIsNotGivenTheEnvironmentsToken`, `TestTheDevelopmentPreferences`).
+- **F3** A local `replace` in go.mod: gone, fynedesygn v0.1.123 instead.
+- **F4** A GitHub failure carried a proxy's or interceptor's host
+  (`TestGitHubFailuresSayNoHost`).
+- **F5** A host could fill the panel's memory: a reading keeps at most 10
+  pages, 5,000 items and 200 project lookups (`TestAGreedyHostIsBounded`).
+- The host in screenshots (`tools/screenshot.sh` drops it and the keys), and
+  repositories named for their owner (`TestARepositoryNamedForItsOwner`).
+
+Filed: #361, bidirectional format characters passing `safetext.Printable`,
+which is older than this change.
+
 ## Risks & Assumptions
 
 - **GitHub's calendar is in the account's zone.** Commit contributions come
@@ -226,6 +282,10 @@ the row.
 - **glab's keyring.** `glab config get token` reads glab's config file; a
   token glab keeps in the keyring is not reached, and the reason says to put
   a key in `~/.secrets.env` or Preferences.
+- **A secrets file with a key and no host lends it to nobody** (review F2).
+  On this desk `~/.secrets.env` holds `GLAB_TOKEN` and no `GITLAB_HOST`, so
+  the key used is glab's for the host glab knows, which is the same key;
+  adding `GITLAB_HOST` makes the file's key the one used.
 - **New dependencies** are larger than the code that uses them;
   client-go is the user's explicit ask (native bindings) and replaces
   hand-written REST.
@@ -266,3 +326,20 @@ build through fynstall, GitHub and GitLab switched on in Preferences:
 ### Prod visibility
 
 Not applicable: a desktop program; the desk is where it runs.
+
+### E2E results (2026-11-19)
+
+On the desk (Plasma 6 Wayland at 1.5), this branch's build run beside the
+installed panel from a throwaway copy of its settings with both forges on:
+
+- Steps 1–3 pass: the drawer showed AI usage, GitHub and GitLab inside its
+  width; a real click on a GitHub day opened the day with the cell marked,
+  Back returned; a click on the GitLab heading drew "reading…" then "now".
+- Step 6 passes: `detail usage/accounts/gitlab/<a busy day>` printed the day
+  by repository; a day is not among the details `readings` prints.
+- `TestLiveForges` passes against both real forges.
+- Pending: step 4 (switching GitHub off while the drawer is open, watched on
+  the wire; covered by `TestTheOverviewFollowsTheSwitches`), step 5 (the
+  terminal panel in a real terminal; covered by
+  `TestTheTerminalWalksTheDays`), and step 7 (the Windows VM). To run after
+  the install through fynstall.

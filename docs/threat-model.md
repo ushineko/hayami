@@ -29,7 +29,7 @@ written here; it is a private advisory until the release that fixes it.
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
 | B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its findings fixed (the advisory in 0.11.12, #244 and #245 since) |
-| B3 Credentials | The Claude and Codex tokens; the shared usage cache | Assessed 2026-10-31; its findings fixed in 0.11.13 |
+| B3 Credentials | The Claude and Codex tokens; the shared usage cache; the GitHub and GitLab keys (spec 102) | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Fuzzed (spec 074); sanshoku's decoders open |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
@@ -189,7 +189,9 @@ paths held in the first assessment, and the polkit route in its own review
 ## B3 Credentials
 
 **Assets.** The Claude and Codex OAuth tokens and refresh tokens; the
-usage cache, which other programs read and write.
+usage cache, which other programs read and write; since spec 102, gh's
+GitHub token and a GitLab key, from `~/.secrets.env`, glab's config or the
+settings file.
 
 **Attackers.** Malware running as the user; another program writing the
 cache; another account; anyone who sees hayami's output; a network attacker
@@ -225,6 +227,30 @@ providers' APIs are reached over TLS.
 - A refusal is recorded in the shared cache as `login_refused_at`, a time
   and nothing else, so every viewer says "needs a login" (`Cached`,
   `internal/usage/cached.go`; spec 089).
+
+- The forges' keys (spec 102) are found only when a person has switched a
+  forge on, and held for one reading (`internal/forge/creds.go`). gh and
+  glab are asked with fixed arguments and a five-second timeout, and their
+  standard error is dropped, since a tool that fails may print what it was
+  given. `~/.secrets.env` is parsed, never run, and of its lines only
+  `GITLAB_TOKEN`, `GLAB_TOKEN` and `GITLAB_HOST` are kept. A key found goes
+  only to the host it was found with: the secrets file's only to its
+  `GITLAB_HOST`, glab's only to the host glab keeps it for, and glab is run
+  without the token variables it would otherwise answer for any host from
+  (`glabEnv`). A host typed into Preferences is taken on Enter or Apply, never
+  at each key, since a host half typed is another host. Every request goes
+  through `forge.NewClient`: HTTPS only, no redirect followed, each response
+  read to 4 MiB and refused past it, fifteen seconds a request. A key is in
+  no error, reason or log line; a failure from either forge is reported
+  without its URL or the proxy's, which name hosts, and GitHub's own error
+  message is not carried (`hostless`, `internal/forge/gitlab.go`).
+
+**Accepted.** A key typed into Preferences is kept in the settings file,
+which is written `0600` (fynedesygn's `settings`) and is the same account's
+as `~/.secrets.env`; nothing prints the configuration. The GitLab host is
+a setting too, so a process of the same account that rewrites the settings
+can send the GitLab key to a host of its choosing; it can already read
+`~/.secrets.env` and glab's config, where the key is.
 
 **Accepted.** A write by Claude Code between hayami's second read and its
 rename can still be lost: milliseconds, where it was a network round trip.
@@ -308,6 +334,17 @@ the settings, which are the user's own; hayami then fetches that URL.
   `FuzzParseProcIO`, `FuzzParsePressure`), the
   load average (`FuzzParseLoadAvg`) and the settings file (`FuzzSettingsFile`).
 
+- The forges' answers (spec 102) are read to `forge.MaxBody` and decoded into
+  typed structs: GitHub's GraphQL answer by `encoding/json`, GitLab's events
+  by client-go. A count is only ever added up and a date compared as text;
+  titles, branch and repository names are the attacker's text (anyone can
+  open an issue on a public repository) and reach a screen only through
+  `safetext.Printable`, applied where the panel takes them and again to
+  every part of a detail as it is drawn (`Detail.printable`). A reading keeps
+  at most 10 pages, 5,000 items and 200 project lookups, whatever a host
+  sends. Fuzzed: `FuzzGitHubResponse`, `FuzzGitLabEvent`, and
+  the secrets file's lines, `FuzzParseLine` (`internal/forge/fuzz_test.go`).
+
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
 (ushineko/sanshoku#67).
 
@@ -358,6 +395,13 @@ something else between hayami reading it and acting on it.
 - An OpenVPN3 sign-in address comes from the session manager and goes to the browser only
   if it is `https` with a host (`SignInURL`, `internal/core/vpn.go`). It is not logged,
   printed, drawn or carried in an error, since such an address can hold a one-time token.
+- The Development drawer reads two network destinations, `api.github.com`
+  and the GitLab host the settings or `~/.secrets.env` name, only while a
+  drawer shows a forge a person switched on (they are off by default, #360),
+  at most once per refresh interval or per click on the forge's heading
+  (`forges`, `internal/panel/development.go`; spec 102). It runs `gh auth
+  token` and `glab config get token` for a key, from the user's `PATH`, as
+  the user, with constant arguments and a timeout, never through a shell.
 - hayami runs one program to read: `nvidia-smi`, with a timeout
   (`internal/core/processors.go`, `internal/core/gpuprocs.go`,
   `internal/core/card.go`), found on the user's `PATH`, as the user, with
@@ -404,6 +448,14 @@ bug report someone pasted `doctor` or `readings --json` into.
 - `tools/screenshot.sh` runs the panel from a throwaway copy of the
   settings, so no path of the user's is shown.
 - Tokens are never printed (B3).
+- The Development drawer shows repository names without their owner or group,
+  which is a user name, and the titles of a person's own pull requests,
+  merge requests and issues; the GitLab host is never drawn. A day's page is
+  a drill, not a listed detail, so `readings` and `doctor` never carry a
+  repository name or a title; the overview's strips are counts (spec 102).
+  A repository named for its owner (a profile, a Pages site) is shown as
+  "profile" or "pages". `tools/screenshot.sh` leaves the GitLab host and
+  the keys out of its copy of the settings.
 - What the pane, `doctor` and `detail` write has its control characters
   taken out, in the one place every section passes on its way out, before
   the pane adds colours of its own (`safetext.Printable`;
@@ -479,6 +531,14 @@ account.
   being deleted, with no bypass, and another lets only an administrator create
   one; the secrets and BPF checks are required on `main`; Dependabot alerts and
   security updates are on (specs 079, 080).
+
+- Spec 102 added `github.com/google/go-github/v93` and
+  `gitlab.com/gitlab-org/api/client-go`, which bring
+  `github.com/google/go-querystring`, `github.com/hashicorp/go-cleanhttp`,
+  `github.com/hashicorp/go-retryablehttp`, `golang.org/x/oauth2` and
+  `golang.org/x/time`. They are in both binaries, including the
+  privileged helper's copy of `hayami-tui`, as every module is; `make vuln`
+  covers them, and no advisory was open against them when they were added.
 
 **Not yet known.** The BPF comparison is about the object, not the process that
 loads it: Go code in the helper can replace the bytes before loading them, and any
@@ -584,6 +644,7 @@ the goal of a working proof of concept.
 | 2026-11-03 | B7 | The adversarial review of spec 084 (the Fyne fork, #293): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. | No way found to change what builds without a reviewed `go.mod` change. `make vuln` went blind to Fyne under the `replace`: fixed before merge with a second scan. The fork reaching the privileged paths and skipping the cooldown held, both accepted in the section above. |
 | 2026-11-14 | B3 | The adversarial review of spec 089 (a dead login, #325): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Five paths, none across a boundary. Fixed before merge: a future `fetched_at` clearing the remembered failure; a 403 remembered as a refusal; a token Claude Code spent meanwhile read as a dead login; an error code carrying a sentence. Accepted: a cache writer hiding the line, as it could already hide every figure. |
 | 2026-11-03 | B3 | The adversarial review of spec 083 (the plan read from the usage reading, #288): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | No exploit path: a label and a badge are all it gives a writer of the cache, who already sets every number beside them. A caption collision with a cache-only account fixed before merge; the drawer asking for a stale caption filed as #289. |
+| 2026-11-19 | B3, B4, B6, B7 | The adversarial review of spec 102 (the forges, #360): one reviewer given the change and the attackers, then a separate refutation pass. Read-only; overlay tests on a desk. | Nothing refuted. Fixed before merge: titles reaching the terminal drawer with escapes (parts were not cleaned); the secrets file's GitLab key lent to whichever host was found, and a host saved half typed; GitHub failures naming a proxy's host; a host able to fill memory; the host in screenshots; repositories named for their owner. Filed: #361 (bidi characters, older than the change). |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
@@ -661,6 +722,28 @@ stops each. A review starts by reading these.
   numbers and labels only, and an unreadable cache is no cache.
 - Corrupting the credential store with a bad refresh reply: a store that
   does not parse is never written, and an empty token is refused.
+
+### B3, spec 102, 2026-11-19
+
+- A token through a redirect: `forge.NewClient` returns the last response
+  rather than following; go-github attaches its token only to its own API
+  origins; client-go's retryablehttp uses hayami's client, so the redirect
+  rule holds there too.
+- client-go retrying or logging a request: `WithoutRetries`, and its logger
+  is nil, so no URL or host is written anywhere.
+- Plain HTTP: the transport refuses any scheme but https, and a host typed
+  with `http://` has it taken off.
+- A token in a URL or an error: both clients send it in a header; `gh` and
+  `glab` failures keep only their exit status.
+- The secrets file's other secrets: only three names are kept, a line too
+  long ends the read, and nothing of the file is echoed.
+- An argument injected into `gh` or `glab`: fixed arguments, no shell; a
+  host from glab's config is taken by `--host` as its value.
+- Escapes through `detail` or JSON: `Text()` cleans each part, JSON escapes
+  control characters. The strip's labels and the heading's state are the
+  program's own words.
+- A malformed answer crashing the panel: pointers are checked, and every
+  answer is read to a bound.
 
 ### B7, 2026-11-01
 
