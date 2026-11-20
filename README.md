@@ -777,6 +777,10 @@ MIT. See
   `GITLAB_HOST`) or `glab`'s, or ones given in Preferences. The accounts'
   plan, spend and week by use move to each account's own page
   (spec 102, #360).
+- **Fixed**: the bidirectional format characters (right-to-left overrides,
+  isolates and marks) are taken out of text from outside with the control
+  characters, so a name or title cannot reorder its line in a terminal
+  (#361).
 
 ### 0.19.0 (2026-11-19)
 

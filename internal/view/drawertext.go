@@ -347,7 +347,11 @@ func partsLines(d Detail, width, height int, s DrawerShape) []string {
 		if p.Title != "" {
 			head := p.Title
 			if row := JoinedRow(p.TitleParts); row.Value != "" {
-				head = padRight(head, max(width-runeLen(row.Value), runeLen(head)+2)) + row.Value
+				lead := 0
+				if p.Open != "" {
+					lead = 2 // the column markText puts before it
+				}
+				head = padRight(head, max(width-lead-runeLen(row.Value), runeLen(head)+2)) + row.Value
 			}
 			if p.Open != "" {
 				head = markText(head, marked == s.Marked)

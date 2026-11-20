@@ -1263,3 +1263,24 @@ func setDays(h *glance.HeatStrip, s view.DayStrip) {
 	h.SetCellLabels(s.Labels)
 	h.SetSelected(s.Selected)
 }
+
+// rereadDrawers reads again, at once, what the open drawers show of a source,
+// for a settings change that changes it: a forge switched off is not left
+// drawn until the next reading (spec 102 R12). A page no longer offered, the
+// day of a forge switched off, goes back to where it was reached from.
+func (p *Panel) rereadDrawers(src panel.Source) {
+	det, ok := src.(panel.Detailer)
+	if !ok {
+		return
+	}
+	for _, d := range p.openDrawers() {
+		if d.section != src.Key() {
+			continue
+		}
+		id := d.id
+		if !panel.Offers(src, id) {
+			id = p.drillUp(d, id)
+		}
+		p.showDetail(d, det, d.section, id)
+	}
+}

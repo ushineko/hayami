@@ -136,6 +136,7 @@ func TestATerminalDrawsTheStrip(t *testing.T) {
 	lines := view.RenderDetail(d, 60, 20, view.DrawerShape{Marked: 1, Day: 9})
 	text := strings.Join(lines, "\n")
 	assert.Contains(t, text, "[█]", "the marked day is not bracketed")
+	assert.Contains(t, text, "↻ 3m ago", "the heading's state was cut to the width")
 	assert.Contains(t, text, " S  M  T ", "the initials are not under the days")
 	assert.Equal(t, 13, view.MarkedDay(-1, 14), "no day marked is today")
 }

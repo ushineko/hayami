@@ -267,7 +267,7 @@ that fails when the fix is broken:
 - The host in screenshots (`tools/screenshot.sh` drops it and the keys), and
   repositories named for their owner (`TestARepositoryNamedForItsOwner`).
 
-Filed: #361, bidirectional format characters passing `safetext.Printable`,
+Filed and fixed in the same PR: #361, bidirectional format characters passing `safetext.Printable`,
 which is older than this change.
 
 ## Risks & Assumptions
@@ -338,8 +338,18 @@ installed panel from a throwaway copy of its settings with both forges on:
 - Step 6 passes: `detail usage/accounts/gitlab/<a busy day>` printed the day
   by repository; a day is not among the details `readings` prints.
 - `TestLiveForges` passes against both real forges.
-- Pending: step 4 (switching GitHub off while the drawer is open, watched on
-  the wire; covered by `TestTheOverviewFollowsTheSwitches`), step 5 (the
-  terminal panel in a real terminal; covered by
-  `TestTheTerminalWalksTheDays`), and step 7 (the Windows VM). To run after
-  the install through fynstall.
+- Step 4 passes, on the wire: with the drawer open, GitHub unticked in
+  Preferences left the drawer at once (the drawer is read again on a
+  settings change, which the first run found missing: it lingered until the
+  next poll). While GitLab was refreshed and the drawer polled every second,
+  the connection to api.github.com sent nothing (3,109 bytes before and
+  after); ticked again, it sent the query and took the answer (4,412 sent,
+  90 KB received).
+- Step 5 passes, in tmux at 100 columns: ↓ to the strip marked today `[▅]`,
+  ← ← moved the mark, Enter opened Tuesday with the day in parentheses and
+  its repositories, Esc came back. The first run found the heading's state
+  cut to "↻ …" by the marker's column; fixed and tested.
+- Step 7, on the Windows 11 VM, through `hayami-tui detail usage` rather
+  than the window: with gh's sign-in unusable from the session and no glab,
+  each part said why ("sign in with gh auth login…", "no GitLab host…") and
+  AI usage read as usual. The window's drawer is the code checked on Plasma.

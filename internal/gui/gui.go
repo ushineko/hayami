@@ -426,6 +426,7 @@ func (p *Panel) Apply(c config.Config) {
 		}
 		if u, ok := s.(*panel.Usage); ok {
 			u.SetDevelopment(config.Usage.Get(c))
+			p.rereadDrawers(u)
 		}
 	}
 }

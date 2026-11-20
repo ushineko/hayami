@@ -469,8 +469,12 @@ Peer host names come from reverse DNS and are names on the network the
 desk is on.
 
 **Accepted.** JSON output passes C1 characters as UTF-8, as
-`encoding/json` does: JSON is for programs. Bidirectional characters are
-not stripped: they can reorder a pasted report, not drive a terminal.
+`encoding/json` does: JSON is for programs.
+
+- The bidirectional format characters (embeddings, overrides, isolates,
+  marks) are taken out with the control characters (`unsafe`,
+  `internal/safetext/safetext.go`; #361): a title someone else wrote could
+  otherwise reorder its line in a terminal that does bidi.
 
 **Not yet known.** The rest of `doctor` and the JSON outputs has not been
 audited for identifiers other than the home path.
@@ -644,7 +648,7 @@ the goal of a working proof of concept.
 | 2026-11-03 | B7 | The adversarial review of spec 084 (the Fyne fork, #293): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. | No way found to change what builds without a reviewed `go.mod` change. `make vuln` went blind to Fyne under the `replace`: fixed before merge with a second scan. The fork reaching the privileged paths and skipping the cooldown held, both accepted in the section above. |
 | 2026-11-14 | B3 | The adversarial review of spec 089 (a dead login, #325): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Five paths, none across a boundary. Fixed before merge: a future `fetched_at` clearing the remembered failure; a 403 remembered as a refusal; a token Claude Code spent meanwhile read as a dead login; an error code carrying a sentence. Accepted: a cache writer hiding the line, as it could already hide every figure. |
 | 2026-11-03 | B3 | The adversarial review of spec 083 (the plan read from the usage reading, #288): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | No exploit path: a label and a badge are all it gives a writer of the cache, who already sets every number beside them. A caption collision with a cache-only account fixed before merge; the drawer asking for a stale caption filed as #289. |
-| 2026-11-19 | B3, B4, B6, B7 | The adversarial review of spec 102 (the forges, #360): one reviewer given the change and the attackers, then a separate refutation pass. Read-only; overlay tests on a desk. | Nothing refuted. Fixed before merge: titles reaching the terminal drawer with escapes (parts were not cleaned); the secrets file's GitLab key lent to whichever host was found, and a host saved half typed; GitHub failures naming a proxy's host; a host able to fill memory; the host in screenshots; repositories named for their owner. Filed: #361 (bidi characters, older than the change). |
+| 2026-11-19 | B3, B4, B6, B7 | The adversarial review of spec 102 (the forges, #360): one reviewer given the change and the attackers, then a separate refutation pass. Read-only; overlay tests on a desk. | Nothing refuted. Fixed before merge: titles reaching the terminal drawer with escapes (parts were not cleaned); the secrets file's GitLab key lent to whichever host was found, and a host saved half typed; GitHub failures naming a proxy's host; a host able to fill memory; the host in screenshots; repositories named for their owner. #361 (bidi characters, older than the change) filed and fixed in the same PR. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
