@@ -12,9 +12,13 @@ package claude
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"sort"
 )
 
@@ -39,13 +43,21 @@ const (
 	DefaultProfileName = "max"
 )
 
-// Store is one credential file: where it is and what it holds.
+// Store is one credential store: where it is and what it holds. A store is a
+// file (Path) or, on macOS, the login Keychain (Keychain), which recent Claude
+// Code uses instead of a file.
 type Store struct {
 	// Name is the profile, as the cache filenames spell it.
 	Name string
 
-	// Path is the credential file.
+	// Path is the credential file, when the store is a file.
 	Path string
+
+	// Keychain is set when the store is the macOS login Keychain rather than a
+	// file; Service and Account then name the generic-password item.
+	Keychain bool
+	Service  string
+	Account  string
 }
 
 // Credentials are what a store holds.
@@ -110,10 +122,38 @@ func DefaultStore() (Store, error) {
 	if err != nil {
 		return Store{}, fmt.Errorf("finding the home directory: %w", err)
 	}
-	return Store{
+	file := Store{
 		Name: DefaultProfileName,
 		Path: filepath.Join(home, ".claude", CredentialsFile),
-	}, nil
+	}
+	// Recent Claude Code on macOS keeps the default account's credentials in the
+	// login Keychain, not the file. Use the Keychain when the file is absent, so
+	// a machine that still has the file is unchanged.
+	if runtime.GOOS == "darwin" {
+		if _, err := os.Stat(file.Path); errors.Is(err, fs.ErrNotExist) {
+			return keychainStore(), nil
+		}
+	}
+	return file, nil
+}
+
+// keychainStore is the default store backed by the macOS login Keychain. The
+// account is the current user, which is how Claude Code names the item.
+func keychainStore() Store {
+	service := KeychainService
+	if s := os.Getenv(KeychainServiceEnv); s != "" {
+		service = s
+	}
+	account := ""
+	if u, err := user.Current(); err == nil {
+		account = u.Username
+	}
+	return Store{
+		Name:     DefaultProfileName,
+		Keychain: true,
+		Service:  service,
+		Account:  account,
+	}
 }
 
 // Stores are the credential stores on this machine, default first and the
@@ -125,10 +165,8 @@ func DefaultStore() (Store, error) {
 func Stores() ([]Store, error) {
 	var out []Store
 
-	if s, err := DefaultStore(); err == nil {
-		if _, err := os.Stat(s.Path); err == nil {
-			out = append(out, s)
-		}
+	if s, err := DefaultStore(); err == nil && storeExists(s) {
+		out = append(out, s)
 	}
 
 	root, err := ProfileRoot()
@@ -164,11 +202,39 @@ func Stores() ([]Store, error) {
 // what makes a write safe: Read and Write are two halves of one operation, and
 // the half that forgets a key is the half that damages the file.
 func Read(s Store) (*Credentials, error) {
+	b, err := storeBytes(s)
+	if err != nil {
+		return nil, err
+	}
+	return parseCredentials(b)
+}
+
+// storeBytes is the raw credential JSON, from the Keychain or the file. A
+// missing store wraps fs.ErrNotExist either way, so readSettled tells a store
+// that is gone from one that is a moment's trouble.
+func storeBytes(s Store) ([]byte, error) {
+	if s.Keychain {
+		return keychainRead(s.Service, s.Account)
+	}
 	b, err := os.ReadFile(s.Path) //nolint:gosec // the store the caller named
 	if err != nil {
 		return nil, fmt.Errorf("reading a credential store: %w", err)
 	}
+	return b, nil
+}
 
+// storeExists reports whether a store is present to be read.
+func storeExists(s Store) bool {
+	if s.Keychain {
+		return keychainExists(s.Service, s.Account)
+	}
+	_, err := os.Stat(s.Path)
+	return err == nil
+}
+
+// parseCredentials reads the credential JSON, keeping the whole object so a
+// later write puts back every key this build does not know.
+func parseCredentials(b []byte) (*Credentials, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return nil, fmt.Errorf("a credential store does not parse: %w", err)
