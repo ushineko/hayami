@@ -764,8 +764,13 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.19.0 (2026-11-19)
 
+- **Fixed**: on macOS the usage section read "out of date" and never
+  refreshed. Recent Claude Code keeps the default account's credentials in the
+  login Keychain, not `~/.claude/.credentials.json`; hayami now reads them —
+  and writes a refreshed token back — from the Keychain item
+  `Claude Code-credentials` when the file is absent (#357, spec 101).
 - **Fixed**: on Plasma, once a second hayami panel had quit (a checkout's
   build, a screenshot run), opening a drawer moved the cards by half the
   drawer's width, and the panel stopped remembering where it was put,
