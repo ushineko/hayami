@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.18.1
+**Version**: 0.20.0
 
 *a chart you read at a glance*
 
@@ -764,7 +764,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.20.0 (2026-11-19)
 
 - **Added**: the AI Usage card is now **Development** (its key is still
   `usage`). Its drawer can show two weeks of your GitHub and GitLab
