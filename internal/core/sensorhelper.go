@@ -8,6 +8,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/ushineko/hayami/internal/safetext"
 )
 
 /*
@@ -52,6 +54,14 @@ func SensorHelperReading(c float64, label string) SensorHelperLine {
 // on to LibreHardwareMonitor. It is not an Absence: the reason a person is
 // given is the next provider's.
 var errNoSensorHelper = fmt.Errorf("the sensor helper is not installed: %w", errNotHere)
+
+// A reading outside these is not a processor's temperature, and is not
+// kept: the panel bounds what a helper sends.
+const (
+	sensorFloor    = -40.0
+	sensorCeiling  = 150.0
+	sensorLabelMax = 64
+)
 
 // sensorStale is how old the latest reading may be before it is no reading.
 const sensorStale = 5 * time.Second
@@ -116,11 +126,11 @@ func (s *sensorStream) read(r io.Reader) error {
 			}
 			s.hello = true
 		case line.Error != "":
-			s.err = fmt.Errorf("the sensor helper: %s", line.Error) //nolint:err113 // the helper's words
+			s.err = fmt.Errorf("the sensor helper: %s", safetext.Printable(line.Error, maxHelperError)) //nolint:err113 // the helper's words
 			s.mu.Unlock()
 			return s.err
-		case line.C != nil:
-			s.reading, s.label, s.at = *line.C, line.Label, s.now()
+		case line.C != nil && *line.C > sensorFloor && *line.C < sensorCeiling:
+			s.reading, s.label, s.at = *line.C, safetext.Printable(line.Label, sensorLabelMax), s.now()
 			s.finish()
 		}
 		s.mu.Unlock()
