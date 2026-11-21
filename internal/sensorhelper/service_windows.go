@@ -24,6 +24,11 @@ const (
 	tick = time.Second
 	// idle is how long the helper stays with nobody reading it.
 	idle = 15 * time.Second
+	// missLimit is how many reads in a row may fail before the helper stops
+	// and says why. One fails when another program holds the PCI mutex past
+	// its wait, which any account can do; that costs a reading, not the
+	// helper.
+	missLimit = 30
 )
 
 // service is the sensor helper as the service manager knows it.
@@ -74,6 +79,12 @@ func Run(ctx context.Context, allow, version string) error {
 	if err != nil {
 		return fmt.Errorf("%q is not an account's SID: %w", allow, err)
 	}
+	// PawnIO's library is loaded by its full path; what it loads in turn
+	// comes from System32 alone, not the machine's PATH, as this runs as
+	// LocalSystem.
+	if err := windows.SetDefaultDllDirectories(windows.LOAD_LIBRARY_SEARCH_SYSTEM32); err != nil {
+		return fmt.Errorf("limiting where libraries load from: %w", err)
+	}
 	r := &reading{dir: nethelper.Dir(), open: cpu.Open}
 	s := &nethelper.Server{
 		Pipe: core.SensorHelperPipe,
@@ -97,9 +108,10 @@ reading is the processor's temperature, read through a module loaded on the
 first take and let go of when the last reader leaves.
 */
 type reading struct {
-	dir  string
-	open func() (*cpu.Reader, error)
-	r    *cpu.Reader
+	dir    string
+	open   func() (*cpu.Reader, error)
+	r      *cpu.Reader
+	missed int
 }
 
 func (r *reading) take() (any, error) {
@@ -116,8 +128,12 @@ func (r *reading) take() (any, error) {
 	}
 	c, label, err := r.r.Temperature()
 	if err != nil {
+		if r.missed++; r.missed < missLimit {
+			return nil, nil //nolint:nilnil // no line this tick
+		}
 		return nil, fmt.Errorf("reading the processor's temperature: %w", err)
 	}
+	r.missed = 0
 	return core.SensorHelperReading(c, label), nil
 }
 

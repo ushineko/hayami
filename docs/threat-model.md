@@ -130,6 +130,15 @@ from the panel's side.
   made in August 2026, which matter to a caller already elevated. A review
   on 2026-11-20 found no published vulnerability and no malware or
   blocklist report. hayami does not install PawnIO; the person does.
+- Any account can keep the processor's temperature from an AMD desk: the
+  `Global\Access_PCI` mutex the readers share by convention is anybody's to
+  create with a hostile access list, or to hold. The sensor helper waits two
+  seconds, misses that reading, and stops after 30 misses in a row
+  (`missLimit` in `internal/sensorhelper/service_windows.go`); nothing it
+  shows can be changed this way. LibreHardwareMonitor takes the same mutex.
+- The sensor helper runs all of `hayami-tui` as LocalSystem, as the network
+  helper runs it as Local Service: every module linked into it, the Fyne
+  fork's `init` included, runs with those rights.
 
 **Open findings.** None of its own since 0.11.11 (GHSA-94c3-mf55-vv8v,
 published). B2's #244 covers how the Windows helper's program is copied
@@ -590,13 +599,18 @@ because a hash in the repository would give up the newest patch on each run, so
 a tampered Go download would be built with and signed. A pin's commit is not
 checked to belong to the repository it names: a fork's commit resolves through
 the parent's name, so a reviewer reading a changed pin is the check.
+The PawnIO modules' pin is one test in the same repository: a PR can change
+`internal/sensorhelper/modules/*.bin` and `modules_test.go` together, and no
+job compares them with PawnIO.Modules' release. PawnIO's signature check
+limits a swap to modules its author signed, older faulty ones included. Such
+a PR is the thing to look for.
 **Accepted.** The panel builds Fyne from a fork, `github.com/ushineko/fyne`,
 through one `replace` to a tag (spec 084). `go.sum` and the checksum database
 hold that tag's contents, so moving the tag fails the build, and new code needs
 a new tag and a reviewed change to `go.mod`. The fork reaches more than the
 panel: `hayami-tui` links its packages through `fynedesygn/theme`, so their
-`init` runs in `sudo hayami-tui network-helper install` and in the helper, as
-upstream Fyne's did. The fork is a further repository to protect: it has no
+`init` runs in `sudo hayami-tui network-helper install` and in the helpers,
+the sensor helper as LocalSystem (spec 103), as upstream Fyne's did. The fork is a further repository to protect: it has no
 ruleset and no immutable releases, like fynedesygn and sanshoku, which the same
 account publishes. Its base is an untagged `develop` commit, 479 past v2.8.2
 and not reviewed here, and moving it by hand skips Dependabot's week. Nothing
@@ -677,6 +691,7 @@ the goal of a working proof of concept.
 | 2026-11-14 | B3 | The adversarial review of spec 089 (a dead login, #325): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Five paths, none across a boundary. Fixed before merge: a future `fetched_at` clearing the remembered failure; a 403 remembered as a refusal; a token Claude Code spent meanwhile read as a dead login; an error code carrying a sentence. Accepted: a cache writer hiding the line, as it could already hide every figure. |
 | 2026-11-03 | B3 | The adversarial review of spec 083 (the plan read from the usage reading, #288): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | No exploit path: a label and a badge are all it gives a writer of the cache, who already sets every number beside them. A caption collision with a cache-only account fixed before merge; the drawer asking for a stale caption filed as #289. |
 | 2026-11-19 | B3, B4, B6, B7 | The adversarial review of spec 102 (the forges, #360): one reviewer given the change and the attackers, then a separate refutation pass. Read-only; overlay tests on a desk. | Nothing refuted. Fixed before merge: titles reaching the terminal drawer with escapes (parts were not cleaned); the secrets file's GitLab key lent to whichever host was found, and a host saved half typed; GitHub failures naming a proxy's host; a host able to fill memory; the host in screenshots; repositories named for their owner. #361 (bidi characters, older than the change) filed and fixed in the same PR. |
+| 2026-11-20 | B1, B2, B7 | The adversarial review of spec 103 (the sensor helper, #365): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. A separate review of PawnIO itself (published issues, signing, the site). | No path to LocalSystem or the kernel; no regression in the network helper. Fixed before merge: a held PCI mutex stopping the helper (now a missed reading); PawnIO's library able to load its own imports from the machine's PATH (now System32 only); the server's wake-up open allowing impersonation (now anonymous). Accepted above: the mutex convention, the whole program as LocalSystem, the modules' pin being one test. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked

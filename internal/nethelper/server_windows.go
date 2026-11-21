@@ -34,8 +34,8 @@ type Server struct {
 	// Hello is the first line each reader is sent.
 	Hello any
 	// Take is the next line: the bytes by process since it was last called,
-	// or a reading. Stop lets go of whatever Take holds, and Take starts
-	// again after it.
+	// or a reading; nil with no error is no line this tick. Stop lets go of
+	// whatever Take holds, and Take starts again after it.
 	Take func() (any, error)
 	Stop func()
 	Tick time.Duration
@@ -114,6 +114,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			if err != nil {
 				s.fail(readers, err)
 				return err
+			}
+			if next == nil {
+				continue
 			}
 			line, _ := json.Marshal(next)
 			kept := readers[:0]
@@ -227,5 +230,8 @@ func openForWake(pipe string) (windows.Handle, error) {
 	if err != nil {
 		return 0, err //nolint:wrapcheck // a name with a NUL in it
 	}
-	return windows.CreateFile(name, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, 0, 0) //nolint:wrapcheck // only whether it opened matters
+	// Anonymously, as the panel opens it: a program that took the name in
+	// the meantime gets no use of this service's account.
+	flags := uint32(windows.SECURITY_SQOS_PRESENT | windows.SECURITY_ANONYMOUS)
+	return windows.CreateFile(name, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, flags, 0) //nolint:wrapcheck // only whether it opened matters
 }
