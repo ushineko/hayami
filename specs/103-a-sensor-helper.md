@@ -150,4 +150,27 @@ reading needs a privileged piece: a service, as the network by process did
 
 ## Verification
 
-Pending: the live run on the Windows test machine.
+### Checks (2026-11-20)
+
+`make test`, `make lint` and `make check-no-binaries` pass on Linux.
+golangci-lint with `GOOS=windows` reports nothing in the changed files; the
+one finding in `nethelper_squat_windows_test.go` was there before.
+
+### Live run (2026-11-20, the Windows test machine, Ryzen 5 2600X)
+
+PawnIO 2.2.0 installed, LibreHardwareMonitor not running. The installer was
+built on the machine with `scripts\installer_windows.ps1 -Windowed` from
+97bde2f and installed over 0.20.0 with `--cli --yes --launch=false`.
+
+- `hayami-tui sensor-helper install`, from an elevated session: `installed:
+  0.20.0-97bde2f-dev, stopped, until a panel reads the temperature`.
+  `%ProgramFiles%\hayami` held `hayami-sensors.exe`, `AMDFamily17.bin`
+  (10652 bytes) and `IntelMSR.bin` (5452 bytes) beside `hayami-network.exe`.
+  The service was registered Manual and Stopped.
+- `hayami-tui readings --sections cooler`: the processor probe read 59.75 °C,
+  with LibreHardwareMonitor not running. The service was Running straight
+  after, and Stopped 25 seconds later.
+- The panel, started in the desk session: the service Running while it
+  shows the cooler card.
+- Pending: the maintainer's look at the panel on the desk, and
+  `sensor-helper remove`.
