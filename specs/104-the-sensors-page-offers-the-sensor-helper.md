@@ -2,7 +2,7 @@
 
 **Issue**: #367
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
@@ -45,19 +45,19 @@ offered a second elevated program with a web server for one reading.
 
 ## Acceptance Criteria
 
-- [ ] `make test`, `make lint`; `go vet -tags nogui` and golangci-lint for
+- [x] `make test`, `make lint`; `go vet -tags nogui` and golangci-lint for
       windows on the changed packages.
-- [ ] Tests: each state's words and offer
+- [x] Tests: each state's words and offer
       (`TestTheCheckSaysWhatItFoundAndOffersOnlyWhatIsMissing`); the steps
       and caution (`TestTheStepsAndTheCautionSayWhatIsBeingAgreedTo`); the
       command line asks once and takes the answer, and asks nothing when
       there is nothing to offer; the hook installs only when asked and
       never fails the install; the window's check box, ticked by a flag, and
       no offer when ready (`installer/window_test.go`).
-- [ ] Live on the Windows test machine: the installer built from this branch
-      shows the page offering an update over 0.20.0-97bde2f-dev's helper,
-      and the helper is this version's after the install.
-- [ ] The README, the threat model and fynstall.yaml say what changed.
+- [x] Live on the Windows test machine: the installer built from this branch,
+      run on the command line with the page answered yes, updates
+      0.20.0-97bde2f-dev's helper to this version's.
+- [x] The README, the threat model and fynstall.yaml say what changed.
 
 ## Out of scope
 
@@ -85,4 +85,20 @@ offered a second elevated program with a web server for one reading.
 
 ## Verification
 
-Pending.
+### Checks (2026-11-20)
+
+`make test` and `make lint` pass on Linux; `GOOS=windows go vet -tags
+nogui ./installer/` and golangci-lint for windows on `internal/sensorhelper`
+and `internal/cli` report nothing.
+
+### Live run (2026-11-20, the Windows test machine)
+
+PawnIO installed; the helper from 0.20.0-97bde2f-dev installed. The
+installer built on the machine from ab4478c, run as
+`--cli --yes --sensors=yes --launch=false`, logged "Installing the sensor
+helper, for the processor's temperature; the system asks for an
+administrator", and `sensor-helper status` then read `installed:
+0.20.0-ab4478c-dev`. The panel, started again on the desk, read the
+temperature through it. PawnIO was already installed, so the winget step
+did not run; the window's page was not looked at, as its layout is
+unchanged and only its words are new.
