@@ -187,7 +187,8 @@ func afterInstall(ctx context.Context, c *extension.Context) error {
 
 /*
 beforeUninstall stops the panel and the terminal panel that run from the
-install directory, and removes the network helper with an uninstall. Windows does not remove the file of a running program,
+install directory, and removes the network and sensor helpers with an
+uninstall. Windows does not remove the file of a running program,
 and an uninstall, or the first half of an upgrade, that leaves hayami.exe
 behind has not removed hayami.
 */
@@ -208,6 +209,16 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 			c.Logf(extension.Warn, "The network helper was not removed: %v. "+
 				"To remove it, as an administrator: hayami-tui network-helper remove, "+
 				"or sc.exe delete hayami-network", err)
+		}
+	}
+	// The sensor helper (spec 103) runs as LocalSystem and goes with an
+	// uninstall for that reason, the same way.
+	if !c.Upgrade() && probeSensorHelper().Installed {
+		c.Log(extension.Info, "Removing the sensor helper; the system asks for an administrator")
+		if err := removeSensors(ctx, c); err != nil {
+			c.Logf(extension.Warn, "The sensor helper was not removed: %v. "+
+				"To remove it, as an administrator: hayami-tui sensor-helper remove, "+
+				"or sc.exe delete hayami-sensors", err)
 		}
 	}
 	// The device rule goes with an uninstall and stays through an upgrade,

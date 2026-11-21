@@ -300,7 +300,7 @@ func (l *LHM) CPUTemperature(ctx context.Context) (float64, error) {
 				Detail: "LibreHardwareMonitor is not running and does not start with Windows: start it as administrator and turn on Options > Run On Windows Startup, or run install_windows.ps1 -WithSensors"}
 		default:
 			return 0, &Absence{Code: AbsenceLHMNotInstalled, Err: err,
-				Detail: "Windows needs LibreHardwareMonitor and its PawnIO driver for a CPU temperature: see README, On Windows"}
+				Detail: "Windows needs hayami's sensor helper (hayami-tui sensor-helper install) and its PawnIO driver for a CPU temperature: see README, On Windows"}
 		}
 	default:
 		return 0, &Absence{Code: AbsenceLHMUnexpected, Err: err, Detail: "LibreHardwareMonitor did not answer as expected: " + err.Error()}

@@ -41,7 +41,21 @@ func helperCalls(t *testing.T, err error) (installs, removals *int) {
 	installs, removals = new(int), new(int)
 	setUpNet = func(context.Context, *extension.Context) error { *installs++; return err }
 	removeNet = func(context.Context, *extension.Context) error { *removals++; return err }
+	sensorCalls(t, nethelper.State{}, nil)
 	return installs, removals
+}
+
+// sensorCalls makes the sensor helper's probe find state, and counts the
+// removals a test caused, each answering err: a test never removes the
+// machine's own helper.
+func sensorCalls(t *testing.T, state nethelper.State, err error) (removals *int) {
+	t.Helper()
+	wasProbe, wasRemove := probeSensorHelper, removeSensors
+	t.Cleanup(func() { probeSensorHelper, removeSensors = wasProbe, wasRemove })
+	removals = new(int)
+	probeSensorHelper = func() nethelper.State { return state }
+	removeSensors = func(context.Context, *extension.Context) error { *removals++; return err }
+	return removals
 }
 
 // installNet is the context of an install, or an uninstall, with network at
@@ -177,6 +191,30 @@ func TestAnUninstallRemovesTheHelperAndAnUpgradeLeavesIt(t *testing.T) {
 	var logged []string
 	require.NoError(t, beforeUninstall(context.Background(), installNet(No, false, &logged)), "a refused prompt failed the uninstall")
 	assert.Contains(t, strings.Join(logged, "\n"), "hayami-tui network-helper remove")
+}
+
+// Spec 103. An uninstall takes the sensor helper, which runs as
+// LocalSystem; an upgrade leaves it; a removal that fails says how to do it
+// by hand.
+func TestAnUninstallRemovesTheSensorHelper(t *testing.T) {
+	answerNet(t, netMissing)
+	helperCalls(t, nil)
+	installed := nethelper.State{Applies: true, Offered: true, Installed: true}
+	removals := sensorCalls(t, installed, nil)
+
+	require.NoError(t, beforeUninstall(context.Background(), installNet(No, true, nil)))
+	require.Zero(t, *removals, "an upgrade removed the sensor helper")
+	require.NoError(t, beforeUninstall(context.Background(), installNet(No, false, nil)))
+	require.Equal(t, 1, *removals)
+
+	removals = sensorCalls(t, nethelper.State{Applies: true}, nil)
+	require.NoError(t, beforeUninstall(context.Background(), installNet(No, false, nil)))
+	require.Zero(t, *removals, "a sensor helper that is not there was removed")
+
+	sensorCalls(t, installed, errors.New("Windows asked for an administrator and was told no"))
+	var logged []string
+	require.NoError(t, beforeUninstall(context.Background(), installNet(No, false, &logged)))
+	assert.Contains(t, strings.Join(logged, "\n"), "hayami-tui sensor-helper remove")
 }
 
 // Spec 078, #257. A system with a helper the installer cannot offer (Linux

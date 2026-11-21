@@ -10,6 +10,7 @@ var (
 	LinuxGraphics         = linuxGraphics
 	LinuxGPUMissing       = linuxGPUMissing
 	WindowsCPUTemperature = windowsCPUTemperature
+	ErrNoSensorHelper     = errNoSensorHelper
 	WindowsCPUMissing     = windowsCPUMissing
 	WindowsGraphics       = windowsGraphics
 	WindowsGPUMissing     = windowsGPUMissing

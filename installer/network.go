@@ -9,6 +9,7 @@ import (
 	"github.com/ushineko/fynstall/extension"
 
 	"github.com/ushineko/hayami/internal/nethelper"
+	"github.com/ushineko/hayami/internal/sensorhelper"
 )
 
 /*
@@ -108,6 +109,25 @@ func setUpNetwork(ctx context.Context, c *extension.Context) error {
 	}
 	if !nethelper.Probe().Installed {
 		return errors.New("the elevated step ended and the service is not registered") //nolint:err113 // said plainly
+	}
+	return nil
+}
+
+// probeSensorHelper and removeSensors are the sensor helper's (spec 103):
+// variables, for the same reason.
+var (
+	probeSensorHelper = sensorhelper.Probe
+	removeSensors     = removeSensorHelper
+)
+
+// removeSensorHelper removes the sensor helper with the installed
+// hayami-tui's own `sensor-helper remove`, as an administrator.
+func removeSensorHelper(ctx context.Context, c *extension.Context) error {
+	if err := nethelper.RunElevated(ctx, helperProgram(c), "sensor-helper", "remove"); err != nil {
+		return err //nolint:wrapcheck // says what Windows answered
+	}
+	if sensorhelper.Probe().Installed {
+		return errors.New("the elevated step ended and the sensor helper is still registered") //nolint:err113 // said plainly
 	}
 	return nil
 }

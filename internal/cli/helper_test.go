@@ -41,3 +41,27 @@ func TestTheServicesOwnCommandNeedsItsAccount(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "allow")
 }
+
+// Spec 103. The sensor helper's command says what is there, and its run
+// needs the account it serves, as the network helper's does.
+func TestTheSensorHelpersCommand(t *testing.T) {
+	root := TUI("1.2.3")
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs([]string{"sensor-helper", "status"})
+	require.NoError(t, root.Execute())
+	if runtime.GOOS == "windows" {
+		assert.Regexp(t, `^(not installed|installed: )`, out.String())
+	} else {
+		assert.Contains(t, out.String(), "not needed")
+	}
+
+	root = TUI("1.2.3")
+	run, _, err := root.Find([]string{"sensor-helper", "run"})
+	require.NoError(t, err)
+	assert.True(t, run.Hidden)
+	root.SetArgs([]string{"sensor-helper", "run"})
+	root.SetOut(&bytes.Buffer{})
+	root.SetErr(&bytes.Buffer{})
+	require.ErrorContains(t, root.Execute(), "allow")
+}

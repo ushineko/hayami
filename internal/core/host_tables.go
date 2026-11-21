@@ -51,10 +51,14 @@ func linuxGPUMissing(root string) func([]string) string {
 // nativeName is what Windows' own report of the card is called in a reason.
 const nativeName = "D3DKMT and the GPU Engine counters"
 
-// windowsCPUTemperature is LibreHardwareMonitor at its address (spec 036),
-// read through read: it loads the driver hayami does not.
-func windowsCPUTemperature(read func(context.Context) (float64, error)) Chain[float64] {
-	return Chain[float64]{Providers: []Provider[float64]{ProviderFunc[float64]{N: "LibreHardwareMonitor", F: read}}}
+// windowsCPUTemperature is hayami's sensor helper (spec 103), which reads the
+// processor through PawnIO, then LibreHardwareMonitor at its address (spec
+// 036) for a desk that has it and not the helper.
+func windowsCPUTemperature(helper, lhm func(context.Context) (float64, error)) Chain[float64] {
+	return Chain[float64]{Providers: []Provider[float64]{
+		ProviderFunc[float64]{N: "the sensor helper", F: helper},
+		ProviderFunc[float64]{N: "LibreHardwareMonitor", F: lhm},
+	}}
 }
 
 // windowsCPUMissing is Windows' account where LibreHardwareMonitor did not say

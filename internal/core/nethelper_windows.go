@@ -193,13 +193,7 @@ errNoNetHelper; one this account may not start is a typed absence, since it
 is another account's and the installer puts that right.
 */
 func startNetHelper() error {
-	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
-	if err != nil {
-		return fmt.Errorf("asking the service manager: %w", err)
-	}
-	defer func() { _ = windows.CloseServiceHandle(manager) }()
-	name, _ := windows.UTF16PtrFromString(NetHelperService)
-	service, err := windows.OpenService(manager, name, windows.SERVICE_START)
+	err := startHelper(NetHelperService)
 	switch {
 	case errors.Is(err, windows.ERROR_SERVICE_DOES_NOT_EXIST):
 		return errNoNetHelper
@@ -209,11 +203,27 @@ func startNetHelper() error {
 				"and choose it, or run `hayami-tui network-helper install`",
 			Err: err}
 	case err != nil:
-		return fmt.Errorf("opening the network helper's service: %w", err)
+		return fmt.Errorf("the network helper: %w", err)
 	}
-	defer func() { _ = windows.CloseServiceHandle(service) }()
-	if err := windows.StartService(service, 0, nil); err != nil && !errors.Is(err, windows.ERROR_SERVICE_ALREADY_RUNNING) {
-		return fmt.Errorf("starting the network helper: %w", err)
+	return nil
+}
+
+// startHelper starts one of hayami's helper services. A service that is not
+// there, or that this account may not start, is Windows' error as it is.
+func startHelper(service string) error {
+	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return fmt.Errorf("asking the service manager: %w", err)
+	}
+	defer func() { _ = windows.CloseServiceHandle(manager) }()
+	name, _ := windows.UTF16PtrFromString(service)
+	handle, err := windows.OpenService(manager, name, windows.SERVICE_START)
+	if err != nil {
+		return err //nolint:wrapcheck // the caller says which helper
+	}
+	defer func() { _ = windows.CloseServiceHandle(handle) }()
+	if err := windows.StartService(handle, 0, nil); err != nil && !errors.Is(err, windows.ERROR_SERVICE_ALREADY_RUNNING) {
+		return fmt.Errorf("starting it: %w", err)
 	}
 	return nil
 }
@@ -226,24 +236,34 @@ the helper was stopped is refused before a byte of it is read. Asking the
 service's state is a right the installed account has.
 */
 func serverIsTheService(server uint32) error {
+	pid, err := helperProcess(NetHelperService)
+	if err != nil {
+		return fmt.Errorf("asking after the network helper's service: %w", err)
+	}
+	return serverMatches(server, pid)
+}
+
+// helperProcess is the process the service manager started for a service,
+// or zero when it is not running.
+func helperProcess(service string) (uint32, error) {
 	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
-		return fmt.Errorf("asking the service manager: %w", err)
+		return 0, fmt.Errorf("asking the service manager: %w", err)
 	}
 	defer func() { _ = windows.CloseServiceHandle(manager) }()
-	name, _ := windows.UTF16PtrFromString(NetHelperService)
-	service, err := windows.OpenService(manager, name, windows.SERVICE_QUERY_STATUS)
+	name, _ := windows.UTF16PtrFromString(service)
+	handle, err := windows.OpenService(manager, name, windows.SERVICE_QUERY_STATUS)
 	if err != nil {
-		return fmt.Errorf("asking after the network helper's service: %w", err)
+		return 0, err //nolint:wrapcheck // the caller says which helper
 	}
-	defer func() { _ = windows.CloseServiceHandle(service) }()
+	defer func() { _ = windows.CloseServiceHandle(handle) }()
 	var status windows.SERVICE_STATUS_PROCESS
 	var needed uint32
-	if err := windows.QueryServiceStatusEx(service, windows.SC_STATUS_PROCESS_INFO,
+	if err := windows.QueryServiceStatusEx(handle, windows.SC_STATUS_PROCESS_INFO,
 		(*byte)(unsafe.Pointer(&status)), uint32(unsafe.Sizeof(status)), &needed); err != nil {
-		return fmt.Errorf("asking after the network helper's service: %w", err)
+		return 0, err //nolint:wrapcheck // the caller says which helper
 	}
-	return serverMatches(server, status.ProcessId)
+	return status.ProcessId, nil
 }
 
 // serverIsThisProcess is the check for a server a test runs in its own

@@ -1,4 +1,4 @@
-# Copied from github.com/ushineko/sanshoku v0.1.18, packaging/60-sanshoku.rules.
+# Copied from github.com/ushineko/sanshoku v0.6.0, packaging/60-sanshoku.rules.
 # hayami reads its devices through that module, as the logged-in user, and
 # this is the rule that lets it: install.sh puts it in /etc/udev/rules.d when
 # it may, and prints the two commands that do it when it may not. Change it
@@ -24,6 +24,23 @@ KERNEL=="hidraw*", KERNELS=="0003:1038:*", TAG+="uaccess"
 # NZXT: the status channel as hidraw, the LCD's bulk endpoint as the USB node
 KERNEL=="hidraw*", KERNELS=="0003:1E71:*", TAG+="uaccess"
 SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1e71", TAG+="uaccess"
+# MSI graphics cards: the NVIDIA driver's I2C adapters, where the lighting
+# controller sits (spec 029). Needs the i2c-dev module.
+SUBSYSTEM=="i2c-dev", ATTR{name}=="NVIDIA i2c adapter *", TAG+="uaccess"
+# The chipset's SMBus, where RGB memory modules sit (spec 042): Intel's and
+# AMD's. The kernel refuses an address one of its drivers owns, such as a DDR5
+# module's SPD hub. Needs the i2c-dev module.
+SUBSYSTEM=="i2c-dev", ATTR{name}=="SMBus I801 adapter *", TAG+="uaccess"
+SUBSYSTEM=="i2c-dev", ATTR{name}=="SMBus PIIX4 adapter *", TAG+="uaccess"
+# Keychron: VIA's raw interface (spec 028)
+KERNEL=="hidraw*", KERNELS=="0003:3434:*", TAG+="uaccess"
+# ASUS: the Aura USB mainboard controller (spec 027)
+KERNEL=="hidraw*", KERNELS=="0003:0B05:*", TAG+="uaccess"
+# Corsair: the MM700's lighting interface (spec 026)
+KERNEL=="hidraw*", KERNELS=="0003:1B1C:*", TAG+="uaccess"
+# Gigabyte RGB Fusion 2 USB mainboard controllers (spec 039): by product,
+# because 048d is ITE's, a chip maker's, and is on keyboards and other devices.
+KERNEL=="hidraw*", KERNELS=="0003:048D:5702.*", TAG+="uaccess"
 # AULA keyboards' 2.4 GHz receiver (Compx chip).
 KERNEL=="hidraw*", KERNELS=="0003:3554:*", TAG+="uaccess"
 # The AULA F75 on its cable (Sino Wealth chip): by product, because the vendor

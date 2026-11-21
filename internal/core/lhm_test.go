@@ -179,7 +179,7 @@ func TestNothingAnsweringIsToldApartByWhatTheMachineHas(t *testing.T) {
 		host core.LHMHost
 		want string
 	}{
-		{core.LHMHost{}, "Windows needs LibreHardwareMonitor and its PawnIO driver"},
+		{core.LHMHost{}, "Windows needs hayami's sensor helper"},
 		{core.LHMHost{PawnIO: true, Running: true}, "its web server is off: Options > Remote Web Server > Run"},
 		{core.LHMHost{Running: true}, "its web server is off"},
 		{core.LHMHost{PawnIO: true}, "does not start with Windows: start it as administrator and turn on Options > Run On Windows Startup, or run install_windows.ps1 -WithSensors"},
