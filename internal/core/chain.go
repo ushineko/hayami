@@ -49,7 +49,8 @@ type Chain[T any] struct {
 
 // Outcome is what a chain read: the merged value, whether any provider
 // answered, every provider asked in order, and the first account a provider
-// gave of its own absence (or failing that the first error).
+// gave of its own absence (or failing that the first error). A provider the
+// machine does not have (errNotHere) gives neither.
 type Outcome[T any] struct {
 	Value    T
 	Answered bool
@@ -71,6 +72,9 @@ func (c Chain[T]) Read(ctx context.Context) Outcome[T] {
 		}
 		out.Tried = append(out.Tried, p.Name())
 		got, err := p.Read(ctx)
+		if errors.Is(err, errNotHere) {
+			continue
+		}
 		if err != nil {
 			if a, ok := AbsenceOf(err); ok && out.Absence == nil {
 				out.Absence = a
@@ -105,6 +109,11 @@ func (c Chain[T]) Names() []string {
 	}
 	return out
 }
+
+// errNotHere is a provider this machine does not have, such as a helper not
+// installed: it is named in what was tried and gives no reason of its own,
+// so the reason is the next provider's.
+var errNotHere = errors.New("not on this machine")
 
 // errNothing is a provider that answered with nothing in it.
 var errNothing = errors.New("nothing to report")

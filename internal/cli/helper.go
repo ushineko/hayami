@@ -118,22 +118,29 @@ func elevate(cmd *cobra.Command, args ...string) error {
 	return nethelper.RunElevated(cmd.Context(), self, args...) //nolint:wrapcheck // says what Windows answered
 }
 
-// helperStatus prints what there is of the helper.
+// helperStatus prints what there is of the network helper.
 func helperStatus(cmd *cobra.Command) error {
+	return serviceStatus(cmd, nethelper.Probe(),
+		"not needed: this system gives the network by process without a helper",
+		"hayami-tui network-helper install   installs it; "+nethelper.InstallNeeds,
+		"stopped, until a panel opens the list")
+}
+
+// serviceStatus prints what there is of one of the helpers.
+func serviceStatus(cmd *cobra.Command, state nethelper.State, notNeeded, install, stopped string) error {
 	out := cmd.OutOrStdout()
-	state := nethelper.Probe()
 	switch {
 	case !state.Applies:
-		_, _ = fmt.Fprintln(out, "not needed: this system gives the network by process without a helper")
+		_, _ = fmt.Fprintln(out, notNeeded)
 	case !state.Installed:
 		_, _ = fmt.Fprintln(out, "not installed")
-		_, _ = fmt.Fprintln(out, "  hayami-tui network-helper install   installs it; "+nethelper.InstallNeeds)
+		_, _ = fmt.Fprintln(out, "  "+install)
 	default:
 		version := state.Version
 		if version == "" {
 			version = "an unknown version"
 		}
-		running := "stopped, until a panel opens the list"
+		running := stopped
 		if state.Running {
 			running = "running"
 		}

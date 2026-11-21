@@ -86,19 +86,23 @@ func TestEachPlatformAsksTheCardInItsOwnOrder(t *testing.T) {
 	assert.Equal(t, "asked D3DKMT and the GPU Engine counters, and tried nvidia-smi", core.WindowsGPUMissing(windows))
 }
 
-// Spec 043. Windows' processor chain is LibreHardwareMonitor alone: its own
-// account of why it has nothing passes through, and anything it does not
-// account for is the platform's sentence (spec 034).
+// noHelper is the sensor helper not installed.
+func noHelper(context.Context) (float64, error) { return 0, core.ErrNoSensorHelper }
+
+// Specs 043 and 103. Windows' processor chain is the sensor helper, then
+// LibreHardwareMonitor: with no helper LibreHardwareMonitor's own account of
+// why it has nothing passes through, and anything it does not account for is
+// the platform's sentence (spec 034).
 func TestWindowsAsksLibreHardwareMonitorForTheProcessor(t *testing.T) {
 	off := &core.Absence{Code: core.AbsenceLHMServerOff, Detail: "web server off"}
-	ch := core.WindowsCPUTemperature(func(context.Context) (float64, error) { return 0, off })
-	assert.Equal(t, []string{"LibreHardwareMonitor"}, ch.Names())
+	ch := core.WindowsCPUTemperature(noHelper, func(context.Context) (float64, error) { return 0, off })
+	assert.Equal(t, []string{"the sensor helper", "LibreHardwareMonitor"}, ch.Names())
 
 	h := core.Host{CPUTemperature: ch, CPUMissing: core.WindowsCPUMissing}
 	_, err := h.ReadCPUTemperature(t.Context())
 	assert.ErrorIs(t, err, off, "LibreHardwareMonitor's own account is lost")
 
-	h.CPUTemperature = core.WindowsCPUTemperature(func(context.Context) (float64, error) {
+	h.CPUTemperature = core.WindowsCPUTemperature(noHelper, func(context.Context) (float64, error) {
 		return 0, context.Canceled
 	})
 	_, err = h.ReadCPUTemperature(t.Context())
@@ -107,6 +111,31 @@ func TestWindowsAsksLibreHardwareMonitorForTheProcessor(t *testing.T) {
 	assert.Equal(t, core.AbsenceCPUSensor, a.Code)
 	assert.Equal(t, "Windows offers no CPU temperature without a kernel driver", a.Detail)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// Spec 103. The sensor helper's reading is the one shown, and
+// LibreHardwareMonitor is not asked; a helper that is installed and cannot
+// read gives its own reason, ahead of LibreHardwareMonitor's.
+func TestWindowsAsksTheSensorHelperFirst(t *testing.T) {
+	asked := 0
+	lhm := func(context.Context) (float64, error) {
+		asked++
+		return 0, &core.Absence{Code: core.AbsenceLHMNotInstalled, Detail: "no LibreHardwareMonitor"}
+	}
+	h := core.Host{CPUTemperature: core.WindowsCPUTemperature(func(context.Context) (float64, error) { return 47.5, nil }, lhm),
+		CPUMissing: core.WindowsCPUMissing}
+	v, err := h.ReadCPUTemperature(t.Context())
+	require.NoError(t, err)
+	assert.InDelta(t, 47.5, v, 1e-9)
+	assert.Zero(t, asked)
+
+	broken := &core.Absence{Code: core.AbsenceSensorHelper, Detail: "PawnIO is not installed"}
+	h.CPUTemperature = core.WindowsCPUTemperature(func(context.Context) (float64, error) { return 0, broken }, lhm)
+	_, err = h.ReadCPUTemperature(t.Context())
+	a, ok := core.AbsenceOf(err)
+	require.True(t, ok)
+	assert.Equal(t, core.AbsenceSensorHelper, a.Code)
+	assert.Equal(t, 1, asked)
 }
 
 // Spec 043. A card the chain found no temperature for is an absence naming

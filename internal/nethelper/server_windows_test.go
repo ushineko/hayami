@@ -58,18 +58,21 @@ var pipes atomic.Int32
 
 // testServer is a server on a pipe of its own, open to this account, on a
 // short clock. No service and no administrator: the pipe is a real one.
-func testServer(t *testing.T, trace *fakeTrace) *server {
+func testServer(t *testing.T, trace *fakeTrace) *Server {
 	t.Helper()
 	me, err := CurrentUser()
 	require.NoError(t, err)
-	return &server{
-		pipe:  fmt.Sprintf(`\\.\pipe\hayami-test-%d-%d`, os.Getpid(), pipes.Add(1)),
-		sddl:  "D:P(A;;GA;;;" + me + ")",
-		hello: core.NetHelperLine{V: core.NetHelperProtocol, Version: "1.2.3", Counts: "TCP and UDP"},
-		take:  trace.take,
-		stop:  trace.stop,
-		tick:  40 * time.Millisecond,
-		idle:  200 * time.Millisecond,
+	return &Server{
+		Pipe:  fmt.Sprintf(`\\.\pipe\hayami-test-%d-%d`, os.Getpid(), pipes.Add(1)),
+		SDDL:  "D:P(A;;GA;;;" + me + ")",
+		Hello: core.NetHelperLine{V: core.NetHelperProtocol, Version: "1.2.3", Counts: "TCP and UDP"},
+		Take: func() (any, error) {
+			counts, err := trace.take()
+			return core.NetHelperCounts(counts), err
+		},
+		Stop: trace.stop,
+		Tick: 40 * time.Millisecond,
+		Idle: 200 * time.Millisecond,
 	}
 }
 
@@ -99,13 +102,13 @@ func TestTheServerCountsOnlyWhileSomebodyReads(t *testing.T) {
 	trace := &fakeTrace{}
 	s := testServer(t, trace)
 	done := make(chan error, 1)
-	go func() { done <- s.serve(t.Context()) }()
+	go func() { done <- s.Serve(t.Context()) }()
 
-	time.Sleep(3 * s.tick)
+	time.Sleep(3 * s.Tick)
 	takes, _ := trace.seen()
 	assert.Zero(t, takes, "nothing is traced with nobody reading")
 
-	f := openWhenThere(t, s.pipe)
+	f := openWhenThere(t, s.Pipe)
 	lines := bufio.NewScanner(f)
 	assert.Equal(t, core.NetHelperLine{V: core.NetHelperProtocol, Version: "1.2.3", Counts: "TCP and UDP"}, readLine(t, lines))
 
@@ -114,7 +117,7 @@ func TestTheServerCountsOnlyWhileSomebodyReads(t *testing.T) {
 	assert.Equal(t, [3]uint64{uint64(os.Getpid()), 1000, 500}, line.P[0]) //nolint:gosec // a process ID
 
 	// A second reader, on an instance of its own, gets the same.
-	g := openWhenThere(t, s.pipe)
+	g := openWhenThere(t, s.Pipe)
 	second := bufio.NewScanner(g)
 	assert.Equal(t, core.NetHelperProtocol, readLine(t, second).V)
 	assert.Len(t, readLine(t, second).P, 1)
@@ -129,7 +132,7 @@ func TestTheServerCountsOnlyWhileSomebodyReads(t *testing.T) {
 	}
 	_, stops := trace.seen()
 	assert.Positive(t, stops, "the trace is let go")
-	_, err := os.Open(s.pipe)
+	_, err := os.Open(s.Pipe)
 	assert.Error(t, err, "the pipe is gone with the server")
 }
 
@@ -139,9 +142,9 @@ func TestATraceThatFailsIsSaidToTheReader(t *testing.T) {
 	trace := &fakeTrace{err: errors.New("enabling the network provider: Access is denied")}
 	s := testServer(t, trace)
 	done := make(chan error, 1)
-	go func() { done <- s.serve(t.Context()) }()
+	go func() { done <- s.Serve(t.Context()) }()
 
-	lines := bufio.NewScanner(openWhenThere(t, s.pipe))
+	lines := bufio.NewScanner(openWhenThere(t, s.Pipe))
 	assert.Equal(t, core.NetHelperProtocol, readLine(t, lines).V)
 	assert.Contains(t, readLine(t, lines).Error, "Access is denied")
 	require.Error(t, <-done)
@@ -157,13 +160,13 @@ func TestThePanelReadsTheHelperItStarted(t *testing.T) {
 	started := 0
 	start := func() error {
 		started++
-		go func() { _ = s.serve(ctx) }()
+		go func() { _ = s.Serve(ctx) }()
 		return nil
 	}
 	samples := func(context.Context) ([]core.ProcessSample, error) {
 		return []core.ProcessSample{{PID: os.Getpid(), Name: "this test"}}, nil
 	}
-	r := core.NewNetHelperReader(s.pipe, start, samples)
+	r := core.NewNetHelperReader(s.Pipe, start, samples)
 	defer r.Close()
 
 	use, err := r.Read(t.Context())
@@ -203,7 +206,7 @@ func TestTheServicesCommandLineKeepsItsProgram(t *testing.T) {
 	assert.Equal(t, `C:\Program Files\hayami\hayami-network.exe`, programOf(line))
 	assert.Equal(t, `C:\hayami\helper.exe`, programOf(`C:\hayami\helper.exe network-helper run`))
 
-	m := versionInDescription.FindStringSubmatch(description("0.10.1"))
+	m := versionInDescription.FindStringSubmatch(network.Describe("0.10.1"))
 	require.NotNil(t, m)
 	assert.Equal(t, "0.10.1", m[1])
 }

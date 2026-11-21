@@ -13,9 +13,10 @@ import (
 
 var procGetSystemTimes = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetSystemTimes")
 
-// NewHost is Windows' table (spec 043): LibreHardwareMonitor for the
-// processor's temperature (spec 036), D3DKMT and the GPU Engine counters for
-// the card with nvidia-smi behind them (spec 034), GetSystemTimes and the
+// NewHost is Windows' table (spec 043): the sensor helper, then
+// LibreHardwareMonitor, for the processor's temperature (specs 103, 036),
+// D3DKMT and the GPU Engine counters for the card with nvidia-smi behind them
+// (spec 034), GetSystemTimes and the
 // registry for the load and the name, the interface table and the WLAN
 // service for the network (specs 033, 037), Windows' own refusal as the advice
 // for a device that would not open, and no Bluetooth batteries: sanshoku's
@@ -24,7 +25,7 @@ var procGetSystemTimes = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetSy
 func NewHost(cfg HostConfig) Host {
 	return Host{
 		Platform:       "windows",
-		CPUTemperature: windowsCPUTemperature(NewLHM(cfg.LHM).CPUTemperature),
+		CPUTemperature: windowsCPUTemperature(newSensorHelper().CPUTemperature, NewLHM(cfg.LHM).CPUTemperature),
 		CPUMissing:     windowsCPUMissing,
 		Graphics:       windowsGraphics(nativeGraphics(), NvidiaSMI),
 		Card:           windowsCard(NvidiaSMICard),

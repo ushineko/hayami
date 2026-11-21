@@ -21,7 +21,7 @@
   detail="no supported cooler detected"
 ## cooler: an absence the source explains
 - label="CPU" text="no sensor" status=0 aside=true actionable=false
-  detail="Windows needs LibreHardwareMonitor and its PawnIO driver for a CPU temperature: see README, On Windows"
+  detail="Windows needs hayami's sensor helper (hayami-tui sensor-helper install) and its PawnIO driver for a CPU temperature: see README, On Windows"
 - label="" text="no GPU sensor" status=0 aside=true actionable=false
   detail="<gpu-sensors>"
 - label="Coolant" text="no cooler" status=0 aside=false actionable=false

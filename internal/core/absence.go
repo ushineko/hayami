@@ -48,6 +48,10 @@ const (
 	// AbsenceNetProcesses is no list of the network by process on this
 	// system.
 	AbsenceNetProcesses AbsenceCode = "net-processes"
+	// AbsenceSensorHelper is hayami's sensor helper installed and not
+	// reading: PawnIO missing, its module refused, another program holding
+	// its pipe (spec 103).
+	AbsenceSensorHelper AbsenceCode = "sensor-helper"
 	// AbsenceNetProcessesDenied is Windows refusing the network by process
 	// to a panel that is not an administrator and has no network helper
 	// (spec 061), or has one installed for another account.

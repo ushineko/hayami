@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/ushineko/fynedesygn v0.1.123
 	github.com/ushineko/fynstall v0.2.6
-	github.com/ushineko/sanshoku v0.1.18
+	github.com/ushineko/sanshoku v0.6.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/image v0.47.0

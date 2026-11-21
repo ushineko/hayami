@@ -30,11 +30,38 @@ const (
 	program = "hayami-network.exe"
 )
 
-// description is the service's, which is also where its version is kept: a
-// panel that is not an administrator can read it and cannot run a query of
-// the program.
-func description(version string) string {
-	return fmt.Sprintf("Reads the network by process for the hayami panel, while a panel is showing it (%s).", version)
+/*
+Service is one of hayami's helper services on Windows: the network helper
+here, and the sensor helper (package sensorhelper, spec 103), which share how
+they are installed, probed, removed and run.
+*/
+type Service struct {
+	// Name is the service's name, and Display what the service list shows.
+	Name, Display string
+	// Account is who it runs as.
+	Account string
+	// Program is its copy of hayami-tui's file name, under Dir.
+	Program string
+	// Command is hayami-tui's subcommand that runs it: Command run --allow.
+	Command string
+	// Describe is its description, which ends "(version)." and is where the
+	// version is kept: a panel that is not an administrator can read it and
+	// cannot run a query of the program.
+	Describe func(version string) string
+	// Files are written beside the program on install, and removed with it.
+	Files map[string][]byte
+}
+
+// network is the network helper.
+var network = Service{
+	Name:    core.NetHelperService,
+	Display: displayName,
+	Account: account,
+	Program: program,
+	Command: "network-helper",
+	Describe: func(version string) string {
+		return fmt.Sprintf("Reads the network by process for the hayami panel, while a panel is showing it (%s).", version)
+	},
 }
 
 var versionInDescription = regexp.MustCompile(`\(([^()]+)\)\.$`)
@@ -91,19 +118,22 @@ func Dir() string {
 }
 
 // Probe finds what there is of the helper. It needs no administrator.
-func Probe() State {
+func Probe() State { return ProbeService(network) }
+
+// ProbeService finds what there is of a helper. It needs no administrator.
+func ProbeService(h Service) State {
 	state := State{Applies: true, Offered: true}
 	manager, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
 	if err != nil {
 		return state
 	}
 	defer func() { _ = windows.CloseServiceHandle(manager) }()
-	name, _ := windows.UTF16PtrFromString(core.NetHelperService)
+	name, _ := windows.UTF16PtrFromString(h.Name)
 	handle, err := windows.OpenService(manager, name, windows.SERVICE_QUERY_CONFIG|windows.SERVICE_QUERY_STATUS)
 	if err != nil {
 		return state
 	}
-	service := &mgr.Service{Name: core.NetHelperService, Handle: handle}
+	service := &mgr.Service{Name: h.Name, Handle: handle}
 	defer func() { _ = service.Close() }()
 	state.Installed = true
 	if config, err := service.Config(); err == nil {
@@ -134,7 +164,10 @@ copy of this program as its own. It needs an administrator, and is safe to
 run again: a service already there is stopped, given the new program and the
 new account, and left stopped for a panel to start.
 */
-func Install(allow, version string) error {
+func Install(allow, version string) error { return InstallService(network, allow, version) }
+
+// InstallService is Install for any of the helpers.
+func InstallService(h Service, allow, version string) error {
 	// This program is held open first, before the service is stopped (which
 	// can take seconds), and copied from that handle: the file is the user's
 	// to change, and one renamed aside and replaced in the meantime would be
@@ -154,7 +187,7 @@ func Install(allow, version string) error {
 	}
 	defer func() { _ = manager.Disconnect() }()
 
-	service, err := manager.OpenService(core.NetHelperService)
+	service, err := manager.OpenService(h.Name)
 	exists := err == nil
 	if exists {
 		defer func() { _ = service.Close() }()
@@ -163,18 +196,21 @@ func Install(allow, version string) error {
 		}
 	}
 
-	path, err := copyProgram(self)
+	path, err := copyProgram(self, h.Program)
 	if err != nil {
 		return err
 	}
-	args := []string{"network-helper", "run", "--allow", sid.String()}
+	if err := writeFiles(h.Files); err != nil {
+		return err
+	}
+	args := []string{h.Command, "run", "--allow", sid.String()}
 	config := mgr.Config{
 		ServiceType:      windows.SERVICE_WIN32_OWN_PROCESS,
 		StartType:        mgr.StartManual,
 		ErrorControl:     mgr.ErrorNormal,
-		ServiceStartName: account,
-		DisplayName:      displayName,
-		Description:      description(version),
+		ServiceStartName: h.Account,
+		DisplayName:      h.Display,
+		Description:      h.Describe(version),
 	}
 	if exists {
 		config.BinaryPathName = commandLine(path, args)
@@ -182,7 +218,7 @@ func Install(allow, version string) error {
 			return fmt.Errorf("updating the service: %w", err)
 		}
 	} else {
-		service, err = manager.CreateService(core.NetHelperService, path, config, args...)
+		service, err = manager.CreateService(h.Name, path, config, args...)
 		if err != nil {
 			return fmt.Errorf("registering the service: %w", err)
 		}
@@ -224,7 +260,7 @@ func allowStart(service *mgr.Service, sid *windows.SID) error {
 // copyProgram puts this program in Program Files as the service's own, and
 // returns where. The directory inherits Program Files' access list: readable
 // by everyone, written by administrators.
-func copyProgram(in *os.File) (string, error) {
+func copyProgram(in *os.File, program string) (string, error) {
 	self := in.Name()
 	dir := Dir()
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // Program Files' own access list governs it
@@ -252,6 +288,22 @@ func copyProgram(in *os.File) (string, error) {
 	return dest, nil
 }
 
+// writeFiles puts a helper's files in Dir, each written aside and renamed into
+// place, as the program is.
+func writeFiles(files map[string][]byte) error {
+	for name, b := range files {
+		dest := filepath.Join(Dir(), name)
+		tmp := dest + ".new"
+		if err := os.WriteFile(tmp, b, 0o644); err != nil { //nolint:gosec // Program Files' own access list governs it
+			return fmt.Errorf("writing %s: %w", tmp, err)
+		}
+		if err := os.Rename(tmp, dest); err != nil {
+			return fmt.Errorf("putting %s in place: %w", dest, err)
+		}
+	}
+	return nil
+}
+
 // stopService stops a running service and waits for it to have stopped.
 func stopService(service *mgr.Service) error {
 	status, err := service.Query()
@@ -274,13 +326,16 @@ func stopService(service *mgr.Service) error {
 
 // Remove stops the service, unregisters it and removes its program. It
 // needs an administrator. A helper that is not there is not an error.
-func Remove() error {
+func Remove() error { return RemoveService(network) }
+
+// RemoveService is Remove for any of the helpers.
+func RemoveService(h Service) error {
 	manager, err := mgr.Connect()
 	if err != nil {
 		return fmt.Errorf("the service manager, which needs an administrator: %w", err)
 	}
 	defer func() { _ = manager.Disconnect() }()
-	if service, err := manager.OpenService(core.NetHelperService); err == nil {
+	if service, err := manager.OpenService(h.Name); err == nil {
 		defer func() { _ = service.Close() }()
 		if err := stopService(service); err != nil {
 			return err
@@ -290,8 +345,13 @@ func Remove() error {
 		}
 	}
 	dir := Dir()
-	if err := os.Remove(filepath.Join(dir, program)); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := os.Remove(filepath.Join(dir, h.Program)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("removing the service's program: %w", err)
+	}
+	for name := range h.Files {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("removing %s: %w", name, err)
+		}
 	}
 	// Only when that leaves it empty: the directory may hold what is not ours.
 	_ = os.Remove(dir)
@@ -310,17 +370,30 @@ func Run(ctx context.Context, allow, version string) error {
 		return fmt.Errorf("%q is not an account's SID: %w", allow, err)
 	}
 	trace := core.NewNetTrace()
-	s := &server{
-		pipe: core.NetHelperPipe,
+	s := &Server{
+		Pipe: core.NetHelperPipe,
 		// SYSTEM, administrators and the service itself have the pipe; the
 		// account it was installed for reads it. Nobody else opens it.
-		sddl:  "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)(A;;GR;;;" + sid.String() + ")",
-		hello: core.NetHelperLine{V: core.NetHelperProtocol, Version: version, Counts: "TCP and UDP"},
-		take:  trace.Take,
-		stop:  trace.Close,
-		tick:  tick,
-		idle:  idle,
+		SDDL:  "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)(A;;GR;;;" + sid.String() + ")",
+		Hello: core.NetHelperLine{V: core.NetHelperProtocol, Version: version, Counts: "TCP and UDP"},
+		Take: func() (any, error) {
+			counts, err := trace.Take()
+			return core.NetHelperCounts(counts), err
+		},
+		Stop: trace.Close,
+		Tick: tick,
+		Idle: idle,
 	}
+	return RunService(ctx, network.Name, s)
+}
+
+/*
+RunService serves s as the service name until nobody has read it for a
+while. Started by the service manager it answers the manager's requests;
+started from a terminal, which needs an administrator, it runs until
+interrupted, which is how it is tried by hand.
+*/
+func RunService(ctx context.Context, name string, s *Server) error {
 	service, err := svc.IsWindowsService()
 	if err != nil {
 		return fmt.Errorf("asking whether this is a service: %w", err)
@@ -328,10 +401,10 @@ func Run(ctx context.Context, allow, version string) error {
 	if !service {
 		ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 		defer cancel()
-		return s.serve(ctx)
+		return s.Serve(ctx)
 	}
 	h := &handler{ctx: ctx, s: s}
-	if err := svc.Run(core.NetHelperService, h); err != nil {
+	if err := svc.Run(name, h); err != nil {
 		return fmt.Errorf("running as a service: %w", err)
 	}
 	return h.err
@@ -340,7 +413,7 @@ func Run(ctx context.Context, allow, version string) error {
 // handler is the service as the service manager sees it.
 type handler struct {
 	ctx context.Context //nolint:containedctx // the manager's callback takes none
-	s   *server
+	s   *Server
 	err error
 }
 
@@ -349,7 +422,7 @@ func (h *handler) Execute(_ []string, requests <-chan svc.ChangeRequest, status 
 	ctx, cancel := context.WithCancel(h.ctx)
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- h.s.serve(ctx) }()
+	go func() { done <- h.s.Serve(ctx) }()
 	status <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	for {
 		select {
