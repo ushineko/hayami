@@ -2,7 +2,7 @@
 
 **Issue**: #365
 
-## Status: INCOMPLETE
+## Status: COMPLETE
 
 ## Executive Summary
 
@@ -80,9 +80,9 @@ reading needs a privileged piece: a service, as the network by process did
 
 ## Acceptance Criteria
 
-- [ ] `make test`, `make lint`, `make check-no-binaries`; golangci-lint for
+- [x] `make test`, `make lint`, `make check-no-binaries`; golangci-lint for
       windows shows nothing in the changed files.
-- [ ] Tests: the chain asks the helper first and passes over one not
+- [x] Tests: the chain asks the helper first and passes over one not
       installed (`TestWindowsAsksTheSensorHelperFirst`,
       `TestWindowsAsksLibreHardwareMonitorForTheProcessor`); the stream keeps
       the latest reading, refuses another version, passes an error and
@@ -91,12 +91,12 @@ reading needs a privileged piece: a service, as the network by process did
       command says what is there and its run needs an account
       (`TestTheSensorHelpersCommand`); an uninstall removes it and an upgrade
       leaves it (`TestAnUninstallRemovesTheSensorHelper`).
-- [ ] Live on the Windows test machine, LibreHardwareMonitor not running:
+- [x] Live on the Windows test machine, LibreHardwareMonitor not running:
       `sensor-helper install` registers the service, the panel shows the
       processor's temperature, the service stops on its own after the panel
       closes, and `sensor-helper remove` removes the service, program and
       modules.
-- [ ] The threat model's B1 and B7 sections, the architecture guide, the
+- [x] The threat model's B1 and B7 sections, the architecture guide, the
       project guidelines' rule on the processor's temperature, and the
       README say what changed.
 
@@ -172,5 +172,8 @@ built on the machine with `scripts\installer_windows.ps1 -Windowed` from
   after, and Stopped 25 seconds later.
 - The panel, started in the desk session: the service Running while it
   shows the cooler card.
-- Pending: the maintainer's look at the panel on the desk, and
-  `sensor-helper remove`.
+- The maintainer, at the desk: the panel restarted and showed the
+  processor's temperature without LibreHardwareMonitor.
+- `hayami-tui sensor-helper remove`: `not installed`; no `hayami-sensors`
+  service; `%ProgramFiles%\hayami` held only `hayami-network.exe`. Installed
+  again afterwards, so the desk keeps the reading.
