@@ -68,7 +68,7 @@ func TestThePageIsShownOnWindowsOnly(t *testing.T) {
 }
 
 /*
-Spec 059. With LibreHardwareMonitor missing the page says so, offers one
+Specs 059 and 104. With the helper missing the page says so, offers one
 check box, clear, and lists under it what ticking it does. Ticking it sets
 the parameter, and clearing it sets it back.
 */
@@ -78,7 +78,7 @@ func TestThePageOffersACheckBoxThatStartsClear(t *testing.T) {
 	require.NotEmpty(t, text)
 	assert.Contains(t, text[0], "is not installed")
 	assert.True(t, page.offer.Visible())
-	assert.Equal(t, "Install LibreHardwareMonitor and configure it for hayami", page.offer.Text)
+	assert.Equal(t, "Install PawnIO and the sensor helper", page.offer.Text)
 	assert.False(t, page.offer.Checked, "the box was ticked for the person")
 	assert.Equal(t, No, page.c.Param(ParamSensors))
 
@@ -87,7 +87,7 @@ func TestThePageOffersACheckBoxThatStartsClear(t *testing.T) {
 		joined += l + "\n"
 	}
 	assert.Contains(t, joined, "winget")
-	assert.Contains(t, joined, "asks for an administrator once")
+	assert.Contains(t, joined, "asks for an administrator twice")
 	assert.Contains(t, joined, "kernel driver")
 
 	page.offer.SetChecked(true)
@@ -100,10 +100,10 @@ func TestThePageOffersACheckBoxThatStartsClear(t *testing.T) {
 func TestAFlagThatSaidYesStartsTheBoxTicked(t *testing.T) {
 	page, _ := built(t, installed, Yes)
 	assert.True(t, page.offer.Checked)
-	assert.Equal(t, "Configure LibreHardwareMonitor for hayami", page.offer.Text)
+	assert.Equal(t, "Install the sensor helper", page.offer.Text)
 }
 
-// With it set up already the page says what hayami reads and offers
+// With the helper installed already the page says so and offers
 // nothing; the parameter is no whatever a flag said.
 func TestThePageOffersNothingWhenItIsSetUp(t *testing.T) {
 	page, content := built(t, ready, Yes)
@@ -111,6 +111,6 @@ func TestThePageOffersNothingWhenItIsSetUp(t *testing.T) {
 	assert.False(t, page.detail.Visible())
 	text := labels(content)
 	require.Len(t, text, 1)
-	assert.Contains(t, text[0], "Core (Tctl/Tdie) 48.1 °C")
+	assert.Contains(t, text[0], "The sensor helper is installed")
 	assert.Equal(t, No, page.c.Param(ParamSensors))
 }

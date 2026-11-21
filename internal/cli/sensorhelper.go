@@ -43,6 +43,7 @@ func sensorHelperCmd(version string) *cobra.Command {
 	}
 
 	var allow string
+	var withPawnIO bool
 	install := &cobra.Command{
 		Use:   "install",
 		Short: "Install the helper, or put this version in its place",
@@ -55,6 +56,13 @@ func sensorHelperCmd(version string) *cobra.Command {
 					return err //nolint:wrapcheck // says what it was asking
 				}
 				allow = sid
+			}
+			// PawnIO first, as the person: winget is theirs, and is never
+			// run by the elevated step.
+			if withPawnIO {
+				if err := sensorhelper.InstallPawnIO(cmd.Context()); err != nil {
+					return err //nolint:wrapcheck // says which step
+				}
 			}
 			if !nethelper.Elevated() {
 				if err := elevate(cmd, "sensor-helper", "install", "--allow", allow); err != nil {
@@ -72,6 +80,7 @@ func sensorHelperCmd(version string) *cobra.Command {
 		},
 	}
 	install.Flags().StringVar(&allow, "allow", "", "the account that may read the helper, as a SID; empty means yours")
+	install.Flags().BoolVar(&withPawnIO, "with-pawnio", false, "install PawnIO's driver with winget first, as you, where it is not installed")
 
 	remove := &cobra.Command{
 		Use: "remove", Short: "Stop the helper, unregister it and remove its program",

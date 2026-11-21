@@ -31,7 +31,7 @@ import (
 )
 
 // ParamSensors is the parameter the page sets, declared in fynstall.yaml:
-// Yes to install and configure LibreHardwareMonitor, No to leave it.
+// Yes to install PawnIO and the sensor helper (spec 104), No to leave them.
 const ParamSensors = "sensors"
 
 // The values of ParamSensors.
@@ -78,12 +78,12 @@ var Extension = extension.Extension{
 	BeforeUninstall: beforeUninstall,
 }
 
-// probe finds what this machine has of LibreHardwareMonitor. A variable, so
-// a test answers for a machine it is not on.
+// probe finds what this machine has for the processor's temperature. A
+// variable, so a test answers for a machine it is not on.
 var probe = probeSensors
 
-// setUp installs and configures LibreHardwareMonitor. A variable, for the
-// same reason.
+// setUp installs PawnIO and the sensor helper. A variable, for the same
+// reason.
 var setUp = setUpSensors
 
 /*
@@ -139,7 +139,7 @@ func askCLI(param string, o offering, c *extension.Context, p extension.Prompter
 
 // sensorsCLI is the sensors page on the command line.
 func sensorsCLI(ctx context.Context, c *extension.Context, p extension.Prompter) error {
-	return askCLI(ParamSensors, probe(ctx), c, p)
+	return askCLI(ParamSensors, probe(ctx, c), c, p)
 }
 
 // networkCLI is the network page on the command line.
@@ -155,9 +155,9 @@ reason line says what is missing afterwards.
 */
 func afterInstall(ctx context.Context, c *extension.Context) error {
 	if c.Param(ParamSensors) == Yes {
-		c.Log(extension.Info, "Setting up LibreHardwareMonitor, for the processor's temperature")
+		c.Log(extension.Info, "Installing the sensor helper, for the processor's temperature; the system asks for an administrator")
 		if err := setUp(ctx, c); err != nil {
-			c.Logf(extension.Warn, "LibreHardwareMonitor was not set up, and hayami is installed without it: %v", err)
+			c.Logf(extension.Warn, "The sensor helper was not installed, and hayami is installed without it: %v", err)
 		}
 	}
 	// A system with a helper the installer cannot offer (Linux without

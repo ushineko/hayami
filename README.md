@@ -336,8 +336,9 @@ It installs to the same directory, adds the Start menu shortcut and an entry
 in Settings > Apps, starts the panel at login, and puts both programs on
 `PATH`. When it is done it starts the panel, so an upgrade brings back the
 panel it stopped: clear "Launch now" on the last page, or pass
-`--launch=false`, to leave it stopped. Its Sensors page checks for LibreHardwareMonitor, says what it found,
-and offers to install and configure it; the offer is never taken for you.
+`--launch=false`, to leave it stopped. Its Sensors page checks for PawnIO
+and the sensor helper, says what it found, and offers to install them; the
+offer is never taken for you.
 The uninstaller, in the install directory and in Settings > Apps, stops the
 panel, removes what the install added, and keeps your settings. Remove a
 copy the script installed first
@@ -472,9 +473,11 @@ needed (spec 103). It is optional; without it, or LibreHardwareMonitor, the
 processor's row shows the load only, and the hover note and `doctor` say
 why.
 
-1. Install PawnIO 2.1.0 or later: `winget install --id namazso.PawnIO -e`.
-2. `hayami-tui sensor-helper install`. Windows asks for an administrator
-   once.
+The installer's Sensors page sets both up. From a terminal,
+`hayami-tui sensor-helper install --with-pawnio` does the same: it installs
+PawnIO with winget (`namazso.PawnIO`) where it is missing, as you, then the
+helper as an administrator. Windows asks for an administrator for each. Use
+PawnIO 2.1.0 or later.
 
 The helper is a Windows service, `hayami-sensors`. It runs as LocalSystem,
 because PawnIO serves only SYSTEM and administrators, and only while a panel
@@ -483,8 +486,7 @@ reads the temperature. It copies hayami-tui and two signed PawnIO modules
 `%ProgramFiles%\hayami`, loads a module only if it is the copy hayami
 carries, calls only its read functions, and serves the temperature down a
 pipe only your account can open. `hayami-tui sensor-helper remove` removes
-it, and uninstalling hayami does too. The installer's Sensors page still
-offers LibreHardwareMonitor; a later version offers the helper there.
+it, and uninstalling hayami does too; PawnIO stays.
 
 #### The processor's temperature: LibreHardwareMonitor
 
@@ -794,6 +796,11 @@ MIT. See
   can open. It loads one of two signed PawnIO modules hayami carries, pinned
   by hash, and only reads. The panel asks it first and LibreHardwareMonitor
   after it. PawnIO itself is installed with winget (spec 103, #365).
+- **Changed**: the installer's Sensors page offers PawnIO and the sensor
+  helper instead of LibreHardwareMonitor;
+  `sensor-helper install --with-pawnio` does the same from a terminal.
+  `install_windows.ps1 -WithSensors` still sets up LibreHardwareMonitor
+  (spec 104, #367).
 - **Changed**: sanshoku 0.6.0.
 
 ### 0.20.0 (2026-11-19)

@@ -38,11 +38,15 @@ written here; it is a private advisory until the release that fixes it.
 | B7 Supply chain and releases | A tampered binary installed with administrator or root rights | Pinned Actions, provenance, secret scanning (spec 075) |
 
 **Accepted.** The opt-in LibreHardwareMonitor install runs `winget` with no
-version pinned (`scripts/install_windows.ps1`, `installer/sensors.go`), and
+version pinned (`scripts/install_windows.ps1`), and
 that program runs as administrator and loads a kernel driver. Winget checks an
 installer against its manifest's hash by its own documentation, not verified
 here. A pin would hold people on a version after its fixes, so hayami does not
-pin it (#269).
+pin it (#269). The installer's Sensors page installs PawnIO the same way,
+`winget install namazso.PawnIO` with no version pinned (spec 104), for the
+same reason. winget runs as the person, never from the elevated step: it is
+found on their PATH, which they can write (`InstallPawnIO` in
+`internal/sensorhelper/service_windows.go`).
 
 ---
 

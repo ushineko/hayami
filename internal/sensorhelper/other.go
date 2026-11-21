@@ -14,6 +14,9 @@ func Probe() nethelper.State { return nethelper.State{} }
 // Install is refused.
 func Install(string, string) error { return ErrNotWindows }
 
+// InstallPawnIO is refused.
+func InstallPawnIO(context.Context) error { return ErrNotWindows }
+
 // Remove is refused.
 func Remove() error { return ErrNotWindows }
 

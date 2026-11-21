@@ -3,46 +3,37 @@ package installer
 import (
 	"fmt"
 
-	"github.com/ushineko/hayami/internal/core"
+	"github.com/ushineko/hayami/internal/nethelper"
 )
 
 /*
-Sensors is what the installer found of LibreHardwareMonitor on this machine:
-the "custom check" the sensors page is built on. Everything in it is read,
-and nothing is changed to learn it.
+Sensors is what the installer found on this machine for the processor's
+temperature (spec 104): PawnIO's driver and the sensor helper (spec 103).
+Everything in it is read, and nothing is changed to learn it.
 */
 type Sensors struct {
 	// Applies is false off Windows, where the kernel gives the processor's
 	// temperature without help and there is nothing to offer.
 	Applies bool
-	// Exe is LibreHardwareMonitor's program where winget installs it, or ""
-	// when it is not there.
-	Exe string
-	// Host says whether it is running, starts with Windows, and has its
-	// driver.
-	Host core.LHMHost
-	// URL is where hayami asks for its sensor tree.
-	URL string
-	// Reading is the processor's temperature as hayami read it there, such
-	// as "Core (Tctl/Tdie) 48.1 °C", or "" when it could not.
-	Reading string
-	// Problem is why it could not, in the words the panel's own reason line
-	// uses.
-	Problem string
+	// PawnIO reports whether PawnIO's driver is installed.
+	PawnIO bool
+	// Helper is what there is of the sensor helper.
+	Helper nethelper.State
+	// Version is the hayami being installed.
+	Version string
+	// LHM reports whether LibreHardwareMonitor is running, which the panel
+	// reads where there is no helper.
+	LHM bool
 }
 
 func (s Sensors) applies() bool   { return s.Applies }
 func (s Sensors) why() string     { return Why }
 func (s Sensors) caution() string { return Caution }
 
-// Ready reports whether hayami already reads the temperature: there is
+// Ready reports whether the helper is installed at this version: there is
 // nothing to set up.
-func (s Sensors) Ready() bool { return s.Reading != "" }
-
-// Installed reports whether LibreHardwareMonitor is on the machine: its
-// program where winget puts it, or signs of one installed another way.
-func (s Sensors) Installed() bool {
-	return s.Exe != "" || s.Host.Running || s.Host.Task
+func (s Sensors) Ready() bool {
+	return s.Helper.Installed && s.Helper.Version == s.Version
 }
 
 // Found says what the check found, in a sentence or two.
@@ -51,15 +42,17 @@ func (s Sensors) Found() string {
 	case !s.Applies:
 		return "This system gives hayami the processor's temperature itself. There is nothing to set up."
 	case s.Ready():
-		return fmt.Sprintf("LibreHardwareMonitor is set up: hayami reads the processor's temperature from it (%s). There is nothing to do.", s.Reading)
-	case s.Installed():
-		text := "LibreHardwareMonitor is installed, and hayami cannot read the processor's temperature from it yet."
-		if s.Problem != "" {
-			text += " " + s.Problem + "."
+		return "The sensor helper is installed: hayami reads the processor's temperature through it. There is nothing to do."
+	case s.Helper.Installed:
+		version := s.Helper.Version
+		if version == "" {
+			version = "an unknown version"
 		}
-		return text
+		return fmt.Sprintf("The sensor helper from hayami %s is installed. It goes on working; this version can take its place.", version)
+	case s.LHM:
+		return "hayami reads the processor's temperature from LibreHardwareMonitor. The sensor helper reads it without LibreHardwareMonitor."
 	default:
-		return "LibreHardwareMonitor is not installed. Without it the panel shows the processor's load and no temperature."
+		return "The sensor helper is not installed. Without it the panel shows the processor's load and no temperature."
 	}
 }
 
@@ -69,35 +62,39 @@ func (s Sensors) Offer() string {
 	switch {
 	case !s.Applies || s.Ready():
 		return ""
-	case s.Exe != "":
-		return "Configure LibreHardwareMonitor for hayami"
+	case s.Helper.Installed:
+		return "Bring the sensor helper up to date"
+	case !s.PawnIO:
+		return "Install PawnIO and the sensor helper"
 	default:
-		return "Install LibreHardwareMonitor and configure it for hayami"
+		return "Install the sensor helper"
 	}
 }
 
 // Why is why the page exists at all, said once above the steps.
-const Why = "Windows keeps the processor's temperature behind a kernel driver, and hayami loads none. " +
-	"LibreHardwareMonitor does, and hayami reads what it serves on this computer. Setting it up:"
+const Why = "Windows keeps the processor's temperature behind a kernel driver. PawnIO is that driver, " +
+	"signed, and used by LibreHardwareMonitor and OpenRGB; it serves only an administrator, and the panel runs as you. " +
+	"The sensor helper is a small Windows service that reads the temperature through it and hands it to the panel. Setting it up:"
 
 // Caution is what a person should know before saying yes.
-const Caution = "It is a second program: it runs as an administrator and loads a kernel driver (PawnIO). " +
-	"The panel works without it, and you can set it up later by running this installer again."
+const Caution = "PawnIO is a kernel driver, and the helper runs as LocalSystem while a panel reads it. " +
+	"Uninstalling hayami removes the helper and leaves PawnIO. " +
+	"The panel works without them, and you can set them up later by running this installer again."
 
-// Steps are what setting it up does, in order. They are install_windows.ps1
-// -WithSensors's, which the hook runs: each is done only if it is not done
-// already.
+// Steps are what setting it up does, in order: each is done only if it is
+// not done already.
 func (s Sensors) Steps() []string {
 	var steps []string
-	if s.Exe == "" {
-		steps = append(steps, "installs it with winget, which accepts winget's source and package agreements for that one package")
+	asks := "Windows asks for an administrator once, for all of this"
+	if !s.PawnIO {
+		steps = append(steps, "installs PawnIO with winget (namazso.PawnIO), which accepts winget's source and package agreements for that one package")
+		asks = "Windows asks for an administrator twice: once for PawnIO's installer, once for the helper"
 	}
 	return append(steps,
-		"turns its web server on, with no password, on the port hayami asks; Windows Firewall's default keeps it off your network",
-		"makes it start minimized, and hide in the notification area when its window is closed",
-		"copies it to Program Files, where only an administrator can change it",
-		"registers that copy to start with Windows, as an administrator",
-		"starts it; on its first start it offers its PawnIO driver, which is what reads the temperature",
-		"Windows asks for an administrator once, for all of this",
+		"copies hayami's terminal program and two signed PawnIO modules to Program Files, where only an administrator can change them",
+		"registers the service hayami-sensors to run that copy as LocalSystem, which PawnIO requires",
+		"lets your account, and no other, start the service and read what it serves: the temperature and nothing else",
+		"starts nothing: the service runs while a panel reads the temperature and stops when it is closed",
+		asks,
 	)
 }

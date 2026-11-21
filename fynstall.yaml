@@ -52,11 +52,11 @@ integration:
 parameters:
   # Set by the sensors page of the installer's own code (installer/), so the
   # Settings page has no field for it. On the command line: --sensors=yes.
-  # "no" unless a person says otherwise: LibreHardwareMonitor is a second
-  # program that runs as an administrator and loads a kernel driver.
+  # "no" unless a person says otherwise: PawnIO is a kernel driver and the
+  # sensor helper a service that runs as LocalSystem (spec 104).
   - name: sensors
-    label: Set up LibreHardwareMonitor
-    description: "yes installs and configures LibreHardwareMonitor, where the panel reads the processor's temperature on Windows"
+    label: Set up the sensor helper
+    description: "yes installs PawnIO and the sensor helper, through which the panel reads the processor's temperature on Windows"
     default: "no"
     # An action for this install, not a setting: an upgrade does not carry
     # it, so it is never done again unasked (fynstall 0.2.6, #259).

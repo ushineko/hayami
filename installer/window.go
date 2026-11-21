@@ -20,7 +20,7 @@ import (
 func init() { //nolint:gochecknoinits // how fynstall is given a page's window
 	gui.Page(PageSensors, func(c *extension.Context) wizard.Page {
 		return &offerPage{c: c, title: "Sensors", param: ParamSensors, checking: Checking,
-			check: func(ctx context.Context) offering { return probe(ctx) },
+			check: func(ctx context.Context) offering { return probe(ctx, c) },
 			// The kernel gives the processor's temperature off Windows.
 			shown: func() bool { return runtime.GOOS == "windows" }}
 	})
@@ -39,7 +39,7 @@ func init() { //nolint:gochecknoinits // how fynstall is given a page's window
 }
 
 // Checking is what the sensors page says until the check answers.
-const Checking = "Checking for LibreHardwareMonitor…"
+const Checking = "Checking for PawnIO and the sensor helper…"
 
 // CheckingNetwork is what the network page says until the check answers.
 const CheckingNetwork = "Checking for the network helper…"
