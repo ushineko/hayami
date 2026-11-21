@@ -10,7 +10,7 @@ import (
 
 // probeSensors has nothing to find off Windows: the kernel gives the
 // processor's temperature there (hwmon), and the page does not apply.
-func probeSensors(context.Context) Sensors { return Sensors{} }
+func probeSensors(context.Context, *extension.Context) Sensors { return Sensors{} }
 
 // setUpSensors is never asked off Windows: the page leaves the parameter at
 // No there.

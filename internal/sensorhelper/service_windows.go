@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -64,6 +65,32 @@ func Probe() nethelper.State { return nethelper.ProbeService(service) }
 // an administrator, and is safe to run again.
 func Install(allow, version string) error {
 	return nethelper.InstallService(service, allow, version) //nolint:wrapcheck // says which step
+}
+
+// PawnIOPackage is PawnIO's winget package.
+const PawnIOPackage = "namazso.PawnIO"
+
+/*
+InstallPawnIO installs PawnIO's driver with winget where it is not
+installed (spec 104). It is run as the person, before anything is elevated:
+winget is found on their PATH, which they can write, so an elevated process
+that ran it would run whatever they put there as an administrator. PawnIO's
+own installer asks Windows for an administrator. winget checks the installer
+against its manifest's hash.
+*/
+func InstallPawnIO(ctx context.Context) error {
+	if core.ProbeLHMHost().PawnIO {
+		return nil
+	}
+	cmd := exec.CommandContext(ctx, "winget", "install", "--id", PawnIOPackage, "-e", "--silent", //nolint:gosec // fixed arguments
+		"--accept-source-agreements", "--accept-package-agreements")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("winget install %s: %w: %s", PawnIOPackage, err, bytes.TrimSpace(out))
+	}
+	if !core.ProbeLHMHost().PawnIO {
+		return errors.New("winget ended and PawnIO's driver is not installed") //nolint:err113 // said plainly
+	}
+	return nil
 }
 
 // Remove stops the helper, unregisters it and removes its program and

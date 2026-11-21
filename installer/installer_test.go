@@ -16,26 +16,26 @@ import (
 	"github.com/ushineko/fynstall/extension"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/ushineko/hayami/internal/core"
+	"github.com/ushineko/hayami/internal/nethelper"
 )
 
-// A machine in each state the check can find, with invented readings.
+// A machine in each state the check can find (spec 104).
 var (
 	notWindows   = Sensors{}
-	notInstalled = Sensors{Applies: true, URL: core.LHMURL, Problem: "It is not running"}
-	installed    = Sensors{Applies: true, URL: core.LHMURL, Exe: `C:\Packages\LibreHardwareMonitor\LibreHardwareMonitor.exe`,
-		Host: core.LHMHost{Running: true}, Problem: "It is running, and its web server does not answer at " + core.LHMURL}
-	byHand = Sensors{Applies: true, URL: core.LHMURL, Host: core.LHMHost{Task: true},
-		Problem: "It is not running, though it is registered to start with Windows"}
-	ready = Sensors{Applies: true, URL: core.LHMURL, Exe: `C:\Packages\LibreHardwareMonitor\LibreHardwareMonitor.exe`,
-		Host: core.LHMHost{Running: true, Task: true, PawnIO: true}, Reading: "Core (Tctl/Tdie) 48.1 °C"}
+	notInstalled = Sensors{Applies: true, Version: "0.0.0"}
+	installed    = Sensors{Applies: true, Version: "0.0.0", PawnIO: true}
+	withLHM      = Sensors{Applies: true, Version: "0.0.0", PawnIO: true, LHM: true}
+	older        = Sensors{Applies: true, Version: "0.0.0", PawnIO: true,
+		Helper: nethelper.State{Applies: true, Offered: true, Installed: true, Version: "0.0.0-older"}}
+	ready = Sensors{Applies: true, Version: "0.0.0", PawnIO: true,
+		Helper: nethelper.State{Applies: true, Offered: true, Installed: true, Version: "0.0.0"}}
 )
 
 // answer makes the check find s for the length of a test.
 func answer(t *testing.T, s Sensors) {
 	t.Helper()
 	was := probe
-	probe = func(context.Context) Sensors { return s }
+	probe = func(context.Context, *extension.Context) Sensors { return s }
 	t.Cleanup(func() { probe = was })
 }
 
@@ -82,19 +82,20 @@ func TestTheCheckSaysWhatItFoundAndOffersOnlyWhatIsMissing(t *testing.T) {
 	assert.Contains(t, notWindows.Found(), "nothing to set up")
 
 	assert.Contains(t, notInstalled.Found(), "is not installed")
-	assert.Equal(t, "Install LibreHardwareMonitor and configure it for hayami", notInstalled.Offer())
+	assert.Equal(t, "Install PawnIO and the sensor helper", notInstalled.Offer())
 	assert.Contains(t, notInstalled.Steps()[0], "winget")
 
-	assert.Contains(t, installed.Found(), "is installed, and hayami cannot read")
-	assert.Contains(t, installed.Found(), "its web server does not answer")
-	assert.Equal(t, "Configure LibreHardwareMonitor for hayami", installed.Offer())
-	assert.NotContains(t, strings.Join(installed.Steps(), "\n"), "winget", "what is installed is not installed again")
+	assert.Equal(t, "Install the sensor helper", installed.Offer())
+	assert.NotContains(t, strings.Join(installed.Steps(), "\n"), "winget", "PawnIO, installed, is not installed again")
 
-	assert.True(t, byHand.Installed(), "one installed another way is still installed")
-	assert.Contains(t, byHand.Found(), "is installed")
+	assert.Contains(t, withLHM.Found(), "without LibreHardwareMonitor")
+	assert.Equal(t, "Install the sensor helper", withLHM.Offer(), "a desk on LibreHardwareMonitor is offered the helper")
+
+	assert.Contains(t, older.Found(), "0.0.0-older")
+	assert.Equal(t, "Bring the sensor helper up to date", older.Offer())
 
 	assert.True(t, ready.Ready())
-	assert.Contains(t, ready.Found(), "Core (Tctl/Tdie) 48.1 °C")
+	assert.Contains(t, ready.Found(), "nothing to do")
 	assert.Empty(t, ready.Offer(), "what works is not offered again")
 }
 
@@ -103,11 +104,11 @@ func TestTheCheckSaysWhatItFoundAndOffersOnlyWhatIsMissing(t *testing.T) {
 func TestTheStepsAndTheCautionSayWhatIsBeingAgreedTo(t *testing.T) {
 	for _, s := range []Sensors{notInstalled, installed} {
 		steps := s.Steps()
-		assert.Contains(t, steps[len(steps)-1], "asks for an administrator once")
+		assert.Contains(t, steps[len(steps)-1], "asks for an administrator")
 	}
-	assert.Contains(t, Caution, "administrator")
+	assert.Contains(t, Caution, "LocalSystem")
 	assert.Contains(t, Caution, "kernel driver")
-	assert.Contains(t, Caution, "works without it")
+	assert.Contains(t, Caution, "works without them")
 }
 
 // On the command line the page says what it found and what setting up does,
@@ -118,7 +119,7 @@ func TestThePageAsksOnceAndTakesTheAnswer(t *testing.T) {
 		p := &prompter{yes: yes}
 		c := install(No, nil)
 		require.NoError(t, sensorsCLI(context.Background(), c, p))
-		require.Equal(t, []string{"Install LibreHardwareMonitor and configure it for hayami?"}, p.asked)
+		require.Equal(t, []string{"Install PawnIO and the sensor helper?"}, p.asked)
 		said := strings.Join(p.said, "\n")
 		assert.Contains(t, said, "is not installed")
 		assert.Contains(t, said, "winget")
@@ -144,7 +145,7 @@ func TestThePageAsksNothingWhenThereIsNothingToOffer(t *testing.T) {
 	}
 }
 
-// The hook sets LibreHardwareMonitor up only when the page was told to, and
+// The hook installs the helper only when the page was told to, and
 // a set-up that fails is a warning: hayami is installed either way.
 func TestTheHookSetsUpOnlyWhenAskedAndNeverFailsTheInstall(t *testing.T) {
 	ran := 0
@@ -153,7 +154,7 @@ func TestTheHookSetsUpOnlyWhenAskedAndNeverFailsTheInstall(t *testing.T) {
 	setUp = func(context.Context, *extension.Context) error { ran++; return nil }
 
 	require.NoError(t, afterInstall(context.Background(), install(No, nil)))
-	require.Zero(t, ran, "LibreHardwareMonitor was set up unasked")
+	require.Zero(t, ran, "the helper was installed unasked")
 
 	require.NoError(t, afterInstall(context.Background(), install(Yes, nil)))
 	require.Equal(t, 1, ran)

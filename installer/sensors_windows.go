@@ -1,17 +1,11 @@
 package installer
 
 import (
-	"bufio"
 	"context"
 	"errors"
-	"fmt"
-	"io/fs"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 	"unsafe"
 
@@ -19,147 +13,42 @@ import (
 
 	"github.com/ushineko/fynstall/extension"
 
-	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/core"
-	"github.com/ushineko/hayami/scripts"
+	"github.com/ushineko/hayami/internal/nethelper"
+	"github.com/ushineko/hayami/internal/sensorhelper"
 )
 
-// sensorsPackage is LibreHardwareMonitor's winget package, whose directory
-// under the person's WinGet packages holds its program.
-const sensorsPackage = "LibreHardwareMonitor.LibreHardwareMonitor"
-
-// probeTimeout bounds the one request the check makes. LibreHardwareMonitor
-// answers on loopback in milliseconds; a port nothing listens on refuses at
-// once.
-const probeTimeout = 3 * time.Second
-
 /*
-probeSensors is the check: where LibreHardwareMonitor is, whether it runs
-and starts with Windows, and whether hayami can read the processor's
-temperature from it now. It reads and changes nothing, and needs no
-administrator: the same questions the panel asks (core.ProbeLHMHost), and
-one GET of data.json.
+probeSensors is the check: whether PawnIO's driver is installed, what there
+is of the sensor helper, and whether LibreHardwareMonitor is running. It
+reads and changes nothing, and needs no administrator: the service manager
+and the process list, as the panel asks them.
 */
-func probeSensors(ctx context.Context) Sensors {
-	s := Sensors{Applies: true, Exe: findSensors(), Host: core.ProbeLHMHost(), URL: sensorsURL()}
-	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
-	defer cancel()
-	root, err := core.FetchLHM(ctx, &http.Client{Timeout: probeTimeout}, s.URL)
-	switch {
-	case err == nil:
-		if v, label, ok := core.LHMCPUTemperature(root); ok {
-			s.Reading = fmt.Sprintf("%s %.1f °C", label, v)
-		} else {
-			s.Problem = "It answers, and has no processor temperature: its PawnIO driver may not be installed"
-		}
-	case errors.Is(err, core.ErrLHMAuth):
-		s.Problem = "Its web server asks for a password, which hayami does not send"
-	case s.Host.Running:
-		s.Problem = "It is running, and its web server does not answer at " + s.URL
-	case s.Host.Task:
-		s.Problem = "It is not running, though it is registered to start with Windows"
-	default:
-		s.Problem = "It is not running"
-	}
-	return s
+func probeSensors(_ context.Context, c *extension.Context) Sensors {
+	host := core.ProbeLHMHost()
+	return Sensors{Applies: true, PawnIO: host.PawnIO, Helper: sensorhelper.Probe(), Version: c.App().Version, LHM: host.Running}
 }
-
-// findSensors is LibreHardwareMonitor's program where winget's portable
-// install puts it, or "".
-func findSensors() string {
-	local := os.Getenv("LOCALAPPDATA")
-	if local == "" {
-		return ""
-	}
-	found, _ := filepath.Glob(filepath.Join(local, "Microsoft", "WinGet", "Packages", sensorsPackage+"*", "LibreHardwareMonitor.exe"))
-	if len(found) == 0 {
-		return ""
-	}
-	return found[0]
-}
-
-// sensorsURL is where hayami asks: the cooler section's setting when the
-// person has one, or LibreHardwareMonitor's default.
-func sensorsURL() string {
-	path, err := config.Path()
-	if err != nil {
-		return core.LHMURL
-	}
-	if _, err := os.Stat(path); err != nil {
-		return core.LHMURL
-	}
-	store, err := config.Open(path)
-	if err != nil {
-		return core.LHMURL
-	}
-	defer func() { _ = store.Close() }()
-	if url := strings.TrimSpace(config.Cooler.Get(store.Config()).LHM); url != "" {
-		return url
-	}
-	return core.LHMURL
-}
-
-// sensorsScripts are the scripts the set-up runs, from the same files the
-// checkout's installer uses.
-var sensorsScripts = []string{"install_windows.ps1", "lhm_settings.ps1"}
 
 /*
-setUpSensors installs and configures LibreHardwareMonitor by running
-install_windows.ps1 -SensorsOnly: the steps install_windows.ps1
--WithSensors has always taken, from the same file, so there is one
-description of them and one set of tests (spec 042). The scripts are carried
-in the installer and written to a temporary directory for the run.
-
-The script asks Windows for an administrator once, for the one step that
-needs it; that prompt is the person's to answer. Its lines go to the
-installer's log.
+setUpSensors installs PawnIO with winget where it is missing, as the person
+running the installer, and then runs the installed hayami-tui's own
+`sensor-helper install` as an administrator. The account that may read the
+helper is the one running this installer, named to the elevated program
+because an administrator's consent may be given by another account.
 */
 func setUpSensors(ctx context.Context, c *extension.Context) error {
-	work, err := os.MkdirTemp("", "hayami-sensors-*")
+	if err := sensorhelper.InstallPawnIO(ctx); err != nil {
+		return err //nolint:wrapcheck // says which step
+	}
+	sid, err := nethelper.CurrentUser()
 	if err != nil {
-		return fmt.Errorf("making a directory for the scripts: %w", err)
+		return err //nolint:wrapcheck // says what it was asking
 	}
-	defer func() { _ = os.RemoveAll(work) }()
-	dir := filepath.Join(work, "scripts")
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		return fmt.Errorf("making a directory for the scripts: %w", err)
+	if err := nethelper.RunElevated(ctx, helperProgram(c), "sensor-helper", "install", "--allow", sid); err != nil {
+		return err //nolint:wrapcheck // says what Windows answered
 	}
-	for _, name := range sensorsScripts {
-		b, err := fs.ReadFile(scripts.Windows, name)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", name, err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
-			return fmt.Errorf("writing %s: %w", name, err)
-		}
-	}
-
-	// Windows PowerShell writes a pipe in the console's code page, in which
-	// the degree sign of a temperature is another character: it is told to
-	// write UTF-8 first. The path is quoted for PowerShell, where a quote
-	// in a quoted string is written twice.
-	script := strings.ReplaceAll(filepath.Join(dir, sensorsScripts[0]), "'", "''")
-	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", //nolint:gosec // a script this installer carries, in a directory it made
-		"[Console]::OutputEncoding = [Text.Encoding]::UTF8; & '"+script+"' -SensorsOnly; exit $LASTEXITCODE")
-	// No console of its own: the wizard is a window, and one opening beside
-	// it for a minute would look like a fault.
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("starting the set-up: %w", err)
-	}
-	cmd.Stderr = cmd.Stdout
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("starting the set-up: %w", err)
-	}
-	sc := bufio.NewScanner(out)
-	for sc.Scan() {
-		if line := strings.TrimRight(sc.Text(), " \t\r"); strings.TrimSpace(line) != "" {
-			c.Log(extension.Info, line)
-		}
-	}
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("the set-up script: %w", err)
+	if !sensorhelper.Probe().Installed {
+		return errors.New("the elevated step ended and the sensor helper is not installed") //nolint:err113 // said plainly
 	}
 	return nil
 }
