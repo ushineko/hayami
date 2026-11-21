@@ -28,6 +28,7 @@ carry the detail. In short:
 | [Fyne](https://github.com/fyne-io/fyne) | BSD-3-Clause | The desktop panel and the preferences window, built from [a fork](https://github.com/ushineko/fyne) carrying fixes not yet released (`go.mod`). |
 | [fynedesygn](https://github.com/ushineko/fynedesygn) | MIT | The glance window, the cards, cells, meters and sparklines, the theme. |
 | [Bubble Tea](https://github.com/charmbracelet/bubbletea) and Lip Gloss | MIT | The terminal panel. |
+| [PawnIO.Modules](https://github.com/namazso/PawnIO.Modules) | LGPL-2.1 | The sensor helper's two signed modules, `AMDFamily17.bin` and `IntelMSR.bin`, carried unchanged from release 0.2.12 with their licence in `internal/sensorhelper/modules` (spec 103). They run in [PawnIO](https://pawnio.eu/)'s driver, which the person installs. |
 | [sanshoku](https://github.com/ushineko/sanshoku) | MIT | Every device. |
 | [Cobra](https://github.com/spf13/cobra) | Apache-2.0 | The command line. |
 | [mdlayher/wifi](https://github.com/mdlayher/wifi) | MIT | A Wi-Fi interface's signal, frequency and link rates over nl80211 on Linux (spec 037). |

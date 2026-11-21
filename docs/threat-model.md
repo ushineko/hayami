@@ -10,11 +10,13 @@ written here; it is a private advisory until the release that fixes it.
 
 - **The panel runs as the person at the desk and asks for nothing more.**
   It never runs elevated and never asks to. A reading that needs a right
-  the panel lacks comes from the network helper, and from nowhere else.
+  the panel lacks comes from a helper: the network helper, or on Windows
+  the sensor helper for the processor's temperature (spec 103).
 - **A privileged component does one thing, for one account, while it is
-  read.** The helpers count network traffic and serve it to the account
-  they were installed for; they read nothing a panel sends; they run only
-  while a panel reads them.
+  read.** The network helpers count network traffic, and the sensor helper
+  reads the processor's temperature, and each serves it to the account it
+  was installed for; they read nothing a panel sends; they run only while a
+  panel reads them.
 - **hayami never becomes root on Linux.** A step that needs root is a line
   the person runs with sudo, printed and never executed for them.
 - **Credentials are the tools' own.** hayami reads the Claude and Codex
@@ -27,7 +29,7 @@ written here; it is a private advisory until the release that fixes it.
 
 | Boundary | What is at stake | Status |
 |---|---|---|
-| B1 Privileged helpers | Becoming Local Service or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
+| B1 Privileged helpers | Becoming Local Service, LocalSystem (the sensor helper, spec 103) or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
 | B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its findings fixed (the advisory in 0.11.12, #244 and #245 since) |
 | B3 Credentials | The Claude and Codex tokens; the shared usage cache; the GitHub and GitLab keys (spec 102) | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Fuzzed (spec 074); sanshoku's decoders open |
@@ -47,7 +49,8 @@ pin it (#269).
 ## B1 Privileged helpers
 
 **Assets.** The rights the helpers hold: on Windows, Local Service and the
-kernel network provider's events; on Linux, `CAP_BPF`, `CAP_NET_ADMIN` and
+kernel network provider's events, and for the sensor helper LocalSystem and
+PawnIO's driver; on Linux, `CAP_BPF`, `CAP_NET_ADMIN` and
 `CAP_PERFMON`, and programs attached to every socket on the machine and to
 the forward hook. The traffic of every account. The panel's availability,
 which reads what the helper sends.
@@ -77,6 +80,18 @@ from the panel's side.
   (`PIPE_REJECT_REMOTE_CLIENTS` in `server_windows.go`).
 - One way: neither server reads from a reader (`serve` in both server
   files).
+- The sensor helper (spec 103) runs as LocalSystem because PawnIO's device
+  opens for SYSTEM and administrators only; it is its own service so the
+  network helper keeps Local Service. Its program and its two PawnIO modules
+  are copies in Program Files; it loads a module only when the file's bytes
+  equal the copy hayami-tui carries (`checkModules` in
+  `internal/sensorhelper/service_windows.go`); it calls only the modules'
+  read functions, on the thermal register and the two thermal MSRs
+  (sanshoku's `cpu` package). Its pipe is one-way, opens for SYSTEM,
+  administrators and the installed account, and refuses remote clients, as
+  the network helper's (`Run`; `nethelper.Server`). The panel checks the
+  process serving the pipe as it does the network helper's
+  (`newSensorHelper` in `internal/core/sensorhelper_windows.go`).
 - Least rights on Linux: a dynamic user with three capabilities and the
   hardening in `ServiceUnit` (`systemd-analyze security`: 1.9, spec 072).
 - Counting only: every BPF program returns "pass" and the netfilter one
@@ -98,7 +113,9 @@ from the panel's side.
   size between readings, long strings are dropped, and the helper's error
   text loses its control characters (`helperStream`, `printable` in
   `internal/core/nethelper.go`). A protocol it does not know is refused by
-  name.
+  name. The sensor helper's lines are bounded the same way, and a reading
+  outside -40 to 150 °C is not kept (`sensorStream` in
+  `internal/core/sensorhelper.go`).
 
 **Accepted.**
 
@@ -108,6 +125,11 @@ from the panel's side.
   README says so.
 - A program holding the Windows pipe's name can still keep the helper from
   starting while it holds it; the panel says which process that is.
+- PawnIO is one maintainer's signed driver, and loads any module its key
+  ever signed; the newest signed driver (2.2.0) predates hardening fixes
+  made in August 2026, which matter to a caller already elevated. A review
+  on 2026-11-20 found no published vulnerability and no malware or
+  blocklist report. hayami does not install PawnIO; the person does.
 
 **Open findings.** None of its own since 0.11.11 (GHSA-94c3-mf55-vv8v,
 published). B2's #244 covers how the Windows helper's program is copied
@@ -482,7 +504,8 @@ audited for identifiers other than the home path.
 ## B7 Supply chain and releases
 
 **Assets.** The binaries and installers people run with administrator or
-root rights.
+root rights. The two signed PawnIO modules hayami-tui carries for the
+sensor helper (spec 103), which run in PawnIO's kernel driver.
 
 **Attackers.** A compromised Go module, GitHub Action or maintainer
 account.
@@ -494,6 +517,11 @@ account.
   fork's path and Fyne's advisories are under its own, so the second scan drops
   the `replace` (spec 084). That reads upstream's source at the fork's base, not
   the fork's own commits.
+- The PawnIO modules are PawnIO.Modules 0.2.12's, committed unchanged with
+  their licence, and pinned by SHA-256 (`TestTheModulesAreTheReleasesOwn` in
+  `internal/sensorhelper/modules`). A change to either is a change of what
+  runs in the kernel, made on purpose. PawnIO checks their signature before
+  it loads them.
 - SHA256SUMS on every release.
 - Build provenance on every file a release publishes
   (`actions/attest-build-provenance`, spec 075). The README's `gh attestation

@@ -221,8 +221,13 @@ adds a table, not a ladder.
   spec 061): a service that runs as Local Service, only while a panel reads
   it, whose program is a copy in Program Files and whose pipe is one-way and
   open to one account. It is never installed unasked. A second reading that
-  needs a right the panel lacks goes through the same helper, by a spec, and
-  not through a second service. On Linux the same helper (spec 072) is a
+  needs a right the panel lacks goes through the same helper, by a spec,
+  unless it needs more rights than the helper holds: then it is a second
+  service, so the first keeps the least it needs. The processor's
+  temperature on Windows is that case (spec 103): PawnIO serves only SYSTEM
+  and administrators, so the sensor helper (`internal/sensorhelper`) runs as
+  LocalSystem, with the network helper's install, pipe and checks
+  (`nethelper.Service`, `nethelper.Server`). On Linux the same helper (spec 072) is a
   systemd service started by its socket, running as a dynamic user with
   `CAP_BPF`, `CAP_NET_ADMIN` and `CAP_PERFMON` and no others, that loads the
   eBPF counter in `internal/netcount` while a panel reads it. Its program is
@@ -232,8 +237,10 @@ adds a table, not a ladder.
   asks to become root only for an action the person chose, through the
   system's own prompt, and never runs sudo.
 - **No kernel driver of its own.** Where the OS needs one, as for the
-  processor's temperature on Windows, hayami reads a program that has one
-  (LibreHardwareMonitor) and never installs it unasked.
+  processor's temperature on Windows, hayami uses one the person installed:
+  PawnIO, through the sensor helper and two signed modules hayami carries
+  (spec 103), or LibreHardwareMonitor, which loads PawnIO itself. It
+  installs neither unasked.
 - **Privacy.** The repository is public. Network names (SSID, BSSID), device
   addresses, serials, hostnames, user names and home paths are not read where
   avoidable, and never stored, logged, shown or committed. Fixtures use
@@ -302,6 +309,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | A detail view in the terminal pane | 3 | Planned | |
 | The network helper: a reading that needs a right the panel lacks | 9 | In place | #194 |
 | The network helper on Linux: every protocol, by eBPF | 9 | In place | #238 |
+| The sensor helper: the processor's temperature on Windows through PawnIO | 9 | In place | #365 |
 | VPN systems as a table on the host, read over the system bus | 2, 5 | In place | #298 |
 | VPN health checks as a table, one set of probes across panels | 2, 5 | In place | #298 |
 | VPN keepalive rules as a pure engine, with a helper to run them | 2 | In place | #298 |

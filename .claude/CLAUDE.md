@@ -176,8 +176,17 @@ place updates the guide's Status table in the same PR.
   left out. On both it is the last provider in the platform's graphics chain
   (`core/host_tables.go`, spec 043), so it is never asked once the card is
   complete.
-- **The processor's temperature on Windows is LibreHardwareMonitor's**
-  (spec 036). Windows keeps it behind a kernel driver and hayami loads none;
+- **The processor's temperature on Windows is the sensor helper's** (spec
+  103), then LibreHardwareMonitor's. The helper is a service,
+  `hayami-sensors`, that runs as LocalSystem, because PawnIO's driver serves
+  only SYSTEM and administrators, and only while a panel reads it. It loads
+  one of two signed PawnIO modules hayami-tui carries, pinned by hash, calls
+  only their read functions, and writes the temperature down a one-way pipe
+  one account may open. It is its own service, not the network helper,
+  because the network helper runs with less. It is never installed unasked:
+  `hayami-tui sensor-helper install` is the route.
+- **LibreHardwareMonitor stays a provider** (spec 036), after the helper.
+  Windows keeps the temperature behind a kernel driver and hayami loads none;
   LibreHardwareMonitor does (PawnIO) and serves what it reads as `data.json`
   over HTTP. hayami reads another program's output over loopback: not a
   subprocess, not a device. It only ever GETs `data.json` -- the same server
@@ -283,8 +292,8 @@ tree contains, which is a different question.
 - Runtime, all optional and each absent is a reported state rather than a
   failure: BlueZ (`org.bluez.Battery1`), `tailscale`, and the udev rule in
   `packaging/60-sanshoku.rules` that lets the user open the devices; on
-  Windows, LibreHardwareMonitor with its web server on, for the processor's
-  temperature. No Python, no Qt.
+  Windows, PawnIO and the sensor helper, or LibreHardwareMonitor with its
+  web server on, for the processor's temperature. No Python, no Qt.
 
 ---
 

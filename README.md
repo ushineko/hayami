@@ -41,7 +41,7 @@ section is not polled at all.
 |---|---|---|
 | Peripherals | Battery level and charging state of mice, keyboards, headsets and game controllers, a cell per kind of device | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, the DualSense over USB or Bluetooth, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
 | Network | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
-| Hardware | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
+| Hardware | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and the sensor helper (PawnIO) or LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
 | Development | One meter per account with the percentage used and when it resets, `CC` for Claude Code and `CX` for Codex. Its drawer adds, once switched on in Preferences, two weeks of your GitHub and GitLab activity, a day per cell, and each day's pull requests, merge requests, issues and pushes by repository | The Anthropic OAuth API and the Codex app-server, through a cache shared with the Python tools. GitHub's GraphQL API with `gh`'s sign-in, and a GitLab host's API with `GITLAB_TOKEN` from `~/.secrets.env` or `glab`'s, or keys given in Preferences |
 
 The sections can be laid out three ways, in either panel:
@@ -463,15 +463,36 @@ on Linux, `%LOCALAPPDATA%\claude-usage-widget\cache` on Windows.
   the `Local Area Connection*` adapters and IPv6 transition tunnels are behind
   "Show every interface".
 
+#### The processor's temperature: the sensor helper
+
+Windows gives a processor's temperature only to a kernel driver. hayami's
+sensor helper reads it through [PawnIO](https://pawnio.eu/), the signed
+driver LibreHardwareMonitor also uses, so LibreHardwareMonitor is not
+needed (spec 103). It is optional; without it, or LibreHardwareMonitor, the
+processor's row shows the load only, and the hover note and `doctor` say
+why.
+
+1. Install PawnIO 2.1.0 or later: `winget install --id namazso.PawnIO -e`.
+2. `hayami-tui sensor-helper install`. Windows asks for an administrator
+   once.
+
+The helper is a Windows service, `hayami-sensors`. It runs as LocalSystem,
+because PawnIO serves only SYSTEM and administrators, and only while a panel
+reads the temperature. It copies hayami-tui and two signed PawnIO modules
+(`AMDFamily17.bin`, `IntelMSR.bin`, from PawnIO.Modules 0.2.12, LGPL-2.1) to
+`%ProgramFiles%\hayami`, loads a module only if it is the copy hayami
+carries, calls only its read functions, and serves the temperature down a
+pipe only your account can open. `hayami-tui sensor-helper remove` removes
+it, and uninstalling hayami does too. The installer's Sensors page still
+offers LibreHardwareMonitor; a later version offers the helper there.
+
 #### The processor's temperature: LibreHardwareMonitor
 
-Windows gives a processor's temperature only to a kernel driver, and hayami
-loads none.
+The panel asks the sensor helper first and LibreHardwareMonitor after it, so
+a desk set up for LibreHardwareMonitor keeps working.
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-does, through its PawnIO driver, and serves its readings from a small web
-server; hayami reads `http://127.0.0.1:8085/data.json`. It is optional.
-Without it the processor's row shows the load only, and the hover note and
-`doctor` say why.
+reads it through PawnIO too, and serves its readings from a small web
+server; hayami reads `http://127.0.0.1:8085/data.json`.
 
 `install_windows.ps1 -WithSensors` installs and configures it, skipping any
 step already done, and then checks that a temperature is served. Windows asks
@@ -763,6 +784,17 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: on Windows, the processor's temperature without
+  LibreHardwareMonitor. `hayami-tui sensor-helper install` installs a small
+  service, `hayami-sensors`, that reads it through PawnIO as LocalSystem,
+  only while a panel reads it, and serves it down a pipe only your account
+  can open. It loads one of two signed PawnIO modules hayami carries, pinned
+  by hash, and only reads. The panel asks it first and LibreHardwareMonitor
+  after it. PawnIO itself is installed with winget (spec 103, #365).
+- **Changed**: sanshoku 0.6.0.
 
 ### 0.20.0 (2026-11-19)
 
