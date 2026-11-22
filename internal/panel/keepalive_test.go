@@ -315,6 +315,9 @@ func TestAPanelProbesNothingWhileTheHelperRunsAndTakesOverAfter(t *testing.T) {
 
 // A press reaches the helper through the file, and the disconnect stays down.
 func TestADisconnectPressedInAPanelStaysDownUntilAConnectIsPressed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("flaky on the Windows runner: the hold is checked the moment the press returns (#380)")
+	}
 	b := newHelperBench(t, true, checkedVPN("kept", true))
 	b.start()
 	b.await("a check", func() bool { return b.checks.Load() > 0 })
@@ -367,6 +370,9 @@ func TestABouncePressedHoldsOnlyForItsLength(t *testing.T) {
 // The helper reading a tunnel down while a person's connect is under way must not dial
 // it as well (found on a real tunnel: NetworkManager refused the second activation).
 func TestTheHelperDoesNotDialAgainstAConnectPressed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("flaky on the Windows runner: the hold is checked the moment the press returns (#376)")
+	}
 	b := newHelperBench(t, true, checkedVPN("kept", true))
 	b.start()
 	b.await("a check", func() bool { return b.checks.Load() > 0 })

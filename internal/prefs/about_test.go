@@ -25,7 +25,7 @@ func aboutOpen(t *testing.T) (*prefs.Window, *markdown.Pane) {
 	t.Helper()
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
-	w := prefs.New(a, prefs.Options{Store: store(t, ""), Version: "1.2.3", Page: "about"})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, ""), Version: "1.2.3", Page: "about"})
 	w.Shell().Window.Resize(fyne.NewSize(900, 700))
 	p := w.Readme()
 	require.NotNil(t, p, "About has no README pane")
