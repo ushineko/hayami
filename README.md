@@ -799,6 +799,9 @@ MIT. See
 
 ### Unreleased
 
+- **Changed**: the clock is drawn larger, at the sub-heading size, and its
+  date stops short of the tuck button instead of running under it (spec 108,
+  #383).
 - **Changed**: three tests that fail by timing on the Windows runner are
   skipped there until fixed (#376, #380, #381); the preferences tests give
   each window a settings file of its own, so they no longer write your

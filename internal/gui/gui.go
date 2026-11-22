@@ -304,6 +304,9 @@ func New(a fyne.App, o Options) *Panel {
 		bare := sec.HeadingOnly()
 		if bare {
 			c.SetTitleEnd(sec.TitleEnd, sectionIcon(sec.TitleEndIcon))
+			// The sub-heading's size: the reading is the heading, and at the
+			// title's size a clock was small for what it is (spec 108).
+			c.SetTitleSize(fynetheme.SizeNameSubHeadingText)
 		}
 		holder := &card{card: c, pinned: map[string]bool{}, nameColumn: nameColumn}
 		// The rows the section has now; a row that arrives later is inserted
