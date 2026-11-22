@@ -282,6 +282,12 @@ type Row struct {
 	// a label changing ("CPU" to a model name) is the same row (spec 044).
 	// Empty for a row whose builder gives none; a shell derives one.
 	ID string `json:",omitempty"`
+
+	// Scrolls puts the row, and its detail lines, in the section's scrolling
+	// run (spec 105): the run is never more than the section's ScrollLines
+	// lines high, and the rest of it is a turn of the wheel or a key away.
+	// The rows that scroll are consecutive.
+	Scrolls bool `json:",omitempty"`
 }
 
 // DetailLines are the row's detail lines, in order, and none for a row
@@ -382,6 +388,17 @@ type Section struct {
 	// failure nobody has observed. The tag is the enforcement, because the
 	// cache is this struct encoded whole.
 	Reasons []Reason `json:"-"`
+
+	// ScrollLines is how many lines of the scrolling run show at once (spec
+	// 105): the rows marked Scrolls, with their detail lines where the
+	// arrangement draws them. Zero for a section with no run, which is every
+	// section but the network's.
+	ScrollLines int `json:",omitempty"`
+
+	// ScrollFirst is the first line of the run a shell draws, set by the
+	// shell from where it was scrolled to; the view clamps it. It is the
+	// shell's state and never cached.
+	ScrollFirst int `json:"-"`
 }
 
 /*

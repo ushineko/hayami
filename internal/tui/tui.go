@@ -59,6 +59,10 @@ type Model struct {
 	dr     *paneDrawer
 	last   map[string]string
 
+	// scroll is how far each section's run is scrolled, by key (spec 105):
+	// the first of its lines drawn.
+	scroll map[string]int
+
 	// paint is how a status becomes colour. Nil in a terminal that has none,
 	// and nil is also what Render expects when nothing should be painted.
 	paint view.Painter
@@ -87,6 +91,7 @@ func New(o Options) Model {
 		width:    80,
 		height:   24,
 		last:     map[string]string{},
+		scroll:   map[string]int{},
 		drawn:    map[string]bool{},
 		reported: map[string]bool{},
 		paint:    Painter(),
@@ -201,6 +206,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.key(msg)
 
+	case tea.MouseMsg:
+		return m.mouse(msg), nil
+
 	case detailRead:
 		return m, m.read(msg)
 
@@ -291,10 +299,20 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c", "esc":
 		m.closeDrawer()
 		return m, tea.Quit
-	case "tab", "down", "j":
+	case "tab":
 		m.choose(1)
-	case "shift+tab", "up", "k":
+	case "shift+tab":
 		m.choose(-1)
+	case "down", "j":
+		// The chosen section's run first, as a list in a list scrolls before
+		// the page does; past its end, the next section (spec 105).
+		if !m.scrollBy(m.chosen, 1) {
+			m.choose(1)
+		}
+	case "up", "k":
+		if !m.scrollBy(m.chosen, -1) {
+			m.choose(-1)
+		}
 	case "enter":
 		if m.chosen == "" {
 			m.choose(1)
@@ -325,9 +343,73 @@ func (m Model) Sections() []view.Section {
 		if !m.shown[k] || !m.drawn[k] {
 			continue
 		}
-		out = append(out, m.source(k).Section())
+		sec := m.source(k).Section()
+		sec.ScrollFirst = max(0, min(m.scroll[k], sec.MostFirst(m.opts.Arrangement)))
+		out = append(out, sec)
 	}
 	return out
+}
+
+// section is the shown section with the key, as Sections gives it.
+func (m Model) section(key string) (view.Section, bool) {
+	for _, s := range m.Sections() {
+		if s.Key == key {
+			return s, true
+		}
+	}
+	return view.Section{}, false
+}
+
+// scrollBy moves a section's run by step lines, and reports whether it moved:
+// false for a section with no run, or one already at that end.
+func (m *Model) scrollBy(key string, step int) bool {
+	s, ok := m.section(key)
+	if !ok || s.ScrollLines == 0 {
+		return false
+	}
+	next := max(0, min(s.ScrollFirst+step, s.MostFirst(m.opts.Arrangement)))
+	if next == s.ScrollFirst {
+		return false
+	}
+	m.scroll[key] = next
+	return true
+}
+
+// mouse scrolls the run under the pointer with the wheel (spec 105). The
+// wheel anywhere else, and every other press, does nothing.
+func (m Model) mouse(msg tea.MouseMsg) Model {
+	step := 0
+	switch msg.Button {
+	case tea.MouseButtonWheelDown:
+		step = 1
+	case tea.MouseButtonWheelUp:
+		step = -1
+	default:
+		return m
+	}
+	for _, r := range m.Regions() {
+		if r.InRun(msg.X, msg.Y) {
+			m.scrollBy(r.Key, step)
+			break
+		}
+	}
+	return m
+}
+
+/*
+Regions are where each section's card is drawn, as Lines draws them, for the
+pointer: none while a drawer stands in the cards' place.
+*/
+func (m Model) Regions() []view.Region {
+	if m.dr != nil && !m.Side() {
+		return nil
+	}
+	width := m.width
+	if m.dr != nil {
+		width = m.width - m.drawerWidth() - 3
+	}
+	_, regions := view.RenderRegions(m.Sections(), m.opts.Arrangement, width, nil)
+	return regions
 }
 
 // View draws the panel.
@@ -387,7 +469,10 @@ func Start(o Options) error {
 		// be captured, piped or left in the scrollback.
 		opts = append(opts, tea.WithInput(nil))
 	} else {
-		opts = append(opts, tea.WithAltScreen())
+		// The wheel scrolls a run under the pointer (spec 105). A terminal
+		// reporting the mouse keeps a drag for itself only with Shift held,
+		// which the README says.
+		opts = append(opts, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	}
 	if _, err := tea.NewProgram(m, opts...).Run(); err != nil {
 		return fmt.Errorf("running the terminal panel: %w", err)

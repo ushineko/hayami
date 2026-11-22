@@ -64,32 +64,64 @@ const (
 	vpnTimeWidth    = 15
 )
 
+// VPNScrollLines is how many lines of VPNs the Network card shows before they
+// scroll (spec 105): three tunnels that are up, each its state, its rates and
+// its totals.
+const VPNScrollLines = 3 * 3
+
 // VPNRows are the VPNs' rows, under the interfaces on the Network card. A VPN has
 // one line saying whether the tunnel is up and answering, with no address on it
 // (spec 085 R9), and a tunnel that is up has its rates and totals under that, as
 // an interface has them (spec 086).
 //
+// A VPN that is down has no row (spec 105): there is nothing to read, and the
+// drawer is where it is connected. One that is dialling or unknown keeps its
+// row -- the first is what the person just asked for, the second the system
+// not answering. The rows scroll, held to VPNScrollLines.
+//
 // The latency column is kept blank until a check has measured one, and the rates
 // until there are two samples, so a figure arriving does not move anything. A
-// tunnel coming up or going down does change the card's height.
+// tunnel coming up or going down does change the card's height, up to the
+// run's.
 func VPNRows(readings []VPNReading) []Row {
 	rows := make([]Row, 0, len(readings))
 	for _, r := range readings {
-		rows = append(rows, vpnRow(r))
+		if r.State == VPNDown {
+			continue
+		}
+		row := vpnRow(r)
+		row.Scrolls = true
+		rows = append(rows, row)
 		if r.Traffic != nil {
-			rows = append(rows, vpnTrafficRow(r))
+			row := vpnTrafficRow(r)
+			row.Scrolls = true
+			rows = append(rows, row)
 		}
 	}
 	return rows
 }
 
+// VPNShown reports whether any VPN has a row: whether one is not down.
+func VPNShown(readings []VPNReading) bool {
+	for _, r := range readings {
+		if r.State != VPNDown {
+			return true
+		}
+	}
+	return false
+}
+
 // VPNTrails are the tunnels' rates for the card's plot, each pair in the series
-// after the last, from first. A trail is emitted for a tunnel that is down, empty,
-// as an interface's is before it has a sample, so a card with only VPNs has a plot
-// from the start and a tunnel's trace is emptied when it goes down.
+// after the last, from first. A tunnel's series is its place among the chosen
+// VPNs, not among the ones shown, so it keeps its colour as others come and go
+// (spec 105). A tunnel that is down has no trail; one that is up has one from
+// its first sample, empty until then, as an interface's is.
 func VPNTrails(readings []VPNReading, first int) []Trail {
 	out := make([]Trail, 0, 2*len(readings))
 	for i, r := range readings {
+		if r.State == VPNDown {
+			continue
+		}
 		var rx, tx []float64
 		if r.Traffic != nil {
 			rx, tx = r.Traffic.RxTrail, r.Traffic.TxTrail

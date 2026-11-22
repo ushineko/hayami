@@ -17,7 +17,6 @@ import (
 // must not move the line, and every part's text joined is the value.
 func TestAVPNRowKeepsItsWidthInEveryState(t *testing.T) {
 	readings := []view.VPNReading{
-		{Name: "a", State: view.VPNDown},
 		{Name: "a", State: view.VPNConnecting},
 		{Name: "a", State: view.VPNUnknown},
 		{Name: "a", State: view.VPNUp, Connected: view.Some(2 * time.Minute)},
@@ -45,7 +44,6 @@ func TestAVPNRowSaysWhatStateItIsIn(t *testing.T) {
 		status view.Status
 	}{
 		{view.VPNUp, "up", view.Good},
-		{view.VPNDown, "down", view.Warn},
 		{view.VPNConnecting, "dialing", view.Info},
 		{view.VPNUnknown, view.Blank, view.Info},
 	}
@@ -60,8 +58,8 @@ func TestAVPNRowSaysWhatStateItIsIn(t *testing.T) {
 // rebuild it.
 func TestAVPNRowHasOneIDThroughItsStates(t *testing.T) {
 	up := view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNUp}})[0]
-	down := view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNDown}})[0]
-	assert.Equal(t, up.ID, down.ID)
+	dialing := view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNConnecting}})[0]
+	assert.Equal(t, up.ID, dialing.ID)
 	assert.NotEmpty(t, up.ID)
 }
 
@@ -76,7 +74,7 @@ func TestALabelTakesTheCardAndTheNameTheTip(t *testing.T) {
 }
 
 func TestAStaleReadingDrawsDim(t *testing.T) {
-	require.True(t, view.VPNRows([]view.VPNReading{{Name: "a", Stale: true}})[0].Stale)
+	require.True(t, view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNUp, Stale: true}})[0].Stale)
 }
 
 // A tunnel can push dozens of routes. They must not push out the health, or the
@@ -124,7 +122,7 @@ func TestTheNetworkCardsLinesShareColumns(t *testing.T) {
 
 // Every width-sensitive latency fits its column.
 func TestALatencyFitsItsColumnAtAnySize(t *testing.T) {
-	want := utf8.RuneCountInString(view.VPNRows([]view.VPNReading{{Name: "a"}})[0].Value)
+	want := utf8.RuneCountInString(view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNUnknown}})[0].Value)
 	for _, ms := range []float64{0, 0.4, 12, 999, 999.6, 1500, 99_949, 99_951, 1e9} {
 		row := view.VPNRows([]view.VPNReading{{Name: "a", State: view.VPNUp, Latency: view.Some(ms)}})[0]
 		assert.Equal(t, want, utf8.RuneCountInString(row.Value), "%v ms: %q", ms, row.Value)

@@ -81,9 +81,13 @@ func TestAVPNAloneDrawsTheCard(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, has)
+	// A VPN that is down has no row (spec 105 R1). With nothing else on the
+	// card, one line keeps it there to be clicked (R6).
 	s := b.Section()
-	assert.Len(t, vpnRows(s), 1)
-	assert.Empty(t, s.Reasons)
+	assert.Empty(t, vpnRows(s))
+	require.Len(t, s.Reasons, 1)
+	assert.Equal(t, "no VPN up", s.Reasons[0].Text)
+	assert.Equal(t, view.DetailVPN, s.Opens)
 }
 
 func TestAnUpVPNDrawsWithItsLabelAndConnectedTime(t *testing.T) {
@@ -169,7 +173,8 @@ func TestTheJSONNamesTheVPNs(t *testing.T) {
 
 // A chosen list changes while the panel runs, from the preferences window.
 func TestChangingTheChosenVPNsTakesEffect(t *testing.T) {
-	b := network(t, nil, answering(), config.VPNItem{Name: "a"})
+	b := network(t, nil, answering(core.VPN{Name: "b", State: core.VPNUp}, core.VPN{Name: "c", State: core.VPNUp}),
+		config.VPNItem{Name: "a"})
 	b.SetVPNs(config.BandwidthSettings{VPNs: []config.VPNItem{{Name: "b"}, {Name: "c"}}})
 
 	_, err := b.Poll(context.Background())
