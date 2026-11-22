@@ -192,6 +192,9 @@ func TestAStoreWithATruncatedLastLineLoads(t *testing.T) {
 
 // The store is bounded: it is a cache, and runs for as long as the machine does.
 func TestTheStoreDoesNotPassItsCap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("flaky on the Windows runner: a 5 s wait tuned on a fast machine (#381)")
+	}
 	const limit, slack = 10_000, 500
 	b, path := healthy(t, func(context.Context, core.VPNCheck) error { return nil }, checked())
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))

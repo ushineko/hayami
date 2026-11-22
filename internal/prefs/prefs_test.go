@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -20,6 +21,36 @@ import (
 	"github.com/ushineko/hayami/internal/testenv"
 	"github.com/ushineko/hayami/internal/view"
 )
+
+// shellDir holds every test window's own settings file, for the whole run.
+var (
+	shellDir   string
+	shellFiles atomic.Int64
+)
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "hayami-prefs-test")
+	if err != nil {
+		panic(err)
+	}
+	shellDir = dir
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+/*
+shellSettings is a window's own settings file (#379). A window built without
+one wrote the person's preferences-window file, and the tests' windows shared
+it, so on Windows one window's write could fail on another's, and the
+failure's report crashed the test driver. Each window has a file of its own,
+in a directory that outlasts every test: a write the window scheduled before
+its test ended still lands, rather than failing in a directory already gone.
+*/
+func shellSettings(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(shellDir, fmt.Sprintf("window-%d.json", shellFiles.Add(1)))
+}
 
 func store(t *testing.T, body string) *config.Store {
 	t.Helper()
@@ -48,7 +79,7 @@ func TestThePreferencesAreASecondWindowOfTheSameApp(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, ""), Version: "1.2.3"})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, ""), Version: "1.2.3"})
 
 	require.NotNil(t, w.Shell())
 	assert.NotNil(t, w.Shell().Window, "a preferences window with no window is a test helper")
@@ -62,7 +93,7 @@ func TestEverySectionIsOfferedWhetherItIsChosenOrNot(t *testing.T) {
 	t.Cleanup(a.Quit)
 	s := store(t, "hayami:\n    sections:\n        - usage\n")
 
-	w := prefs.New(a, prefs.Options{Store: s})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: s})
 
 	built := w.Shell().Sections()
 	require.Len(t, built, 4)
@@ -121,7 +152,7 @@ func TestEveryKnownSectionIsOfferedByName(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, "hayami:\n    sections:\n        - usage\n")})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, "hayami:\n    sections:\n        - usage\n")})
 
 	var offered []string
 	for _, o := range test.LaidOutObjects(w.Shell().Window.Content()) {
@@ -157,7 +188,7 @@ func TestTheWindowSectionOffersTheRuleAndTheOpacity(t *testing.T) {
 			a := test.NewApp()
 			t.Cleanup(a.Quit)
 
-			w := prefs.New(a, prefs.Options{Store: store(t, "")})
+			w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, "")})
 			w.Shell().Select("Window")
 
 			checks, labels, sliders := windowSection(w)
@@ -220,7 +251,7 @@ func TestClosingThePreferencesPutsThemAway(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, "")})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, "")})
 	w.Show()
 
 	// What the close button does: the intercept, not a destroy.
@@ -245,7 +276,7 @@ func TestTheNavigationsShapeIsOffered(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, "")})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, "")})
 
 	// The shell's own control appears in the header once shapes are listed.
 	var buttons []string
@@ -266,7 +297,7 @@ func TestPagesAreTheNavigationInOrder(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, ""), Version: "1.2.3"})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, ""), Version: "1.2.3"})
 	var titles []string
 	for _, s := range w.Shell().Sections() {
 		titles = append(titles, strings.ToLower(s.Title()))
@@ -280,7 +311,7 @@ func TestTheWindowOpensOnTheNamedPage(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 
-	w := prefs.New(a, prefs.Options{Store: store(t, ""), Version: "1.2.3", Page: "about"})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: store(t, ""), Version: "1.2.3", Page: "about"})
 	assert.Equal(t, "About", w.Shell().Current().Title())
 
 	w.ShowPage("Window")
@@ -302,7 +333,7 @@ func TestTheWindowSectionOffersHidingForAFullScreenApp(t *testing.T) {
 			a := test.NewApp()
 			t.Cleanup(a.Quit)
 			s := store(t, "")
-			w := prefs.New(a, prefs.Options{Store: s})
+			w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: s})
 			w.Shell().Select("Window")
 
 			var check *widget.Check
@@ -332,7 +363,7 @@ func TestMovingASectionUpAppliesTheNewOrder(t *testing.T) {
 	t.Cleanup(a.Quit)
 	s := store(t, "hayami:\n    sections:\n        - bandwidth\n        - cooler\n        - usage\n")
 	var applied [][]string
-	w := prefs.New(a, prefs.Options{Store: s, OnChange: func() {
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: s, OnChange: func() {
 		applied = append(applied, slices.Clone(s.Config().Sections))
 	}})
 	w.Shell().Select("Sections")

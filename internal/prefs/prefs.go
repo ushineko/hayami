@@ -36,6 +36,13 @@ type Options struct {
 	// Store is the settings, shared with the panel.
 	Store *config.Store
 
+	// SettingsPath is the window's own settings file, which the design
+	// system's shell keeps its navigation and appearance in. Empty is the
+	// shell's default, in the user's configuration directory; a test gives
+	// one in its own directory, so it neither writes the person's file nor
+	// shares one file with the other tests' windows (#379).
+	SettingsPath string
+
 	// Version is shown in the window's title.
 	Version string
 
@@ -90,10 +97,11 @@ type Window struct {
 func New(a fyne.App, o Options) *Window {
 	w := &Window{opts: o}
 	w.shell = shell.NewIn(a, shell.Options{
-		AppID:   AppID,
-		Name:    "hayami preferences",
-		Version: o.Version,
-		Theme:   o.Theme,
+		AppID:        AppID,
+		SettingsPath: o.SettingsPath,
+		Name:         "hayami preferences",
+		Version:      o.Version,
+		Theme:        o.Theme,
 
 		// Not the master window. Closing a master window exits the
 		// application, and this one belongs to a panel: closing the

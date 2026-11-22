@@ -21,7 +21,7 @@ func TestTheDevelopmentPreferences(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
 	s := store(t, "")
-	w := prefs.New(a, prefs.Options{Store: s})
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t), Store: s})
 	w.Shell().Select("Sections")
 
 	checks := map[string]*widget.Check{}

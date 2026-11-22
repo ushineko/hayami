@@ -36,7 +36,7 @@ func vpnWindow(t *testing.T, s *config.Store, importFrom string, names ...string
 	if importFrom == "" {
 		importFrom = filepath.Join(t.TempDir(), "absent.json")
 	}
-	w := prefs.New(a, prefs.Options{
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t),
 		Store: s, Version: "1.2.3", VPNSystems: systems(names...), VPNToggleConfig: importFrom,
 		Background: func(f func()) { f() },
 	})
@@ -236,7 +236,7 @@ func TestASystemThatWillNotListIsLeftOut(t *testing.T) {
 func TestAPlatformWithNoSystemsHasNoVPNGroup(t *testing.T) {
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
-	w := prefs.New(a, prefs.Options{
+	w := prefs.New(a, prefs.Options{SettingsPath: shellSettings(t),
 		Store: store(t, ""), Version: "1.2.3",
 		VPNSystems: func() []core.VPNBackend { return nil }, VPNToggleConfig: vpnToggle(t),
 	})

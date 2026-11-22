@@ -770,6 +770,8 @@ make screenshots    # the gallery above, from live readings
                     # (KDE/Wayland, kdotool, spectacle, alacritty, python3 with Pillow)
 
 tools/screenshot.sh --what prefs:about        # one screenshot
+tools/watch-ci.sh --pr 123                    # wait for a PR's CI; exits 1 naming the failing tests
+tools/watch-ci.sh --ref v1.2.3                # the same for a tag's release build
 tools/shot-tui.sh out.png 150 6 ./hayami-tui --sections usage
                                               # a terminal pane (KDE/Wayland)
 ```
@@ -794,6 +796,14 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Changed**: three tests that fail by timing on the Windows runner are
+  skipped there until fixed (#376, #380, #381); the preferences tests give
+  each window a settings file of its own, so they no longer write your
+  preferences-window settings or share one file (#379); `tools/watch-ci.sh`
+  watches a PR's or a tag's CI and says which test failed.
 
 ### 0.21.0 (2026-11-21)
 
