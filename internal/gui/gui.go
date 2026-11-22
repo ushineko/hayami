@@ -136,6 +136,12 @@ type card struct {
 	card   *glance.Card
 	meters []*glance.Meter
 
+	// run holds the section's scrolling run (spec 105): its rows, held to the
+	// section's ScrollLines. Every card has one, under its rows and above
+	// its plot, hidden while it is empty, because the library takes a card's
+	// pieces when it is built and a run can start at any poll.
+	run *glance.Scroller
+
 	// spark is the section's trend, for a section that has one. Nil for the
 	// rest, which is most of them. traces are the names it has declared, so
 	// a later draw recolours a trace rather than declaring it again, which
@@ -297,9 +303,18 @@ func New(a fyne.App, o Options) *Panel {
 		// among them by its ID, above the plot (spec 044).
 		holder.lines = rowIDs(sec.Lines())
 		holder.remember(sec)
+		holder.run = glance.NewScroller(max(1, sec.ScrollLines))
 		for _, r := range flatten(holder.lines, true) {
+			if r.Scrolls {
+				holder.run.AddRow(holder.newRow(r))
+				continue
+			}
 			c.AddRow(holder.newRow(r))
 		}
+		if len(holder.run.Rows()) == 0 {
+			holder.run.Object().Hide()
+		}
+		c.Add(holder.run)
 		for _, m := range sec.Meters {
 			// The window arranges in one column, not the pane's three: the
 			// design system's meter pins its label to a width of its own and
@@ -519,6 +534,9 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// The panel is re-measured below in every case.
 	c.lines = rowIDs(sec.Lines())
 	c.remember(sec)
+	if sec.ScrollLines > 0 && sec.ScrollLines != c.run.Visible() {
+		c.run.SetVisible(sec.ScrollLines)
+	}
 	p.rebuild(c, flatten(c.lines, !p.row))
 
 	// A cell the card was not built with cannot be added now, for the reason
@@ -670,7 +688,9 @@ func flatten(rows []view.Row, details bool) []view.Row {
 		}
 		out = append(out, bare)
 		for i, d := range r.DetailLines() {
-			out = append(out, view.Row{ID: fmt.Sprintf("%s/detail:%d", r.ID, i+1), Value: d, Status: view.Info})
+			out = append(out, view.Row{
+				ID: fmt.Sprintf("%s/detail:%d", r.ID, i+1), Value: d, Status: view.Info, Scrolls: r.Scrolls,
+			})
 		}
 	}
 	return out
@@ -729,27 +749,65 @@ two rows that swapped -- is moved. None of this happens because a value
 changed, so a value never moves anything; Draw re-measures the panel after.
 */
 func (p *Panel) rebuild(c *card, want []view.Row) {
+	// The run's rows go to the run and the rest to the card (spec 105); a row
+	// moving between them is taken out of one and built in the other.
+	var fixed, run []view.Row
+	for _, r := range want {
+		if r.Scrolls {
+			run = append(run, r)
+		} else {
+			fixed = append(fixed, r)
+		}
+	}
+	p.rebuildIn(c, c.card, fixed, run)
+	p.rebuildIn(c, c.run, run, fixed)
+	if shown := len(run) > 0; shown != c.run.Object().Visible() {
+		if shown {
+			c.run.Object().Show()
+		} else {
+			c.run.Object().Hide()
+		}
+	}
+}
+
+// rows is what holds a card's rows: the card itself, or its run.
+type rows interface {
+	Rows() []*glance.Row
+	RowByID(id string) *glance.Row
+	RemoveRow(id string) bool
+	InsertRow(at int, r *glance.Row) error
+}
+
+// rebuildIn brings one holder's rows into line with want, by ID. Rows in
+// elsewhere belong to the card's other holder and are left to it.
+func (p *Panel) rebuildIn(c *card, in rows, want, elsewhere []view.Row) {
 	keep := make(map[string]bool, len(want))
 	for _, r := range want {
 		keep[r.ID] = true
 	}
-	for _, row := range slices.Clone(c.card.Rows()) {
+	moving := make(map[string]bool, len(elsewhere))
+	for _, r := range elsewhere {
+		moving[r.ID] = true
+	}
+	for _, row := range slices.Clone(in.Rows()) {
 		if !keep[row.ID()] {
-			c.card.RemoveRow(row.ID())
-			delete(c.pinned, row.ID())
+			in.RemoveRow(row.ID())
+			if !moving[row.ID()] {
+				delete(c.pinned, row.ID())
+			}
 		}
 	}
 	for i, r := range want {
-		row := c.card.RowByID(r.ID)
-		if rows := c.card.Rows(); row == nil || i >= len(rows) || rows[i] != row {
+		row := in.RowByID(r.ID)
+		if rows := in.Rows(); row == nil || i >= len(rows) || rows[i] != row {
 			if row != nil {
-				c.card.RemoveRow(r.ID)
+				in.RemoveRow(r.ID)
 			} else {
 				row = c.newRow(r)
 			}
 			// Cannot fail: i is at most the rows' length, and the ID is not
-			// on the card -- it was just removed or never there.
-			_ = c.card.InsertRow(i, row)
+			// in the holder -- it was just removed or never there.
+			_ = in.InsertRow(i, row)
 		}
 		label := r.Label
 		if c.pinned[r.ID] {

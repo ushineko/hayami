@@ -40,7 +40,7 @@ func TestAnUpTunnelHasItsTrafficOnTheCard(t *testing.T) {
 	_, err := b.Poll(context.Background())
 	require.NoError(t, err)
 	rows := vpnRows(b.Section())
-	require.Len(t, rows, 3, "a's state and rates, and b's state")
+	require.Len(t, rows, 2, "a's state and rates; b is down and has none")
 	assert.Contains(t, rows[1].Value, view.Blank)
 	assert.Contains(t, rows[1].Detail, "Σ")
 
@@ -52,21 +52,20 @@ func TestAnUpTunnelHasItsTrafficOnTheCard(t *testing.T) {
 	}, 5*time.Second, 50*time.Millisecond)
 	assert.Equal(t, "tun0", rows[1].Tip)
 
-	// Series 0 is the interface's; the tunnels follow it.
+	// Series 0 is the interface's; the tunnels follow it. b is down and has
+	// no trace.
 	sec := b.Section()
-	require.Len(t, sec.Trails, 6, "an interface and two tunnels, down and up each")
+	require.Len(t, sec.Trails, 4, "an interface and the tunnel that is up, down and up each")
 	assert.Equal(t, 1, sec.Trails[2].Series)
 	assert.NotEmpty(t, sec.Trails[2].Samples)
-	assert.Equal(t, 2, sec.Trails[4].Series)
-	assert.Empty(t, sec.Trails[4].Samples)
 
 	state = core.VPNDown
 	b.ForgetVPNReadTime()
 	_, err = b.Poll(context.Background())
 	require.NoError(t, err)
 	sec = b.Section()
-	assert.Len(t, vpnRows(sec), 2, "two down tunnels are two lines")
-	assert.Empty(t, sec.Trails[2].Samples, "a tunnel's trace empties when it goes down")
+	assert.Empty(t, vpnRows(sec), "two down tunnels have no lines")
+	assert.Len(t, sec.Trails, 2, "a tunnel's trace goes when it goes down")
 }
 
 // Choosing only VPNs still reads a tunnel's counters.

@@ -178,6 +178,9 @@ stands beside the cards; otherwise, and in `row`, it takes the pane until
 Esc. It turns no VPN on or off and ends no process; the window does those.
 `hayami-tui detail` prints the same detail once.
 
+The terminal panel reads the mouse, for the wheel over the Network card's VPN
+lines, so selecting text in it takes Shift in most terminals.
+
 ## Screenshots
 
 Taken by `make screenshots` from live readings on a Linux desk.
@@ -669,10 +672,13 @@ opens on the right and the panel keeps the keyboard after a click.
 
 #### VPNs and the keepalive helper
 
-A VPN gets a line on the Network card when you choose it in preferences, on the
-Sections page, from NetworkManager's and OpenVPN3's lists. While a tunnel is up, its
-rates and totals sit under that line and join the trend, and the totals count from
-when its interface was created. A check is a ping or a
+A VPN you choose in preferences, on the Sections page, from NetworkManager's and
+OpenVPN3's lists, gets a line on the Network card while it is not down; one that is
+down is connected from the drawer. While a tunnel is up, its rates and totals sit
+under that line and join the trend, and the totals count from when its interface was
+created. The VPN lines are held to three tunnels' height, and past that the wheel
+over them scrolls them; in the terminal panel the wheel does the same, and with the
+Network card chosen the arrows scroll them before moving to the next card. A check is a ping or a
 DNS lookup, sent only while the tunnel is up. The Network drawer's `VPN` view plots
 each tunnel, and connects, disconnects and bounces it; a disconnect and a bounce take
 two presses. All of this works with nothing else installed, and nothing acts on a VPN
@@ -802,6 +808,13 @@ MIT. See
   `install_windows.ps1 -WithSensors` still sets up LibreHardwareMonitor
   (spec 104, #367).
 - **Changed**: sanshoku 0.6.0.
+- **Changed**: the Network card shows only the VPNs that are not down; one
+  that is down is in the drawer, where it is connected. The VPN lines are
+  held to three tunnels' height and scroll past that, with the wheel in both
+  panels and with the arrows in the terminal panel; the card's plot stays
+  where it was. The terminal panel now reads the mouse, so selecting text in
+  it takes Shift (spec 105, #371).
+- **Changed**: fynedesygn 0.1.124.
 
 ### 0.20.0 (2026-11-19)
 

@@ -72,33 +72,32 @@ func Render(sections []Section, a Arrangement, width int) []string {
 // Nothing is painted without one, which is what keeps a pipe, a redirect and
 // every test in this package seeing exactly the text the view built.
 func RenderWith(sections []Section, a Arrangement, width int, p Painter) []string {
-	if width < 1 {
-		width = 1
-	}
-	switch a {
-	case ArrangeGrid:
-		return renderGrid(sections, width, p)
-	case ArrangeRow:
-		return renderRow(sections, width, p)
-	default:
-		return renderStack(sections, width, p)
-	}
+	out, _ := RenderRegions(sections, a, width, p)
+	return out
 }
 
 // renderStack is one section above another.
-func renderStack(sections []Section, width int, p Painter) []string {
+func renderStack(sections []Section, width int, p Painter) ([]string, []Region) {
 	var out []string
+	regions := make([]Region, 0, len(sections))
 	for i, s := range sections {
 		if i > 0 {
 			out = append(out, "")
 		}
-		out = append(out, block(s, width, p)...)
+		lines, runY, runH := block(s, width, p)
+		regions = append(regions, Region{
+			Key: s.Key, X: 0, Y: len(out), W: width, H: len(lines),
+			RunY: len(out) + runY, RunH: runH,
+		})
+		out = append(out, lines...)
 	}
-	return out
+	return out, regions
 }
 
 // block is one section as lines at a width: the title, then a line per row.
-func block(s Section, width int, p Painter) []string {
+// runY and runH are where its scrolling run is among the lines, none for a
+// section without one (spec 105).
+func block(s Section, width int, p Painter) (out []string, runY, runH int) {
 	title := s.Title
 	if s.Gone {
 		title += " (unavailable)"
@@ -109,19 +108,34 @@ func block(s Section, width int, p Painter) []string {
 		// since nothing is appended to its title.
 		p = p.dimmed()
 	}
-	out := []string{p.paint(truncate(title, width), Dim)}
-	for _, r := range s.Lines() {
+	out = []string{p.paint(truncate(title, width), Dim)}
+	// A run that does not fit takes the last column for its bar, from every
+	// row of the section, so the figures still end in one column.
+	rows := width
+	if s.overflows(ArrangeStack) {
+		rows = width - 1
+	}
+	above, run, below := runParts(s, func(r Row) []string {
 		if s.Gone {
 			// The numbers are kept and the verdict is dropped. A green row
 			// for a temperature nobody has measured this minute asserts
 			// something the panel does not know.
 			r.Status = Dim
 		}
-		out = append(out, line(r, width, p))
+		lines := []string{line(r, rows, p)}
 		for _, d := range r.DetailLines() {
-			out = append(out, p.paint(rightAlign(d, width), Dim))
+			lines = append(lines, p.paint(rightAlign(d, rows), Dim))
 		}
+		return lines
+	})
+	if rows < width {
+		above, below = padded(above), padded(below)
 	}
+	out = append(out, above...)
+	runY = len(out)
+	run = window(run, s, ArrangeStack, p)
+	out = append(out, run...)
+	out = append(out, below...)
 	out = append(out, cells(s.Cells, width, p)...)
 	out = append(out, meters(s.Meters, width, p)...)
 	for _, t := range s.Trails {
@@ -129,7 +143,7 @@ func block(s Section, width int, p Painter) []string {
 			out = append(out, p.paint(line, trailStatus(t, s.Gone)))
 		}
 	}
-	return out
+	return out, runY, len(run)
 }
 
 // plot draws one of a section's trails at a width, under the section's
@@ -306,16 +320,30 @@ func rightAlign(s string, width int) string {
 // The section's title is not repeated. In a pane of three lines, a heading on
 // each one spends three columns saying what the labels already say; it is
 // carried only for a row that has no label of its own.
-func renderRow(sections []Section, width int, p Painter) []string {
+func renderRow(sections []Section, width int, p Painter) ([]string, []Region) {
 	c := rowColumns(sections)
 	sc := measureStrips(sections)
 	bars := cellRowBars(sections, width)
 
 	var out []string
+	regions := make([]Region, 0, len(sections))
 	for _, s := range sections {
-		for _, r := range s.Lines() {
-			out = append(out, line(labelled(s, r), width, p))
+		top := len(out)
+		rows := width
+		if s.overflows(ArrangeRow) {
+			rows = width - 1
 		}
+		above, run, below := runParts(s, func(r Row) []string {
+			return []string{line(labelled(s, r), rows, p)}
+		})
+		if rows < width {
+			above, below = padded(above), padded(below)
+		}
+		out = append(out, above...)
+		runY := len(out)
+		run = window(run, s, ArrangeRow, p)
+		out = append(out, run...)
+		out = append(out, below...)
 		for _, c := range s.Cells {
 			out = append(out, cellLine(c, width, bars, p))
 		}
@@ -331,8 +359,11 @@ func renderRow(sections []Section, width int, p Painter) []string {
 				out = append(out, trail)
 			}
 		}
+		regions = append(regions, Region{
+			Key: s.Key, X: 0, Y: top, W: width, H: len(out) - top, RunY: runY, RunH: len(run),
+		})
 	}
-	return out
+	return out, regions
 }
 
 // trailRow is one of a section's series as one line: the trail's name in the
@@ -608,7 +639,7 @@ func padLeft(s string, width int) string {
 // ArrangeStack: a grid that drew a single narrow column would be a stack with worse
 // spacing. Sections fill column-major, so reading down a column follows the
 // order the user set.
-func renderGrid(sections []Section, width int, p Painter) []string {
+func renderGrid(sections []Section, width int, p Painter) ([]string, []Region) {
 	cols := (width + ColumnGap) / (MinColumnWidth + ColumnGap)
 	if cols < 2 || len(sections) < 2 {
 		return renderStack(sections, width, p)
@@ -624,13 +655,20 @@ func renderGrid(sections []Section, width int, p Painter) []string {
 	colWidth := (width - ColumnGap*(cols-1)) / cols
 
 	columns := make([][]string, cols)
+	regions := make([]Region, 0, len(sections))
 	height := 0
 	for c := range cols {
 		for i := c * perCol; i < (c+1)*perCol && i < len(sections); i++ {
 			if len(columns[c]) > 0 {
 				columns[c] = append(columns[c], "")
 			}
-			columns[c] = append(columns[c], block(sections[i], colWidth, p)...)
+			lines, runY, runH := block(sections[i], colWidth, p)
+			y := len(columns[c])
+			regions = append(regions, Region{
+				Key: sections[i].Key, X: c * (colWidth + ColumnGap), Y: y, W: colWidth, H: len(lines),
+				RunY: y + runY, RunH: runH,
+			})
+			columns[c] = append(columns[c], lines...)
 		}
 		height = max(height, len(columns[c]))
 	}
@@ -653,5 +691,5 @@ func renderGrid(sections []Section, width int, p Painter) []string {
 		}
 		out = append(out, strings.TrimRight(b.String(), " "))
 	}
-	return out
+	return out, regions
 }

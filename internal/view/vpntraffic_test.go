@@ -50,10 +50,10 @@ func TestATunnelsRateTakesAnInterfacesBand(t *testing.T) {
 	assert.Equal(t, view.Info, rows[1].Parts[3].Status)
 }
 
-// Only a tunnel that is up with an interface has rates, and the rest are one line.
+// Only a tunnel that is up with an interface has rates, and the rest that are
+// shown are one line.
 func TestATunnelWithoutTrafficIsOneLine(t *testing.T) {
 	for _, r := range []view.VPNReading{
-		{Name: "down", State: view.VPNDown},
 		{Name: "dialing", State: view.VPNConnecting},
 		{Name: "unknown", State: view.VPNUnknown},
 		{Name: "no interface", State: view.VPNUp},
@@ -93,11 +93,14 @@ func TestAPaneNamesATunnelsRateLine(t *testing.T) {
 }
 
 // A tunnel's trace follows the interfaces', as a pair of one colour, and a tunnel
-// with no traffic keeps an empty trace, which is what empties it on the plot.
+// that is up with no traffic yet keeps an empty trace. A tunnel that is down has
+// none, and the series after it keep their places among the chosen VPNs (spec
+// 105), so a tunnel's colour does not change as another comes and goes.
 func TestATunnelsTraceFollowsTheInterfaces(t *testing.T) {
 	trails := view.VPNTrails([]view.VPNReading{
 		{Name: "a", Label: "short", State: view.VPNUp, Traffic: tunnel(5, 6)},
-		{Name: "b", State: view.VPNDown},
+		{Name: "down", State: view.VPNDown},
+		{Name: "b", State: view.VPNUp},
 	}, 2)
 
 	require.Len(t, trails, 4)
@@ -110,7 +113,7 @@ func TestATunnelsTraceFollowsTheInterfaces(t *testing.T) {
 	assert.True(t, trails[1].Secondary)
 	assert.Equal(t, "b ↓", trails[2].Name)
 	assert.Empty(t, trails[2].Samples)
-	assert.Equal(t, 3, trails[2].Series)
+	assert.Equal(t, 4, trails[2].Series, "the tunnel after one that is down took its colour")
 }
 
 // The drawer's plot is told how long a check takes to come round.

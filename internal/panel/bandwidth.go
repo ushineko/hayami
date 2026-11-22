@@ -219,10 +219,20 @@ func (b *Bandwidth) Section() view.Section {
 	}
 	if b.vpnChosen() {
 		vpns := b.vpnReadings()
+		// The VPNs that are not down, in a run held to three tunnels' lines
+		// (spec 105).
 		sec.Rows = append(sec.Rows, view.VPNRows(vpns)...)
+		sec.ScrollLines = view.VPNScrollLines
 		// After the interfaces', so an interface keeps its colour as VPNs are chosen.
 		sec.Trails = append(sec.Trails, view.VPNTrails(vpns, len(out))...)
-		reasons = append(reasons, b.vpnReasons()...)
+		vpnReasons := b.vpnReasons()
+		if len(readings) == 0 && !view.VPNShown(vpns) && len(vpnReasons) == 0 {
+			// Nothing else on the card: the line keeps it there, and a click
+			// on it still opens the VPNs, where one is connected. Where the
+			// system is not answering, that is what the card says instead.
+			reasons = append(reasons, view.Reason{Text: "no VPN up", Status: view.Info})
+		}
+		reasons = append(reasons, vpnReasons...)
 	}
 	sec.Reasons = reasons
 	if b.net != nil {

@@ -744,3 +744,21 @@ func Woken(p *Panel, key string) bool {
 		return false
 	}
 }
+
+// RunIDs are the IDs of the rows in key's scrolling run (spec 105), in order,
+// how many of them show at once, and whether the run is drawn.
+func RunIDs(p *Panel, key string) (ids []string, visible int, shown bool) {
+	c, ok := p.cards[key]
+	if !ok {
+		return nil, 0, false
+	}
+	for _, r := range c.run.Rows() {
+		ids = append(ids, r.ID())
+	}
+	return ids, c.run.Visible(), c.run.Object().Visible()
+}
+
+// CardHeight is the height key's card asks for.
+func CardHeight(p *Panel, key string) float32 {
+	return p.cards[key].card.Object().MinSize().Height
+}
