@@ -265,7 +265,8 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
 | A detail behind a reading | `Details`, `PollDetail`, `DetailInterval` and `CloseDetail` on the section's source (`panel.Detailer`), a builder in `view` that returns a `view.Detail`, and `Opens` on the section that asks for it; a `Label` and a `Key` on each `DetailInfo` where there is more than one to choose between | It appears in the window's drawer, the terminal's drawer, `hayami-tui detail`, `readings` and `doctor`. It is not polled until shown |
-| A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test |
+| A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test. A section on by default is offered once to existing settings files (`config.Offered`), at its place in `view.Sections()` |
+| A source polled at a moment, not an interval | `Next` on the source (`panel.Paced`); both shells wait `panel.Wait` | The clock, at the turn of each second (spec 106) |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
 | A setting | A `config.Setting` in `internal/config/sections.go`, read by the section's builder from `Env.Settings` | A `sectionPrefs` widget in `internal/prefs/sections.go`, if a person would change it more than once |
 | A usage provider | An entry in `usage`'s provider table (`internal/usage/providers.go`: cache name, display name, shorthand, decoder) and one in the panel's (`usageProviders`: how its accounts are found and fetched), beside its fetch and decode code | Its cache file's suffix is its name, and the default provider has none: the slug is shared with the Python tools |
@@ -314,10 +315,13 @@ These rules apply in addition to CONTRIBUTING.md's.
 | VPN health checks as a table, one set of probes across panels | 2, 5 | In place | #298 |
 | VPN keepalive rules as a pure engine, with a helper to run them | 2 | In place | #298 |
 | Forges read headless in `internal/forge`, drawn from plain values | 9 | In place | #360 |
+| Sources paced by the moment they want (`panel.Paced`) | Adding things | In place | #372 |
+| New default sections offered once to existing settings | Adding things | In place | #372 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a
-reading, as the terminal draws it. Two differences remain and are named in the
+reading, as the terminal draws it. A card that is only its heading -- the
+clock -- keeps it, since the heading is its reading (spec 106). Two differences remain and are named in the
 parity test's allow-list: the terminal spells a usage meter the usage widget's
 way in a row (spec 019), and it draws each trend as a named line where the
 window's row leaves plots out.

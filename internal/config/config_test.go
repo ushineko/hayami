@@ -29,7 +29,7 @@ func TestAMachineWithNoSettingsFileGetsTheDefaults(t *testing.T) {
 
 	c := s.Config()
 
-	assert.Equal(t, []string{"bandwidth", "usage", "cooler", "peripherals"}, c.Sections)
+	assert.Equal(t, []string{"clock", "bandwidth", "usage", "cooler", "peripherals"}, c.Sections)
 	assert.Equal(t, "stack", c.Arrangement)
 	assert.Empty(t, c.Interfaces,
 		"guessing an interface would be this program deciding what is interesting about someone's network")
@@ -226,4 +226,43 @@ func TestHidingForAFullScreenAppIsOnUnlessTurnedOff(t *testing.T) {
 
 	require.NoError(t, again.SetConfig(again.Config().WithHideForFullscreen(true)))
 	assert.True(t, again.Config().HidesForFullscreen())
+}
+
+// Spec 106 R1. A file from before the clock gets it at the top, once: the
+// person's own order is kept under it, and a section they had hidden stays
+// hidden.
+func TestAnOldFileIsOfferedTheClockAtTheTop(t *testing.T) {
+	s, path := open(t, "hayami:\n  sections: [cooler, bandwidth]\n")
+	c := s.Config()
+	assert.Equal(t, []string{"clock", "cooler", "bandwidth"}, c.Sections,
+		"the clock not at the top, or the person's order or choice changed")
+	assert.Contains(t, c.Offered, "clock")
+	require.NoError(t, s.SetConfig(c))
+	require.NoError(t, s.Flush())
+
+	again, err := config.Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"clock", "cooler", "bandwidth"}, again.Config().Sections, "offered twice")
+}
+
+// Spec 106 R1. A person who hides or moves the clock keeps their choice: it
+// has been offered, and is not offered again.
+func TestAHiddenClockStaysHidden(t *testing.T) {
+	s, path := open(t, "hayami:\n  sections: [cooler]\n")
+	c := s.Config()
+	c.Sections = []string{"cooler"}
+	require.NoError(t, s.SetConfig(c))
+	require.NoError(t, s.Flush())
+
+	again, err := config.Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cooler"}, again.Config().Sections, "a hidden clock came back")
+
+	c = again.Config()
+	c.Sections = []string{"cooler", "clock"}
+	require.NoError(t, again.SetConfig(c))
+	require.NoError(t, again.Flush())
+	third, err := config.Open(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cooler", "clock"}, third.Config().Sections, "a moved clock was moved back")
 }

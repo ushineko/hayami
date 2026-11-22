@@ -88,7 +88,11 @@ func TestAChangeReachesTheStoreWithoutASaveButton(t *testing.T) {
 	s := store(t, "hayami:\n    sections:\n        - usage\n")
 	called := 0
 
-	require.NoError(t, s.SetConfig(config.Config{Sections: []string{"usage", "cooler"}}))
+	// From the store's settings, as the window has them, so the clock counts
+	// as offered (spec 106).
+	c := s.Config()
+	c.Sections = []string{"usage", "cooler"}
+	require.NoError(t, s.SetConfig(c))
 	called++
 	require.NoError(t, s.Flush())
 
@@ -351,7 +355,8 @@ func TestMovingASectionUpAppliesTheNewOrder(t *testing.T) {
 	require.NotNil(t, up, "the cooler's row has no up button")
 	test.Tap(up)
 
-	want := []string{"cooler", "bandwidth", "usage"}
+	// The clock was offered at the top of a file from before it (spec 106).
+	want := []string{"clock", "cooler", "bandwidth", "usage"}
 	assert.Equal(t, want, s.Config().Sections, "the move was not saved")
 	require.Len(t, applied, 1, "the panel was not told, or told twice")
 	assert.Equal(t, want, applied[0], "the panel was told before the store had the new order")

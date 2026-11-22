@@ -101,6 +101,7 @@ two to each other: a section in one and not the other fails it rather than
 being a section the settings can name and nothing draws.
 */
 var builders = map[string]func(Env) Source{
+	view.ClockInfo.Key:       func(Env) Source { return NewClock(nil) },
 	view.BandwidthInfo.Key:   Env.bandwidth,
 	view.UsageInfo.Key:       Env.usage,
 	view.CoolerInfo.Key:      func(e Env) Source { return NewCooler(e.Host, e.scan()) },

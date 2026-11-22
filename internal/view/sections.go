@@ -27,6 +27,7 @@ type SectionInfo struct {
 // The sections, by name, for the builder and the source that each belongs
 // to.
 var (
+	ClockInfo       = SectionInfo{Key: "clock", Title: "Clock", Icon: IconClock, Default: true}
 	BandwidthInfo   = SectionInfo{Key: "bandwidth", Title: "Network", Icon: IconBandwidth, Default: true}
 	UsageInfo       = SectionInfo{Key: "usage", Title: "Development", Icon: IconUsage, Default: true}
 	CoolerInfo      = SectionInfo{Key: "cooler", Title: "Hardware", Icon: IconCooler, Default: true}
@@ -36,7 +37,7 @@ var (
 // Sections is every section this build has, in the order a new settings file
 // draws them.
 func Sections() []SectionInfo {
-	return []SectionInfo{BandwidthInfo, UsageInfo, CoolerInfo, PeripheralsInfo}
+	return []SectionInfo{ClockInfo, BandwidthInfo, UsageInfo, CoolerInfo, PeripheralsInfo}
 }
 
 // DefaultSections are the keys a settings file that names none draws, in

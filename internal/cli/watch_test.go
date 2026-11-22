@@ -40,7 +40,8 @@ func TestTheTerminalSeesTheSettingsChange(t *testing.T) {
 	rewrite(t, path, body, time.Now())
 	shown, arr, changed := look()
 	require.True(t, changed, "a moved section was not seen")
-	assert.Equal(t, []string{"usage", "bandwidth"}, shown)
+	// A file from before the clock is offered it, at the top (spec 106).
+	assert.Equal(t, []string{"clock", "usage", "bandwidth"}, shown)
 	assert.Equal(t, view.ArrangeGrid, arr)
 
 	_, _, changed = look()

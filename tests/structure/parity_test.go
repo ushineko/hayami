@@ -46,7 +46,13 @@ func TestEveryRegistryEntryBuildsItsSource(t *testing.T) {
 			require.NotNil(t, src)
 			assert.Equal(t, spec.Key, src.Key(), "a section was not built under its own key")
 			sec := src.Section()
-			assert.Equal(t, spec.Title, sec.Title)
+			if sec.HeadingOnly() {
+				// Its heading is its reading -- the clock's time (spec 106) --
+				// and its name is the preferences' and the command line's.
+				assert.NotEmpty(t, sec.Title)
+			} else {
+				assert.Equal(t, spec.Title, sec.Title)
+			}
 			assert.Equal(t, spec.Icon, sec.Icon)
 		})
 	}

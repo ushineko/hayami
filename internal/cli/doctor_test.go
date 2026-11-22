@@ -165,7 +165,7 @@ func TestDoctorReportsEverySectionIncludingTheOnesThatAreOff(t *testing.T) {
 	bare(t)
 	findings := cli.Diagnose(t.Context(), []string{"bandwidth"}, panel.Env{Settings: config.Bandwidth.Set(config.Config{}, config.BandwidthSettings{Interfaces: []string{"eth0"}}), Counters: counters})
 
-	assert.Equal(t, []string{"bandwidth", "cooler", "peripherals", "usage"}, cli.Keys(findings))
+	assert.Equal(t, []string{"bandwidth", "clock", "cooler", "peripherals", "usage"}, cli.Keys(findings))
 
 	for _, f := range findings {
 		if f.Key == "bandwidth" {

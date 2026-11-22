@@ -108,7 +108,7 @@ func block(s Section, width int, p Painter) (out []string, runY, runH int) {
 		// since nothing is appended to its title.
 		p = p.dimmed()
 	}
-	out = []string{p.paint(truncate(title, width), Dim)}
+	out = []string{titleLine(s, title, width, p)}
 	// A run that does not fit takes the last column for its bar, from every
 	// row of the section, so the figures still end in one column.
 	rows := width
@@ -332,6 +332,13 @@ func renderRow(sections []Section, width int, p Painter) ([]string, []Region) {
 		rows := width
 		if s.overflows(ArrangeRow) {
 			rows = width - 1
+		}
+		if s.HeadingOnly() {
+			// The heading is the reading, and in row it is the one line: the
+			// time at the left, the date at the right (spec 106).
+			out = append(out, line(Row{Label: s.Title, Value: s.TitleEnd, Status: Info}, width, p))
+			regions = append(regions, Region{Key: s.Key, X: 0, Y: top, W: width, H: 1})
+			continue
 		}
 		above, run, below := runParts(s, func(r Row) []string {
 			return []string{line(labelled(s, r), rows, p)}
@@ -692,4 +699,17 @@ func renderGrid(sections []Section, width int, p Painter) ([]string, []Region) {
 		out = append(out, strings.TrimRight(b.String(), " "))
 	}
 	return out, regions
+}
+
+// titleLine is a section's heading at a width: its title, and its title's
+// other end against the right edge where it has one (spec 106).
+func titleLine(s Section, title string, width int, p Painter) string {
+	if s.TitleEnd == "" {
+		return p.paint(truncate(title, width), Dim)
+	}
+	gap := width - runeLen(title) - runeLen(s.TitleEnd)
+	if gap < 1 {
+		return p.paint(truncate(title+" "+s.TitleEnd, width), Dim)
+	}
+	return p.paint(title+strings.Repeat(" ", gap)+s.TitleEnd, Dim)
 }

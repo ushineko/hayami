@@ -19,7 +19,7 @@ they are still installed.
 
 ## Contents
 
-- [The four sections](#the-four-sections)
+- [The five sections](#the-five-sections)
 - [Screenshots](#screenshots)
 - [Installing](#installing)
 - [Running it](#running-it)
@@ -31,7 +31,7 @@ they are still installed.
 - [Licence](#licence)
 - [Changelog](#changelog)
 
-## The four sections
+## The five sections
 
 Each reading is a **section**. A section is drawn only when it has something
 to show, and you choose which sections appear and in what order. A hidden
@@ -39,6 +39,7 @@ section is not polled at all.
 
 | Section | What it shows | Where it reads from |
 |---|---|---|
+| Clock | The time to the second and the date, as the card's heading: the time at the left, the date at the right. On by default, at the top | The system's clock, read at the turn of each second |
 | Peripherals | Battery level and charging state of mice, keyboards, headsets and game controllers, a cell per kind of device | [sanshoku](https://github.com/ushineko/sanshoku): Logitech HID++ (including devices behind a receiver), Razer (including the Basilisk Ultimate on its dongle or its cable), SteelSeries, the AULA F75 through its 2.4 GHz receiver, the DualSense over USB or Bluetooth, Bluetooth headsets and other devices through BlueZ on Linux and Windows' own Bluetooth battery level on Windows, AirPods on Linux |
 | Network | Download and upload rate and totals per interface, with a two-minute trend. A Wi-Fi interface also shows its signal, band, channel and link rate | `/proc/net/dev` and nl80211 on Linux; the interface table and the WLAN service on Windows. The network's name is never read |
 | Hardware | Processor and graphics card load and temperature, the memory in use, and a liquid cooler's coolant temperature, fan and pump speeds, with a five-minute trend | hwmon by label, `/proc/stat`, `/proc/meminfo` and the NZXT Kraken's status report on Linux; on Windows, the system's load counters, `GlobalMemoryStatusEx`, D3DKMT and the `GPU Engine` counters, and the sensor helper (PawnIO) or LibreHardwareMonitor for the processor's temperature. `nvidia-smi` only for what those leave out |
@@ -49,7 +50,8 @@ The sections can be laid out three ways, in either panel:
 - **stack**: one card above another.
 - **grid**: columns that reflow to the width, as in `btop`.
 - **row**: one full-width line per reading, its bar stretching across. In the
-  window, row has no card headings and no trend plots.
+  window, row has no card headings and no trend plots, except the clock's,
+  whose heading is its reading.
 
 A usage reading that is more than five minutes old stays on screen and is
 marked stale: dim in the terminal, with its age in the window's hover note.
@@ -823,6 +825,11 @@ MIT. See
   drawer's part names and day headings are bold, and a day's lines are
   indented (spec 107, #374).
 - **Changed**: fynedesygn 0.1.125.
+- **Added**: a clock. A section of its own, on by default at the top: the
+  time to the second at the left and the date at the right, as the card's
+  heading, with nothing under it. A settings file from before it gets it at
+  the top once; hide it or move it in Preferences like any section and it
+  stays where you put it (spec 106, #372).
 
 ### 0.20.0 (2026-11-19)
 

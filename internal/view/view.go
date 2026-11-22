@@ -399,6 +399,18 @@ type Section struct {
 	// shell from where it was scrolled to; the view clamps it. It is the
 	// shell's state and never cached.
 	ScrollFirst int `json:"-"`
+
+	// TitleEnd is a second title at the heading's right end, with its glyph
+	// before it (spec 106): the clock's date across from its time. Empty for
+	// every other section.
+	TitleEnd     string   `json:",omitempty"`
+	TitleEndIcon IconName `json:",omitempty"`
+}
+
+// HeadingOnly reports whether the section is its heading and nothing under
+// it: the clock, whose time and date are the heading (spec 106).
+func (s Section) HeadingOnly() bool {
+	return s.TitleEnd != "" && len(s.Rows) == 0 && len(s.Meters) == 0 && len(s.Cells) == 0 && len(s.Trails) == 0
 }
 
 /*
@@ -519,4 +531,8 @@ const (
 	IconCooler IconName = "cooler"
 	// IconUsage is a quota being spent.
 	IconUsage IconName = "usage"
+	// IconClock is a clock face, before the clock's time (spec 106).
+	IconClock IconName = "clock"
+	// IconCalendar is a calendar, before the clock's date.
+	IconCalendar IconName = "calendar"
 )
