@@ -305,6 +305,8 @@ func TestEveryAccountIsADetailOfParts(t *testing.T) {
 
 	assert.Equal(t, "usage", d.Section)
 	assert.Equal(t, view.DetailAccounts, d.ID)
+	// Each part's name is a heading in the overview (spec 107).
+	desk.TitleBold, failed.TitleBold = true, true
 	assert.Equal(t, []view.Detail{desk, failed}, d.Parts)
 	assert.False(t, d.Filterable)
 	assert.False(t, d.Quiet())

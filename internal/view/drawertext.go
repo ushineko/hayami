@@ -340,7 +340,17 @@ func tailText(d Detail) []string {
 func partsLines(d Detail, width, height int, s DrawerShape) []string {
 	var all []string
 	marked := 0
+	// fit is the part whose lines are cut to the room (Detail.Fit): where
+	// its title's blank line, its title and its lines are in all.
+	fit := struct {
+		part          Detail
+		top, lines, n int
+		found         bool
+	}{}
 	for i, p := range d.Parts {
+		if p.Fit && !fit.found {
+			fit.part, fit.top, fit.found = p, len(all), true
+		}
 		if i > 0 {
 			all = append(all, "")
 		}
@@ -380,7 +390,11 @@ func partsLines(d Detail, width, height int, s DrawerShape) []string {
 		if cells > 0 && len(p.Lines) > 0 {
 			all = append(all, "  "+padRight("", DetailNameWidth)+"  "+ColumnHeads(figure, p.Columns, cells))
 		}
+		if fit.found && fit.part.ID == p.ID && fit.n == 0 {
+			fit.lines, fit.n = len(all), len(p.Lines)
+		}
 		for _, l := range p.Lines {
+			l = indented(l)
 			if l.Wide {
 				all = append(all, wideText(l, width, !l.Heading && marked == s.Marked))
 				if !l.Heading {
@@ -395,8 +409,38 @@ func partsLines(d Detail, width, height int, s DrawerShape) []string {
 		}
 		all = append(all, tailText(p)...)
 	}
+	if fit.found {
+		all = fitPart(all, fit.part, fit.top, fit.lines, fit.n, height)
+	}
 	start := min(max(s.Scroll, 0), max(len(all)-height, 0))
 	return all[start:min(len(all), start+max(height, 0))]
+}
+
+// fitPart cuts a Fit part's lines, which are all[lines:lines+n], to what the
+// height leaves (spec 107), and a heading left with nothing under it with
+// them. A part left with no line goes whole, from top, its title and the
+// blank line before it.
+func fitPart(all []string, p Detail, top, lines, n, height int) []string {
+	over := len(all) - height
+	if over <= 0 || n == 0 {
+		return all
+	}
+	keep := max(0, n-over)
+	for keep > 0 && p.Lines[keep-1].Heading {
+		keep--
+	}
+	if keep == 0 {
+		return append(all[:top:top], all[lines+n:]...)
+	}
+	return append(all[:lines+keep:lines+keep], all[lines+n:]...)
+}
+
+// indented is a line with its name set in by its indent, two columns a step.
+func indented(l DetailLine) DetailLine {
+	if l.Indent > 0 {
+		l.Name = strings.Repeat("  ", l.Indent) + l.Name
+	}
+	return l
 }
 
 // clip cuts each line to width and the lines to height.

@@ -814,7 +814,15 @@ MIT. See
   panels and with the arrows in the terminal panel; the card's plot stays
   where it was. The terminal panel now reads the mouse, so selecting text in
   it takes Shift (spec 105, #371).
-- **Changed**: fynedesygn 0.1.124.
+- **Added**: the Development drawer says what was done lately. Under the
+  GitHub and GitLab strips, **Recent** lists the latest days across both,
+  newest first, each day's repositories and what was done in them, filling
+  the room left and never making the drawer scroll; **Repositories** is the
+  fortnight's three busiest, a bar each. Both come from the forges' last
+  reads, with no new request, and `readings` and `doctor` leave them out. The
+  drawer's part names and day headings are bold, and a day's lines are
+  indented (spec 107, #374).
+- **Changed**: fynedesygn 0.1.125.
 
 ### 0.20.0 (2026-11-19)
 

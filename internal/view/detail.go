@@ -81,6 +81,22 @@ type Detail struct {
 	// fortnight, a day each (spec 102). Nil for every other detail.
 	Days *DayStrip `json:"days,omitempty"`
 
+	// TitleBold draws a part's title as a heading, bold where a shell can
+	// (spec 107): the Development overview's parts, told apart at a glance.
+	TitleBold bool `json:"-"`
+
+	// Fit cuts the part's lines to the room the drawer has left once
+	// everything else in it is drawn (spec 107), so the part fills the
+	// drawer and never makes it scroll. A heading left with nothing under it
+	// goes too.
+	Fit bool `json:"-"`
+
+	// Personal marks a part that names what a person worked on --
+	// repositories, the titles of their pull requests -- which the drawer
+	// and `detail` show and `readings` and `doctor` leave out (spec 107, threat
+	// model B6): their output is what gets pasted into a bug report.
+	Personal bool `json:"-"`
+
 	// Controls are lines a shell that can act may offer, each with what a press
 	// on it asks for in Open. They are in no text and no JSON, and only the
 	// desktop panel reads them (spec 085 R20).
@@ -125,6 +141,11 @@ type DetailLine struct {
 	// leads to, or one of the Act names below. Empty for a line that is
 	// only to be read, which is most of them.
 	Open string `json:"open,omitempty"`
+
+	// Indent is how many steps in the line is set under the line it belongs
+	// to (spec 107): a repository under its day, a pull request under its
+	// repository. Zero for most.
+	Indent int `json:"indent,omitempty"`
 }
 
 // The actions a detail line can carry in Open, as against a detail to open.
@@ -194,6 +215,16 @@ func (d Detail) Top(n int) Detail {
 	if len(d.Lines) > n {
 		d.Lines = d.Lines[:n]
 	}
+	return d
+}
+
+// Listed is the detail as `readings` and `doctor` print it: without its
+// Personal parts.
+func (d Detail) Listed() Detail {
+	if !slices.ContainsFunc(d.Parts, func(p Detail) bool { return p.Personal }) {
+		return d
+	}
+	d.Parts = slices.DeleteFunc(slices.Clone(d.Parts), func(p Detail) bool { return p.Personal })
 	return d
 }
 

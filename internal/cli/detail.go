@@ -111,7 +111,8 @@ func details(ctx context.Context, s panel.Source) map[string]view.Detail {
 		}
 		detail, _ := d.PollDetail(ctx, info.ID)
 		d.CloseDetail(info.ID)
-		out[info.ID] = detail
+		// What a person worked on stays out of readings and doctor (spec 107).
+		out[info.ID] = detail.Listed()
 	}
 	if len(out) == 0 {
 		return nil

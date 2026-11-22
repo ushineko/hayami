@@ -488,6 +488,10 @@ bug report someone pasted `doctor` or `readings --json` into.
   merge requests and issues; the GitLab host is never drawn. A day's page is
   a drill, not a listed detail, so `readings` and `doctor` never carry a
   repository name or a title; the overview's strips are counts (spec 102).
+  The overview's Recent and Repositories parts (spec 107) name repositories
+  and titles too, and are marked personal: the drawer and `detail` draw them,
+  and `readings` and `doctor`, whose output is what gets pasted into a bug
+  report, leave them out (`Detail.Listed`).
   A repository named for its owner (a profile, a Pages site) is shown as
   "profile" or "pages". `tools/screenshot.sh` leaves the GitLab host and
   the keys out of its copy of the settings.

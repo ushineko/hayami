@@ -14,7 +14,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/stretchr/testify v1.12.1
-	github.com/ushineko/fynedesygn v0.1.124
+	github.com/ushineko/fynedesygn v0.1.125
 	github.com/ushineko/fynstall v0.2.6
 	github.com/ushineko/sanshoku v0.6.0
 	gitlab.com/gitlab-org/api/client-go v1.46.0
