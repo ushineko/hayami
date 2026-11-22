@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.21.0
+**Version**: 0.21.1
 
 *a chart you read at a glance*
 
@@ -797,7 +797,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.21.1 (2026-11-22)
 
 - **Changed**: the clock is drawn larger, at the sub-heading size, and its
   date stops short of the tuck button instead of running under it (spec 108,
