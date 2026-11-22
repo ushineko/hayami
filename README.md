@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.20.0
+**Version**: 0.21.0
 
 *a chart you read at a glance*
 
@@ -795,7 +795,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.21.0 (2026-11-21)
 
 - **Added**: on Windows, the processor's temperature without
   LibreHardwareMonitor. `hayami-tui sensor-helper install` installs a small
