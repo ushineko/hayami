@@ -762,3 +762,14 @@ func RunIDs(p *Panel, key string) (ids []string, visible int, shown bool) {
 func CardHeight(p *Panel, key string) float32 {
 	return p.cards[key].card.Object().MinSize().Height
 }
+
+// TextSize is the size a card draws a text at, or 0 when it draws no such
+// text.
+func TextSize(p *Panel, key, text string) float32 {
+	for _, o := range test.LaidOutObjects(p.cards[key].card.Object()) {
+		if t, ok := o.(*canvas.Text); ok && t.Text == text {
+			return t.TextSize
+		}
+	}
+	return 0
+}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2/test"
+	fynetheme "fyne.io/fyne/v2/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,4 +50,23 @@ func TestTheClockKeepsItsHeadingInRow(t *testing.T) {
 	require.Contains(t, gui.CardText(p, "clock"), "18:25:04", "the clock lost its heading in row")
 	assert.Contains(t, gui.CardText(p, "clock"), "Sat 2026/11/21")
 	assert.NotContains(t, gui.CardText(p, "cooler"), view.CoolerInfo.Title, "a card with rows kept its heading in row")
+}
+
+// Spec 108 R1. The clock's heading is drawn at the sub-heading size, and the
+// other cards' titles at the ordinary one.
+func TestTheClockIsDrawnLarger(t *testing.T) {
+	a := test.NewTempApp(t)
+	at := time.Date(2026, 11, 21, 18, 25, 4, 0, time.Local)
+	clock := &fixed{view.Clock(at)}
+	cooler := &fixed{coolerWith()}
+	p := gui.New(a, gui.Options{Sources: []panel.Source{clock, cooler}, Title: "hayami"})
+	p.Draw("clock", view.Clock(at), true)
+	p.Draw("cooler", cooler.sec, true)
+
+	th := a.Settings().Theme()
+	sub, text := th.Size(fynetheme.SizeNameSubHeadingText), th.Size(fynetheme.SizeNameText)
+	require.Greater(t, sub, text)
+	assert.InDelta(t, sub, gui.TextSize(p, "clock", "18:25:04"), 0.01, "the time is not drawn larger")
+	assert.InDelta(t, sub, gui.TextSize(p, "clock", "Sat 2026/11/21"), 0.01, "the date is not drawn larger")
+	assert.InDelta(t, text, gui.TextSize(p, "cooler", view.CoolerInfo.Title), 0.01, "another card's title changed")
 }
