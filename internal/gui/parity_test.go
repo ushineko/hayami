@@ -101,7 +101,10 @@ func paritySections(t *testing.T) []view.Section {
 	}, now.Add(-12*time.Minute))
 	require.True(t, usage.Stale, "the usage fixture is meant to be stale")
 
-	out := []view.Section{bandwidth, cooler, peripherals, usage}
+	// The clock: its heading is the reading, the time and the date (spec 106).
+	clock := view.Clock(now)
+
+	out := []view.Section{clock, bandwidth, cooler, peripherals, usage}
 	keys := map[string]bool{}
 	for _, s := range out {
 		keys[s.Key] = true
@@ -128,6 +131,7 @@ func facts(s view.Section) []fact {
 			out = append(out, fact{kind, text})
 		}
 	}
+	add("title end", s.TitleEnd)
 	for _, r := range s.Lines() {
 		add("label", r.Label)
 		add("value", strings.TrimSpace(r.Value+" "+r.Unit))

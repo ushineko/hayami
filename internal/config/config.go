@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/ushineko/fynedesygn/settings"
 	_ "github.com/ushineko/fynedesygn/settings/yamlcodec" // registers .yaml
@@ -37,6 +38,13 @@ type Config struct {
 	// Sections are the sections to draw, in the order to draw them. A section
 	// that is not listed is not drawn and does not poll.
 	Sections []string `json:"sections"`
+
+	// Offered are the sections this file has been given the chance to show
+	// (spec 106). A section that is on by default and not yet offered is put
+	// in Sections at its place, once; one the person then hides stays hidden,
+	// because it is offered from then on. Nil in a file written before this,
+	// which had been offered the sections that existed then.
+	Offered []string `json:"offered,omitempty"`
 
 	// Arrangement is "stack", "grid" or "row".
 	Arrangement string `json:"arrangement"`
@@ -257,7 +265,34 @@ func (s *Store) Config() Config {
 	if c.Arrangement == "" {
 		c.Arrangement = "stack"
 	}
+	c.offer()
 	return c
+}
+
+// sectionsBeforeOffering are the sections every settings file had been
+// offered before Offered existed (spec 106): the ones there were.
+var sectionsBeforeOffering = []string{"bandwidth", "usage", "cooler", "peripherals"}
+
+/*
+offer puts each section that is on by default and has not been offered into
+Sections at its place in view.Sections, and marks it offered (spec 106): the
+clock, at the top, once. It changes nothing on disk until the settings are
+next saved, and is the same on every read until then.
+*/
+func (c *Config) offer() {
+	if c.Offered == nil {
+		c.Offered = slices.Clone(sectionsBeforeOffering)
+	}
+	for i, info := range view.Sections() {
+		if !info.Default || slices.Contains(c.Offered, info.Key) {
+			continue
+		}
+		c.Offered = append(c.Offered, info.Key)
+		if c.Shows(info.Key) {
+			continue
+		}
+		c.Sections = slices.Insert(slices.Clone(c.Sections), min(i, len(c.Sections)), info.Key)
+	}
 }
 
 // SetConfig writes the settings back.

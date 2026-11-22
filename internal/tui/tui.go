@@ -184,7 +184,8 @@ func poll(s panel.Source) tea.Cmd {
 
 // after schedules the next poll of one source.
 func after(s panel.Source) tea.Cmd {
-	return tea.Tick(s.Interval(), func(time.Time) tea.Msg { return tick{key: s.Key()} })
+	// A paced source -- the clock -- says when (spec 106).
+	return tea.Tick(panel.Wait(s, time.Now()), func(time.Time) tea.Msg { return tick{key: s.Key()} })
 }
 
 // Update handles a resize, a keypress and the polls.

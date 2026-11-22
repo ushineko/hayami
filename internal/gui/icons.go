@@ -43,4 +43,13 @@ var sectionIcons = map[view.IconName]func() fyne.Resource{
 	view.IconBandwidth:   fynetheme.DownloadIcon,
 	view.IconCooler:      fynetheme.MediaRecordIcon,
 	view.IconUsage:       fynetheme.StorageIcon,
+	// The clock's are in the title's grey (spec 106): its time and date are
+	// its heading, and the icons belong to the words beside them.
+	view.IconClock:    func() fyne.Resource { return titleGrey(fynetheme.HistoryIcon()) },
+	view.IconCalendar: func() fyne.Resource { return titleGrey(fynetheme.CalendarIcon()) },
+}
+
+// titleGrey colours an icon as a card's title is.
+func titleGrey(r fyne.Resource) fyne.Resource {
+	return fynetheme.NewColoredResource(r, fynetheme.ColorNamePlaceHolder)
 }

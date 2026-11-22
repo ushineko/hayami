@@ -298,23 +298,34 @@ func New(a fyne.App, o Options) *Panel {
 		}
 		c := glance.NewCard(sec.Title)
 		c.SetIcon(sectionIcon(sec.Icon))
+		// A section that is its heading -- the clock -- has the heading's
+		// other end too, and nothing under it: no scroller, no grid, so the
+		// card has nothing but its heading and keeps it in Lines (spec 106).
+		bare := sec.HeadingOnly()
+		if bare {
+			c.SetTitleEnd(sec.TitleEnd, sectionIcon(sec.TitleEndIcon))
+		}
 		holder := &card{card: c, pinned: map[string]bool{}, nameColumn: nameColumn}
 		// The rows the section has now; a row that arrives later is inserted
 		// among them by its ID, above the plot (spec 044).
 		holder.lines = rowIDs(sec.Lines())
 		holder.remember(sec)
-		holder.run = glance.NewScroller(max(1, sec.ScrollLines))
+		if !bare {
+			holder.run = glance.NewScroller(max(1, sec.ScrollLines))
+		}
 		for _, r := range flatten(holder.lines, true) {
-			if r.Scrolls {
+			if r.Scrolls && holder.run != nil {
 				holder.run.AddRow(holder.newRow(r))
 				continue
 			}
 			c.AddRow(holder.newRow(r))
 		}
-		if len(holder.run.Rows()) == 0 {
-			holder.run.Object().Hide()
+		if holder.run != nil {
+			if len(holder.run.Rows()) == 0 {
+				holder.run.Object().Hide()
+			}
+			c.Add(holder.run)
 		}
-		c.Add(holder.run)
 		for _, m := range sec.Meters {
 			// The window arranges in one column, not the pane's three: the
 			// design system's meter pins its label to a width of its own and
@@ -339,8 +350,13 @@ func New(a fyne.App, o Options) *Panel {
 		//
 		// An empty grid costs nothing: the library's layout reports a zero
 		// size while no cell is shown, so a card of rows is unchanged.
-		holder.grid = glance.NewCellGrid()
+		if !bare {
+			holder.grid = glance.NewCellGrid()
+		}
 		for i := range len(sec.Cells) + CellSlack {
+			if bare {
+				break
+			}
 			blank := view.NoQuantity()
 			if i < len(sec.Cells) {
 				blank = sec.Cells[i].Value
@@ -350,7 +366,9 @@ func New(a fyne.App, o Options) *Panel {
 			holder.cells = append(holder.cells, cell)
 			holder.grid.Add(cell)
 		}
-		c.Add(holder.grid)
+		if holder.grid != nil {
+			c.Add(holder.grid)
+		}
 
 		// A section with a trend to plot gets one. The pane has drawn these
 		// since spec 006 and the window never has, which is a parity gap the
@@ -534,7 +552,17 @@ func (p *Panel) Draw(key string, sec view.Section, drawn bool) {
 	// The panel is re-measured below in every case.
 	c.lines = rowIDs(sec.Lines())
 	c.remember(sec)
-	if sec.ScrollLines > 0 && sec.ScrollLines != c.run.Visible() {
+	if sec.TitleEnd != "" {
+		// A heading that is the reading -- the clock's time and date --
+		// changes in place (spec 106).
+		if c.card.Title() != sec.Title {
+			c.card.SetTitle(sec.Title)
+		}
+		if c.card.TitleEnd() != sec.TitleEnd {
+			c.card.SetTitleEnd(sec.TitleEnd, sectionIcon(sec.TitleEndIcon))
+		}
+	}
+	if c.run != nil && sec.ScrollLines > 0 && sec.ScrollLines != c.run.Visible() {
 		c.run.SetVisible(sec.ScrollLines)
 	}
 	p.rebuild(c, flatten(c.lines, !p.row))
@@ -753,13 +781,16 @@ func (p *Panel) rebuild(c *card, want []view.Row) {
 	// moving between them is taken out of one and built in the other.
 	var fixed, run []view.Row
 	for _, r := range want {
-		if r.Scrolls {
+		if r.Scrolls && c.run != nil {
 			run = append(run, r)
 		} else {
 			fixed = append(fixed, r)
 		}
 	}
 	p.rebuildIn(c, c.card, fixed, run)
+	if c.run == nil {
+		return
+	}
 	p.rebuildIn(c, c.run, run, fixed)
 	if shown := len(run) > 0; shown != c.run.Object().Visible() {
 		if shown {
@@ -1282,7 +1313,10 @@ func (p *Panel) keepCache(ctx context.Context) {
 // pollOne is one source's loop. Each keeps its own interval: a byte counter
 // and a thermal probe share a window and nothing else.
 func pollOne(ctx context.Context, s panel.Source, p *Panel) {
-	t := time.NewTicker(s.Interval())
+	// A timer set again after each poll, for the time the source asks: its
+	// interval, or for a paced source -- the clock -- the turn of the next
+	// second (spec 106).
+	t := time.NewTimer(panel.Wait(s, time.Now()))
 	defer t.Stop()
 	key := s.Key()
 	for {
@@ -1307,6 +1341,7 @@ func pollOne(ctx context.Context, s panel.Source, p *Panel) {
 		}
 		p.do(func() { p.Draw(s.Key(), sec, drawn) })
 
+		t.Reset(panel.Wait(s, time.Now()))
 		select {
 		case <-ctx.Done():
 			return
