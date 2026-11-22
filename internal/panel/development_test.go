@@ -110,10 +110,12 @@ func TestTheOverviewFollowsTheSwitches(t *testing.T) {
 	assert.Zero(t, f.count(forge.GitHub)+f.count(forge.GitLab))
 
 	u.SetDevelopment(config.UsageSettings{GitHub: true, GitLab: true})
-	assert.Equal(t, []string{"CC desk", "GitHub", "GitLab"}, titles(overview(t, u)))
+	// What was done lately and where, under the forges once they list
+	// something (spec 107).
+	assert.Equal(t, []string{"CC desk", "GitHub", "GitLab", "Recent", "Repositories"}, titles(overview(t, u)))
 
 	u.SetDevelopment(config.UsageSettings{HideAI: true, GitLab: true})
-	assert.Equal(t, []string{"GitLab"}, titles(overview(t, u)))
+	assert.Equal(t, []string{"GitLab", "Recent", "Repositories"}, titles(overview(t, u)))
 	before := f.count(forge.GitHub)
 	overview(t, u)
 	assert.Equal(t, before, f.count(forge.GitHub), "a forge switched off was read")

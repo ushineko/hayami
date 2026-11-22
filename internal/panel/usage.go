@@ -664,8 +664,19 @@ func (u *Usage) PollDetail(ctx context.Context, id string) (view.Detail, error) 
 		}
 		u.dev.due()
 		var forges []view.Detail
+		var read []view.DevReading
 		for _, p := range u.dev.shown() {
-			forges = append(forges, view.DevPart(u.dev.viewOf(p), u.now(), -1))
+			r := u.dev.viewOf(p)
+			read = append(read, r)
+			forges = append(forges, view.DevPart(r, u.now(), -1))
+		}
+		// What was done lately and where the fortnight went, from the items
+		// the forges' reads already hold (spec 107). Each is drawn only once
+		// a forge has listed something.
+		for _, part := range []view.Detail{view.DevRecent(read), view.DevRepos(read)} {
+			if !part.Quiet() {
+				forges = append(forges, part)
+			}
 		}
 		return view.Development(parts, forges), errors.Join(failed...)
 	}

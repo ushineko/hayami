@@ -86,6 +86,10 @@ type drawer struct {
 	rules      int
 	partsShape string
 
+	// pieces are the parts' pieces as the drawer holds them, for measuring
+	// the room a part cut to it has (spec 107).
+	pieces []glance.Piece
+
 	// paused stops the reading of the open detail; confirming is the kill
 	// waiting for its second click; killed is what the last one did, said
 	// on the page until the drill is left.
@@ -174,6 +178,8 @@ type Desk interface {
 // drawerPart is one part of a detail made of details, as drawn: its heading,
 // its meters, its lines, and the lines for its reasons and its note.
 type drawerPart struct {
+	// rule is the line drawn above the part, nil for the first.
+	rule *glance.Rule
 	head *glance.Row
 	// days is a forge's fortnight under the heading (spec 102), nil for
 	// every other part.
@@ -1031,6 +1037,10 @@ func setMeter(to *glance.Meter, m view.Meter) {
 func (p *Panel) setLine(r *glance.Row, l view.DetailLine, cells int) {
 	r.SetID(l.Open)
 	r.SetLabel(l.Name)
+	// A heading line bold, and a line under another set in by its steps
+	// (spec 107).
+	r.SetLabelBold(l.Heading)
+	r.SetIndent(l.Indent)
 	r.Set(p.value(l.Row(cells)))
 }
 
@@ -1123,13 +1133,14 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 		// choose between has a switch that draws nothing.
 		pieces := []glance.Piece{d.sw}
 		for i, part := range detail.Parts {
+			built := drawerPart{head: glance.NewRow("", "")}
 			if i > 0 {
 				// A rule between one account and the next: their meters
 				// look alike, and a gap alone does not say where one ends.
-				pieces = append(pieces, glance.NewRule())
+				built.rule = glance.NewRule()
+				pieces = append(pieces, built.rule)
 				d.rules++
 			}
-			built := drawerPart{head: glance.NewRow("", "")}
 			pieces = append(pieces, built.head)
 			if part.Days != nil {
 				built.days = glance.NewHeatStrip("", 0)
@@ -1170,6 +1181,7 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 		}
 		dr.SetScrolling(true)
 		dr.SetContent(pieces...)
+		d.pieces = pieces
 		var taps []*glance.Row
 		var strips []*glance.HeatStrip
 		for i, built := range d.parts {
@@ -1187,6 +1199,7 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 	for i, part := range detail.Parts {
 		built := d.parts[i]
 		built.head.SetLabel(part.Title)
+		built.head.SetLabelBold(part.TitleBold)
 		built.head.SetID(part.Open)
 		if built.days != nil && part.Days != nil {
 			setDays(built.days, *part.Days)
@@ -1209,6 +1222,57 @@ func (p *Panel) renderParts(d *drawer, detail view.Detail) {
 		}
 		for j, text := range tailLines(part) {
 			built.notes[j].SetLabel(text)
+		}
+	}
+	for i, part := range detail.Parts {
+		if part.Fit {
+			fitPart(dr, d.pieces, d.parts[i], part)
+		}
+	}
+}
+
+/*
+fitPart shows as many of a part's lines as the room the rest of the drawer
+leaves (spec 107), so the part fills the drawer and never makes it scroll. A
+heading left with nothing under it is hidden with the lines after it, and a
+part left with no line is hidden whole, its rule with it.
+*/
+func fitPart(dr *glance.Drawer, pieces []glance.Piece, built drawerPart, part view.Detail) {
+	if len(built.rows) == 0 {
+		return
+	}
+	mine := make(map[glance.Piece]bool, len(built.rows)+2)
+	for _, r := range built.rows {
+		mine[r] = true
+	}
+	mine[built.head] = true
+	if built.rule != nil {
+		mine[built.rule] = true
+	}
+	var others []glance.Piece
+	for _, p := range pieces {
+		if !mine[p] {
+			others = append(others, p)
+		}
+	}
+	// The part's heading and rule take room whenever any line is shown.
+	others = append(others, built.head)
+	if built.rule != nil {
+		others = append(others, built.rule)
+	}
+	keep := min(len(built.rows), dr.Fit(built.rows[0], others...))
+	for keep > 0 && part.Lines[keep-1].Heading {
+		keep--
+	}
+	for j, r := range built.rows {
+		r.SetShown(j < keep)
+	}
+	built.head.SetShown(keep > 0)
+	if built.rule != nil {
+		if keep > 0 {
+			built.rule.Object().Show()
+		} else {
+			built.rule.Object().Hide()
 		}
 	}
 }

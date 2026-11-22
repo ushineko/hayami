@@ -258,14 +258,18 @@ func devDayLines(r DevReading, day DevDay) []DetailLine {
 	slices.SortStableFunc(repos, func(a, b string) int { return len(byRepo[b]) - len(byRepo[a]) })
 	for _, repo := range repos {
 		items := byRepo[repo]
-		out = append(out, DetailLine{Name: truncate(withoutOwner(repo), DetailNameWidth), Value: devCounts(items), Status: Good})
+		// A repository a step under its day, and its things a step under
+		// it (spec 107).
+		out = append(out, DetailLine{
+			Name: truncate(withoutOwner(repo), DetailNameWidth), Value: devCounts(items), Status: Good, Indent: 1,
+		})
 		out = append(out, devThings(items)...)
 	}
 	if r.Private > 0 {
-		out = append(out, DetailLine{Name: fmt.Sprintf("%d private contributions not listed", r.Private), Wide: true})
+		out = append(out, DetailLine{Name: fmt.Sprintf("%d private contributions not listed", r.Private), Wide: true, Indent: 1})
 	}
 	if len(repos) == 0 && day.Count > 0 {
-		out = append(out, DetailLine{Name: "nothing the forge lists", Wide: true})
+		out = append(out, DetailLine{Name: "nothing the forge lists", Wide: true, Indent: 1})
 	}
 	return out
 }
@@ -371,7 +375,7 @@ func devThings(items []DevItem) []DetailLine {
 		case t.pushes > 1:
 			value = fmt.Sprintf("pushed ×%d", t.pushes)
 		}
-		out = append(out, DetailLine{Name: truncate(t.name, DevWideNameWidth), Value: value, Wide: true})
+		out = append(out, DetailLine{Name: truncate(t.name, DevWideNameWidth), Value: value, Wide: true, Indent: 2})
 	}
 	return out
 }
@@ -398,11 +402,17 @@ const DevTitle = "Development"
 // Development is the drawer's overview: the AI usage accounts, then the
 // forges, each a part, in that order (spec 102 R2).
 func Development(accounts, forges []Detail) Detail {
+	parts := append(slices.Clone(accounts), forges...)
+	// Each part's name is a heading, bold where the shell can (spec 107):
+	// the accounts, the forges and the lists under them are told apart by it.
+	for i := range parts {
+		parts[i].TitleBold = true
+	}
 	return Detail{
 		Section: UsageInfo.Key,
 		ID:      DetailAccounts,
 		Title:   DevTitle,
-		Parts:   append(slices.Clone(accounts), forges...),
+		Parts:   parts,
 	}
 }
 
