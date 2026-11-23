@@ -259,7 +259,7 @@ func (f *forges) viewOf(provider string) view.DevReading {
 		return r
 	}
 	a := st.act
-	r.Unit, r.Private, r.ReadAt = a.Unit, a.Private, a.ReadAt
+	r.Unit, r.ReadAt = a.Unit, a.ReadAt
 	for _, d := range a.Days {
 		r.Days = append(r.Days, view.DevDay{Date: d.Date, Count: d.Count})
 	}

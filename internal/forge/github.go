@@ -12,27 +12,54 @@ import (
 )
 
 /*
-contributionsQuery is a fortnight of the viewer's contributions in one
-request (spec 102): the calendar the profile's heatmap is drawn from, the
-commits by repository by day, and the pull requests, reviews and issues
-opened, with their titles. The REST events list is not used: it stops at
-300 events, and its payloads no longer carry commit counts or titles.
+contributionsQuery is a fortnight of the viewer's contributions (spec 102):
+the commits by repository by day, the repositories created, and the pull
+requests, reviews and issues opened, with their titles. The REST events list
+is not used: it stops at 300 events, and its payloads no longer carry commit
+counts or titles.
+
+The pull requests, reviews and issues come a hundred at a time, and a busy
+fortnight has more (spec 109): the first request asks for everything, and
+each later one only for the lists with a page left, after their cursors.
+
+The calendar and the restricted count are not asked for: the calendar counts
+contributions in an organisation's private repositories that this sign-in
+cannot see and GitHub will not name, and a day is what it lists (spec 109).
 */
-const contributionsQuery = `query($from: DateTime!, $to: DateTime!) {
+const contributionsQuery = `query($from: DateTime!, $to: DateTime!, $first: Boolean!,
+  $prs: Boolean!, $prAfter: String, $reviews: Boolean!, $reviewAfter: String, $issues: Boolean!, $issueAfter: String) {
   viewer {
     contributionsCollection(from: $from, to: $to) {
-      restrictedContributionsCount
-      contributionCalendar { weeks { contributionDays { date contributionCount } } }
-      commitContributionsByRepository(maxRepositories: 100) {
+      commitContributionsByRepository(maxRepositories: 100) @include(if: $first) {
         repository { nameWithOwner }
         contributions(first: 100) { nodes { occurredAt commitCount } }
       }
-      pullRequestContributions(first: 100) { nodes { occurredAt pullRequest { number title state merged repository { nameWithOwner } } } }
-      pullRequestReviewContributions(first: 100) { nodes { occurredAt pullRequestReview { state } pullRequest { number title repository { nameWithOwner } } } }
-      issueContributions(first: 100) { nodes { occurredAt issue { number title state repository { nameWithOwner } } } }
+      repositoryContributions(first: 100) @include(if: $first) { nodes { occurredAt repository { nameWithOwner } } }
+      pullRequestContributions(first: 100, after: $prAfter) @include(if: $prs) {
+        pageInfo { hasNextPage endCursor }
+        nodes { occurredAt pullRequest { number title state merged repository { nameWithOwner } } }
+      }
+      pullRequestReviewContributions(first: 100, after: $reviewAfter) @include(if: $reviews) {
+        pageInfo { hasNextPage endCursor }
+        nodes { occurredAt pullRequestReview { state } pullRequest { number title repository { nameWithOwner } } }
+      }
+      issueContributions(first: 100, after: $issueAfter) @include(if: $issues) {
+        pageInfo { hasNextPage endCursor }
+        nodes { occurredAt issue { number title state repository { nameWithOwner } } }
+      }
     }
   }
 }`
+
+// maxGitHubPages bounds the requests one reading makes, as maxEventPages
+// does GitLab's: a thousand of each kind is far past a person's fortnight.
+const maxGitHubPages = 10
+
+// ghPage is where a list stopped.
+type ghPage struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
+}
 
 type ghRepo struct {
 	NameWithOwner string `json:"nameWithOwner"`
@@ -50,15 +77,6 @@ type ghResponse struct {
 	Data struct {
 		Viewer struct {
 			CC struct {
-				Restricted int `json:"restrictedContributionsCount"`
-				Calendar   struct {
-					Weeks []struct {
-						Days []struct {
-							Date  string `json:"date"`
-							Count int    `json:"contributionCount"`
-						} `json:"contributionDays"`
-					} `json:"weeks"`
-				} `json:"contributionCalendar"`
 				Commits []struct {
 					Repository    ghRepo `json:"repository"`
 					Contributions struct {
@@ -68,14 +86,22 @@ type ghResponse struct {
 						} `json:"nodes"`
 					} `json:"contributions"`
 				} `json:"commitContributionsByRepository"`
-				PRs struct {
+				Created struct {
 					Nodes []struct {
+						OccurredAt time.Time `json:"occurredAt"`
+						Repository ghRepo    `json:"repository"`
+					} `json:"nodes"`
+				} `json:"repositoryContributions"`
+				PRs struct {
+					PageInfo ghPage `json:"pageInfo"`
+					Nodes    []struct {
 						OccurredAt  time.Time `json:"occurredAt"`
 						PullRequest ghThing   `json:"pullRequest"`
 					} `json:"nodes"`
 				} `json:"pullRequestContributions"`
 				Reviews struct {
-					Nodes []struct {
+					PageInfo ghPage `json:"pageInfo"`
+					Nodes    []struct {
 						OccurredAt time.Time `json:"occurredAt"`
 						Review     struct {
 							State string `json:"state"`
@@ -84,7 +110,8 @@ type ghResponse struct {
 					} `json:"nodes"`
 				} `json:"pullRequestReviewContributions"`
 				Issues struct {
-					Nodes []struct {
+					PageInfo ghPage `json:"pageInfo"`
+					Nodes    []struct {
 						OccurredAt time.Time `json:"occurredAt"`
 						Issue      ghThing   `json:"issue"`
 					} `json:"nodes"`
@@ -127,27 +154,63 @@ func (r GitHubReader) Read(ctx context.Context, token string) (Activity, error) 
 	}
 	start, dates := Window(now())
 	end := start.AddDate(0, 0, Days).Add(-time.Second)
-	body := map[string]any{
-		"query": contributionsQuery,
-		"variables": map[string]string{
-			"from": start.Format(time.RFC3339),
-			"to":   end.Format(time.RFC3339),
-		},
+	vars := map[string]any{
+		"from": start.Format(time.RFC3339), "to": end.Format(time.RFC3339),
+		"first": true, "prs": true, "reviews": true, "issues": true,
 	}
+	var all ghResponse
+	for range maxGitHubPages {
+		out, err := githubQuery(ctx, c, vars)
+		if err != nil {
+			return Activity{}, err
+		}
+		got, have := &out.Data.Viewer.CC, &all.Data.Viewer.CC
+		if vars["first"] == true {
+			have.Commits, have.Created = got.Commits, got.Created
+		}
+		have.PRs.Nodes = append(have.PRs.Nodes, got.PRs.Nodes...)
+		have.Reviews.Nodes = append(have.Reviews.Nodes, got.Reviews.Nodes...)
+		have.Issues.Nodes = append(have.Issues.Nodes, got.Issues.Nodes...)
+		// The next request asks only for the lists with a page left.
+		more := false
+		for _, l := range []struct {
+			on, after string
+			was       bool
+			page      ghPage
+		}{
+			{"prs", "prAfter", vars["prs"] == true, got.PRs.PageInfo},
+			{"reviews", "reviewAfter", vars["reviews"] == true, got.Reviews.PageInfo},
+			{"issues", "issueAfter", vars["issues"] == true, got.Issues.PageInfo},
+		} {
+			next := l.was && l.page.HasNextPage && l.page.EndCursor != ""
+			vars[l.on], vars[l.after] = next, l.page.EndCursor
+			more = more || next
+		}
+		vars["first"] = false
+		if !more {
+			break
+		}
+	}
+	return githubActivity(all, dates, now()), nil
+}
+
+// githubQuery is one request of contributionsQuery.
+func githubQuery(ctx context.Context, c *github.Client, vars map[string]any) (ghResponse, error) {
+	body := map[string]any{"query": contributionsQuery, "variables": vars}
 	req, err := c.NewRequest(ctx, http.MethodPost, "graphql", body)
 	if err != nil {
-		return Activity{}, fmt.Errorf("github: %w", err)
+		return ghResponse{}, fmt.Errorf("github: %w", err)
 	}
 	var out ghResponse
 	if _, err := c.Do(req, &out); err != nil {
-		return Activity{}, githubError(err)
+		return ghResponse{}, githubError(err)
 	}
 	if len(out.Errors) > 0 {
 		// The message is GitHub's text, not this program's: it is not
 		// carried, only that the query was refused.
-		return Activity{}, errors.New("github: the query was refused")
+		return ghResponse{}, errors.New("github: the query was refused")
 	}
-	return githubActivity(out, dates, now()), nil
+	return out, nil
 }
 
 func (r GitHubReader) client() *http.Client {
@@ -160,25 +223,24 @@ func (r GitHubReader) client() *http.Client {
 // githubActivity turns a response into a reading over dates.
 func githubActivity(out ghResponse, dates []string, now time.Time) Activity {
 	cc := out.Data.Viewer.CC
-	calendar := map[string]int{}
-	for _, w := range cc.Calendar.Weeks {
-		for _, d := range w.Days {
-			calendar[d.Date] = d.Count
-		}
-	}
-	a := Activity{Provider: GitHub, Unit: "contributions", Private: cc.Restricted, ReadAt: now}
-	for _, d := range dates {
-		a.Days = append(a.Days, Day{Date: d, Count: calendar[d]})
-	}
+	a := Activity{Provider: GitHub, Unit: "contributions", ReadAt: now}
 	add := func(it Item) {
-		if dateIn(dates, it.Date) {
+		if dateIn(dates, it.Date) && len(a.Items) < MaxItems {
 			a.Items = append(a.Items, it)
 		}
 	}
 	for _, r := range cc.Commits {
 		for _, n := range r.Contributions.Nodes {
+			if n.CommitCount < 1 {
+				// A day is counted from its items: no host's number takes
+				// a day below nothing.
+				continue
+			}
 			add(Item{Date: DateOf(n.OccurredAt), Repo: r.Repository.NameWithOwner, Kind: KindCommits, Count: n.CommitCount})
 		}
+	}
+	for _, n := range cc.Created.Nodes {
+		add(Item{Date: DateOf(n.OccurredAt), Repo: n.Repository.NameWithOwner, Kind: KindOther, Action: "created", Count: 1})
 	}
 	for _, n := range cc.PRs.Nodes {
 		pr := n.PullRequest
@@ -195,6 +257,8 @@ func githubActivity(out ghResponse, dates []string, now time.Time) Activity {
 		add(Item{Date: DateOf(n.OccurredAt), Repo: is.Repository.NameWithOwner, Kind: KindIssue,
 			Ref: fmt.Sprintf("#%d", is.Number), Title: is.Title, Action: strings.ToLower(is.State), Count: 1})
 	}
+	// A day is what it lists (spec 109).
+	a.Days = countItems(dates, a.Items)
 	return a
 }
 

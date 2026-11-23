@@ -31,10 +31,6 @@ type DevReading struct {
 	Days  []DevDay
 	Items []DevItem
 
-	// Private is how many contributions the forge counted and would not
-	// list.
-	Private int
-
 	// ReadAt is when Days were read; zero before the first reading.
 	ReadAt time.Time
 
@@ -264,9 +260,6 @@ func devDayLines(r DevReading, day DevDay) []DetailLine {
 			Name: truncate(withoutOwner(repo), DetailNameWidth), Value: devCounts(items), Status: Good, Indent: 1,
 		})
 		out = append(out, devThings(items)...)
-	}
-	if r.Private > 0 {
-		out = append(out, DetailLine{Name: fmt.Sprintf("%d private contributions not listed", r.Private), Wide: true, Indent: 1})
 	}
 	if len(repos) == 0 && day.Count > 0 {
 		out = append(out, DetailLine{Name: "nothing the forge lists", Wide: true, Indent: 1})
