@@ -596,14 +596,22 @@ func (u *Usage) DetailInterval(string) time.Duration {
 // flight.
 const forgePollInterval = time.Second
 
-// Drills reports whether an ID is a forge's day (spec 102 R6).
+// Drills reports whether an ID is a forge's day (spec 102 R6) or a change
+// on one (spec 111).
 func (u *Usage) Drills(id string) bool {
+	if p, _, _, ok := view.ParseDevChangeID(id); ok {
+		return u.dev.shows(p)
+	}
 	p, _, ok := view.ParseDevDayID(id)
 	return ok && u.dev.shows(p)
 }
 
-// DrillUp is the overview, from a day and from an account's own page alike.
+// DrillUp is a change's day, and the overview from a day and from an
+// account's own page alike.
 func (u *Usage) DrillUp(id string) string {
+	if p, date, _, ok := view.ParseDevChangeID(id); ok {
+		return view.DevDayID(p, date)
+	}
 	if id == view.DetailAccounts {
 		return id
 	}
@@ -679,6 +687,13 @@ func (u *Usage) PollDetail(ctx context.Context, id string) (view.Detail, error) 
 			}
 		}
 		return view.Development(parts, forges), errors.Join(failed...)
+	}
+	if p, _, _, ok := view.ParseDevChangeID(id); ok {
+		if !u.dev.shows(p) {
+			return unread(u.Key(), id, view.DevTitle, errors.New("switched off")), nil
+		}
+		u.dev.due()
+		return u.dev.changePage(id), nil
 	}
 	if p, date, ok := view.ParseDevDayID(id); ok {
 		if !u.dev.shows(p) {

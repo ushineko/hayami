@@ -806,6 +806,13 @@ MIT. See
 - **Fixed**: connecting a VPN no longer pushes the cards under the Network
   card down: the VPN lines are held to one tunnel's height and a second
   tunnel scrolls in it (spec 110, #388).
+- **Added**: a change on a Development day's page opens its details. A
+  pull or merge request's page is its state, times, branches, lines added
+  and removed, files, commits, checks, reviews, labels, comments,
+  description, and its commits and files; an issue's is its state, times,
+  labels and description; a push or a repository's line lists the commits
+  made that day. Read on the click and kept for the refresh interval; the
+  same lines in Recent open the same pages (spec 111, #390).
 
 ### 0.21.1 (2026-11-22)
 

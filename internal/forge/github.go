@@ -140,17 +140,9 @@ func (r GitHubReader) Read(ctx context.Context, token string) (Activity, error) 
 	if r.Now != nil {
 		now = r.Now
 	}
-	opts := []github.ClientOptionsFunc{
-		github.WithHTTPClient(r.client()),
-		github.WithAuthToken(token),
-		github.WithUserAgent("hayami"),
-	}
-	if r.BaseURL != "" {
-		opts = append(opts, github.WithURLs(&r.BaseURL, &r.BaseURL))
-	}
-	c, err := github.NewClient(opts...)
+	c, err := r.newClient(token)
 	if err != nil {
-		return Activity{}, fmt.Errorf("github: %w", err)
+		return Activity{}, err
 	}
 	start, dates := Window(now())
 	end := start.AddDate(0, 0, Days).Add(-time.Second)

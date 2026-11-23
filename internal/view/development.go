@@ -47,8 +47,10 @@ type DevDay struct {
 	Count int
 }
 
-// DevItem is one thing done: see forge.Item.
+// DevItem is one thing done: see forge.Item. Provider is the forge it came
+// from, which the line's page is read from (spec 111).
 type DevItem struct {
+	Provider                             string
 	Date, Repo, Kind, Ref, Title, Action string
 	Count                                int
 }
@@ -245,6 +247,9 @@ func devDayLines(r DevReading, day DevDay) []DetailLine {
 		if it.Date != day.Date {
 			continue
 		}
+		if it.Provider == "" {
+			it.Provider = r.Provider
+		}
 		if _, ok := byRepo[it.Repo]; !ok {
 			repos = append(repos, it.Repo)
 		}
@@ -255,11 +260,13 @@ func devDayLines(r DevReading, day DevDay) []DetailLine {
 	for _, repo := range repos {
 		items := byRepo[repo]
 		// A repository a step under its day, and its things a step under
-		// it (spec 107).
+		// it (spec 107). Each opens its page (spec 111): the repository its
+		// day's commits, a thing itself.
 		out = append(out, DetailLine{
 			Name: truncate(withoutOwner(repo), DetailNameWidth), Value: devCounts(items), Status: Good, Indent: 1,
+			Open: DevChangeID(items[0].Provider, day.Date, DevChangeKey(DevOpenRepo, repo, "")),
 		})
-		out = append(out, devThings(items)...)
+		out = append(out, devThings(day.Date, items)...)
 	}
 	if len(repos) == 0 && day.Count > 0 {
 		out = append(out, DetailLine{Name: "nothing the forge lists", Wide: true, Indent: 1})
@@ -324,11 +331,12 @@ func devCounts(items []DevItem) string {
 // devThings are a repository's things, one line each: a pull request opened,
 // reviewed and merged in a day is one line, merged; a branch pushed four
 // times is one line, "pushed ×4". Commits are counted, not listed.
-func devThings(items []DevItem) []DetailLine {
+func devThings(date string, items []DevItem) []DetailLine {
 	type thing struct {
 		name    string
 		actions []string
 		pushes  int
+		open    string
 	}
 	var order []*thing
 	seen := map[string]*thing{}
@@ -344,6 +352,9 @@ func devThings(items []DevItem) []DetailLine {
 		t := seen[key]
 		if t == nil {
 			t = &thing{name: name}
+			if open, by := DevOpens(it.Provider, it.Kind, it.Ref); open != "" && it.Provider != "" {
+				t.open = DevChangeID(it.Provider, date, DevChangeKey(open, it.Repo, by))
+			}
 			seen[key] = t
 			order = append(order, t)
 		}
@@ -368,7 +379,7 @@ func devThings(items []DevItem) []DetailLine {
 		case t.pushes > 1:
 			value = fmt.Sprintf("pushed ×%d", t.pushes)
 		}
-		out = append(out, DetailLine{Name: truncate(t.name, DevWideNameWidth), Value: value, Wide: true, Indent: 2})
+		out = append(out, DetailLine{Name: truncate(t.name, DevWideNameWidth), Value: value, Wide: true, Indent: 2, Open: t.open})
 	}
 	return out
 }

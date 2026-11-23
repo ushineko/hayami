@@ -28,7 +28,12 @@ func combined(forges []DevReading) DevReading {
 	var all DevReading
 	counts := map[string]int{}
 	for _, f := range forges {
-		all.Items = append(all.Items, f.Items...)
+		for _, it := range f.Items {
+			if it.Provider == "" {
+				it.Provider = f.Provider
+			}
+			all.Items = append(all.Items, it)
+		}
 		for _, d := range f.Days {
 			counts[d.Date] += d.Count
 		}
