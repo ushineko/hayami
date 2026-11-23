@@ -797,6 +797,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: GitHub's day pages list every pull request, review and issue,
+  not the first hundred of each, and the repositories created; a day counts
+  what it lists, and the "private contributions not listed" line, which was
+  an organisation's work this sign-in cannot see, is gone (spec 109, #386).
+
 ### 0.21.1 (2026-11-22)
 
 - **Changed**: the clock is drawn larger, at the sub-heading size, and its

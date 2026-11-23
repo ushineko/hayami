@@ -32,14 +32,11 @@ type Activity struct {
 	// Days are the fortnight's counts, oldest first, today last.
 	Days []Day `json:"days"`
 
-	// Items are what happened, each on its day. A forge that counts more
-	// than it lists (GitHub's private contributions) has fewer items than
-	// its days' counts.
+	// Items are what happened, each on its day. A day's count is its
+	// items' (spec 109): what a forge counts and will not name -- GitHub's
+	// contributions in an organisation's repositories this sign-in cannot
+	// see -- is not the person's to read here.
 	Items []Item `json:"items,omitempty"`
-
-	// Private is how many of the fortnight's contributions the forge counted
-	// and would not itemise.
-	Private int `json:"private,omitempty"`
 
 	// Unit names what a day's count counts: "contributions", "events".
 	Unit string `json:"unit"`

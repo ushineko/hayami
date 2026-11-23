@@ -34,7 +34,10 @@ func tlsServer(t *testing.T, h http.Handler) (*httptest.Server, *http.Client) {
 }
 
 // githubResponse is a fortnight's contributions, invented: two repositories,
-// a pull request merged, a review, an issue, a day outside the window.
+// one created, a pull request merged, a review, an issue, a day outside the
+// window. Its calendar and restricted count are what GitHub would send if
+// asked: a day counted that lists nothing (1 March), and one counted past
+// what it lists (14 March). The reader does not ask for them (spec 109).
 const githubResponse = `{"data":{"viewer":{"contributionsCollection":{
   "restrictedContributionsCount": 3,
   "contributionCalendar":{"weeks":[
@@ -46,22 +49,25 @@ const githubResponse = `{"data":{"viewer":{"contributionsCollection":{
       {"occurredAt":"2026-02-27T12:00:00Z","commitCount":8}]}},
     {"repository":{"nameWithOwner":"octo/gadget"},"contributions":{"nodes":[
       {"occurredAt":"2026-03-14T12:00:00Z","commitCount":2}]}}],
-  "pullRequestContributions":{"nodes":[
+  "repositoryContributions":{"nodes":[
+    {"occurredAt":"2026-03-14T08:00:00Z","repository":{"nameWithOwner":"octo/gizmo"}}]},
+  "pullRequestContributions":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"occurredAt":"2026-03-10T15:00:00Z","pullRequest":{"number":12,"title":"feat: a widget","state":"MERGED","merged":true,"repository":{"nameWithOwner":"octo/widget"}}}]},
-  "pullRequestReviewContributions":{"nodes":[
+  "pullRequestReviewContributions":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"occurredAt":"2026-03-10T16:00:00Z","pullRequestReview":{"state":"APPROVED"},"pullRequest":{"number":13,"title":"fix: a gadget","repository":{"nameWithOwner":"octo/gadget"}}}]},
-  "issueContributions":{"nodes":[
+  "issueContributions":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"occurredAt":"2026-03-14T09:00:00Z","issue":{"number":4,"title":"the widget squeaks","state":"OPEN","repository":{"nameWithOwner":"octo/widget"}}}]}
 }}}}`
 
-// Spec 102 R4, R8, AC4. One query becomes fourteen days counted as the
-// calendar counts, the items on their days, and the private count; a day
-// outside the window is not one of them.
+// Spec 102 R4, R8, AC4; spec 109 R2, R3. One query becomes fourteen days,
+// each counted from what it lists, and the items on their days; a day outside
+// the window is not one of them, and what GitHub counts and will not name is
+// not counted.
 func TestGitHubReadsAFortnightInOneQuery(t *testing.T) {
 	var calls atomic.Int32
 	var asked struct {
-		Query     string            `json:"query"`
-		Variables map[string]string `json:"variables"`
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
 	}
 	srv, hc := tlsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -76,14 +82,15 @@ func TestGitHubReadsAFortnightInOneQuery(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, calls.Load(), "a fortnight is one request")
 	assert.Contains(t, asked.Query, "contributionsCollection")
-	assert.True(t, strings.HasPrefix(asked.Variables["from"], "2026-03-01T00:00:00"), asked.Variables["from"])
-	assert.True(t, strings.HasPrefix(asked.Variables["to"], "2026-03-14T23:59:59"), asked.Variables["to"])
+	assert.NotContains(t, asked.Query, "restrictedContributionsCount")
+	assert.NotContains(t, asked.Query, "contributionCalendar")
+	assert.True(t, strings.HasPrefix(fmt.Sprint(asked.Variables["from"]), "2026-03-01T00:00:00"), asked.Variables["from"])
+	assert.True(t, strings.HasPrefix(fmt.Sprint(asked.Variables["to"]), "2026-03-14T23:59:59"), asked.Variables["to"])
 
 	require.Len(t, a.Days, forge.Days)
-	assert.Equal(t, forge.Day{Date: "2026-03-01", Count: 2}, a.Days[0])
+	assert.Equal(t, forge.Day{Date: "2026-03-01", Count: 0}, a.Days[0], "a day that lists nothing counts nothing")
 	assert.Equal(t, forge.Day{Date: "2026-03-10", Count: 7}, a.Days[9])
-	assert.Equal(t, forge.Day{Date: "2026-03-14", Count: 4}, a.Days[13])
-	assert.Equal(t, 3, a.Private)
+	assert.Equal(t, forge.Day{Date: "2026-03-14", Count: 4}, a.Days[13], "two commits, an issue and a repository created")
 	assert.Equal(t, "contributions", a.Unit)
 
 	byKind := map[forge.Kind][]forge.Item{}
@@ -98,6 +105,74 @@ func TestGitHubReadsAFortnightInOneQuery(t *testing.T) {
 	assert.Equal(t, "approved", byKind[forge.KindReview][0].Action)
 	require.Len(t, byKind[forge.KindIssue], 1)
 	assert.Equal(t, "open", byKind[forge.KindIssue][0].Action)
+	require.Len(t, byKind[forge.KindOther], 1)
+	assert.Equal(t, forge.Item{Date: "2026-03-14", Repo: "octo/gizmo", Kind: forge.KindOther, Action: "created", Count: 1}, byKind[forge.KindOther][0])
+}
+
+// Spec 109 R1. A list with more than a page is read to its end: each later
+// request asks only for the lists with a page left, after their cursors, and
+// not again for the commits.
+func TestGitHubReadsEveryPage(t *testing.T) {
+	pr := func(n int) string {
+		return fmt.Sprintf(`{"occurredAt":"2026-03-12T10:00:00Z","pullRequest":{"number":%d,"title":"t","state":"OPEN","merged":false,"repository":{"nameWithOwner":"octo/widget"}}}`, n)
+	}
+	issue := func(n int) string {
+		return fmt.Sprintf(`{"occurredAt":"2026-03-12T11:00:00Z","issue":{"number":%d,"title":"t","state":"OPEN","repository":{"nameWithOwner":"octo/widget"}}}`, n)
+	}
+	var asked []map[string]any
+	srv, hc := tlsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Variables map[string]any `json:"variables"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		v := body.Variables
+		asked = append(asked, v)
+		var parts []string
+		if v["first"] == true {
+			parts = append(parts, `"commitContributionsByRepository":[{"repository":{"nameWithOwner":"octo/widget"},"contributions":{"nodes":[{"occurredAt":"2026-03-12T09:00:00Z","commitCount":3}]}}]`,
+				`"repositoryContributions":{"nodes":[]}`)
+		}
+		if v["prs"] == true {
+			switch v["prAfter"] {
+			case nil, "":
+				parts = append(parts, `"pullRequestContributions":{"pageInfo":{"hasNextPage":true,"endCursor":"pr1"},"nodes":[`+pr(1)+`,`+pr(2)+`]}`)
+			case "pr1":
+				parts = append(parts, `"pullRequestContributions":{"pageInfo":{"hasNextPage":true,"endCursor":"pr2"},"nodes":[`+pr(3)+`]}`)
+			case "pr2":
+				parts = append(parts, `"pullRequestContributions":{"pageInfo":{"hasNextPage":false,"endCursor":"pr3"},"nodes":[`+pr(4)+`]}`)
+			}
+		}
+		if v["reviews"] == true {
+			parts = append(parts, `"pullRequestReviewContributions":{"pageInfo":{"hasNextPage":false},"nodes":[]}`)
+		}
+		if v["issues"] == true {
+			switch v["issueAfter"] {
+			case nil, "":
+				parts = append(parts, `"issueContributions":{"pageInfo":{"hasNextPage":true,"endCursor":"is1"},"nodes":[`+issue(1)+`]}`)
+			case "is1":
+				parts = append(parts, `"issueContributions":{"pageInfo":{"hasNextPage":false,"endCursor":"is2"},"nodes":[`+issue(2)+`]}`)
+			}
+		}
+		_, _ = io.WriteString(w, `{"data":{"viewer":{"contributionsCollection":{`+strings.Join(parts, ",")+`}}}}`)
+	}))
+
+	a, err := forge.GitHubReader{Client: hc, BaseURL: srv.URL + "/", Now: func() time.Time { return now }}.Read(t.Context(), token)
+	require.NoError(t, err)
+	require.Len(t, asked, 3, "a request a page, the longest list's")
+	assert.Equal(t, false, asked[1]["first"], "the commits were asked for again")
+	assert.Equal(t, "pr1", asked[1]["prAfter"])
+	assert.Equal(t, "is1", asked[1]["issueAfter"])
+	assert.Equal(t, false, asked[1]["reviews"], "a list with nothing left was asked for again")
+	assert.Equal(t, false, asked[2]["issues"], "a list read to its end was asked for again")
+
+	byKind := map[forge.Kind]int{}
+	for _, it := range a.Items {
+		byKind[it.Kind]++
+	}
+	assert.Equal(t, 4, byKind[forge.KindPR], "a page of pull requests was left out")
+	assert.Equal(t, 2, byKind[forge.KindIssue], "a page of issues was left out")
+	assert.Equal(t, 1, byKind[forge.KindCommits], "the commits were read twice")
+	assert.Equal(t, forge.Day{Date: "2026-03-12", Count: 9}, a.Days[11])
 }
 
 // R5, R11, AC10. A refused token, and a rate limit, come back as the

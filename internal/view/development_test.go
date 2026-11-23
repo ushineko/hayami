@@ -84,11 +84,9 @@ func TestAForgePartSaysItsState(t *testing.T) {
 
 // R6, R7, R8, AC6. A day: the strip with the day marked, the date and its
 // count, each repository without its owner and its counts in a fixed order,
-// one line per thing at the furthest it got, pushes to a branch as one, and
-// the private contributions said.
+// one line per thing at the furthest it got, and pushes to a branch as one.
 func TestADayIsItsRepositories(t *testing.T) {
 	r := fortnight()
-	r.Private = 3
 	page := view.DevDayPage(r, devNow, "2026-03-10")
 	assert.Equal(t, view.DevDayID("github", "2026-03-10"), page.ID)
 	require.Len(t, page.Parts, 1)
@@ -108,7 +106,7 @@ func TestADayIsItsRepositories(t *testing.T) {
 	assert.Equal(t, "merged", got["!7 fix: ids"], "an MR opened and merged in a day is merged")
 	assert.Equal(t, "merged", got["#12 feat: a widget"], "a merged PR reviewed the same day is merged")
 	assert.NotContains(t, order, "octo/widget", "a repository's owner is a user name")
-	assert.Contains(t, order, "3 private contributions not listed")
+	assert.NotContains(t, strings.Join(order, "\n"), "private", "an uncounted contribution is not said (spec 109)")
 	assert.NotContains(t, order, "#4 squeaks", "another day's issue is on this one")
 	for _, l := range part.Lines {
 		assert.LessOrEqual(t, len([]rune(l.Name)), view.DevWideNameWidth, l.Name)

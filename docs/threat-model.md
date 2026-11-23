@@ -377,7 +377,10 @@ the settings, which are the user's own; hayami then fetches that URL.
   `safetext.Printable`, applied where the panel takes them and again to
   every part of a detail as it is drawn (`Detail.printable`). A reading keeps
   at most 10 pages, 5,000 items and 200 project lookups, whatever a host
-  sends. Fuzzed: `FuzzGitHubResponse`, `FuzzGitLabEvent`, and
+  sends; GitHub's lists are paged too, at most 10 requests a reading
+  however many pages a host says are left (spec 109). A day is counted
+  from its items, and an item counting less than one is dropped, so no
+  answer makes a day negative. Fuzzed: `FuzzGitHubResponse`, `FuzzGitLabEvent`, and
   the secrets file's lines, `FuzzParseLine` (`internal/forge/fuzz_test.go`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
@@ -434,7 +437,8 @@ something else between hayami reading it and acting on it.
   and the GitLab host the settings or `~/.secrets.env` name, only while a
   drawer shows a forge a person switched on (they are off by default, #360),
   at most once per refresh interval or per click on the forge's heading
-  (`forges`, `internal/panel/development.go`; spec 102). It runs `gh auth
+  (`forges`, `internal/panel/development.go`; spec 102); a reading is up to
+  10 requests to each (spec 109). It runs `gh auth
   token` and `glab config get token` for a key, from the user's `PATH`, as
   the user, with constant arguments and a timeout, never through a shell.
 - hayami runs one program to read: `nvidia-smi`, with a timeout

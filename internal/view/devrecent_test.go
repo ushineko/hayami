@@ -23,7 +23,6 @@ func twoForges() []view.DevReading {
 				{Date: "2026-11-21", Repo: "octo/widget", Kind: "pr", Ref: "#7", Title: "a change", Action: "merged", Count: 1},
 				{Date: "2026-11-21", Repo: "octo/widget", Kind: "commits", Count: 4},
 			},
-			Private: 2,
 		},
 		{
 			Provider: "gitlab", Title: "GitLab", Unit: "events",
@@ -35,7 +34,7 @@ func twoForges() []view.DevReading {
 
 // Spec 107 R1, R3. Recent is the forges' days together, newest first: a
 // day's heading, its repositories a step in, their things two; it is cut to
-// the room by the shell, and says nothing of a forge's private count.
+// the room by the shell.
 func TestRecentIsBothForgesNewestFirstAndIndented(t *testing.T) {
 	d := view.DevRecent(twoForges())
 	assert.True(t, d.Fit)
@@ -54,7 +53,6 @@ func TestRecentIsBothForgesNewestFirstAndIndented(t *testing.T) {
 	assert.Contains(t, names, ">agent")
 	assert.Contains(t, names, ">>#7 a change")
 	assert.Contains(t, names, ">>main")
-	assert.NotContains(t, strings.Join(names, "\n"), "private", "a forge's private count is its own strip's")
 	assert.NotContains(t, strings.Join(names, "\n"), "octo", "an owner is a user name (rule 9)")
 
 	heads := 0
