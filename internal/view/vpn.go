@@ -65,9 +65,10 @@ const (
 )
 
 // VPNScrollLines is how many lines of VPNs the Network card shows before they
-// scroll (spec 105): three tunnels that are up, each its state, its rates and
-// its totals.
-const VPNScrollLines = 3 * 3
+// scroll: one tunnel that is up, its state, its rates and its totals (spec
+// 110). A second tunnel coming up scrolls in that room rather than pushing
+// the cards under it down; spec 105 held three.
+const VPNScrollLines = 3
 
 // VPNRows are the VPNs' rows, under the interfaces on the Network card. A VPN has
 // one line saying whether the tunnel is up and answering, with no address on it
@@ -80,9 +81,9 @@ const VPNScrollLines = 3 * 3
 // not answering. The rows scroll, held to VPNScrollLines.
 //
 // The latency column is kept blank until a check has measured one, and the rates
-// until there are two samples, so a figure arriving does not move anything. A
-// tunnel coming up or going down does change the card's height, up to the
-// run's.
+// until there are two samples, so a figure arriving does not move anything.
+// Only the first tunnel coming up, or the last going down, changes the card's
+// height: the run is one tunnel high (VPNScrollLines).
 func VPNRows(readings []VPNReading) []Row {
 	rows := make([]Row, 0, len(readings))
 	for _, r := range readings {

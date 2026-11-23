@@ -26,8 +26,10 @@ func upTunnels(n int) []view.VPNReading {
 func network(tunnels []view.VPNReading) view.Section {
 	return view.Section{
 		Key: "bandwidth", Title: "Network",
-		Rows:        append([]view.Row{{Label: "eno2", Value: "1.0 MiB/s"}}, view.VPNRows(tunnels)...),
-		ScrollLines: view.VPNScrollLines,
+		Rows: append([]view.Row{{Label: "eno2", Value: "1.0 MiB/s"}}, view.VPNRows(tunnels)...),
+		// Nine lines, three tunnels: the run's workings, whatever the card
+		// holds it to (VPNScrollLines).
+		ScrollLines: 9,
 	}
 }
 

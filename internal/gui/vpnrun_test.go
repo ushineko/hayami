@@ -29,31 +29,32 @@ func networkWith(n int) view.Section {
 	return sec
 }
 
-// Spec 105 R1, R4. The tunnels that are up are in the card's run, the one that
-// is down is nowhere, and the run shows nine lines: the card is as tall with
-// four or five tunnels up as with three, and shorter with two.
-func TestTheTunnelsAreARunHeldToNineLines(t *testing.T) {
+// Spec 105 R1, R4; spec 110 R1. The tunnels that are up are in the card's
+// run, the one that is down is nowhere, and the run is one tunnel's three
+// lines: a second tunnel coming up scrolls in it, and the card is as tall
+// with five up as with one.
+func TestTheTunnelsAreARunOneTunnelHigh(t *testing.T) {
 	a := test.NewTempApp(t)
-	net := &fixed{networkWith(2)}
+	net := &fixed{networkWith(1)}
 	p := gui.New(a, gui.Options{Sources: []panel.Source{net}, Title: "hayami"})
 
-	p.Draw("bandwidth", networkWith(2), true)
+	p.Draw("bandwidth", networkWith(0), true)
+	none := gui.CardHeight(p, "bandwidth")
+
+	p.Draw("bandwidth", networkWith(1), true)
 	ids, visible, shown := gui.RunIDs(p, "bandwidth")
 	require.True(t, shown)
-	assert.Equal(t, view.VPNScrollLines, visible)
-	assert.Len(t, ids, 6, "two tunnels: state, rates and totals each")
+	assert.Equal(t, 3, visible, "the run is not one tunnel high")
+	assert.Len(t, ids, 3, "a tunnel: state, rates and totals")
 	assert.NotContains(t, ids, "vpn:down")
-	two := gui.CardHeight(p, "bandwidth")
+	one := gui.CardHeight(p, "bandwidth")
+	assert.Greater(t, one, none, "the first tunnel did not show")
 
-	p.Draw("bandwidth", networkWith(3), true)
-	three := gui.CardHeight(p, "bandwidth")
-	assert.Greater(t, three, two)
-
-	for _, n := range []int{4, 5} {
+	for _, n := range []int{2, 3, 5} {
 		p.Draw("bandwidth", networkWith(n), true)
 		ids, _, _ = gui.RunIDs(p, "bandwidth")
 		assert.Len(t, ids, 3*n)
-		assert.InDelta(t, three, gui.CardHeight(p, "bandwidth"), 0.01, "%d tunnels grew the card", n)
+		assert.InDelta(t, one, gui.CardHeight(p, "bandwidth"), 0.01, "%d tunnels grew the card", n)
 	}
 
 	for _, r := range ids {
@@ -64,6 +65,7 @@ func TestTheTunnelsAreARunHeldToNineLines(t *testing.T) {
 	ids, _, shown = gui.RunIDs(p, "bandwidth")
 	assert.Empty(t, ids)
 	assert.False(t, shown, "an empty run is drawn")
+	assert.InDelta(t, none, gui.CardHeight(p, "bandwidth"), 0.01, "the last tunnel going left its room")
 }
 
 // rowIDs are the IDs of the card's own rows.
