@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.22.0
+**Version**: 0.22.1
 
 *a chart you read at a glance*
 
@@ -797,7 +797,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.22.1 (2026-11-22)
 
 - **Fixed**: a change's description and title fill the drawer's width
   instead of a fixed 36 characters, and flow again when the drawer is made
