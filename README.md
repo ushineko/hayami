@@ -678,7 +678,7 @@ A VPN you choose in preferences, on the Sections page, from NetworkManager's and
 OpenVPN3's lists, gets a line on the Network card while it is not down; one that is
 down is connected from the drawer. While a tunnel is up, its rates and totals sit
 under that line and join the trend, and the totals count from when its interface was
-created. The VPN lines are held to three tunnels' height, and past that the wheel
+created. The VPN lines are held to one tunnel's height, and past that the wheel
 over them scrolls them; in the terminal panel the wheel does the same, and with the
 Network card chosen the arrows scroll them before moving to the next card. A check is a ping or a
 DNS lookup, sent only while the tunnel is up. The Network drawer's `VPN` view plots
@@ -803,6 +803,9 @@ MIT. See
   not the first hundred of each, and the repositories created; a day counts
   what it lists, and the "private contributions not listed" line, which was
   an organisation's work this sign-in cannot see, is gone (spec 109, #386).
+- **Fixed**: connecting a VPN no longer pushes the cards under the Network
+  card down: the VPN lines are held to one tunnel's height and a second
+  tunnel scrolls in it (spec 110, #388).
 
 ### 0.21.1 (2026-11-22)
 

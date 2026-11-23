@@ -33,7 +33,8 @@ func (tunnelSource) Section() view.Section {
 		}
 	}
 	sec.Rows = append(sec.Rows, view.VPNRows(vpns)...)
-	sec.ScrollLines = view.VPNScrollLines
+	// Nine lines: the run's workings, whatever the card holds it to.
+	sec.ScrollLines = 9
 	sec.Opens = view.DetailVPN
 	return sec
 }

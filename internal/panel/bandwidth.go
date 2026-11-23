@@ -219,8 +219,8 @@ func (b *Bandwidth) Section() view.Section {
 	}
 	if b.vpnChosen() {
 		vpns := b.vpnReadings()
-		// The VPNs that are not down, in a run held to three tunnels' lines
-		// (spec 105).
+		// The VPNs that are not down, in a run held to one tunnel's lines
+		// (specs 105, 110).
 		sec.Rows = append(sec.Rows, view.VPNRows(vpns)...)
 		sec.ScrollLines = view.VPNScrollLines
 		// After the interfaces', so an interface keeps its colour as VPNs are chosen.
