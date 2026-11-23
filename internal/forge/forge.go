@@ -79,6 +79,12 @@ type Item struct {
 	// or for a GitHub contribution the thing's state now.
 	Action string `json:"action,omitempty"`
 	Count  int    `json:"count"`
+
+	// From, To and Commits are a GitLab push's: the commits before and
+	// after it and how many it carried, which its page reads (spec 111).
+	From    string `json:"from,omitempty"`
+	To      string `json:"to,omitempty"`
+	Commits int    `json:"commits,omitempty"`
 }
 
 // DateOf is a moment's day on the desk.

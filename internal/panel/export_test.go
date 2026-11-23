@@ -141,3 +141,8 @@ func (b *Bandwidth) ForgetVPNReadTime() { b.vpns.Refresh() }
 func SetForgeRead(u *Usage, read func(ctx context.Context, provider string, s config.UsageSettings) (forge.Activity, error)) {
 	u.dev.read = read
 }
+
+// SetChangeRead replaces how a change's page is read (spec 111).
+func SetChangeRead(u *Usage, read func(ctx context.Context, provider string, s config.UsageSettings, ref forge.ChangeRef) (forge.Change, error)) {
+	u.dev.readChange = read
+}

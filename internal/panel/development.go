@@ -52,6 +52,10 @@ type forges struct {
 	state    map[string]*forgeState
 	read     forgeRead
 	now      func() time.Time
+
+	// changes are the change pages opened (spec 111), by ID.
+	changes    map[string]*changeState
+	readChange changeRead
 }
 
 type forgeState struct {
@@ -65,7 +69,11 @@ type forgeState struct {
 }
 
 func newForges(now func() time.Time) *forges {
-	return &forges{state: map[string]*forgeState{}, read: readForge(forge.NewCreds()), now: now}
+	c := forge.NewCreds()
+	return &forges{
+		state: map[string]*forgeState{}, read: readForge(c), now: now,
+		changes: map[string]*changeState{}, readChange: readChange(c),
+	}
 }
 
 // readForge is the real reading: gh or the secrets file for the credential,
@@ -116,6 +124,7 @@ func (f *forges) forget(provider string) {
 	if st, ok := f.state[provider]; ok {
 		f.state[provider] = &forgeState{gen: st.gen + 1}
 	}
+	f.forgetChangesLocked(provider)
 }
 
 // shown are the forges switched on, in the drawer's order.
@@ -200,7 +209,7 @@ func (f *forges) startLocked(p string, st *forgeState) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), forgeTimeout)
 		defer cancel()
-		act, err := read(ctx, p, settings)
+		act, err := guarded(func() (forge.Activity, error) { return read(ctx, p, settings) })
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		cur := f.stateLocked(p)
@@ -226,7 +235,7 @@ func (f *forges) reading() bool {
 			return true
 		}
 	}
-	return false
+	return f.changeReadingLocked()
 }
 
 // shows reports whether a forge is switched on.
@@ -265,7 +274,7 @@ func (f *forges) viewOf(provider string) view.DevReading {
 	}
 	for _, it := range a.Items {
 		r.Items = append(r.Items, view.DevItem{
-			Date: it.Date, Repo: clean(it.Repo), Kind: string(it.Kind), Ref: clean(it.Ref),
+			Provider: provider, Date: it.Date, Repo: clean(it.Repo), Kind: string(it.Kind), Ref: clean(it.Ref),
 			Title: clean(it.Title), Action: clean(it.Action), Count: it.Count,
 		})
 	}

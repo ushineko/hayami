@@ -38,25 +38,9 @@ func (r GitLabReader) Read(ctx context.Context, token string) (Activity, error) 
 	if r.Now != nil {
 		now = r.Now
 	}
-	base := r.BaseURL
-	if base == "" {
-		if r.Host == "" {
-			return Activity{}, fmt.Errorf("%w: no GitLab host; set one in Preferences or GITLAB_HOST in ~/.secrets.env", ErrNoCredential)
-		}
-		base = "https://" + r.Host + "/api/v4/"
-	}
-	hc := r.Client
-	if hc == nil {
-		hc = NewClient(nil)
-	}
-	c, err := gitlab.NewClient(token,
-		gitlab.WithBaseURL(base),
-		gitlab.WithHTTPClient(hc),
-		gitlab.WithoutRetries(),
-		gitlab.WithUserAgent("hayami"),
-	)
+	c, err := r.newClient(token)
 	if err != nil {
-		return Activity{}, fmt.Errorf("gitlab: %w", err)
+		return Activity{}, err
 	}
 	start, dates := Window(now())
 	// after is exclusive, and a day: the day before the window's first.
@@ -125,6 +109,8 @@ func gitlabItem(e *gitlab.ContributionEvent) Item {
 		it.Kind, it.Action = KindPushed, "pushed"
 		it.Ref = e.PushData.Ref
 		it.Title = e.PushData.CommitTitle
+		// What the push's page reads its commits from (spec 111).
+		it.From, it.To, it.Commits = e.PushData.CommitFrom, e.PushData.CommitTo, int(e.PushData.CommitCount)
 		return it
 	}
 	it.Title = e.TargetTitle

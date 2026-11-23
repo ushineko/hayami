@@ -380,7 +380,18 @@ the settings, which are the user's own; hayami then fetches that URL.
   sends; GitHub's lists are paged too, at most 10 requests a reading
   however many pages a host says are left (spec 109). A day is counted
   from its items, and an item counting less than one is dropped, so no
-  answer makes a day negative. Fuzzed: `FuzzGitHubResponse`, `FuzzGitLabEvent`, and
+  answer makes a day negative.
+- A change's page (spec 111) decodes a pull request, an issue, a merge
+  request and its approvals, commits and diffs into typed values, each
+  response read to `forge.MaxBody`, at most 100 commits, 100 files and three
+  pages of diffs, every text cleaned before it is drawn. The repository path
+  it reads by comes from a reading's answer and goes into a request's path
+  with the key, so it is checked first: segments of letters, digits, dots,
+  dashes and underscores, none of them only dots (`validRef`); a number must
+  be positive. client-go's issue decoder panics on an answer without an id;
+  a forge's reading runs in a goroutine of its own, so a panic there would
+  end the panel: it is the reading's error instead (`guarded`,
+  `internal/panel/devchange.go`; `GitLabReader.ReadChange`). Fuzzed: `FuzzGitHubResponse`, `FuzzGitLabEvent`, and
   the secrets file's lines, `FuzzParseLine` (`internal/forge/fuzz_test.go`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
@@ -438,7 +449,9 @@ something else between hayami reading it and acting on it.
   drawer shows a forge a person switched on (they are off by default, #360),
   at most once per refresh interval or per click on the forge's heading
   (`forges`, `internal/panel/development.go`; spec 102); a reading is up to
-  10 requests to each (spec 109). It runs `gh auth
+  10 requests to each (spec 109). A change's page (spec 111) is read on a
+  click and kept for the refresh interval: one or two requests to GitHub,
+  up to six to GitLab for a merge request or one per push of the day. It runs `gh auth
   token` and `glab config get token` for a key, from the user's `PATH`, as
   the user, with constant arguments and a timeout, never through a shell.
 - hayami runs one program to read: `nvidia-smi`, with a timeout
@@ -496,6 +509,10 @@ bug report someone pasted `doctor` or `readings --json` into.
   and titles too, and are marked personal: the drawer and `detail` draw them,
   and `readings` and `doctor`, whose output is what gets pasted into a bug
   report, leave them out (`Detail.Listed`).
+  A change's page (spec 111) draws a change's description, its commits'
+  titles and its files' paths; it is a drill, never listed, so `readings`
+  and `doctor` never print it, and its ID is a hash, not a repository's
+  name.
   A repository named for its owner (a profile, a Pages site) is shown as
   "profile" or "pages". `tools/screenshot.sh` leaves the GitLab host and
   the keys out of its copy of the settings.

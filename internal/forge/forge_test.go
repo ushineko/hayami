@@ -260,7 +260,8 @@ func TestGitLabCountsEachEventOnce(t *testing.T) {
 	for _, it := range a.Items {
 		assert.Equal(t, "team/agent", it.Repo)
 	}
-	assert.Equal(t, forge.Item{Date: "2026-03-13", Repo: "team/agent", Kind: forge.KindPushed, Ref: "main", Title: "rebase", Action: "pushed", Count: 1}, a.Items[0])
+	assert.Equal(t, forge.Item{Date: "2026-03-13", Repo: "team/agent", Kind: forge.KindPushed, Ref: "main", Title: "rebase", Action: "pushed", Count: 1, Commits: 1094}, a.Items[0],
+		"a push counts once, and keeps its commits for its page (spec 111)")
 	assert.Equal(t, forge.KindMR, a.Items[3].Kind)
 	assert.Equal(t, "merged", a.Items[3].Action)
 	assert.Equal(t, "!693", a.Items[3].Ref)
