@@ -123,6 +123,16 @@ func TestAChangeReadIsItsWholePage(t *testing.T) {
 	assert.True(t, strings.HasSuffix(file, "widget_test.go (added)"), file)
 	assert.LessOrEqual(t, len([]rune(file)), view.DevWideNameWidth)
 
+	c.Title = strings.Repeat("long ", 1000)
+	page = view.DevChangePage("GitHub", "x", view.DevOpenPR, "octo/widget", "#12", "", c, false, nil)
+	words := 0
+	for _, l := range page.Parts[0].Lines {
+		if strings.HasPrefix(l.Name, "long") {
+			words++
+		}
+	}
+	assert.Equal(t, 6, words, "a long title is not held to six lines (review F1)")
+
 	c.Approvals = 0
 	page = view.DevChangePage("GitHub", "x", view.DevOpenPR, "octo/widget", "#12", "", c, false, nil)
 	for _, l := range page.Parts[0].Lines {

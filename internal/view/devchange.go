@@ -93,8 +93,12 @@ func DevOpens(provider, kind, ref string) (open, by string) {
 	return "", ""
 }
 
-// DevChangeKey is a page's key: what it opens, in which repository, by
-// which reference, hashed.
+/*
+DevChangeKey is a page's key: what it opens, in which repository, by which
+reference, hashed. It keeps a repository's name out of plain sight in an ID;
+it does not hide it from someone guessing, since it is the same in every
+process, which `hayami-tui detail <id>` needs (spec 111 review, F3).
+*/
 func DevChangeKey(open, repo, ref string) string {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(open + "\x00" + repo + "\x00" + ref))
@@ -166,7 +170,7 @@ func DevChangePage(title, id, open, repo, ref, line string, c *DevChange, readin
 	if c.State != "" {
 		head.TitleParts = append([]Part{{Text: stateWord(c), Status: stateStatus(c)}}, head.TitleParts...)
 	}
-	head.Lines = append(head.Lines, wrapLines(c.Title, Good)...)
+	head.Lines = append(head.Lines, capLines(wrapLines(c.Title, Good), devTitleLines)...)
 	head.Lines = append(head.Lines, changeFacts(c)...)
 	page.Parts = append(page.Parts, head)
 
@@ -174,6 +178,9 @@ func DevChangePage(title, id, open, repo, ref, line string, c *DevChange, readin
 		desc := Detail{Section: UsageInfo.Key, ID: "description", Title: "Description", TitleBold: true}
 		var lines []DetailLine
 		for para := range strings.SplitSeq(body, "\n") {
+			if len(lines) > DevChangeLines {
+				break
+			}
 			para = strings.TrimRight(para, " \t\r")
 			if para == "" {
 				if len(lines) > 0 && lines[len(lines)-1].Name != "" {
@@ -193,8 +200,8 @@ func DevChangePage(title, id, open, repo, ref, line string, c *DevChange, readin
 		part := Detail{Section: UsageInfo.Key, ID: "commits", Title: countTitle("Commits", len(c.Commits), c.CommitCount), TitleBold: true}
 		for _, cm := range c.Commits {
 			sha := cm.SHA
-			if len(sha) > 7 {
-				sha = sha[:7]
+			if r := []rune(sha); len(r) > 7 {
+				sha = string(r[:7])
 			}
 			l := DetailLine{Name: truncate(sha+" "+cm.Title, DevWideNameWidth), Wide: true, Status: Good}
 			if cm.Stats {
@@ -284,7 +291,7 @@ func changeFacts(c *DevChange) []DetailLine {
 		fact("Comments", strconv.Itoa(c.Comments), Info)
 	}
 	if len(c.Labels) > 0 {
-		out = append(out, wrapLines("Labels: "+strings.Join(c.Labels, ", "), Info)...)
+		out = append(out, capLines(wrapLines("Labels: "+strings.Join(c.Labels, ", "), Info), devTitleLines)...)
 	}
 	return out
 }
@@ -335,6 +342,20 @@ func when(t time.Time) string {
 		return ""
 	}
 	return t.Local().Format("Mon 2 Jan 15:04")
+}
+
+// devTitleLines is how many lines a title or a list of labels takes at
+// most.
+const devTitleLines = 6
+
+// capLines is lines cut to n, the last saying there is more.
+func capLines(lines []DetailLine, n int) []DetailLine {
+	if len(lines) <= n {
+		return lines
+	}
+	out := append([]DetailLine(nil), lines[:n]...)
+	out[n-1].Name = truncate(out[n-1].Name+" …", DevWideNameWidth)
+	return out
 }
 
 // wrapLines is text wrapped at word boundaries into wide lines.

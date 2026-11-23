@@ -129,10 +129,16 @@ type ChangeRef struct {
 
 // The bounds of a change's page: a request's list is a page, and a page
 // shows at most this many of each.
+// A host's answer is kept to these whatever it sends (spec 111 review, F1,
+// F2): a list asked for a page at a time may come back longer, and a day's
+// pushes may be thousands.
 const (
 	MaxChangeCommits = 100
 	MaxChangeFiles   = 100
+	MaxChangeLabels  = 20
+	MaxChangeBody    = 64 << 10
 	maxDiffPages     = 3
+	maxPushReads     = 10
 )
 
 // repoPath is a repository's path as a forge names one: segments of
@@ -348,7 +354,7 @@ func (r GitHubReader) ReadChange(ctx context.Context, token string, ref ChangeRe
 			out.Additions, out.Deletions = commitLines(out.Commits)
 			out.SizeKnown = len(h.Nodes) == h.Total
 		}
-		return out, nil
+		return bounded(out), nil
 	}
 
 	var resp ghThingResponse
@@ -369,7 +375,7 @@ func (r GitHubReader) ReadChange(ctx context.Context, token string, ref ChangeRe
 	}
 	if t.Type != "PullRequest" {
 		out.Kind = KindIssue
-		return out, nil
+		return bounded(out), nil
 	}
 	out.Kind = KindPR
 	if t.Merged {
@@ -406,7 +412,7 @@ func (r GitHubReader) ReadChange(ctx context.Context, token string, ref ChangeRe
 		}
 		out.Files = append(out.Files, file)
 	}
-	return out, nil
+	return bounded(out), nil
 }
 
 // errRefused is an answer that is not one: the query refused, or a
@@ -566,11 +572,18 @@ func (r GitLabReader) readChange(ctx context.Context, token string, ref ChangeRe
 		out.Labels, out.Comments = []string(is.Labels), int(is.UserNotesCount)
 	case KindPushed, KindCommits:
 		out.Ref = ref.Branch
-		seen := map[string]bool{}
+		// One request a branch head, at most maxPushReads of them: pushes to
+		// one head are one list, and a day of thousands of pushes is not
+		// thousands of requests (spec 111 review, F2).
+		seen, asked := map[string]bool{}, map[string]bool{}
 		for _, p := range ref.Pushes {
-			if p.To == "" || len(out.Commits) >= MaxChangeCommits {
+			if p.To == "" || asked[p.To] || len(out.Commits) >= MaxChangeCommits {
 				continue
 			}
+			if len(asked) >= maxPushReads {
+				break
+			}
+			asked[p.To] = true
 			stats := true
 			since, until := ref.Day, ref.Day.AddDate(0, 0, 1)
 			commits, _, err := c.Commits.ListCommits(ref.Repo, &gitlab.ListCommitsOptions{
@@ -592,7 +605,27 @@ func (r GitLabReader) readChange(ctx context.Context, token string, ref ChangeRe
 		out.Additions, out.Deletions = commitLines(out.Commits)
 		out.CommitCount, out.SizeKnown = len(out.Commits), true
 	}
-	return out, nil
+	return bounded(out), nil
+}
+
+/*
+bounded is a change kept to the page's limits: the commits, files and labels
+to their counts, the body to MaxChangeBody bytes at a line's end. A page is a
+widget a line, so a host that answers a list longer than it was asked for
+would otherwise build hundreds of thousands of them (spec 111 review, F1).
+*/
+func bounded(c Change) Change {
+	c.Commits = c.Commits[:min(len(c.Commits), MaxChangeCommits)]
+	c.Files = c.Files[:min(len(c.Files), MaxChangeFiles)]
+	c.Labels = c.Labels[:min(len(c.Labels), MaxChangeLabels)]
+	if len(c.Body) > MaxChangeBody {
+		body := c.Body[:MaxChangeBody]
+		if i := strings.LastIndexByte(body, '\n'); i > 0 {
+			body = body[:i]
+		}
+		c.Body = body
+	}
+	return c
 }
 
 func (r GitLabReader) newClient(token string) (*gitlab.Client, error) {

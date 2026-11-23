@@ -11,8 +11,9 @@ push or repository -- opens a page of its own, a drill under the day. A pull
 or merge request's page is its state, times, branches, size, checks,
 reviews, labels, comments, description, commits and files; an issue's its
 state, times, labels, comments and description; a push or a repository's
-day its commits. The page is read once per click in the background and kept
-for the refresh interval. Review `findLocked` in
+day its commits. The page is read once per click in the background, kept
+for the refresh interval, and held to its limits whatever a host answers.
+Review `findLocked` in
 `internal/panel/devchange.go`, `validRef` and the GitLab panic guard in
 `internal/forge/change.go` first.
 
@@ -89,7 +90,32 @@ list their commits.
       settings): a pull request opened from Recent, its heading, facts,
       description and, scrolled, its commits and files; a GitLab merge
       request opened from its day, lines added and removed coloured apart.
+- [x] The adversarial review's findings fixed or refuted (below), each fix
+      falsified.
 - [x] `make test`, `make lint`; changelog line; README and threat model.
+
+## Adversarial review
+
+One reviewer, given the commit and three attackers -- a hostile GitLab host,
+a public repository's contributors, a crafted detail ID -- found no key sent
+off its forge, no injection, no uncleaned text and no panic. Then checked
+against the code:
+
+- F1, confirmed and fixed: a host answering a merge request's commits or
+  labels longer than asked, or a huge title, built a widget a line in the
+  drawer. A change is kept to 100 commits and files, 20 labels and 64 KiB of
+  description (`bounded`); a title or label list to six lines; the view is
+  built once when the reading lands, not on every poll.
+  `TestAChangeIsKeptToItsLimits`, and the title in
+  `TestAChangeReadIsItsWholePage`; both falsified.
+- F2, confirmed and fixed: a day's pushes were a request each. Now once a
+  branch head, ten at most. `TestADaysPushesAreFewRequests`, falsified by
+  the cap and by the de-duplication.
+- F3, refuted as a fix: the key is an unsalted hash, so a guess can be
+  confirmed from a logged ID. It has to be the same in every process for
+  `hayami-tui detail <id>`; the comment now says it keeps a name out of
+  plain sight and no more.
+- A short hash was cut by bytes; now by characters.
 
 ## Risks & Assumptions
 

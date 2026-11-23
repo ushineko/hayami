@@ -2,6 +2,7 @@ package forge_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -160,6 +161,15 @@ func gitlabChange(t *testing.T) (forge.GitLabReader, *[]string) {
 			}
 			w.Header().Set("X-Next-Page", "2")
 			_, _ = io.WriteString(w, `[{"old_path":"ids.go","new_path":"ids.go","diff":"--- a/ids.go\n+++ b/ids.go\n@@ -1 +1,2 @@\n-x\n+y\n+z\n"}]`)
+		case p + "/merge_requests/8":
+			// A host answering longer than it was asked (review F1).
+			labels := strings.Repeat(`"l",`, 500) + `"l"`
+			body := strings.Repeat("a line of a description\n", 10000)
+			_, _ = io.WriteString(w, `{"iid":8,"title":"big","state":"opened","labels":[`+labels+`],"description":"`+strings.ReplaceAll(body, "\n", `\n`)+`"}`)
+		case p + "/merge_requests/8/commits":
+			_, _ = io.WriteString(w, "["+strings.TrimSuffix(strings.Repeat(`{"id":"x","title":"x"},`, 5000), ",")+"]")
+		case p + "/merge_requests/8/diffs", p + "/merge_requests/8/approvals":
+			_, _ = io.WriteString(w, `[]`)
 		case p + "/issues/4":
 			// No id: client-go's decoder panics on it.
 			_, _ = io.WriteString(w, `{"iid":4,"title":"x"}`)
@@ -232,6 +242,38 @@ func TestGitLabReadsADaysPushes(t *testing.T) {
 	assert.Contains(t, (*asked)[0], "since=")
 	assert.Contains(t, (*asked)[0], "until=")
 	assert.Contains(t, (*asked)[0], "per_page=100", "a rebase's count asked for its commits")
+}
+
+// Spec 111 review F1. A host answering longer lists than it was asked for
+// is kept to the page's limits.
+func TestAChangeIsKeptToItsLimits(t *testing.T) {
+	r, _ := gitlabChange(t)
+	c, err := r.ReadChange(t.Context(), token, forge.ChangeRef{Kind: forge.KindMR, Repo: "team/agent", Number: 8})
+	require.NoError(t, err)
+	assert.Len(t, c.Commits, forge.MaxChangeCommits)
+	assert.Len(t, c.Labels, forge.MaxChangeLabels)
+	assert.LessOrEqual(t, len(c.Body), forge.MaxChangeBody)
+	assert.True(t, strings.HasSuffix(c.Body, "description"), "the body was cut inside a line")
+}
+
+// Spec 111 review F2. A day of many pushes asks once a branch head, and at
+// most ten times.
+func TestADaysPushesAreFewRequests(t *testing.T) {
+	r, asked := gitlabChange(t)
+	var pushes []forge.Push
+	for i := range 40 {
+		// Twenty heads, each pushed twice in a row.
+		pushes = append(pushes, forge.Push{To: fmt.Sprintf("head%d", i/2), Count: 1})
+	}
+	_, err := r.ReadChange(t.Context(), token, forge.ChangeRef{Kind: forge.KindPushed, Repo: "team/agent", Branch: "main",
+		Day: time.Date(2026, 3, 13, 0, 0, 0, 0, time.Local), Pushes: pushes})
+	require.NoError(t, err)
+	assert.Len(t, *asked, 10)
+	heads := map[string]bool{}
+	for _, a := range *asked {
+		assert.False(t, heads[a], "a branch head was asked for twice")
+		heads[a] = true
+	}
 }
 
 // Spec 111 R6. A reference that is not a repository's, or a number that is

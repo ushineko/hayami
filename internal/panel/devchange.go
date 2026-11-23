@@ -26,7 +26,9 @@ reading listed.
 type changeRead func(ctx context.Context, provider string, s config.UsageSettings, ref forge.ChangeRef) (forge.Change, error)
 
 type changeState struct {
-	c       *forge.Change
+	// c is the change as the view takes it, made once when its reading
+	// lands rather than on every poll of the page.
+	c       *view.DevChange
 	reading bool
 	failed  error
 	at      time.Time
@@ -166,11 +168,7 @@ func (f *forges) changePage(id string) view.Detail {
 		r := forgeReason(st.failed)
 		failed = &r
 	}
-	var c *view.DevChange
-	if st.c != nil {
-		c = devChange(*st.c)
-	}
-	return view.DevChangePage(title, id, thing.open, thing.repo, thing.ref, thing.line, c, st.reading, failed)
+	return view.DevChangePage(title, id, thing.open, thing.repo, thing.ref, thing.line, st.c, st.reading, failed)
 }
 
 // startChangeLocked reads a change in the background. Under f.mu.
@@ -192,7 +190,7 @@ func (f *forges) startChangeLocked(id, provider string, ref forge.ChangeRef, st 
 			cur.failed = err
 			return
 		}
-		cur.failed, cur.c = nil, &c
+		cur.failed, cur.c = nil, devChange(c)
 	}()
 }
 
