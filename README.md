@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.21.1
+**Version**: 0.22.0
 
 *a chart you read at a glance*
 
@@ -797,7 +797,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.22.0 (2026-11-22)
 
 - **Fixed**: GitHub's day pages list every pull request, review and issue,
   not the first hundred of each, and the repositories created; a day counts
