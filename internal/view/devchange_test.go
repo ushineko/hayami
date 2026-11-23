@@ -79,7 +79,7 @@ func TestAChangeBeingReadSaysWhatItsLineSaid(t *testing.T) {
 // description is cut and says so.
 func TestAChangeReadIsItsWholePage(t *testing.T) {
 	merged := time.Date(2026, 3, 10, 15, 0, 0, 0, time.UTC)
-	body := strings.Repeat("A word that goes on. ", 1000)
+	body := strings.Repeat("A paragraph that goes on.\n", 400)
 	c := &view.DevChange{
 		Kind: "pr", Ref: "#12", Title: "feat: a widget that is called something long enough to wrap",
 		State: "merged", Opened: merged.Add(-time.Hour), Merged: merged, Source: "feat/widget", Target: "main",
@@ -100,8 +100,13 @@ func TestAChangeReadIsItsWholePage(t *testing.T) {
 	facts := map[string]string{}
 	for _, l := range head.Lines {
 		facts[l.Name] = l.Value
-		assert.LessOrEqual(t, len([]rune(l.Name)), view.DevWideNameWidth, l.Name)
+		if !l.Prose {
+			assert.LessOrEqual(t, len([]rune(l.Name)), view.DevWideNameWidth, l.Name)
+		}
 	}
+	// Spec 112: the title is one paragraph, whole, for the shell to flow.
+	require.True(t, head.Lines[0].Prose)
+	assert.Equal(t, c.Title, head.Lines[0].Name)
 	assert.Equal(t, "+40 −3", facts["Lines"])
 	for _, l := range head.Lines {
 		if l.Name == "Lines" {
@@ -115,7 +120,8 @@ func TestAChangeReadIsItsWholePage(t *testing.T) {
 	assert.Contains(t, facts, "→ main")
 
 	desc := page.Parts[1].Lines
-	assert.Len(t, desc, view.DevChangeLines+1)
+	assert.Len(t, desc, view.DevChangeLines+1, "a paragraph a line, up to the limit")
+	assert.True(t, desc[0].Prose)
 	assert.Equal(t, "… the rest on the forge", desc[len(desc)-1].Name)
 	assert.Equal(t, "Commits (1)", page.Parts[2].Title)
 	assert.Equal(t, "aaaaaaa feat: a widget", page.Parts[2].Lines[0].Name)
@@ -125,13 +131,7 @@ func TestAChangeReadIsItsWholePage(t *testing.T) {
 
 	c.Title = strings.Repeat("long ", 1000)
 	page = view.DevChangePage("GitHub", "x", view.DevOpenPR, "octo/widget", "#12", "", c, false, nil)
-	words := 0
-	for _, l := range page.Parts[0].Lines {
-		if strings.HasPrefix(l.Name, "long") {
-			words++
-		}
-	}
-	assert.Equal(t, 6, words, "a long title is not held to six lines (review F1)")
+	assert.LessOrEqual(t, len([]rune(page.Parts[0].Lines[0].Name)), 1200, "a long title is not held (review F1)")
 
 	c.Approvals = 0
 	page = view.DevChangePage("GitHub", "x", view.DevOpenPR, "octo/widget", "#12", "", c, false, nil)

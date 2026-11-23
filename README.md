@@ -797,6 +797,12 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: a change's description and title fill the drawer's width
+  instead of a fixed 36 characters, and flow again when the drawer is made
+  wider; the terminal flows them to its columns (spec 112, #393).
+
 ### 0.22.0 (2026-11-22)
 
 - **Fixed**: GitHub's day pages list every pull request, review and issue,

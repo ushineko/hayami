@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/test"
+	fynetheme "fyne.io/fyne/v2/theme"
 
 	"github.com/ushineko/fynedesygn/glance"
 
@@ -596,6 +597,36 @@ func DrawerPartHeads(p *Panel) []string {
 		out = append(out, strings.Join(visibleTexts(part.head.Object()), "|"))
 	}
 	return out
+}
+
+// DrawerPartRows are the texts of each part's shown rows (spec 112).
+func DrawerPartRows(p *Panel) [][]string {
+	var out [][]string
+	for _, part := range p.first().parts {
+		var rows []string
+		for _, r := range part.rows {
+			if r.Object().Visible() {
+				rows = append(rows, strings.Join(visibleTexts(r.Object()), "|"))
+			}
+		}
+		out = append(out, rows)
+	}
+	return out
+}
+
+// DrawerRoom is the width a row's name may take in the first drawer, and
+// TextWidth a text's width in the panel's face (spec 112).
+func DrawerRoom(p *Panel) float32 {
+	th, _ := p.theme()
+	return p.first().dr.Available().Width - 2*th.Size(fynetheme.SizeNamePadding)
+}
+
+func TextWidth(p *Panel, s string) float32 {
+	th, _ := p.theme()
+	t := canvas.NewText(s, nil)
+	t.TextSize = th.Size(fynetheme.SizeNameText)
+	t.FontSource = th.Font(fyne.TextStyle{})
+	return t.MinSize().Width
 }
 
 func DrawerPartMeters(p *Panel) []int {
