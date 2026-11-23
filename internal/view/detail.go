@@ -146,6 +146,11 @@ type DetailLine struct {
 	// to (spec 107): a repository under its day, a pull request under its
 	// repository. Zero for most.
 	Indent int `json:"indent,omitempty"`
+
+	// Prose marks a wide line whose name is a paragraph: a change's title or
+	// description (spec 112). The view does not cut it; each shell flows it
+	// to the width it has, a line a row (Reflow).
+	Prose bool `json:"prose,omitempty"`
 }
 
 // The actions a detail line can carry in Open, as against a detail to open.

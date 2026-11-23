@@ -86,6 +86,12 @@ type drawer struct {
 	rules      int
 	partsShape string
 
+	// flowKey and flowed are the last breakdown whose prose was flowed to
+	// the drawer's width, and the result (spec 112): a page is drawn every
+	// poll and measuring a description word by word is not free.
+	flowKey string
+	flowed  view.Detail
+
 	// pieces are the parts' pieces as the drawer holds them, for measuring
 	// the room a part cut to it has (spec 107).
 	pieces []glance.Piece
@@ -1109,6 +1115,7 @@ changes, an account or a limit arriving or going, and set in place otherwise,
 so a reading leaves a scrolled breakdown where it is (R12).
 */
 func (p *Panel) renderParts(d *drawer, detail view.Detail) {
+	detail = p.flowProse(d, detail)
 	dr := d.dr
 	dr.SetTitle(detail.Title)
 	d.filter.Key = 0 // not a list: nothing to filter, as for one breakdown

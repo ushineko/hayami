@@ -133,9 +133,14 @@ func DevNumber(ref string) int {
 	return n
 }
 
-// DevChangeLines is how many lines of a description a page shows: the page
-// has the drawer to itself and scrolls, so most of one.
+// DevChangeLines is how many of a description's lines -- paragraphs, each
+// flowed to the drawer's width -- a page shows: the page has the drawer to
+// itself and scrolls, so most of one.
 const DevChangeLines = 150
+
+// devProseRunes is the most of one paragraph, a title or a list of labels a
+// page keeps: a page is a widget a line once flowed (spec 111 review, F1).
+const devProseRunes = 1200
 
 /*
 DevChangePage is a change's page. What the day's line said -- the heading
@@ -162,7 +167,7 @@ func DevChangePage(title, id, open, repo, ref, line string, c *DevChange, readin
 	page := Detail{Section: UsageInfo.Key, ID: id, Title: title}
 	if c == nil {
 		if line != "" {
-			head.Lines = wrapLines(line, Good)
+			head.Lines = []DetailLine{prose(line, Good)}
 		}
 		page.Parts = []Detail{head}
 		return page
@@ -170,15 +175,18 @@ func DevChangePage(title, id, open, repo, ref, line string, c *DevChange, readin
 	if c.State != "" {
 		head.TitleParts = append([]Part{{Text: stateWord(c), Status: stateStatus(c)}}, head.TitleParts...)
 	}
-	head.Lines = append(head.Lines, capLines(wrapLines(c.Title, Good), devTitleLines)...)
+	head.Lines = append(head.Lines, prose(c.Title, Good))
 	head.Lines = append(head.Lines, changeFacts(c)...)
 	page.Parts = append(page.Parts, head)
 
 	if body := strings.TrimSpace(c.Body); body != "" {
 		desc := Detail{Section: UsageInfo.Key, ID: "description", Title: "Description", TitleBold: true}
+		// A paragraph a line, which the shell flows to its width (Prose);
+		// a blank line between paragraphs as the description has one.
 		var lines []DetailLine
 		for para := range strings.SplitSeq(body, "\n") {
-			if len(lines) > DevChangeLines {
+			if len(lines) >= DevChangeLines {
+				lines = append(lines, DetailLine{Name: "… the rest on the forge", Wide: true, Status: Info})
 				break
 			}
 			para = strings.TrimRight(para, " \t\r")
@@ -188,10 +196,7 @@ func DevChangePage(title, id, open, repo, ref, line string, c *DevChange, readin
 				}
 				continue
 			}
-			lines = append(lines, wrapLines(para, Info)...)
-		}
-		if len(lines) > DevChangeLines {
-			lines = append(lines[:DevChangeLines], DetailLine{Name: "… the rest on the forge", Wide: true, Status: Info})
+			lines = append(lines, prose(para, Info))
 		}
 		desc.Lines = lines
 		page.Parts = append(page.Parts, desc)
@@ -291,7 +296,7 @@ func changeFacts(c *DevChange) []DetailLine {
 		fact("Comments", strconv.Itoa(c.Comments), Info)
 	}
 	if len(c.Labels) > 0 {
-		out = append(out, capLines(wrapLines("Labels: "+strings.Join(c.Labels, ", "), Info), devTitleLines)...)
+		out = append(out, prose("Labels: "+strings.Join(c.Labels, ", "), Info))
 	}
 	return out
 }
@@ -344,60 +349,12 @@ func when(t time.Time) string {
 	return t.Local().Format("Mon 2 Jan 15:04")
 }
 
-// devTitleLines is how many lines a title or a list of labels takes at
-// most.
-const devTitleLines = 6
-
-// capLines is lines cut to n, the last saying there is more.
-func capLines(lines []DetailLine, n int) []DetailLine {
-	if len(lines) <= n {
-		return lines
+// prose is a paragraph as a line the shell flows to its width.
+func prose(text string, st Status) DetailLine {
+	if r := []rune(text); len(r) > devProseRunes {
+		text = string(r[:devProseRunes-1]) + "…"
 	}
-	out := append([]DetailLine(nil), lines[:n]...)
-	out[n-1].Name = truncate(out[n-1].Name+" …", DevWideNameWidth)
-	return out
-}
-
-// wrapLines is text wrapped at word boundaries into wide lines.
-func wrapLines(text string, st Status) []DetailLine {
-	var out []DetailLine
-	for _, l := range wrapWords(text, DevWideNameWidth) {
-		out = append(out, DetailLine{Name: l, Wide: true, Status: st})
-	}
-	return out
-}
-
-// wrapWords breaks text into lines of at most width runes, at spaces where
-// it can and inside a word longer than a line where it cannot.
-func wrapWords(text string, width int) []string {
-	var out []string
-	var cur []rune
-	flush := func() {
-		if len(cur) > 0 {
-			out = append(out, string(cur))
-			cur = cur[:0]
-		}
-	}
-	for w := range strings.FieldsSeq(text) {
-		word := []rune(w)
-		for len(word) > width {
-			flush()
-			out = append(out, string(word[:width]))
-			word = word[width:]
-		}
-		switch {
-		case len(cur) == 0:
-			cur = append(cur, word...)
-		case len(cur)+1+len(word) <= width:
-			cur = append(cur, ' ')
-			cur = append(cur, word...)
-		default:
-			flush()
-			cur = append(cur, word...)
-		}
-	}
-	flush()
-	return out
+	return DetailLine{Name: text, Wide: true, Prose: true, Status: st}
 }
 
 // truncateLeft keeps a path's end, which names the file: "…/view/devchange.go".

@@ -394,6 +394,15 @@ func partsLines(d Detail, width, height int, s DrawerShape) []string {
 			fit.lines, fit.n = len(all), len(p.Lines)
 		}
 		for _, l := range p.Lines {
+			if l.Prose {
+				// A paragraph flowed to the drawer's columns (spec 112), one
+				// line for the selection however many rows it takes.
+				for _, row := range Reflow([]DetailLine{l}, FitsColumns(width-4)) {
+					all = append(all, wideText(indented(row), width, false))
+				}
+				marked++
+				continue
+			}
 			l = indented(l)
 			if l.Wide {
 				all = append(all, wideText(l, width, !l.Heading && marked == s.Marked))
