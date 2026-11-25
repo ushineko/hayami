@@ -174,7 +174,10 @@ func TestTheExtensionKeepsFynstallsRules(t *testing.T) {
 	require.Regexp(t, `(?m)^  - name: `+ParamNetwork+`$`, config, "fynstall.yaml does not declare the network page's parameter")
 	require.Regexp(t, `(?m)^extension: \./installer$`, config)
 	require.Regexp(t, `(?m)^  - name: `+ParamKeepalive+`$`, config, "fynstall.yaml does not declare the keepalive page's parameter")
-	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork, ParamKeepalive}))
+	require.Regexp(t, `(?m)^  - name: `+ParamAPI+`$`, config, "fynstall.yaml does not declare the API page's parameter")
+	require.Regexp(t, `(?m)^  - name: `+ParamAPI+`\n(?:    .*\n)*?    default: "`+Auto+`"\n    once: true$`, config,
+		"the API parameter is auto and once, so --yes never gives back a removed service (spec 113 R25)")
+	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork, ParamKeepalive, ParamAPI}))
 	require.NotNil(t, Extension.AfterInstall)
 	require.NotNil(t, Extension.BeforeUninstall)
 }

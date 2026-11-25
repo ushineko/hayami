@@ -808,6 +808,11 @@ MIT. See
   `status`, `get`, `watch`, `check` (walks every section, detail and drill
   and holds each response to the contract) and `load` (many clients and
   streams at once, at low priority) (spec 113, #396).
+- **Added**: the installer's Service page sets up the service on Linux, as a
+  systemd user socket that starts it when a program connects; on by default
+  on a first install, kept by an upgrade, removed by clearing the box or by
+  uninstalling. `hayami-tui api status` says whether it is installed and
+  running. `docs/api.md` describes what it serves (spec 113, #396).
 - **Changed**: a detail is read once, as plain values, and the window and
   the terminal draw it from them (spec 113, #400).
 

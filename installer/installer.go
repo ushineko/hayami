@@ -73,6 +73,10 @@ var Extension = extension.Extension{
 		ID:   PageKeepalive,
 		Sets: []string{ParamKeepalive},
 		CLI:  keepaliveCLI,
+	}, {
+		ID:   PageAPI,
+		Sets: []string{ParamAPI},
+		CLI:  apiCLI,
 	}},
 	AfterInstall:    afterInstall,
 	BeforeUninstall: beforeUninstall,
@@ -182,6 +186,7 @@ func afterInstall(ctx context.Context, c *extension.Context) error {
 	}
 	placeRule(ctx, c)
 	placeKeepalive(ctx, c)
+	placeAPI(ctx, c)
 	return nil
 }
 
@@ -227,6 +232,7 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 		removeRule(ctx, c)
 	}
 	dropKeepalive(ctx, c)
+	dropAPI(ctx, c)
 	dropCopy(c)
 	return nil
 }

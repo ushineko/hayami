@@ -95,7 +95,7 @@ it is given or makes, checks each peer's credentials, and exits when idle.
 | Recovery actions (the Windows VM) | `sc failure` on an instance fails (87); on the template it succeeds. An instance made before the template had them did not restart after `taskkill /f` (exit 1067, stopped); the instance made at the next sign-in carried them and restarted under a new PID within seconds | The installer sets the recovery actions when it registers the template, before any instance exists. Changing them later takes effect at the next sign-in |
 | The instance's pipe (the Windows VM) | `winio.ListenPipe` at `\\.\pipe\hayami-spike-<SID>` with `D:P(A;;GA;;;<SID>)`. A client in the desktop session (session 1, a `schtasks /it` task) and one over ssh (session 0) both read `/v1/health` and the SSE stream. A second server on the same name was refused ("Access to the path is denied") | The transport on Windows holds. R4's second-`serve` refusal is the pipe's |
 | Stop, upgrade, removal (the Windows VM) | The running program could not be overwritten ("being used by another process"). `sc stop` on the instance, replacing the program, then `sc start` on the instance ran the new program. **`sc delete` on the template left the stopped instance registered**; `sc delete` on the instance removed it, with no reboot, and no `hayami-api-spike` key remained under `Services` | An upgrade stops each `hayami-api_*` instance, replaces the program and starts them again. Removal stops and deletes each instance, then deletes the template (R25) |
-| fynstall page default | Read from fynstall 0.2.6 (`extension.Page`): under `--yes` a page is not run and each parameter takes its static default from `fynstall.yaml`, so a default of `yes` would reinstall a removed service on every `--yes` upgrade | No fynstall change. The `api` parameter is three-valued, with `once: true` and default `auto`: `auto` installs on a first install and leaves an upgrade as it found the service, and an explicit `yes` or `no` always wins. The page asks with what it found as the default |
+| fynstall page default | Read from fynstall 0.2.6 (`extension.Page`): under `--yes` a page is not run and each parameter takes its static default from `fynstall.yaml`, so a default of `yes` would reinstall a removed service on every `--yes` upgrade | No fynstall change. The `api` parameter is three-valued, with `once: true` and default `auto`: `auto` installs on a first install and leaves an upgrade as it found the service, and an explicit `yes` or `no` always wins. The page asks with what it found as the default. **Corrected in 3c:** the install half cannot tell an upgrade (see Gaps found), so `auto` reads a marker hayami writes in the install directory |
 | JSON Schema validator | `github.com/santhosh-tekuri/jsonschema/v6` v6.0.3: JSON Schema 2020-12, which OpenAPI 3.1's schemas are written in, Apache-2.0. The YAML is read with `go.yaml.in/yaml/v3`, already a dependency | Test-only. Recorded under B7 |
 | Pipe listener | `github.com/Microsoft/go-winio` v0.6.4, `winio.ListenPipe` with an SDDL, chosen by the operator on 2026-11-24 over a listener written on `x/sys` | A shipped dependency on Windows. Recorded under B7 |
 
@@ -109,8 +109,8 @@ meets them lands.
 | 1 | Spike findings (above) | Merged |
 | 2 | R14: `panel.RawDetailer` on the bandwidth, cooler and usage sources. `ReadDetail` returns a `panel.RawDetail` (processes with their PIDs and whole names, the network reading with the peers' whole host names, a process's page without its command line, an account's breakdown, the overview, a forge's day, a change's page); `DrawDetail` builds the `view.Detail` from it and reads nothing; `PollDetail` is the one drawn from the other. `core.PeerNames` keeps whole names (`Full`) and shortens for a column (`Name`); a process's parent and children are names and PIDs. The shells are unchanged: the existing tests pass unmodified, and the bandwidth breakdown's pages, which had none, are pinned by tests that pass on the code before the change too. Found on the way: #399, a cooler row with a long name opens an idle page, fixed on its own | This PR |
 | 3a | The contract (`api/openapi.yaml`, `internal/api/contract`), the server (`internal/api`: leases, one poller a source, snapshots, SSE with a latest-only queue, the limits, panic recovery), the Linux socket with its peer check and systemd's hand-over, and `hayami-tui serve`. Tests: every endpoint's golden response checked against the contract, each Go type held to its schema, the behaviour over a real socket, nothing secret over real sources, a fuzz target, and the load test. The adversarial review's five findings fixed and pinned; #401 filed | Merged (#402) |
-| 3b | The reference client (`internal/api/client`: the address rule, strict decoding against the contract types, the stream, `Check`, `Load`) and `hayami-tui api address/status/get/watch/check/load`. The contract types carry `enum`, `format` and `nullable` tags, held to the schema by the parity test; `api/openapi.yaml` is validated as an OpenAPI 3.1 document against the OpenAPI Initiative's schema, vendored as a test fixture. The adversarial review's six findings fixed and pinned | This PR |
-| 3c | The systemd units, the installer page, `docs/api.md`, CLAUDE.md, the desk's end-to-end run | — |
+| 3b | The reference client (`internal/api/client`: the address rule, strict decoding against the contract types, the stream, `Check`, `Load`) and `hayami-tui api address/status/get/watch/check/load`. The contract types carry `enum`, `format` and `nullable` tags, held to the schema by the parity test; `api/openapi.yaml` is validated as an OpenAPI 3.1 document against the OpenAPI Initiative's schema, vendored as a test fixture. The adversarial review's six findings fixed and pinned | Merged (#403) |
+| 3c | The systemd user units (`internal/api/unit`, standard library only: written as the person, hayami's mark on each, `RemoveOnStop`, `try-restart` on an upgrade), the installer's Service page (`api`: `auto`, `once`; `auto` sets the service up the first time the installer decides, by a marker in the install directory, and never gives back one removed), `install.sh` and `uninstall.sh`, `hayami-tui api status` with the manager's state, `docs/api.md`, CLAUDE.md, and the desk's end-to-end run. The adversarial review's two findings fixed and pinned | This PR |
 | 4 | Windows per-user service | — |
 | 5 | macOS agent and CI job | — |
 
@@ -519,6 +519,9 @@ for review.
       The service's RSS is flat in the last three minutes, `api check`
       passes straight afterwards, and the panels keep updating throughout
 
+  As built in 3c: passed on the desk against the installed service (E2E
+  results below). The Windows VM and the Mac are 4 and 5.
+
 ### Platforms and installer
 
 - [ ] Linux: the socket is `0600` in a `0700` directory; a connection from
@@ -547,6 +550,13 @@ for review.
       the Windows VM and the Mac)
 - [ ] Uninstalling hayami removes the units, the instance and template, or
       the agent, and the socket (desk, the Windows VM and the Mac)
+
+  As built in 3c, Linux: the socket's mode and the other account's refusal,
+  socket activation, the idle exit, the installer page's default, keep,
+  removal and `--yes` behaviour, and the upgrade's restart all held on the
+  desk (E2E results below). Uninstalling hayami was not run on the desk; its
+  Linux half is held by the tests. Each criterion stays open for the
+  Windows VM and the Mac.
 
 ### Reference client and documents
 
@@ -582,10 +592,10 @@ for review.
   a section at once (R23), so every one is minutes of waiting for leases
   to lapse. Over that limit `check` waits as the 503 says and asks again,
   and a drill whose process ended between two reads is counted, not failed.
-- [ ] `docs/api.md`, `docs/architecture.md`, CLAUDE.md and
+- [x] `docs/api.md`, `docs/architecture.md`, CLAUDE.md and
       `docs/threat-model.md` are updated in the PR
-- [ ] `cmd/hayami-tui` still builds with `CGO_ENABLED=0`
-- [ ] README changelog line under `### Unreleased`
+- [x] `cmd/hayami-tui` still builds with `CGO_ENABLED=0`
+- [x] README changelog line under `### Unreleased`
 
 ## Threat model delta
 
@@ -667,6 +677,26 @@ run against the installed service, plus the lifecycle steps around it.
 | The Mac | `sudo -u nobody` connection to the socket | Refused by mode or closed by the peer check | R4 |
 | The Mac | Re-run removing it; then reinstall and uninstall hayami | Agent unloaded and plist gone each time; no socket left | installer |
 
+### Results: the desk, 3c, 2026-11-25
+
+Run with the installers `make installer` built from this branch, by the
+fynstall CLI installer, user scope.
+
+| Step | Result |
+|---|---|
+| Install, defaults | `hayami-api.socket` enabled and listening, the service started by the first connection; the marker `share/api-asked` written |
+| `api check` | Passed: 73 requests, 5 sections, 46 details, 5 events |
+| Upgrade (`--yes`) | The running service was stopped and the socket's next connection started the new program (`try-restart`, journal 11:30:01) |
+| Idle | `idle, exiting after=5m0s` (journal 11:35:01); socket still listening; the next `api status` started it again |
+| `sudo -u nobody curl --unix-socket …` | Refused, connect failed: the socket is `0600` in a `0700` directory under a `0700` runtime directory |
+| `api watch --sections usage,bandwidth`, 2 min | One event for each section at once, then one per poll (64 bandwidth at 2 s, 5 usage at 30 s), a keepalive comment every 15 s |
+| A change's page against `gh pr view 403` | Title whole and equal. The body's words are whole, but it is GitHub's `bodyText`, Markdown removed, which the contract does not say: #404 |
+| `api load --clients 32 --streams 8 --duration 5m`, panel running, RSS every 10 s | 4,817,355 requests (200 and the 404s it asks for), 0 errors, p99 3.0 ms, max 495 ms. RSS 49–65 MB after warm-up, no trend over the last three minutes. `api check` straight afterwards passed (76 requests, 49 details) |
+| Installer, `--api no` | "Removing the service other programs read": no unit files, no `sockets.target.wants` link, no socket; the marker kept |
+| Then `--yes` upgrade, `api` left at `auto` | Not set up again |
+| Then `--api yes` | Set up again; panel restarted |
+| Uninstall of hayami | Not run on the desk (decided with the user): it would also remove the network helper, the VPN keepalive the work VPN depends on and the device rule. The uninstall path is held by the installer's tests (`dropAPI`) and `uninstall.sh`'s dry runs; the real uninstall runs on the Windows VM and the Mac in 4 and 5 |
+
 ### Prod visibility
 
 Not applicable: hayami is a desktop program with no telemetry. A person's
@@ -695,6 +725,12 @@ report is `hayami-tui api status`, `api check` and `doctor`.
   release, and hayami's release workflow gains macOS builds of both
   binaries (the windowed one with cgo, on a macOS runner). This blocks R25's
   macOS criteria only. Filed as ushineko/fynstall#75.
-- The spike's question on an extension page's default added none: a
-  three-valued `auto` parameter with `once: true` does it with fynstall
-  0.2.6 as it is (Spike findings).
+- The spike's question on an extension page's default added none, but
+  for a reason the spike did not see (found in 3c on the desk): fynstall's
+  install half cannot tell a first install from an upgrade.
+  `Context.Upgrade` is set only in the old version's uninstaller, which is
+  the old program, so `auto` first set the service up on every `--yes`
+  upgrade. hayami keeps its own note instead, a marker in the install
+  directory (decided with the user), and needs no fynstall change. A
+  "this install replaces one" signal in fynstall's extension context
+  would let a later version drop the marker; not filed.

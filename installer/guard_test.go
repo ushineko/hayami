@@ -22,6 +22,12 @@ func init() {
 	// change on the machine it runs on.
 	setUpKeep, removeKeep = refuse, refuse
 	probeKeep = func() Keepalive { return Keepalive{} }
+	// The service other programs read (spec 113) is the same: a person's own
+	// units, and no test's to write or remove.
+	setUpAPI, removeAPI = refuse, refuse
+	probeAPI = func(*extension.Context) API { return API{} }
+	markAsked = func(*extension.Context) error { return nil }
+	unmarkAsked = func(*extension.Context) {}
 }
 
 var errNoElevationInTests = errors.New("a test reached a step that asks for an administrator")

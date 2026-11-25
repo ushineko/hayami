@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/unit"
 	"github.com/ushineko/hayami/internal/safetext"
 )
 
@@ -107,15 +108,26 @@ func apiAddressCmd(f *apiFlags) *cobra.Command {
 
 func apiStatusCmd(f *apiFlags) *cobra.Command {
 	return &cobra.Command{
-		Use: "status", Short: "Say whether the service answers, its version and its sections", Args: cobra.NoArgs,
+		Use:   "status",
+		Short: "Say whether the service is installed and running, where, its version and its sections",
+		Long: "Say whether the service is installed and running, at which address, and what it\n" +
+			"serves. What the service manager says is printed before the service is asked,\n" +
+			"since asking starts one that is only listening.",
+		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: f.run(time.Minute, func(ctx context.Context, cmd *cobra.Command, _ []string) error {
+			out := cmd.OutOrStdout()
+			addr, err := apiAddress(f.address)
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(out, "address    %s\n", addr)
+			_, _ = fmt.Fprintf(out, "installed  %s\n", installedLine(unit.Status(ctx)))
 			c, err := f.dial()
 			if err != nil {
 				return err
 			}
 			defer c.Close()
-			out := cmd.OutOrStdout()
 			index, err := c.Index(ctx)
 			if err != nil {
 				return fmt.Errorf("the service does not answer: %w", err)
@@ -134,6 +146,22 @@ func apiStatusCmd(f *apiFlags) *cobra.Command {
 			}
 			return nil
 		}),
+	}
+}
+
+// installedLine is what the service manager says of the service, in a line.
+func installedLine(s unit.State) string {
+	switch {
+	case !unit.Offered():
+		return "no: not set up on this system; hayami-tui serve runs it by hand"
+	case !s.Installed:
+		return "no: running the installer again sets it up"
+	case s.Running:
+		return "yes, running"
+	case s.Listening:
+		return "yes, listening: the next program to connect starts it"
+	default:
+		return "yes, and not listening: systemctl --user start " + unit.SocketName
 	}
 }
 
