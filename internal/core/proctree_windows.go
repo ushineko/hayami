@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"sort"
 	"unsafe"
 
@@ -54,7 +53,7 @@ func ProcessInfo(pid int) ProcInfo {
 	info.Name, info.State, info.Threads = self.Name, self.State, self.Threads
 	if parent, ok := winParent(procs, self); ok {
 		info.PPID = parent.PID
-		info.Parent = fmt.Sprintf("%s (%d)", parent.Name, parent.PID)
+		info.ParentName = parent.Name
 	}
 	info.Sockets = socketsOwnedBy(pid)
 	return info
@@ -68,7 +67,7 @@ func ProcessChildren(pid int) Children {
 	}
 	var out Children
 	for _, c := range winChildren(procs, pid) {
-		out = append(out, fmt.Sprintf("%s (%d)", c.Name, c.PID))
+		out = append(out, ProcRef{PID: c.PID, Name: c.Name})
 	}
 	return out
 }

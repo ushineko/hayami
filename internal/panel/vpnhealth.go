@@ -379,9 +379,10 @@ func vpnStats(points []vpnPoint) view.VPNStats {
 // vpnDetailTrail is how many points of a VPN's history the drawer plots.
 const vpnDetailTrail = 60
 
-// vpnDetail is the drawer's view of the chosen VPNs. Addresses are read here and
-// not on the poll: nobody asked for them until now (spec 085 R9).
-func (b *Bandwidth) vpnDetail() view.Detail {
+// vpnDetailReadings are what the drawer says of the chosen VPNs. Addresses are
+// read here and not on the poll: nobody asked for them until now (spec 085
+// R9).
+func (b *Bandwidth) vpnDetailReadings() []view.VPNDetailReading {
 	points := b.health.points()
 	card := b.vpnReadings()
 	vpns := b.vpns.Readings()
@@ -416,7 +417,7 @@ func (b *Bandwidth) vpnDetail() view.Detail {
 		}
 		out = append(out, r)
 	}
-	return view.VPNDetail(b.Key(), out)
+	return out
 }
 
 // keepaliveReading says what the keepalive helper is doing about a VPN it is switched

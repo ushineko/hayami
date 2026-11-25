@@ -77,13 +77,14 @@ func (b *Bandwidth) DrillUp(id string) string {
 	return view.DetailPeers
 }
 
-// drillDetail is a drill-down of the peer breakdown.
-func (b *Bandwidth) drillDetail(key, id string, use core.NetUse) view.Detail {
+// drawNetDrill is the peer breakdown, or a drill-down of it.
+func drawNetDrill(raw RawDetail) view.Detail {
+	id, use, net := raw.ID, raw.Net.Use, raw.Net
 	path, ok := parseDrill(id)
 	if !ok {
-		return b.peerDetail(key, use)
+		return peerDetail(raw)
 	}
-	d := view.Detail{Section: key, ID: id, Title: view.ProcessTitle(view.DetailPeers)}
+	d := view.Detail{Section: raw.Section, ID: id, Title: view.ProcessTitle(view.DetailPeers)}
 	d.Lines = Trail("Bandwidth", id)
 
 	var procs []core.NetProcess
@@ -108,11 +109,11 @@ func (b *Bandwidth) drillDetail(key, id string, use core.NetUse) view.Detail {
 
 	switch {
 	case path.peer != "":
-		b.drillPeer(&d, procs, path.peer)
+		drillPeer(&d, net, procs, path.peer)
 	case path.pid != 0:
-		b.drillProcess(&d, procs, path.pid)
+		drillProcess(&d, net, procs, path.pid)
 	default:
-		b.drillName(&d, procs)
+		drillName(&d, net, procs)
 	}
 	d.Note = use.Counts
 	return AsPage(d)
@@ -120,7 +121,7 @@ func (b *Bandwidth) drillDetail(key, id string, use core.NetUse) view.Detail {
 
 // drillName is the processes behind one name: a browser is forty of them and
 // the list above says only "vivaldi-bin".
-func (b *Bandwidth) drillName(d *view.Detail, procs []core.NetProcess) {
+func drillName(d *view.Detail, net *RawNet, procs []core.NetProcess) {
 	sort.Slice(procs, func(i, j int) bool {
 		return procs[i].Rx+procs[i].Tx > procs[j].Rx+procs[j].Tx
 	})
@@ -170,7 +171,7 @@ func (b *Bandwidth) drillName(d *view.Detail, procs []core.NetProcess) {
 		if f.Rx+f.Tx < peerFloor {
 			continue
 		}
-		label := b.names.Name(addr)
+		label := net.peerName(addr)
 		if f.Served {
 			label = "← " + label
 		}
@@ -182,14 +183,18 @@ func (b *Bandwidth) drillName(d *view.Detail, procs []core.NetProcess) {
 
 // drillProcess is one process: who it is, who started it, what it holds, and
 // the offer to end it.
-func (b *Bandwidth) drillProcess(d *view.Detail, procs []core.NetProcess, pid int) {
+func drillProcess(d *view.Detail, net *RawNet, procs []core.NetProcess, pid int) {
 	var self core.NetProcess
 	for _, p := range procs {
 		if p.PID == pid {
 			self = p
 		}
 	}
-	lines := ProcessLines(pid)
+	proc := RawProc{PID: pid, Gone: true}
+	if net.Proc != nil {
+		proc = *net.Proc
+	}
+	lines := ProcessLines(proc)
 	if lines == nil {
 		// The page says it once. What became of a kill is the drawer's to
 		// say, and this saying so too read as two different facts.
@@ -201,7 +206,7 @@ func (b *Bandwidth) drillProcess(d *view.Detail, procs []core.NetProcess, pid in
 
 // drillPeer is the connections to one peer: a row of figures is a number of
 // sockets, and this is them.
-func (b *Bandwidth) drillPeer(d *view.Detail, procs []core.NetProcess, addr string) {
+func drillPeer(d *view.Detail, net *RawNet, procs []core.NetProcess, addr string) {
 	var socks []core.NetSocket
 	var rx, tx float64
 	served := false
@@ -216,7 +221,7 @@ func (b *Bandwidth) drillPeer(d *view.Detail, procs []core.NetProcess, addr stri
 			socks = append(socks, far.Sockets...)
 		}
 	}
-	name := b.names.Name(addr)
+	name := net.peerName(addr)
 	if name != addr {
 		d.Lines = append(d.Lines, view.DetailLine{Name: addr, Value: name})
 	}

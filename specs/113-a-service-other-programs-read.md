@@ -99,6 +99,19 @@ it is given or makes, checks each peer's credentials, and exits when idle.
 | JSON Schema validator | `github.com/santhosh-tekuri/jsonschema/v6` v6.0.3: JSON Schema 2020-12, which OpenAPI 3.1's schemas are written in, Apache-2.0. The YAML is read with `go.yaml.in/yaml/v3`, already a dependency | Test-only. Recorded under B7 |
 | Pipe listener | `github.com/Microsoft/go-winio` v0.6.4, `winio.ListenPipe` with an SDDL, chosen by the operator on 2026-11-24 over a listener written on `x/sys` | A shipped dependency on Windows. Recorded under B7 |
 
+## Delivery
+
+In phases, each its own PR; the criteria below are checked as the phase that
+meets them lands.
+
+| Phase | What | State |
+|---|---|---|
+| 1 | Spike findings (above) | Merged |
+| 2 | R14: `panel.RawDetailer` on the bandwidth, cooler and usage sources. `ReadDetail` returns a `panel.RawDetail` (processes with their PIDs and whole names, the network reading with the peers' whole host names, a process's page without its command line, an account's breakdown, the overview, a forge's day, a change's page); `DrawDetail` builds the `view.Detail` from it and reads nothing; `PollDetail` is the one drawn from the other. `core.PeerNames` keeps whole names (`Full`) and shortens for a column (`Name`); a process's parent and children are names and PIDs. The shells are unchanged: the existing tests pass unmodified, and the bandwidth breakdown's pages, which had none, are pinned by tests that pass on the code before the change too. Found on the way: #399, a cooler row with a long name opens an idle page, fixed on its own | This PR |
+| 3 | Contract, server, Go client, `api check`/`load`, Linux unit, installer page | — |
+| 4 | Windows per-user service | — |
+| 5 | macOS agent and CI job | — |
+
 ## Requirements
 
 ### The process
