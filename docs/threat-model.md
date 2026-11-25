@@ -217,6 +217,18 @@ name.
   each instance before the template, which would otherwise leave them registered, then
   removes the copy. An instance for an account that has never run hayami stops at once
   without serving.
+- On macOS the service is a launchd agent of the person's own (spec 113 R7), written to
+  `~/Library/LaunchAgents` and loaded into `gui/<uid>`, as the person, no
+  administrator. Its plist is written by hayami's writer: every value escaped as XML
+  text, the tags its own, so a path cannot add a key; the program's path must be
+  absolute with no control character; and a file at the plist's path without hayami's
+  mark is neither replaced nor removed (`internal/api/unit/unit_darwin.go`). The agent
+  runs `hayami-tui` from wherever the person put it, a file the person can write, and
+  runs it as the person alone: anything that can rewrite it can already run as them.
+  launchd holds the socket at `0600` in a `0700` directory under the per-user
+  `$TMPDIR`, and the service checks each peer's account (`LOCAL_PEERCRED`). A removal
+  takes the agent out of launchd, then its file and its socket. Until fynstall builds a
+  macOS installer it is set up with `hayami-tui api-service install`, run as the person.
 - The Linux helper is removed by its own root-owned copy in
   `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).

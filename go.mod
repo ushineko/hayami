@@ -91,4 +91,4 @@ require (
 //   - batched text is drawn premultiplied, so a translucent window keeps its
 //     alpha at the edges of a glyph.
 // Drop this for the first tagged Fyne release that carries all four.
-replace fyne.io/fyne/v2 => github.com/ushineko/fyne/v2 v2.8.3-ushineko.4
+replace fyne.io/fyne/v2 => /home/nverenin/git/fyne.worktrees/darwin-nocgo

@@ -235,6 +235,9 @@ place updates the guide's Status table in the same PR.
   every account runs it, its program is a copy in Program Files, never the
   install under `%LOCALAPPDATA%`, and registering or updating it asks for an
   administrator once (`hayami-tui api-service`, the installer's step).
+  On macOS it is a launchd agent of the person's own, `io.ushineko.hayami.api`,
+  that launchd starts on the first connection; until fynstall builds a macOS
+  installer, `hayami-tui api-service install` sets it up, as the person.
   The reference client,
   `internal/api/client` and `hayami-tui api`, imports only the contract and the
   standard library, and `api check` is what an end-to-end run runs.

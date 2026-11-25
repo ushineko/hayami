@@ -797,6 +797,18 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Added**: the service runs on macOS, as a launchd agent of your own that
+  starts when a program connects to its socket in your temporary directory.
+  Until the installer is built for macOS, `hayami-tui api-service install`
+  sets it up and `hayami-tui api-service remove` removes it (spec 113, #396).
+- **Fixed**: the terminal panel builds for macOS without cgo again (the Fyne
+  fork's scroller had no fallback there).
+- **Fixed**: on a machine with no VPN system (macOS, or a Linux without one),
+  the service's bandwidth section read as an error: asking for the VPN rows
+  dereferenced a VPN section that was never made.
+
 ### 0.23.0 (2026-11-25)
 
 - **Added**: the service runs on Windows, as a per-user service Windows

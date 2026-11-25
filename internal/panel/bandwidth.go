@@ -252,6 +252,10 @@ var vpnStates = map[core.VPNState]view.VPNState{
 // VPNReadings are the chosen VPNs as the view takes them: the card's, and the
 // service's (spec 113).
 func (b *Bandwidth) VPNReadings() []view.VPNReading {
+	if b.vpns == nil {
+		// No VPN system on this machine: no rows (spec 085 R3).
+		return nil
+	}
 	b.labelsMu.Lock()
 	labels := b.labels
 	b.labelsMu.Unlock()
