@@ -53,6 +53,20 @@ if (Get-Service hayami-network -ErrorAction SilentlyContinue) {
         Write-Host "  the network helper is installed and $Pane is not here to remove it; as administrator: sc.exe delete hayami-network"
     }
 }
+# The service other programs read (spec 113) likewise: each instance, the
+# template, and its copy of hayami-tui in Program Files.
+if (Get-Service hayami-api -ErrorAction SilentlyContinue) {
+    $removed++
+    if ($DryRun) {
+        Write-Host "  would remove the service other programs read: $Pane api-service remove (Windows asks for an administrator)"
+    } elseif (Test-Path $Pane) {
+        & $Pane api-service remove | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Host "  removed the service other programs read" }
+        else { Write-Host "  the service other programs read was not removed; as administrator: sc.exe delete each hayami-api_ service, then hayami-api" }
+    } else {
+        Write-Host "  the service other programs read is installed and $Pane is not here to remove it; as administrator: sc.exe delete each hayami-api_ service, then hayami-api"
+    }
+}
 $paths = @(
     (Join-Path $StartupDir "hayami.lnk"),
     (Join-Path $StartMenuDir "hayami.lnk"),

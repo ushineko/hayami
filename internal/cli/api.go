@@ -161,7 +161,7 @@ func installedLine(s unit.State) string {
 	case s.Listening:
 		return "yes, listening: the next program to connect starts it"
 	default:
-		return "yes, and not listening: systemctl --user start " + unit.SocketName
+		return unit.NotRunning
 	}
 }
 

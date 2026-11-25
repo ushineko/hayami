@@ -11,6 +11,10 @@ import (
 	"unicode"
 )
 
+// mark is each unit's first line, by which a file at the unit's path is
+// known to be hayami's own and so hayami's to replace or remove.
+const mark = "# Written by hayami's installer (spec 113). Running the installer again, or uninstalling hayami, removes it."
+
 // systemctl asks the person's own service manager for something, and
 // returns what it printed. A variable, so a test answers for one.
 var systemctl = func(ctx context.Context, args ...string) (string, error) {

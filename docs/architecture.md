@@ -34,7 +34,7 @@ layers, in one direction:
 | Sources | `internal/panel` | Polling: which readers a section asks, how often, what it remembers between polls (trails, held devices, the last good reading), and turning readings and absences into a `view.Section` | Platform build tags, device protocols, toolkit calls |
 | View | `internal/view` | The section vocabulary (`Section`, `Row`, `Cell`, `Meter`, `Trail`, `Reason`, `Status`), fixed-width formatting, thresholds, the text arrangements | Imports from any other hayami package; any toolkit |
 | Shells | `internal/gui`, `internal/tui`, `internal/cli` | Arranging sections on a surface: the Fyne window, the Bubble Tea pane, `doctor`, `readings` | Deciding what a section says |
-| Service | `internal/api`, `internal/api/contract`, `internal/api/unit` | Serving the sources' readings and raw details to programs of the same account as the contract's JSON (spec 113, `api/openapi.yaml`): the leases that poll a section only while a client reads it, the socket and its peer check; the systemd user units the installer writes (`unit`, standard library only) | Deciding what a section says; anything `view` has cut, padded or formatted |
+| Service | `internal/api`, `internal/api/contract`, `internal/api/unit` | Serving the sources' readings and raw details to programs of the same account as the contract's JSON (spec 113, `api/openapi.yaml`): the leases that poll a section only while a client reads it, the socket and its peer check, the pipe and its access list; the systemd user units the installer writes and the Windows per-user service it registers (`unit`) | Deciding what a section says; anything `view` has cut, padded or formatted |
 | Reference client | `internal/api/client` | Reading the service as any program would (spec 113 R29): the address rule written again, the contract held by strict decoding (every field present, null only where the contract has it, enums and dates by the contract types' tags), the stream, `api check` and `api load` | Importing anything of hayami's but `internal/api/contract`, or anything outside the standard library but `golang.org/x/sys`; a test reads its imports |
 | Settings | `internal/config`, `internal/prefs`, `internal/desktop` | The settings file, the preferences window, window placement and the KWin rule | Reading devices or sensors |
 
@@ -340,7 +340,8 @@ These rules apply in addition to CONTRIBUTING.md's.
 | The service other programs read (`internal/api`): contract, leases, Linux socket | 9 | In place | #396 |
 | The reference client (`internal/api/client`) and `hayami-tui api` | 9 | In place | #396 |
 | The service installed and started by its socket (systemd user units, the installer's Service page) | 9 | In place | #396 |
-| The service on Windows (per-user service) and macOS (launchd agent) | 5, 9 | Planned | #396 |
+| The service on Windows (a per-user service running a copy in Program Files, the pipe and its owner check) | 5, 9 | In place | #396 |
+| The service on macOS (launchd agent) | 5, 9 | Planned | #396 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a

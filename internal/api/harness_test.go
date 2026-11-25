@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/hayami/internal/api"
+	"github.com/ushineko/hayami/internal/api/client"
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
 )
@@ -45,10 +46,8 @@ func start(t *testing.T, srcs []panel.Source, o options) *harness {
 	t.Helper()
 	// Short: a socket's path is capped at 104 bytes on macOS and t.TempDir
 	// is long there.
-	dir, err := os.MkdirTemp("", "hy")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "run", "api.sock")
+	sock := testAddress(t)
+	var err error
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	var l net.Listener
@@ -80,15 +79,14 @@ func start(t *testing.T, srcs []panel.Source, o options) *harness {
 		cancel()
 		_ = hs.Close()
 	})
-	return &harness{hub: hub, srv: srv, sock: sock, client: unixClient(sock)}
+	return &harness{hub: hub, srv: srv, sock: sock, client: serviceClient(sock)}
 }
 
-// unixClient is an HTTP client whose every request goes to sock.
-func unixClient(sock string) *http.Client {
+// serviceClient is an HTTP client whose every request goes to the service at sock.
+func serviceClient(sock string) *http.Client {
 	return &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sock)
+			return client.Dial(ctx, sock)
 		},
 		MaxIdleConnsPerHost: 4,
 	}, Timeout: 30 * time.Second}
@@ -117,6 +115,5 @@ func fetch(ctx context.Context, client *http.Client, path string) (*http.Respons
 // dial is a raw connection to sock.
 func dial(t testing.TB, sock string) (net.Conn, error) {
 	t.Helper()
-	var d net.Dialer
-	return d.DialContext(context.Background(), "unix", sock)
+	return client.Dial(context.Background(), sock) //nolint:wrapcheck // a test's
 }

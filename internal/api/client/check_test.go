@@ -3,10 +3,7 @@ package client_test
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -64,10 +61,6 @@ It returns the socket.
 */
 func standIn(t *testing.T, fault func(map[string]any)) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "hy")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "api.sock")
 
 	at := time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
 	pct := 80
@@ -126,9 +119,7 @@ func standIn(t *testing.T, fault func(map[string]any)) string {
 		<-r.Context().Done()
 	})
 
-	var lc net.ListenConfig
-	l, err := lc.Listen(context.Background(), "unix", sock)
-	require.NoError(t, err)
+	l, sock := listen(t)
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: time.Second}
 	go func() { _ = srv.Serve(l) }()
 	t.Cleanup(func() { _ = srv.Close() })

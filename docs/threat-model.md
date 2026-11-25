@@ -129,6 +129,12 @@ from the panel's side.
   README says so.
 - A program holding the Windows pipe's name can still keep the helper from
   starting while it holds it; the panel says which process that is.
+- Likewise the service's pipe (spec 113): pipe names are one namespace for the
+  machine, so another account can make `\\.\pipe\hayami-api-<SID>` before the
+  account signs in, and that account's instance then refuses to start; Windows
+  tries twice more and leaves it stopped until the next sign-in. It reads
+  nothing: the client asks who serves the pipe before it writes, and `api
+  status` says the service is not running.
 - PawnIO is one maintainer's signed driver, and loads any module its key
   ever signed; the newest signed driver (2.2.0) predates hardening fixes
   made in August 2026, which matter to a caller already elevated. A review
@@ -196,6 +202,21 @@ name.
   socket is `0600` in a `0700` directory, and `RemoveOnStop` takes its file when it
   stops, so a removal leaves no socket behind. The tarball's scripts restart it and
   remove it by the same mark, and set none up.
+- On Windows the service is a per-user service template, `hayami-api`, which Windows
+  instantiates as every account that signs in (spec 113 R6). Its program is therefore a
+  copy of `hayami-tui.exe` in Program Files, `hayami\hayami-api.exe` under the known
+  folder (not `%ProgramFiles%`), which only an administrator can change: the install
+  under `%LOCALAPPDATA%` is the person's to write, and a template running it would run
+  one account's file as the next account to sign in. The copy is taken from a handle
+  held shut against writes and renames (`nethelper.CopyToProgramFiles`, #244), and
+  registering it and updating it on an upgrade are one elevated step, the installed
+  `hayami-tui`'s own `api-service install`, which the installer runs after one UAC
+  prompt, a `--yes` upgrade's included; refused, the old copy keeps serving and the
+  installer says so. An update changes only the template's program; its type, account
+  and recovery actions are set once, when it is registered. A removal stops and deletes
+  each instance before the template, which would otherwise leave them registered, then
+  removes the copy. An instance for an account that has never run hayami stops at once
+  without serving.
 - The Linux helper is removed by its own root-owned copy in
   `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
@@ -589,7 +610,14 @@ activity, spec 107), are served whole to any program the account runs:
 service gives them continuously, whole, and needs no terminal. A peer's host
 name is served whole where the shells shorten it. No other account reaches
 them: the socket is `0600` in a `0700` directory and a connection whose peer
-is another account is closed without a word. A browser reaches nothing: there
+is another account is closed without a word. On Windows the pipe's access
+list grants the account alone, it is made as the pipe's first instance so a
+name taken first is a refusal to start, it takes no client from another
+machine, and the reference client asks which process serves a pipe and that
+process's account before it writes, opening it anonymously, so a pipe someone
+else made under the name is refused (`Dial`, `internal/api/client`;
+`TestAPipeOfAnotherAccountIsRefused`, run on the Windows VM with SYSTEM as
+the other account). A browser reaches nothing: there
 is no TCP port, and a request carrying `Origin` is refused. Every string is
 cleaned of control and bidirectional characters (`internal/api/text.go`), and
 one past 4 KiB is cut and the response marked `truncated`, so a hostile
@@ -740,6 +768,12 @@ it) to check the contract is one. The reference client that ships in
 `hayami-tui` checks responses with the standard library and the contract
 types' tags, so the checker stays out of the binary.
 
+**The service's pipe on Windows (spec 113).** `github.com/Microsoft/go-winio`
+v0.6.4 (MIT), Microsoft's, makes the service's pipe with its access list
+(`winio.ListenPipe`). It ships, in `hayami-tui.exe` on Windows only, chosen by
+the operator on 2026-11-24 over a listener written on `x/sys`. The reference
+client does not import it: its dial is on `x/sys` alone, as any client's can be.
+
 ---
 
 ## Keeping it true
@@ -795,6 +829,7 @@ the goal of a working proof of concept.
 | 2026-11-22 | B3, B4, B5, B6 | The adversarial review of spec 111 (change pages, #390): one reviewer given the change and three attackers (a hostile GitLab host, a public repository's contributors, a crafted detail ID), then a refutation pass against the code. | Fixed before merge: a host answering longer lists than asked, or a huge title or label list, building a widget a line in the drawer (pages kept to 100 commits and files, 20 labels, 64 KiB of description, six lines of title; the view built once a reading); a day of pushes asking once a push (once a head, ten at most); a short hash cut inside a character. Refuted as a fix: salting the page key, which `hayami-tui detail <id>` needs stable across processes; the comment that claimed it hid names now says it only keeps them out of plain sight. Checked: no key sent off its forge, no path or query injection, no uncleaned text, no panic, `-race` clean. |
 | 2026-11-20 | B1, B2, B7 | The adversarial review of spec 103 (the sensor helper, #365): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. A separate review of PawnIO itself (published issues, signing, the site). | No path to LocalSystem or the kernel; no regression in the network helper. Fixed before merge: a held PCI mutex stopping the helper (now a missed reading); PawnIO's library able to load its own imports from the machine's PATH (now System32 only); the server's wake-up open allowing impersonation (now anonymous). Accepted above: the mutex convention, the whole program as LocalSystem, the modules' pin being one test. |
 | 2026-11-25 | B3, B4, B6, B7 | The adversarial review of spec 113's service, its first part (the contract, the server, `serve` on Linux, #396): one reviewer given the change and six attackers (another account, a same-account program after a credential, a browser, a hostile string's author, a client exhausting the service, someone racing the socket's directory), then each finding held against a test written to show it. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test (`internal/api/review_test.go`, `listen_linux_test.go`): made-up drill IDs each starting a poller and never let go (now 32 at once a section, 16 a stream, and let go when unread); the write deadline shorter than a first read's wait; `--listen` following a link to chmod its target; a NaN answered as an empty 200; an error's text not cleaned. Filed: #401, a usage reading's decimal places unbounded (older than the change). |
+| 2026-11-25 | B1, B2, B6, B7 | The adversarial review of spec 113's service on Windows (the pipe, `serve` under the service manager, the client's dial, the per-user template and its copy in Program Files, `api-service`, the installer page and scripts, go-winio; phase 4): one reviewer given the change and the attackers (another account, a same-account program without administrator rights, a pipe squatter, someone writing the install directory during the elevated step, the upgrade and uninstall paths, the supply chain), finding and refuting in one pass, then its one open question tested on the Windows VM. Read-only. | Nothing crossed an account boundary. The open question, whether an administrator's instance runs with the full token, was tested: it runs with the limited one, Medium integrity, as its desktop does. Fixed before merge, each pinned by a test: `api status` read a pipe someone else made as the service running (now it dials with the owner check); an update that failed after stopping the instances left the account without its service until the next sign-in (now they start again on the copy there; `TestAFailedUpdateLeavesTheServiceRunning`, falsified). Accepted: another account taking the pipe's name first keeps the service down (above). Checked: below. |
 | 2026-11-25 | B2, B4, B6 | The adversarial review of spec 113's units and installer page (`internal/api/unit`, the Service page, `install.sh` and `uninstall.sh`; 3c): one reviewer given the change and the attackers (another account, a same-account program or a unit planted in `~/.config/systemd/user`, the program's path, the upgrade and uninstall paths, systemd's hand-over), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test: a removal that found the service hayami's and the socket someone else's still disabled that socket (now each unit is stopped only when it is hayami's); a removal with no manager to ask left `sockets.target.wants`' link to the socket pointing at nothing (now removed where it is a link to hayami's socket). Checked: below. |
 | 2026-11-25 | B4, B6, B7 | The adversarial review of spec 113's reference client (`internal/api/client`, `hayami-tui api`, the vendored OpenAPI schema; 3b): one reviewer given the change and the attackers (whatever answers on the socket, a hostile string's author, the supply chain), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary: the only peer is the same account, or a path the person names. Fixed before merge, each pinned by a test: text from the socket reaching the terminal uncleaned through `status`, `load`'s report, `watch --json` and error messages (now cleaned once, for every subcommand); an embedded struct's fields read by the wrong index in `check` (it held only while two structs had as many fields); a response cap of 64 MiB, several times that once decoded (now 16 MiB); no deadline on `get` and `check` (now 1 m and 15 m, `--timeout`); a stream reconnecting without a pause; a negative `--streams` panicking. Checked: below. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
@@ -897,6 +932,37 @@ stops each. A review starts by reading these.
   of JSON, so a string cannot add an event.
 - **Forge pages** are read only for items a forge's reading already listed,
   so the service asks a forge nothing more than the panel does.
+
+### B1, B2, B6, B7, spec 113's service on Windows, 2026-11-25
+
+- **An administrator's instance and its token.** Tested on the Windows VM: the
+  instance of an account in Administrators runs with the limited token
+  (elevation type limited, integrity Medium, `S-1-16-8192`), as the account's
+  `explorer.exe` does, so the usage cache it writes and the `nvidia-smi` it may
+  run are the account's own, not an elevated process's.
+- **One account's file run as another.** The template's program is a copy in
+  Program Files under the known folder, which only an administrator writes; its
+  arguments are fixed (`serve`), its path quoted.
+- **Reading another account's readings.** The pipe's access list is protected and
+  grants the account alone; low-integrity and AppContainer processes are refused;
+  a pipe takes no remote client.
+- **A squatter receiving or acting with the client's connection.** The client
+  opens the pipe anonymously and checks the serving process's account before it
+  writes; a process it cannot ask is refused (`TestAPipeOfAnotherAccountIsRefused`,
+  with SYSTEM as the squatter, falsified).
+- **Swapping `hayami-tui.exe` during the elevated step.** The copy is read from a
+  handle held shut against writes and renames (#244); the post-check fails closed.
+  A same-account program that swaps the file before the prompt gets an
+  administrator only if the person consents, the network helper's accepted case.
+- **Removal elevating the user's copy, not the one in Program Files.** A running
+  program cannot delete its own file on Windows, so the copy cannot remove itself
+  (the network helper's `RemoveFromCopy` is false for the same reason); removal
+  needs no new bytes from anyone.
+- **Feeding `stopInstances` a service of one's own.** Creating a service needs an
+  administrator; interactive users have no start, stop or change rights on the
+  template.
+- **Program Files' shared `hayami` directory.** Each removal deletes only its own
+  files, and the directory only when it is empty.
 
 ### B2, B4, B6, spec 113's units and installer page, 2026-11-25
 

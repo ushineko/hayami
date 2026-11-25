@@ -480,6 +480,18 @@ if ($WithNetwork) {
         if ($LASTEXITCODE -ne 0) { Write-Note "not installed; the panel runs without the list of programs." }
     }
 }
+# The service other programs read (spec 113) is the installer's to set up;
+# this script sets none up, and puts this version in place of one that is
+# there, since it runs a copy of hayami-tui in Program Files.
+if (Get-Service hayami-api -ErrorAction SilentlyContinue) {
+    Write-Step "The service other programs read, on this version"
+    if ($DryRun) {
+        Write-Note "would run: $Pane api-service install (Windows asks for an administrator)"
+    } else {
+        & $Pane api-service install
+        if ($LASTEXITCODE -ne 0) { Write-Note "not updated; it runs the version before until the installer is run again." }
+    }
+}
 
 Write-Host ""
 Write-Host "Done."

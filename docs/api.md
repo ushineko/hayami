@@ -24,8 +24,21 @@ service is checked: everything it does, any client can.
   is not given back.
 - **Without a systemd user manager** the page says so, and the service runs
   by hand: `hayami-tui serve`, in the foreground, until stopped.
-- **Windows and macOS** are later phases of spec 113: a per-user service and
-  a launchd agent.
+- **Windows.** The same page, the same default. It registers a per-user
+  service, `hayami-api`: a template from which Windows starts an instance as
+  each account that signs in, `hayami-api_` and a number, and stops it at
+  sign-out. Its program is a copy of `hayami-tui.exe` in Program Files,
+  `hayami\hayami-api.exe`, not the install under `%LOCALAPPDATA%`: every
+  account that signs in runs it, so it must be a file no one account can
+  change. Registering it, and updating the copy on an upgrade, asks for an
+  administrator (one UAC prompt, a `--yes` upgrade's included). It starts at
+  the next sign-in; an ssh sign-in makes no instance, so a client started over
+  ssh finds the service only while the account is also signed in at the
+  console. An instance for an account that has never run hayami stops at once.
+  Windows restarts one that fails, twice, five seconds apart. Removing it, by
+  the page or by uninstalling, stops and deletes each instance, then the
+  template, then the copy.
+- **macOS** is a later phase of spec 113: a launchd agent.
 
 ```console
 $ hayami-tui api status
@@ -50,7 +63,7 @@ machine reaches it.
 | System | Address |
 |---|---|
 | Linux | the Unix socket `$XDG_RUNTIME_DIR/hayami/api.sock` |
-| Windows (later) | the named pipe `\\.\pipe\hayami-api-<SID>`, the account's SID |
+| Windows | the named pipe `\\.\pipe\hayami-api-<SID>`, the account's SID |
 | macOS (later) | the Unix socket `$TMPDIR/hayami/api.sock`, the per-user `$TMPDIR` |
 
 A path longer than the system takes in a socket address (108 bytes on Linux,
@@ -60,6 +73,20 @@ address. The URL's host is ignored:
 ```console
 $ curl --unix-socket "$XDG_RUNTIME_DIR/hayami/api.sock" http://hayami/v1/sections/cooler
 ```
+
+### Who is at the address, on Windows
+
+The pipe's access list grants the account and no one else, and the service
+makes it as the pipe's first instance, so a second service, or a pipe someone
+made first under the name, is a refusal to start. But a name can be taken
+before the service starts, and a client cannot tell from the name alone. So a
+client asks who serves the pipe before it sends a byte:
+`GetNamedPipeServerProcessId` on the handle, then that process's token, whose
+user must be the client's own. The reference client does
+(`internal/api/client`, `Dial`), and opens the pipe anonymously
+(`SECURITY_SQOS_PRESENT | SECURITY_ANONYMOUS`), so a server that is not the
+service cannot act as the client's account with the connection. A pipe takes
+no client from another machine.
 
 Only `GET`. A request with a body is 400, one with an `Origin` header 403 (a
 browser's), more than 64 connections or 16 streams at once 503 with

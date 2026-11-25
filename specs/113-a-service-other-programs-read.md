@@ -111,7 +111,7 @@ meets them lands.
 | 3a | The contract (`api/openapi.yaml`, `internal/api/contract`), the server (`internal/api`: leases, one poller a source, snapshots, SSE with a latest-only queue, the limits, panic recovery), the Linux socket with its peer check and systemd's hand-over, and `hayami-tui serve`. Tests: every endpoint's golden response checked against the contract, each Go type held to its schema, the behaviour over a real socket, nothing secret over real sources, a fuzz target, and the load test. The adversarial review's five findings fixed and pinned; #401 filed | Merged (#402) |
 | 3b | The reference client (`internal/api/client`: the address rule, strict decoding against the contract types, the stream, `Check`, `Load`) and `hayami-tui api address/status/get/watch/check/load`. The contract types carry `enum`, `format` and `nullable` tags, held to the schema by the parity test; `api/openapi.yaml` is validated as an OpenAPI 3.1 document against the OpenAPI Initiative's schema, vendored as a test fixture. The adversarial review's six findings fixed and pinned | Merged (#403) |
 | 3c | The systemd user units (`internal/api/unit`, standard library only: written as the person, hayami's mark on each, `RemoveOnStop`, `try-restart` on an upgrade), the installer's Service page (`api`: `auto`, `once`; `auto` sets the service up the first time the installer decides, by a marker in the install directory, and never gives back one removed), `install.sh` and `uninstall.sh`, `hayami-tui api status` with the manager's state, `docs/api.md`, CLAUDE.md, and the desk's end-to-end run. The adversarial review's two findings fixed and pinned | This PR |
-| 4 | Windows per-user service | — |
+| 4 | Windows per-user service: the pipe (`\\.\pipe\hayami-api-<SID>`, `go-winio`, an access list of the account alone, made as the first instance), `serve` under the service manager (`svc.Run`; an account that never ran hayami is served nothing), the client's pipe dial on `x/sys` with its check of who serves the pipe, the template running a copy in Program Files (decided with the operator: every account that signs in runs it), its recovery actions, the upgrade that stops, replaces and restarts the instances, the removal that deletes them before the template, the hidden `api-service` step the installer and scripts run elevated, one UAC prompt on an upgrade under `--yes` too (decided with the operator), `api status` on Windows, the tests run on the Windows VM and on CI's runner, and the VM's end-to-end run. The adversarial review's open question tested on the VM (an administrator's instance has the limited token) and its two findings fixed and pinned | This PR |
 | 5 | macOS agent and CI job | — |
 
 ## Requirements
@@ -151,8 +151,15 @@ meets them lands.
   the first connection starts the service, and the service exits after five
   minutes with no request and no open stream.
 - **R6 Windows lifetime.** A per-user service template, `hayami-api`, of type
-  `SERVICE_USER_OWN_PROCESS`, start type automatic, whose program is the
-  installed `hayami-tui.exe` with the argument `serve`. Windows starts an
+  `SERVICE_USER_OWN_PROCESS`, start type automatic, whose program is a copy
+  of `hayami-tui.exe` in Program Files, `hayami\hayami-api.exe` under the
+  known folder (not `%ProgramFiles%`, which the environment sets), with the
+  argument `serve`. Not the installed `hayami-tui.exe`: hayami installs under
+  `%LOCALAPPDATA%`, which the person can write, and Windows makes an instance
+  of the template for every account that signs in, so a program one account
+  can write would run as another (decided with the operator, 2026-11-25). An
+  instance for an account that has never run hayami (no settings directory)
+  exits at once with success, which the recovery actions leave alone. Windows starts an
   instance as each signed-in account and stops it at sign-out. The instance
   restarts on failure (the service's recovery actions: restart after 5 s,
   twice, then stay stopped), which are set on the template when it is
@@ -522,13 +529,16 @@ for review.
   As built in 3c: passed on the desk against the installed service (E2E
   results below). The Windows VM and the Mac are 4 and 5.
 
+  As built in 4: passed on the Windows VM against the installed instance
+  (E2E results below). The Mac is 5.
+
 ### Platforms and installer
 
 - [ ] Linux: the socket is `0600` in a `0700` directory; a connection from
       another UID is closed with no response
 - [ ] Linux: the socket unit starts the service on connect and the service
       exits after the idle period (real user manager on the desk)
-- [ ] Windows: the template is registered as `SERVICE_USER_OWN_PROCESS`; an
+- [x] Windows: the template is registered as `SERVICE_USER_OWN_PROCESS`; an
       instance runs as the signed-in account after sign-in and is gone after
       sign-out; the pipe's access list holds that account alone; a second
       `serve` against an existing pipe refuses to start (the Windows VM)
@@ -557,6 +567,14 @@ for review.
   desk (E2E results below). Uninstalling hayami was not run on the desk; its
   Linux half is held by the tests. Each criterion stays open for the
   Windows VM and the Mac.
+
+  As built in 4, Windows: the template, the instance as the account after
+  a console sign-in and gone after sign-out, the pipe's access list, the
+  second `serve`'s refusal, the installer page's default, keep, removal and
+  `--yes` behaviour, the upgrade's restart on the new program, and the
+  uninstall's removal of the template and its copy all held on the Windows
+  VM (E2E results below). Each criterion above that names the Mac stays open
+  for 5.
 
 ### Reference client and documents
 
@@ -601,7 +619,7 @@ for review.
 
 | Boundary | What changes for an attacker | Section updated |
 |---|---|---|
-| B1 Privileged helpers | No new privileged component: the service runs as the person. But on Windows a service template is registered in the Service Control Manager, and its program path is a target: it is the installed `hayami-tui.exe`, in a directory only the installer writes (as for the network helper's copy, spec 061), checked by the adversarial review | B1 |
+| B1 Privileged helpers | No new privileged component: the service runs as the person. But on Windows a service template is registered in the Service Control Manager, and its program path is a target: every account that signs in runs it. It is a copy in Program Files, which only an administrator writes (as the network helper's is, spec 061), never the installed `hayami-tui.exe` under `%LOCALAPPDATA%`, which one account could change to run code as the next to sign in. The copy is taken from a handle held shut against writes (#244), and an upgrade replaces it under the same UAC prompt, a `--yes` upgrade included (decided with the operator: one prompt, so the service is not left on an old program); refused, the old copy keeps serving and the installer says so. Checked by the adversarial review | B1 |
 | B2 Installing | The installer, by default, writes a systemd user socket and service (Linux; no root), registers a per-user service template (Windows; one UAC prompt), or writes a launchd agent into `~/Library/LaunchAgents` (macOS; no administrator). A path in a unit gets the keepalive's quoting rules (spec 085's findings). The plist is written as XML by an encoder, never by joining strings, so a path cannot add a key. On macOS anything running as the person can rewrite their own agent, which is no more than it can already do to their shell profile | B2 |
 | B3 Credentials | A long-running process holds the usage reader and its OAuth refresh, as the panel does. New: its responses leave the process, so a credential reaching a response would be served to every program of the account. R24's test is the defence | B3 |
 | B4 What hayami parses | New input: HTTP requests on the socket or pipe, from the same account only (R4) but not trusted to be well formed. Request limits (R23) and a fuzz target on the router and the ID decoding. The reference client parses what answers on the socket: a response and a stream's event are read to 16 MiB at most and decoded strictly, and what it prints to a terminal is cleaned again (3b) | B4, B6 |
@@ -696,6 +714,36 @@ fynstall CLI installer, user scope.
 | Then `--yes` upgrade, `api` left at `auto` | Not set up again |
 | Then `--api yes` | Set up again; panel restarted |
 | Uninstall of hayami | Not run on the desk (decided with the user): it would also remove the network helper, the VPN keepalive the work VPN depends on and the device rule. The uninstall path is held by the installer's tests (`dropAPI`) and `uninstall.sh`'s dry runs; the real uninstall runs on the Windows VM and the Mac in 4 and 5 |
+
+### Results: the Windows VM, 4, 2026-11-25
+
+Windows 11, build 26200. `hayami-tui.exe` cross-built from this branch; the
+installer built on the VM from it (`scripts/installer_windows.ps1
+-WithCliOnly`). The ssh session is elevated, so the installer's UAC prompt
+is not shown there; on a desktop it is the one prompt the page names.
+
+| Step | Result |
+|---|---|
+| `api-service install` | `hayami-api` registered: type `0x50` (`USER_OWN_PROCESS TEMPLATE`), automatic, `"C:\Program Files\hayami\hayami-api.exe" serve`, restart after 5 s twice, reset after a day. The copy in Program Files. `api status`: installed, not running for this account yet, starts at the next sign-in |
+| Sign out and in at the console | `hayami-api_<n>` made: type `0xd0` (`USER_OWN_PROCESS INSTANCE`), running as the account in its console session, serving |
+| `api check` over ssh (session 0) | Passed: 36 requests, 5 sections, 24 details, 5 events |
+| A second `hayami-tui serve` | Refused, exit 1: "a service is already listening at `\\.\pipe\hayami-api-<SID>`, or someone else made the pipe first" |
+| A pipe made first by SYSTEM, open to everyone, dialled by the client | Refused before writing, `ErrNotOurs` (`TestAPipeOfAnotherAccountIsRefused`). Falsified: with the owner check skipped the test fails |
+| `api load --clients 32 --streams 8 --duration 5m`, working set every 10 s | 6,375,581 requests (200 and the 404s it asks for), 0 errors, p99 5.0 ms, max 76 ms. Working set 92–94 MB throughout. `api check` straight afterwards passed |
+| `taskkill /f` on the instance | Restarted by Windows under a new PID within 9 s; the System log has the service manager's 7031, "terminated unexpectedly … Restart the service" |
+| `sc stop` on the instance | Stays stopped; `sc start` brings it back |
+| Upgrade: `api-service install` from a build of another version, the instance running | The instance stopped, the copy replaced, the instance started again under a new PID on the new version |
+| An administrator's instance (the account is in Administrators) | Runs with the limited token: not elevated, integrity Medium (`S-1-16-8192`), as the account's `explorer.exe` (the adversarial review's open question) |
+| An update that fails after stopping the instances (`TestAFailedUpdateLeavesTheServiceRunning`) | The instances start again on the copy there. Falsified: without the restart the test fails |
+| Installer `--yes`, `api` left at `auto`, the service installed on an older copy | "kept, on this version": the copy replaced, the instance started again under a new PID on the new version; the marker written |
+| Installer `--yes --api=no` | "Removing the service other programs read": no instance, no template, no copy, no pipe; the marker kept |
+| Then `--yes`, `api` at `auto` | Not set up again |
+| Then `--yes --api=yes` | Registered: "set up, and starts at your next sign-in"; `api status` says so |
+| Uninstall (`uninstall.exe --yes`) | The template, the copy and the marker gone |
+| First install, `--yes`, `api` at `auto` | Set up by default, as on a first install anywhere |
+| Then a console sign-in | An instance of the installer's service, running; `api check` with the installed `hayami-tui` passed (36 requests, 24 details) |
+| The template's registration, update and removal (`TestTheTemplateIsRegisteredAndRemoved`, elevated) | Registered with its type, start, program and recovery actions; registered again, updated in place; removed with its program. Falsified: with the first recovery action changed the test fails |
+| Sign out and in at the console, again | The instance before gone, deleted at the sign-out; a new `hayami-api_<n>` made at the sign-in, running |
 
 ### Prod visibility
 

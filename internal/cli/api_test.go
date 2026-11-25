@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -95,19 +96,20 @@ func TestAPIAddressIsTheContractsRule(t *testing.T) {
 	if err != nil {
 		t.Skipf("no default address on this system: %v", err)
 	}
-	assert.Equal(t, filepath.Join("/run/user/1000", "hayami", "api.sock")+"\n", out)
+	if runtime.GOOS == "windows" {
+		assert.True(t, strings.HasPrefix(out, `\\.\pipe\hayami-api-S-1-`), out)
+	} else {
+		assert.Equal(t, filepath.Join("/run/user/1000", "hayami", "api.sock")+"\n", out)
+	}
 	out, err = run(t, "api", "--address", "/elsewhere.sock", "address")
 	require.NoError(t, err)
 	assert.Equal(t, "/elsewhere.sock\n", out)
 }
 
-// answer serves each path's body as JSON on a socket, and returns it.
+// answer serves each path's body as JSON on a socket, or a pipe on Windows,
+// and returns its address.
 func answer(t *testing.T, bodies map[string]string) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "hy")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "api.sock")
 	srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, ok := bodies[r.URL.Path]
 		if !ok {
@@ -117,9 +119,7 @@ func answer(t *testing.T, bodies map[string]string) string {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(strings.TrimSpace(body)))
 	})}
-	var lc net.ListenConfig
-	l, err := lc.Listen(context.Background(), "unix", sock)
-	require.NoError(t, err)
+	l, sock := listenAPI(t)
 	go func() { _ = srv.Serve(l) }()
 	t.Cleanup(func() { _ = srv.Close() })
 	return sock
