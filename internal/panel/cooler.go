@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -632,33 +633,83 @@ func (c *Cooler) DetailInterval(string) time.Duration { return ProcessInterval }
 func (c *Cooler) CloseDetail(string) {}
 
 // coolerDetails is how each of the lists is read, by ID.
-var coolerDetails = map[string]func(*Cooler, context.Context) ([]pidUse, string, error){
+var coolerDetails = map[string]func(*Cooler, context.Context) ([]RawUse, string, error){
 	view.DetailCPU:    (*Cooler).cpuUse,
 	view.DetailMemory: (*Cooler).memoryUse,
 	view.DetailGPU:    (*Cooler).gpuUse,
 	view.DetailIO:     (*Cooler).ioUse,
 }
 
-// PollDetail reads one list of processes. Only names and figures leave here:
-// a process is its name (spec 060 R6).
+// PollDetail reads one list of processes, and draws it.
 func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+	return pollRaw(ctx, c, id)
+}
+
+/*
+ReadDetail reads one list of processes, or a drill into one. Only names and
+figures leave here: a process is its name (spec 060 R6). Each use keeps its
+PID, which a list of names drops and a drill is about.
+*/
+func (c *Cooler) ReadDetail(ctx context.Context, id string) (RawDetail, error) {
 	key := c.Key()
 	if c.Drills(id) {
-		return c.coolerDrill(ctx, id)
+		return c.readDrill(ctx, id)
 	}
 	read, ok := coolerDetails[id]
 	if !ok {
-		return view.Detail{}, fmt.Errorf("the %s section has no detail %q", key, id)
+		return RawDetail{}, fmt.Errorf("the %s section has no detail %q", key, id)
 	}
 	uses, note, err := read(c, ctx)
 	if err != nil {
-		return unread(key, id, view.ProcessTitle(id), err), err
+		return unreadRaw(key, id, view.ProcessTitle(id), err), err
 	}
-	named := make([]view.ProcessUse, len(uses))
-	for i, u := range uses {
+	raw := RawDetail{Section: key, ID: id, Title: view.ProcessTitle(id), At: time.Now()}
+	list := &RawProcesses{List: id, Uses: uses, Note: note}
+	switch {
+	case id == view.DetailCPU && c.processor != nil:
+		f := c.cpuFigures(ctx)
+		list.CPU = &f
+	case id == view.DetailGPU && c.card != nil:
+		f := c.gpuFigures(ctx)
+		list.GPU = &f
+	case id == view.DetailIO:
+		f := c.ioFigures()
+		list.IO = &f
+	case id == view.DetailMemory:
+		f, inUse := c.memoryFigures()
+		list.Memory, list.InUse = &f, inUse
+	}
+	raw.Processes = list
+	return raw, nil
+}
+
+// DrawDetail is a list of processes, or a drill into one, as the shells show
+// it.
+func (c *Cooler) DrawDetail(raw RawDetail) view.Detail {
+	if d, ok := drawUnread(raw); ok {
+		return d
+	}
+	switch {
+	case raw.Process != nil:
+		return drawCoolerProcess(raw)
+	case raw.Processes != nil && raw.Processes.Name != "":
+		return drawCoolerName(raw)
+	case raw.Processes != nil:
+		return drawCoolerList(raw)
+	}
+	return view.Detail{}
+}
+
+// drawCoolerList is one of the cooler's lists: a line per name, greatest
+// first, each leading to the processes behind it, and the list's summary.
+func drawCoolerList(raw RawDetail) view.Detail {
+	list := raw.Processes
+	id := list.List
+	named := make([]view.ProcessUse, len(list.Uses))
+	for i, u := range list.Uses {
 		named[i] = u.ProcessUse
 	}
-	d := view.Processes(key, id, named)
+	d := view.Processes(raw.Section, id, named)
 	// Every row leads to the processes behind its name. The row carries
 	// what it asks for; what a click does with it is the shell's.
 	for i, l := range d.Lines {
@@ -667,48 +718,34 @@ func (c *Cooler) PollDetail(ctx context.Context, id string) (view.Detail, error)
 		}
 		d.Lines[i].Open = DrillUnder(id, l.Name)
 	}
-	d.Note = note
-	if id == view.DetailCPU && c.processor != nil {
-		summary, reasons := c.cpuSummary(ctx)
-		d.Summary = &summary
-		d.Reasons = append(d.Reasons, reasons...)
+	d.Note = list.Note
+	if list.InUse != nil {
+		d.Note = memoryNote(*list.InUse)
 	}
-	if id == view.DetailGPU && c.card != nil {
-		summary, reasons := c.gpuSummary(ctx)
-		d.Summary = &summary
-		d.Reasons = append(d.Reasons, reasons...)
+	var summary view.Summary
+	var reasons []view.Reason
+	switch {
+	case list.CPU != nil:
+		summary, reasons = view.CPUSummary(*list.CPU)
+	case list.GPU != nil:
+		summary, reasons = view.GPUSummary(*list.GPU)
+	case list.IO != nil:
+		summary, reasons = view.IOSummary(*list.IO)
+	case list.Memory != nil:
+		summary, reasons = view.MemorySummary(*list.Memory)
+	default:
+		return d
 	}
-	if id == view.DetailIO {
-		summary, reasons := c.ioSummary()
-		d.Summary = &summary
-		d.Reasons = append(d.Reasons, reasons...)
-	}
-	if id == view.DetailMemory {
-		c.mu.Lock()
-		m := c.reading.memory
-		c.mu.Unlock()
-		summary, reasons := view.MemorySummary(view.MemoryFigures{
-			Used: float64(m.Used), Total: float64(m.Total),
-			Cache: view.Maybe(float64(m.Cache), m.HasCache),
-			Swap:  view.Maybe(float64(m.SwapUsed), m.HasSwap), SwapTotal: float64(m.SwapTotal),
-			SwapName: m.SwapName,
-		})
-		d.Summary = &summary
-		d.Reasons = append(d.Reasons, reasons...)
-	}
-	return d, nil
+	d.Summary = &summary
+	d.Reasons = append(d.Reasons, reasons...)
+	return d
 }
 
-/*
-pidUse is one process's figures in whichever list it was read from, with the
-PID the lists throw away: a list is of names, because a browser is forty
-processes and a person asks about the browser (spec 060 R6). A drill is the
-other question -- which of the forty -- so it reads the same lists and keeps
-what they drop.
-*/
-type pidUse struct {
-	PID int
-	view.ProcessUse
+// memoryNote is the memory list's note: how much of the whole is in use.
+func memoryNote(m MemoryInUse) string {
+	used, usedUnit := view.Size(float64(m.Used))
+	total, totalUnit := view.Size(float64(m.Total))
+	return strings.TrimSpace(used) + " " + usedUnit + " of " + strings.TrimSpace(total) + " " + totalUnit + " in use"
 }
 
 // readProcesses is one reading of the processes and the memory's total, which
@@ -729,8 +766,8 @@ func (c *Cooler) readProcesses(ctx context.Context) ([]core.Process, uint64, err
 
 // figures are every figure one process reading has of a process, for the
 // lists' columns (spec 092); the list sets which of them it is ordered by.
-func figures(p core.Process, total uint64) pidUse {
-	return pidUse{PID: p.PID, ProcessUse: view.ProcessUse{
+func figures(p core.Process, total uint64) RawUse {
+	return RawUse{PID: p.PID, ProcessUse: view.ProcessUse{
 		Name:   p.Name,
 		CPU:    view.Maybe(p.CPU, p.HasCPU),
 		Memory: view.Some(float64(p.Memory)),
@@ -739,12 +776,12 @@ func figures(p core.Process, total uint64) pidUse {
 }
 
 // cpuUse is each process's share of the processors since the last reading.
-func (c *Cooler) cpuUse(ctx context.Context) ([]pidUse, string, error) {
+func (c *Cooler) cpuUse(ctx context.Context) ([]RawUse, string, error) {
 	processes, total, err := c.readProcesses(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	uses := make([]pidUse, 0, len(processes))
+	uses := make([]RawUse, 0, len(processes))
 	for _, p := range processes {
 		if p.HasCPU {
 			u := figures(p, total)
@@ -756,27 +793,20 @@ func (c *Cooler) cpuUse(ctx context.Context) ([]pidUse, string, error) {
 }
 
 // memoryUse is the memory each process holds.
-func (c *Cooler) memoryUse(ctx context.Context) ([]pidUse, string, error) {
+func (c *Cooler) memoryUse(ctx context.Context) ([]RawUse, string, error) {
 	processes, total, err := c.readProcesses(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	uses := make([]pidUse, 0, len(processes))
+	uses := make([]RawUse, 0, len(processes))
 	for _, p := range processes {
 		u := figures(p, total)
 		u.Value = float64(p.Memory)
 		uses = append(uses, u)
 	}
-	c.mu.Lock()
-	state := c.reading
-	c.mu.Unlock()
-	note := ""
-	if state.HasMemory && state.MemoryTotal > 0 {
-		used, usedUnit := view.Size(float64(state.Memory))
-		total, totalUnit := view.Size(float64(state.MemoryTotal))
-		note = strings.TrimSpace(used) + " " + usedUnit + " of " + strings.TrimSpace(total) + " " + totalUnit + " in use"
-	}
-	return uses, note, nil
+	// The list's note is how much of the whole is in use, which is a figure
+	// and is drawn from the reading's (memoryFigures, memoryNote).
+	return uses, "", nil
 }
 
 /*
@@ -789,7 +819,7 @@ another account's on Windows -- keeps its load and has no other figure: the
 empty form, not a zero. A reading of the processes that fails costs the
 columns and not the list.
 */
-func (c *Cooler) gpuUse(ctx context.Context) ([]pidUse, string, error) {
+func (c *Cooler) gpuUse(ctx context.Context) ([]RawUse, string, error) {
 	if c.gpuProcesses == nil {
 		return nil, "", errNoProcesses
 	}
@@ -808,9 +838,9 @@ func (c *Cooler) gpuUse(ctx context.Context) ([]pidUse, string, error) {
 			byPID[p.PID] = p
 		}
 	}
-	uses := make([]pidUse, 0, len(processes))
+	uses := make([]RawUse, 0, len(processes))
 	for _, gp := range processes {
-		u := pidUse{PID: gp.PID}
+		u := RawUse{PID: gp.PID}
 		if p, ok := byPID[gp.PID]; ok && gp.PID != 0 {
 			u = figures(p, total)
 		}
@@ -823,30 +853,32 @@ func (c *Cooler) gpuUse(ctx context.Context) ([]pidUse, string, error) {
 // errNoProcesses is a source built without a process reader: a test's.
 var errNoProcesses = errors.New("this source reads no processes")
 
-// cpuSummary is the CPU drawer's summary (spec 095): the load and its plot
-// from the poll, the cores, the clock, the waiting and the tasks read now.
-func (c *Cooler) cpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
+// cpuFigures are the CPU drawer's summary's figures (spec 095): the load and
+// its plot from the poll, the cores, the clock, the waiting and the tasks
+// read now.
+func (c *Cooler) cpuFigures(ctx context.Context) view.CPUFigures {
 	p := c.processor.Read(ctx)
 	c.mu.Lock()
 	state := c.reading
+	trail := slices.Clone(state.loadTrail)
 	c.mu.Unlock()
 	kind := view.LoadAverage
 	if p.Queues {
 		kind = view.LoadQueue
 	}
-	return view.CPUSummary(view.CPUFigures{
-		Load: view.Maybe(state.CPULoad, state.HasCPULoad), Trail: state.loadTrail, TrailEvery: CoolerInterval,
+	return view.CPUFigures{
+		Load: view.Maybe(state.CPULoad, state.HasCPULoad), Trail: trail, TrailEvery: CoolerInterval,
 		Cores: p.Cores, HasCores: p.HasCores,
 		Clock: view.Maybe(p.Clock, p.HasClock), MaxClock: p.MaxClock,
 		LoadKind: kind, LoadAvg: view.Maybe(p.LoadAvg, p.HasLoadAvg), Queue: view.Maybe(p.Queue, p.HasQueue),
 		Processes: p.Processes, Threads: p.Threads, HasTasks: p.HasTasks,
-	})
+	}
 }
 
-// gpuSummary is the GPU drawer's summary (spec 096), read now from the card
-// the list is about, by the route its reading came from. A card that could
-// not be read is every line's empty form, and its reasons.
-func (c *Cooler) gpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
+// gpuFigures are the GPU drawer's summary's figures (spec 096), read now from
+// the card the list is about, by the route its reading came from. A card
+// that could not be read is every figure's empty form.
+func (c *Cooler) gpuFigures(ctx context.Context) view.GPUFigures {
 	c.mu.Lock()
 	via := c.gpuVia
 	c.mu.Unlock()
@@ -854,11 +886,11 @@ func (c *Cooler) gpuSummary(ctx context.Context) (view.Summary, []view.Reason) {
 	if err != nil {
 		card = core.Card{}
 	}
-	return view.GPUSummary(view.GPUFigures{
+	return view.GPUFigures{
 		VRAM: card.VRAMUsed, VRAMTotal: card.VRAMTotal, HasVRAM: card.HasVRAM,
 		Clock: view.Maybe(card.Clock, card.HasClock), MemClock: view.Maybe(card.MemClock, card.HasMemClock),
 		Power: view.Maybe(card.Power, card.HasPower), PowerLimit: card.PowerLimit,
-	})
+	}
 }
 
 /*
@@ -869,7 +901,7 @@ line of its own, the list's "other" (R3), never below nothing. On Windows a
 process's figure is every transfer, files, network and devices, which is not
 a share of the disks' rates, so there is no "other" and the note says so.
 */
-func (c *Cooler) ioUse(ctx context.Context) ([]pidUse, string, error) {
+func (c *Cooler) ioUse(ctx context.Context) ([]RawUse, string, error) {
 	processes, total, err := c.readProcesses(ctx)
 	if err != nil {
 		return nil, "", err
@@ -877,7 +909,7 @@ func (c *Cooler) ioUse(ctx context.Context) ([]pidUse, string, error) {
 	c.mu.Lock()
 	disks := c.reading.disks
 	c.mu.Unlock()
-	uses := make([]pidUse, 0, len(processes))
+	uses := make([]RawUse, 0, len(processes))
 	var read, write float64
 	for _, p := range processes {
 		if !p.HasIO {
@@ -892,7 +924,7 @@ func (c *Cooler) ioUse(ctx context.Context) ([]pidUse, string, error) {
 		return uses, "all IO: files, network and devices", nil
 	}
 	if disks.HasRates {
-		other := pidUse{ProcessUse: view.ProcessUse{
+		other := RawUse{ProcessUse: view.ProcessUse{
 			Value: max(disks.Read-read, 0), Second: max(disks.Write-write, 0),
 		}}
 		uses = append(uses, other)
@@ -900,11 +932,12 @@ func (c *Cooler) ioUse(ctx context.Context) ([]pidUse, string, error) {
 	return uses, "to and from the disks; other: what this account cannot see", nil
 }
 
-// ioSummary is the IO drawer's summary (spec 097): every figure from the
-// card's poll, so the row and the summary are one reading.
-func (c *Cooler) ioSummary() (view.Summary, []view.Reason) {
+// ioFigures are the IO drawer's summary's figures (spec 097): every one from
+// the card's poll, so the row and the summary are one reading.
+func (c *Cooler) ioFigures() view.IOFigures {
 	c.mu.Lock()
 	s := c.reading
+	readTrail, writeTrail := slices.Clone(s.readTrail), slices.Clone(s.writeTrail)
 	c.mu.Unlock()
 	d := s.disks
 	busy := make([]float64, len(d.Busy))
@@ -914,11 +947,30 @@ func (c *Cooler) ioSummary() (view.Summary, []view.Reason) {
 			busy[i] = -1
 		}
 	}
-	return view.IOSummary(view.IOFigures{
+	return view.IOFigures{
 		Read: view.Maybe(d.Read, d.HasRates), Write: view.Maybe(d.Write, d.HasRates),
-		ReadTrail: s.readTrail, WriteTrail: s.writeTrail, TrailEvery: CoolerInterval,
+		ReadTrail: readTrail, WriteTrail: writeTrail, TrailEvery: CoolerInterval,
 		Busy: busy, HasBusy: d.HasBusy,
 		Queues: d.Queues, Pressure: view.Maybe(d.Pressure, d.HasPressure), Queue: view.Maybe(d.Queue, d.HasQueue),
 		SwapIn: d.SwapIn, SwapOut: d.SwapOut, HasSwap: d.HasSwap,
-	})
+	}
+}
+
+// memoryFigures are the memory drawer's summary's figures, and the memory in
+// use the list's note says, from the poll.
+func (c *Cooler) memoryFigures() (view.MemoryFigures, *MemoryInUse) {
+	c.mu.Lock()
+	state := c.reading
+	c.mu.Unlock()
+	m := state.memory
+	var inUse *MemoryInUse
+	if state.HasMemory && state.MemoryTotal > 0 {
+		inUse = &MemoryInUse{Used: state.Memory, Total: state.MemoryTotal}
+	}
+	return view.MemoryFigures{
+		Used: float64(m.Used), Total: float64(m.Total),
+		Cache: view.Maybe(float64(m.Cache), m.HasCache),
+		Swap:  view.Maybe(float64(m.SwapUsed), m.HasSwap), SwapTotal: float64(m.SwapTotal),
+		SwapName: m.SwapName,
+	}, inUse
 }

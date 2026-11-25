@@ -101,8 +101,8 @@ func TestProcessInfoLive(t *testing.T) {
 	if info.Gone {
 		t.Fatal("the child is not in the table")
 	}
-	if info.PPID != self || !strings.HasSuffix(info.Parent, "("+strconv.Itoa(self)+")") {
-		t.Errorf("parent %q (%d), want this test (%d)", info.Parent, info.PPID, self)
+	if info.PPID != self || info.ParentName == "" || !strings.HasSuffix(info.Parent(), "("+strconv.Itoa(self)+")") {
+		t.Errorf("parent %q (%d), want this test (%d)", info.Parent(), info.PPID, self)
 	}
 	if info.Threads < 1 || info.State == "" {
 		t.Errorf("threads %d, state %q", info.Threads, info.State)
@@ -110,8 +110,8 @@ func TestProcessInfoLive(t *testing.T) {
 	if mine := ProcessInfo(self); mine.Sockets < 1 {
 		t.Errorf("this test holds a listener and counts %d sockets", mine.Sockets)
 	}
-	if !slices.ContainsFunc(ProcessChildren(self), func(c string) bool {
-		return strings.HasSuffix(c, "("+strconv.Itoa(child)+")")
+	if !slices.ContainsFunc(ProcessChildren(self), func(c ProcRef) bool {
+		return c.PID == child && c.Name != ""
 	}) {
 		t.Errorf("children %v do not include %d", ProcessChildren(self), child)
 	}

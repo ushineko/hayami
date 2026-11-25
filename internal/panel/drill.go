@@ -83,30 +83,46 @@ A process that is no longer there says so and offers nothing: the kill is
 carried as a line the shells read (view.ActKill) and draw as they choose,
 and a page about a process that has gone does not carry it.
 */
-func ProcessLines(pid int) []view.DetailLine {
-	info := core.ProcessInfo(pid)
-	if info.Gone {
+func ProcessLines(p RawProc) []view.DetailLine {
+	if p.Gone {
 		return nil
 	}
 	add := func(name, value string) view.DetailLine {
 		return view.DetailLine{Name: name, Value: value}
 	}
 	out := []view.DetailLine{
-		add("pid", strconv.Itoa(info.PID)),
-		add("parent", info.Parent),
-		add("state", info.State),
-		add("threads", strconv.Itoa(info.Threads)),
-		add("sockets", strconv.Itoa(info.Sockets)),
+		add("pid", strconv.Itoa(p.PID)),
+		add("parent", core.ProcInfo{PPID: p.PPID, ParentName: p.ParentName}.Parent()),
+		add("state", p.State),
+		add("threads", strconv.Itoa(p.Threads)),
+		add("sockets", strconv.Itoa(p.Sockets)),
 	}
-	if children := core.ProcessChildren(pid); len(children) > 0 {
+	if len(p.Children) > 0 {
 		out = append(out, view.DetailLine{Name: "children", Heading: true})
-		for _, c := range children {
-			out = append(out, view.DetailLine{Name: "  " + c})
+		for _, c := range p.Children {
+			out = append(out, view.DetailLine{Name: "  " + c.String()})
 		}
 	}
 	return append(out, view.DetailLine{
 		Name: "kill", Value: core.EndAsk + ", then " + core.EndForce, Open: view.ActKill,
 	})
+}
+
+/*
+readProc reads one process for its page: what ProcessLines draws, and
+nothing it does not (no command line, path or owner). A variable so a test
+reads a process of its own making.
+*/
+var readProc = func(pid int) RawProc {
+	info := core.ProcessInfo(pid)
+	if info.Gone {
+		return RawProc{PID: pid, Gone: true}
+	}
+	return RawProc{
+		PID: info.PID, Name: info.Name, PPID: info.PPID, ParentName: info.ParentName,
+		State: info.State, Threads: info.Threads, Sockets: info.Sockets,
+		Children: core.ProcessChildren(pid),
+	}
 }
 
 /*

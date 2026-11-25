@@ -37,9 +37,23 @@ func NewPeerNames() *PeerNames {
 	}
 }
 
-// Name is the address's name if one is known, and the address itself if not.
-// It never blocks.
-func (n *PeerNames) Name(addr string) string {
+// Name is the address's name, shortened for a column, if one is known, and
+// the address itself if not. It never blocks.
+func (n *PeerNames) Name(addr string) string { return ShortName(addr, n.Full(addr)) }
+
+// ShortName is a peer's whole name as a column shows it: shortened, or the
+// address where there is no name.
+func ShortName(addr, full string) string {
+	if full == "" || full == addr {
+		return addr
+	}
+	return Shorten(full)
+}
+
+// Full is the address's whole name if one is known, and the address itself
+// if not: the fact, before a column has had its say (spec 113 R12). It never
+// blocks, and a miss asks in the background as Name's does.
+func (n *PeerNames) Full(addr string) string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if name, ok := n.known[addr]; ok {
@@ -61,7 +75,7 @@ func (n *PeerNames) ask(addr string) {
 	names, err := n.lookup(ctx, addr)
 	name := ""
 	if err == nil && len(names) > 0 {
-		name = Shorten(strings.TrimSuffix(names[0], "."))
+		name = strings.TrimSuffix(names[0], ".")
 	}
 	n.mu.Lock()
 	n.known[addr] = name

@@ -325,21 +325,27 @@ func (b *Bandwidth) CloseDetail(string) {
 	}
 }
 
-/*
-PollDetail reads the network by process.
-
-**The list is partial and says so** (spec 060 R11). Its note names what it is
-made of, the reader's own words, and the share of the watched interfaces'
-traffic the list adds up to, so a list that comes to less than the rows above
-it reads as partial and not as wrong.
-*/
+// PollDetail reads the network by process, or the chosen VPNs, and draws it.
 func (b *Bandwidth) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+	return pollRaw(ctx, b, id)
+}
+
+/*
+ReadDetail reads the network by process, with the interfaces it is a share
+of and, for the breakdown's pages, the peers' whole names and the process a
+page is about; or the chosen VPNs.
+*/
+func (b *Bandwidth) ReadDetail(ctx context.Context, id string) (RawDetail, error) {
+	key := b.Key()
 	if id == view.DetailVPN && b.vpnChosen() {
-		return b.vpnDetail(), nil
+		return RawDetail{
+			Section: key, ID: id, Title: view.VPNDetailInfo().Title, At: time.Now(),
+			VPN: &RawVPN{VPNs: b.vpnDetailReadings()},
+		}, nil
 	}
-	key, title := b.Key(), view.ProcessTitle(id)
+	title := view.ProcessTitle(id)
 	if (id != view.DetailProcesses && !b.Drills(id)) || b.net == nil {
-		return view.Detail{}, fmt.Errorf("the %s section has no detail %q", key, id)
+		return RawDetail{}, fmt.Errorf("the %s section has no detail %q", key, id)
 	}
 	b.netMu.Lock()
 	if b.reader == nil {
@@ -350,14 +356,76 @@ func (b *Bandwidth) PollDetail(ctx context.Context, id string) (view.Detail, err
 
 	use, err := reader.Read(ctx)
 	if err != nil {
-		return unread(key, id, title, err), err //nolint:wrapcheck // the account the reader gives of the absence
+		return unreadRaw(key, id, title, err), err //nolint:wrapcheck // the account the reader gives of the absence
 	}
+	raw := RawDetail{Section: key, ID: id, Title: title, At: time.Now(), Net: &RawNet{Use: use, Interfaces: b.Readings()}}
 	if b.Drills(id) {
 		if b.names == nil {
 			b.names = core.NewPeerNames()
 		}
-		return b.drillDetail(key, id, use), nil
+		raw.Net.Names = b.peerNames(id, use)
+		if path, ok := parseDrill(id); ok && path.pid != 0 && path.peer == "" {
+			p := readProc(path.pid)
+			raw.Net.Proc = &p
+		}
 	}
+	return raw, nil
+}
+
+/*
+peerNames are the whole names of the peers a page of the breakdown may name:
+every peer moving anything, and the one a peer's page is about. A name not
+known yet is asked for, and arrives in a later reading.
+*/
+func (b *Bandwidth) peerNames(id string, use core.NetUse) map[string]string {
+	moved := map[string]float64{}
+	for _, p := range use.Processes {
+		for _, far := range p.Peers {
+			moved[far.Addr] += far.Rx + far.Tx
+		}
+	}
+	if path, ok := parseDrill(id); ok && path.peer != "" {
+		moved[path.peer] = max(moved[path.peer], peerFloor)
+	}
+	out := map[string]string{}
+	for addr, n := range moved {
+		if n < peerFloor {
+			continue
+		}
+		if full := b.names.Full(addr); full != addr {
+			out[addr] = full
+		}
+	}
+	return out
+}
+
+// DrawDetail is a reading of the network by process, or of the VPNs, as the
+// shells show it.
+func (b *Bandwidth) DrawDetail(raw RawDetail) view.Detail {
+	if d, ok := drawUnread(raw); ok {
+		return d
+	}
+	switch {
+	case raw.VPN != nil:
+		return view.VPNDetail(raw.Section, raw.VPN.VPNs)
+	case raw.Net == nil:
+		return view.Detail{}
+	case raw.ID == view.DetailProcesses:
+		return drawNetProcesses(raw)
+	}
+	return drawNetDrill(raw)
+}
+
+/*
+drawNetProcesses is the network by process.
+
+**The list is partial and says so** (spec 060 R11). Its note names what it is
+made of, the reader's own words, and the share of the watched interfaces'
+traffic the list adds up to, so a list that comes to less than the rows above
+it reads as partial and not as wrong.
+*/
+func drawNetProcesses(raw RawDetail) view.Detail {
+	use := raw.Net.Use
 	uses := make([]view.ProcessUse, 0, len(use.Processes))
 	listed := 0.0
 	for _, p := range use.Processes {
@@ -368,10 +436,13 @@ func (b *Bandwidth) PollDetail(ctx context.Context, id string) (view.Detail, err
 		uses = append(uses, view.ProcessUse{Name: name, Value: p.Rx, Second: p.Tx})
 		listed += p.Rx + p.Tx
 	}
-	d := view.Processes(key, id, uses)
-	d.Note = netNote(use, listed, b.Readings())
-	return d, nil
+	d := view.Processes(raw.Section, raw.ID, uses)
+	d.Note = netNote(use, listed, raw.Net.Interfaces)
+	return d
 }
+
+// peerName is a peer as a line names it: its name shortened, or its address.
+func (n *RawNet) peerName(addr string) string { return core.ShortName(addr, n.Names[addr]) }
 
 // shareFloor is the least an interface total has to be, in bytes per second,
 // before the share of it the list accounts for is worth saying: under it the
@@ -450,7 +521,8 @@ is a prefix -- so the remainder, which is last, would be the first row
 dropped, and a list whose job is to say it is incomplete would go quiet about
 it. The Parts path scrolls and draws the whole of what it is given.
 */
-func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
+func peerDetail(raw RawDetail) view.Detail {
+	key, use, net := raw.Section, raw.Net.Use, raw.Net
 	d := view.Detail{Section: key, ID: view.DetailPeers, Title: view.ProcessTitle(view.DetailPeers)}
 
 	byIface := map[string][]core.NetProcess{}
@@ -462,7 +534,7 @@ func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
 		byIface[name] = append(byIface[name], p)
 	}
 
-	for _, r := range b.Readings() {
+	for _, r := range net.Interfaces {
 		if !r.Present || !r.HasRate {
 			continue
 		}
@@ -543,7 +615,7 @@ func (b *Bandwidth) peerDetail(key string, use core.NetUse) view.Detail {
 				return fars[i].Rx+fars[i].Tx > fars[j].Rx+fars[j].Tx
 			})
 			for _, far := range fars {
-				label := b.names.Name(far.Addr)
+				label := net.peerName(far.Addr)
 				if far.Served {
 					label = "\u2190 " + label
 				}

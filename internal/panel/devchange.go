@@ -127,11 +127,11 @@ func (f *forges) findLocked(provider, date, key string) (found, bool) {
 }
 
 /*
-changePage is a change's page: what the day's line said at once, and the
-change itself once read. A page not read, or read longer ago than the
+readChangePage reads a change's page: what the day's line said at once, and
+the change itself once read. A page not read, or read longer ago than the
 interval, is read now in the background.
 */
-func (f *forges) changePage(id string) view.Detail {
+func (f *forges) readChangePage(id string) RawChange {
 	provider, date, key, _ := view.ParseDevChangeID(id)
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -146,14 +146,10 @@ func (f *forges) changePage(id string) view.Detail {
 		// The fortnight is not read yet -- a page opened from the command
 		// line, or after a credential changed -- and the thing is found once
 		// it is.
-		return view.Detail{Section: view.UsageInfo.Key, ID: id, Title: title, Parts: []view.Detail{
-			{Section: view.UsageInfo.Key, ID: "change", Title: "reading…", TitleBold: true},
-		}}
+		return RawChange{State: ChangeWaiting, Forge: title}
 	}
 	if !ok {
-		return view.Detail{Section: view.UsageInfo.Key, ID: id, Title: title, Reasons: []view.Reason{
-			{Text: "no longer in the forge's last reading", Status: view.Info},
-		}}
+		return RawChange{State: ChangeGone, Forge: title}
 	}
 	st := f.changes[id]
 	if st == nil {
@@ -168,7 +164,27 @@ func (f *forges) changePage(id string) view.Detail {
 		r := forgeReason(st.failed)
 		failed = &r
 	}
-	return view.DevChangePage(title, id, thing.open, thing.repo, thing.ref, thing.line, st.c, st.reading, failed)
+	return RawChange{
+		State: ChangeFound, Forge: title,
+		Open: thing.open, Repo: thing.repo, Ref: thing.ref, Line: thing.line,
+		Change: st.c, Reading: st.reading, Failed: failed,
+	}
+}
+
+// drawChangePage is a change's page as the shells show it.
+func drawChangePage(raw RawDetail) view.Detail {
+	c := raw.Change
+	switch c.State {
+	case ChangeWaiting:
+		return view.Detail{Section: raw.Section, ID: raw.ID, Title: c.Forge, Parts: []view.Detail{
+			{Section: raw.Section, ID: "change", Title: "reading…", TitleBold: true},
+		}}
+	case ChangeGone:
+		return view.Detail{Section: raw.Section, ID: raw.ID, Title: c.Forge, Reasons: []view.Reason{
+			{Text: "no longer in the forge's last reading", Status: view.Info},
+		}}
+	}
+	return view.DevChangePage(c.Forge, raw.ID, c.Open, c.Repo, c.Ref, c.Line, c.Change, c.Reading, c.Failed)
 }
 
 // startChangeLocked reads a change in the background. Under f.mu.

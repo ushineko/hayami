@@ -648,65 +648,109 @@ func (u *Usage) Refresh(ask string) bool {
 // CloseDetail has nothing to let go of.
 func (u *Usage) CloseDetail(string) {}
 
+// PollDetail reads one of the usage section's details, and draws it.
+func (u *Usage) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+	return pollRaw(ctx, u, id)
+}
+
 /*
-PollDetail reads one account's breakdown out of the cache, or every
-account's. An account that cannot be read is a part with its reason in it,
-and the others are whole; the error is every account's that failed.
+ReadDetail reads one account's breakdown out of the cache, or the overview:
+every account's and every forge's. An account that cannot be read is a part
+with its reason in it, and the others are whole; the error is every
+account's that failed.
 
 **It reads and never fetches.** The meters' poll is what goes upstream, behind
 the cache's gate; this decodes more of the entry that poll left, so opening a
 drawer costs no request and writes nothing (spec 060 R14).
 */
-func (u *Usage) PollDetail(ctx context.Context, id string) (view.Detail, error) {
+func (u *Usage) ReadDetail(_ context.Context, id string) (RawDetail, error) {
+	key, now := u.Key(), u.now()
 	if id == view.DetailAccounts {
-		var parts []view.Detail
+		raw := RawDetail{Section: key, ID: id, Title: view.DevTitle, At: now, Overview: &RawOverview{}}
 		var failed []error
 		if u.dev.aiShown() {
 			for _, account := range u.accounts() {
-				part, err := u.PollDetail(ctx, account)
-				if err != nil {
+				a := RawAccount{Label: account}
+				if b, err := u.breakdown(account); err != nil {
+					a.Err = err
 					failed = append(failed, err)
+				} else {
+					a.Breakdown = &b
 				}
-				parts = append(parts, view.UsageOverview(part))
+				raw.Overview.Accounts = append(raw.Overview.Accounts, a)
 			}
 		}
 		u.dev.due()
-		var forges []view.Detail
-		var read []view.DevReading
 		for _, p := range u.dev.shown() {
-			r := u.dev.viewOf(p)
-			read = append(read, r)
-			forges = append(forges, view.DevPart(r, u.now(), -1))
+			raw.Overview.Forges = append(raw.Overview.Forges, u.dev.viewOf(p))
 		}
-		// What was done lately and where the fortnight went, from the items
-		// the forges' reads already hold (spec 107). Each is drawn only once
-		// a forge has listed something.
-		for _, part := range []view.Detail{view.DevRecent(read), view.DevRepos(read)} {
-			if !part.Quiet() {
-				forges = append(forges, part)
-			}
-		}
-		return view.Development(parts, forges), errors.Join(failed...)
+		return raw, errors.Join(failed...)
 	}
 	if p, _, _, ok := view.ParseDevChangeID(id); ok {
 		if !u.dev.shows(p) {
-			return unread(u.Key(), id, view.DevTitle, errors.New("switched off")), nil
+			return unreadRaw(key, id, view.DevTitle, errors.New("switched off")), nil
 		}
 		u.dev.due()
-		return u.dev.changePage(id), nil
+		c := u.dev.readChangePage(id)
+		return RawDetail{Section: key, ID: id, Title: c.Forge, At: now, Change: &c}, nil
 	}
 	if p, date, ok := view.ParseDevDayID(id); ok {
 		if !u.dev.shows(p) {
-			return unread(u.Key(), id, view.DevTitle, errors.New("switched off")), nil
+			return unreadRaw(key, id, view.DevTitle, errors.New("switched off")), nil
 		}
 		u.dev.due()
-		return view.DevDayPage(u.dev.viewOf(p), u.now(), date), nil
+		r := u.dev.viewOf(p)
+		return RawDetail{Section: key, ID: id, Title: r.Title, At: now, Day: &RawDay{Forge: r, Date: date}}, nil
 	}
 	b, err := u.breakdown(id)
 	if err != nil {
-		return unread(u.Key(), id, id, err), err
+		return unreadRaw(key, id, id, err), err
 	}
-	return view.UsageDetail(u.now(), b), nil
+	return RawDetail{Section: key, ID: id, Title: id, At: now, Account: &b}, nil
+}
+
+// DrawDetail is one of the usage section's details as the shells show it.
+func (u *Usage) DrawDetail(raw RawDetail) view.Detail {
+	if d, ok := drawUnread(raw); ok {
+		return d
+	}
+	switch {
+	case raw.Account != nil:
+		return view.UsageDetail(raw.At, *raw.Account)
+	case raw.Overview != nil:
+		return drawOverview(raw)
+	case raw.Day != nil:
+		return view.DevDayPage(raw.Day.Forge, raw.At, raw.Day.Date)
+	case raw.Change != nil:
+		return drawChangePage(raw)
+	}
+	return view.Detail{}
+}
+
+// drawOverview is every account's breakdown, shortened to the overview's, and
+// every forge's fortnight, with what was done lately and where.
+func drawOverview(raw RawDetail) view.Detail {
+	var parts []view.Detail
+	for _, a := range raw.Overview.Accounts {
+		part := unread(raw.Section, a.Label, a.Label, a.Err)
+		if a.Breakdown != nil {
+			part = view.UsageDetail(raw.At, *a.Breakdown)
+		}
+		parts = append(parts, view.UsageOverview(part))
+	}
+	var forges []view.Detail
+	for _, r := range raw.Overview.Forges {
+		forges = append(forges, view.DevPart(r, raw.At, -1))
+	}
+	// What was done lately and where the fortnight went, from the items
+	// the forges' reads already hold (spec 107). Each is drawn only once
+	// a forge has listed something.
+	for _, part := range []view.Detail{view.DevRecent(raw.Overview.Forges), view.DevRepos(raw.Overview.Forges)} {
+		if !part.Quiet() {
+			forges = append(forges, part)
+		}
+	}
+	return view.Development(parts, forges)
 }
 
 // cachedBreakdown is the breakdown of the account labelled label, from its

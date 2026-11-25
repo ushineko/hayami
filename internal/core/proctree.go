@@ -11,21 +11,41 @@ import (
 // ProcInfo is what is known of one process for a drill-down: who it is, who
 // started it, and how much of the machine it is holding.
 type ProcInfo struct {
-	PID     int
-	PPID    int
-	Name    string
-	Parent  string
-	Cmdline string
-	State   string
-	Threads int
-	Sockets int
-	Started string
-	User    string
-	Gone    bool
+	PID  int
+	PPID int
+	Name string
+	// ParentName is the parent's whole name; empty where it could not be
+	// read.
+	ParentName string
+	Cmdline    string
+	State      string
+	Threads    int
+	Sockets    int
+	Started    string
+	User       string
+	Gone       bool
 }
 
-// Children are the processes a process started, as "name (pid)".
-type Children []string
+// Parent is the process that started this one as a page names it:
+// "name (pid)", or nothing where it could not be read.
+func (p ProcInfo) Parent() string {
+	if p.ParentName == "" {
+		return ""
+	}
+	return ProcRef{PID: p.PPID, Name: p.ParentName}.String()
+}
+
+// ProcRef is a process by its PID and its whole name.
+type ProcRef struct {
+	PID  int
+	Name string
+}
+
+// String is the process as a page names it: "name (pid)".
+func (r ProcRef) String() string { return fmt.Sprintf("%s (%d)", r.Name, r.PID) }
+
+// Children are the processes a process started.
+type Children []ProcRef
 
 /*
 ReadProc reads one process, and reports Gone for one that has exited.
@@ -74,7 +94,7 @@ func ReadProc(root string, pid int) ProcInfo {
 	if info.PPID > 0 {
 		if b, err := os.ReadFile(filepath.Join(root, strconv.Itoa(info.PPID), "comm")); err == nil {
 			parent := filepath.Join(root, strconv.Itoa(info.PPID))
-			info.Parent = fmt.Sprintf("%s (%d)", FullProcName(parent, strings.TrimSpace(string(b))), info.PPID)
+			info.ParentName = FullProcName(parent, strings.TrimSpace(string(b)))
 		}
 	}
 	return info
@@ -107,7 +127,7 @@ func ProcChildren(root string, pid int) Children {
 			}
 		}
 		if ppid == pid {
-			out = append(out, fmt.Sprintf("%s (%d)", FullProcName(filepath.Join(root, e.Name()), name), child))
+			out = append(out, ProcRef{PID: child, Name: FullProcName(filepath.Join(root, e.Name()), name)})
 		}
 	}
 	return out

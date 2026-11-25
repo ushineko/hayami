@@ -110,6 +110,14 @@ terminal draws the same detail in a drawer of text in the pane (spec 098,
 `view.RenderDetail`), read-only, and prints one from `hayami-tui detail`. A process in a detail is its
 name and nothing else: no command line, path or owner is read.
 
+A detail is read once, as plain values, and drawn from them (spec 113 R14).
+A source with details is a `panel.RawDetailer`: `ReadDetail` reads one into a
+`panel.RawDetail` -- names whole, figures in their units, times as times --
+and `DrawDetail` builds the `view.Detail` from that and reads nothing, so
+`PollDetail` is the drawing of one reading. Cutting a name to a drawer's
+width, padding a figure and shortening a peer's host name belong to the
+drawing; a reading holds the fact, which is what the service serves.
+
 ### 4. A sensor source is a provider in a chain
 
 Where a quantity has more than one possible source, the sources are providers
@@ -264,7 +272,7 @@ reassign are not added. `panel.DefaultScan` remains as the fallback when an
 | A reading from the OS or another program | A reader in `core`, with `_linux`/`_windows`/`_other` files, a field in `core.Host`, and a fake for tests | It appears in `hayami-tui readings` and `doctor` through its section |
 | Another source for an existing quantity | A `core.Provider` and a row in its platform's chain in `core/host_tables.go` (rule 4), in priority order | The absence it can report, as a typed absence |
 | Another part the cooler reads (a second card, a motherboard sensor) | A `view.Probe` from its source, with an ID unique in the reading; a row in `view.coolerRoles` only for a role the table does not have | No view or window change for a known role |
-| A detail behind a reading | `Details`, `PollDetail`, `DetailInterval` and `CloseDetail` on the section's source (`panel.Detailer`), a builder in `view` that returns a `view.Detail`, and `Opens` on the section that asks for it; a `Label` and a `Key` on each `DetailInfo` where there is more than one to choose between | It appears in the window's drawer, the terminal's drawer, `hayami-tui detail`, `readings` and `doctor`. It is not polled until shown |
+| A detail behind a reading | `Details`, `PollDetail`, `DetailInterval` and `CloseDetail` on the section's source (`panel.Detailer`), with `ReadDetail` into a kind of `panel.RawDetail` and `DrawDetail` from it (`panel.RawDetailer`, rule 3), a builder in `view` that returns a `view.Detail`, and `Opens` on the section that asks for it; a `Label` and a `Key` on each `DetailInfo` where there is more than one to choose between | It appears in the window's drawer, the terminal's drawer, `hayami-tui detail`, `readings` and `doctor`. It is not polled until shown |
 | A section | An entry in `view.Sections()` and `panel.Specs()`, a glyph, a source in `panel`, a builder in `view` | Renders in stack, grid and row in both shells; a hidden section is not polled; a fixture in the parity test. A section on by default is offered once to existing settings files (`config.Offered`), at its place in `view.Sections()` |
 | A source polled at a moment, not an interval | `Next` on the source (`panel.Paced`); both shells wait `panel.Wait` | The clock, at the turn of each second (spec 106) |
 | A threshold or status | A `view.Bands` table | A test at and around each threshold |
