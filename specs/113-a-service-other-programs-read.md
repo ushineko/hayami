@@ -108,7 +108,9 @@ meets them lands.
 |---|---|---|
 | 1 | Spike findings (above) | Merged |
 | 2 | R14: `panel.RawDetailer` on the bandwidth, cooler and usage sources. `ReadDetail` returns a `panel.RawDetail` (processes with their PIDs and whole names, the network reading with the peers' whole host names, a process's page without its command line, an account's breakdown, the overview, a forge's day, a change's page); `DrawDetail` builds the `view.Detail` from it and reads nothing; `PollDetail` is the one drawn from the other. `core.PeerNames` keeps whole names (`Full`) and shortens for a column (`Name`); a process's parent and children are names and PIDs. The shells are unchanged: the existing tests pass unmodified, and the bandwidth breakdown's pages, which had none, are pinned by tests that pass on the code before the change too. Found on the way: #399, a cooler row with a long name opens an idle page, fixed on its own | This PR |
-| 3 | Contract, server, Go client, `api check`/`load`, Linux unit, installer page | — |
+| 3a | The contract (`api/openapi.yaml`, `internal/api/contract`), the server (`internal/api`: leases, one poller a source, snapshots, SSE with a latest-only queue, the limits, panic recovery), the Linux socket with its peer check and systemd's hand-over, and `hayami-tui serve`. Tests: every endpoint's golden response checked against the contract, each Go type held to its schema, the behaviour over a real socket, nothing secret over real sources, a fuzz target, and the load test. The adversarial review's five findings fixed and pinned; #401 filed | This PR |
+| 3b | The reference client (`internal/api/client`) and `hayami-tui api address/status/get/watch/check/load` | — |
+| 3c | The systemd units, the installer page, `docs/api.md`, CLAUDE.md, the desk's end-to-end run | — |
 | 4 | Windows per-user service | — |
 | 5 | macOS agent and CI job | — |
 
@@ -275,6 +277,16 @@ for review.
 
   An unknown key is 404 with the known keys in the body. An error names no
   path under the home (`safetext.WithoutHome`).
+
+  As built (phase 3a; `api/openapi.yaml` is the contract): `reading` is an
+  object with a field for every section, the section's own set and the
+  others `null`, so a typed client reads `reading.usage` without a
+  discriminator. R17's list is `{"sections": [...]}` and R19's map is
+  `{"readings": {...}}`, each in an object so a field can be added beside
+  it. The usage reading's accounts carry `plan_badge` (the card's letter);
+  the plan's name is in the account's detail. A peripheral's `asleep` is
+  not read by any source yet, and its `charge` is a word (`draining`,
+  `charging`, `charged`).
 - **R19 `GET /v1/readings?sections=a,b`.** A map of key to R18's object,
   for the sections named, or every section when the parameter is absent.
 - **R20 `GET /v1/sections/{key}/details/{id...}`.** One detail's raw form
@@ -426,48 +438,48 @@ for review.
 - [ ] `api/openapi.yaml` exists, validates as OpenAPI 3.1, and describes
       every endpoint, every section's reading, every detail's raw form, the
       SSE events and the errors
-- [ ] Golden responses for every endpoint over fixture sources validate
+- [x] Golden responses for every endpoint over fixture sources validate
       against the contract (R28), and a Go contract type and its schema
       cannot drift apart without a test failing
-- [ ] A fixture process name of 40 characters, a device name of 40, an
+- [x] A fixture process name of 40 characters, a device name of 40, an
       account name of 40 and a pull-request title of 200 come back whole
       from their section and detail endpoints; the same fixtures are still
       cut in the window's and the terminal's rendering (the shells
       unchanged)
-- [ ] A fixture name with control and bidirectional-override characters
+- [x] A fixture name with control and bidirectional-override characters
       comes back with them removed and nothing else changed; a 10 KiB name
       is cut to 4 KiB with `truncated: true`
-- [ ] Rates, temperatures, percentages and times are JSON numbers and RFC
+- [x] Rates, temperatures, percentages and times are JSON numbers and RFC
       3339 strings; an unknown value is `null`, not absent
 - [ ] Each detail is read once per poll whether the window, the terminal and
       the service all show it (counting fake Detailer)
 
 ### Service behaviour
 
-- [ ] `hayami-tui serve --listen <tmp>` serves every endpoint R16–R22 over a
+- [x] `hayami-tui serve --listen <tmp>` serves every endpoint R16–R22 over a
       real socket in `t.TempDir()`
-- [ ] A drill ID with `/` and a detail ID with a space both resolve through
+- [x] A drill ID with `/` and a detail ID with a space both resolve through
       R20; an unoffered ID is 404 listing the offered ones; no action link
       appears in any response
-- [ ] Two clients of the same section cause one poll per interval
-- [ ] A section with no client for its lease stops being polled; a detail's
+- [x] Two clients of the same section cause one poll per interval
+- [x] A section with no client for its lease stops being polled; a detail's
       lease lapsing calls `CloseDetail`
 - [ ] The first request for an unread section waits for its first poll; the
       next poll's response carries rates
 - [ ] A settings change (a chosen interface) shows in the next poll without
       a restart
-- [ ] The SSE stream sends an initial event, an event per new poll, a
+- [x] The SSE stream sends an initial event, an event per new poll, a
       keepalive comment, and ends the lease on disconnect; the seventeenth
       stream is 503
-- [ ] Non-GET is 405, a body is 400, an `Origin` header is 403, an unknown
+- [x] Non-GET is 405, a body is 400, an `Origin` header is 403, an unknown
       section is 404
-- [ ] No response from any endpoint contains a fixture token, refresh token
+- [x] No response from any endpoint contains a fixture token, refresh token
       or forge key (R24)
-- [ ] A fuzz target covers the router and the ID decoding (B4)
+- [x] A fuzz target covers the router and the ID decoding (B4)
 
 ### Concurrency and load
 
-- [ ] A load test in `internal/api`, run under `-race` over fixture sources
+- [x] A load test in `internal/api`, run under `-race` over fixture sources
       for 60 s, passes. It runs 48 clients looping `GET`s over every section,
       detail and drill, and 16 SSE streams with random disconnects and
       reconnects. One stream never reads, and one connection sends half a
@@ -480,11 +492,22 @@ for review.
     after `ReadHeaderTimeout`
   - after every client leaves: goroutines back to their idle count, and heap
     within 10% of its idle level once the leases lapse
-- [ ] The 65th connection and the 17th stream get 503 with `Retry-After`
+
+  As built (`TestManyClientsAtOnce`, 2026-11-25: about 1.8 million requests
+  a minute, snapshot p99 5.5 ms under `-race`): the streams are 14 and the
+  one that never reads, so with it there is room for a reconnect under the
+  limit of 16 (the limit itself is `TestOverTheStreamLimitIsA503`). The
+  stream that never reads is closed by the write deadline once its socket's
+  buffer is full, well inside 30 s. The idle level is taken after a warm-up
+  from 64 goroutines, and the heap is allowed 10% or 1 MiB over it, whichever
+  is more: a heap profile showed what remains to be the runtime's own
+  threads, which it keeps once made. Falsified with the stream queue's
+  signal made blocking: the test fails, and the queue was put back.
+- [x] The 65th connection and the 17th stream get 503 with `Retry-After`
       within a second, and are never left hanging
-- [ ] A source that panics in a poll, and a handler that panics, leave the
+- [x] A source that panics in a poll, and a handler that panics, leave the
       service serving the other sections
-- [ ] The load test is falsified: a single unbuffered stream writer, or a
+- [x] The load test is falsified: a single unbuffered stream writer, or a
       poll taken under the request's lock, makes it fail. The fault is then
       put back
 - [ ] `hayami-tui api load --clients 32 --streams 8 --duration 5m` against

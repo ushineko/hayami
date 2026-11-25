@@ -1,0 +1,84 @@
+{
+  "section": "cooler",
+  "id": "cpu",
+  "title": "CPU by process",
+  "kind": "processes",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [
+    "cpu/a-program-with-a-name-of-forty-letters-x"
+  ],
+  "truncated": false,
+  "processes": {
+    "list": "cpu",
+    "name": null,
+    "note": "share of every processor together",
+    "processes": [
+      {
+        "pid": 41,
+        "name": "a-program-with-a-name-of-forty-letters-x",
+        "cpu_pct": 10,
+        "gpu_pct": null,
+        "memory_bytes": 2000000000,
+        "memory_pct": 6.25,
+        "read_bps": null,
+        "write_bps": null
+      },
+      {
+        "pid": 42,
+        "name": "a-program-with-a-name-of-forty-letters-x",
+        "cpu_pct": 2.5,
+        "gpu_pct": null,
+        "memory_bytes": null,
+        "memory_pct": null,
+        "read_bps": null,
+        "write_bps": null
+      },
+      {
+        "pid": 7,
+        "name": "kworker/0:0",
+        "cpu_pct": 0.1,
+        "gpu_pct": null,
+        "memory_bytes": null,
+        "memory_pct": null,
+        "read_bps": null,
+        "write_bps": null
+      }
+    ],
+    "summary": {
+      "cpu": {
+        "load_pct": 12.5,
+        "trail": [
+          10,
+          12.5
+        ],
+        "trail_every_s": 5,
+        "cores_pct": [
+          20,
+          5
+        ],
+        "clock_mhz": 4800,
+        "max_clock_mhz": 5700,
+        "load_average": [
+          1.5,
+          1.2,
+          1
+        ],
+        "queue": null,
+        "processes": 412,
+        "threads": 2048
+      },
+      "gpu": null,
+      "memory": null,
+      "io": null
+    }
+  },
+  "process": null,
+  "network": null,
+  "vpns": null,
+  "account": null,
+  "overview": null,
+  "day": null,
+  "change": null
+}

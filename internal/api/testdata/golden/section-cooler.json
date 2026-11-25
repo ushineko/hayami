@@ -1,0 +1,70 @@
+{
+  "key": "cooler",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "interval_s": 5,
+  "reading": {
+    "clock": null,
+    "bandwidth": null,
+    "usage": null,
+    "cooler": {
+      "probes": [
+        {
+          "id": "cpu",
+          "role": "cpu",
+          "name": "A Processor With A Long Name, Sixteen Cores",
+          "load_pct": 12.5,
+          "temp_c": 52,
+          "rpm": null,
+          "bytes": null,
+          "of_bytes": null,
+          "read_bps": null,
+          "write_bps": null,
+          "trail": [
+            50,
+            52
+          ],
+          "stale": false
+        },
+        {
+          "id": "memory",
+          "role": "memory",
+          "name": null,
+          "load_pct": 50,
+          "temp_c": null,
+          "rpm": null,
+          "bytes": 16000000000,
+          "of_bytes": 32000000000,
+          "read_bps": null,
+          "write_bps": null,
+          "trail": [],
+          "stale": false
+        },
+        {
+          "id": "pump",
+          "role": "pump",
+          "name": null,
+          "load_pct": null,
+          "temp_c": null,
+          "rpm": 2400,
+          "bytes": null,
+          "of_bytes": null,
+          "read_bps": null,
+          "write_bps": null,
+          "trail": [],
+          "stale": true
+        }
+      ],
+      "uptime_s": 129600
+    },
+    "peripherals": null
+  },
+  "absences": [],
+  "error": null,
+  "details": [
+    {
+      "id": "cpu",
+      "title": "CPU by process"
+    }
+  ],
+  "truncated": false
+}

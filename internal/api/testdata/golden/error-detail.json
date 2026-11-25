@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": "not_found",
+    "message": "no detail \"nope\" in cooler",
+    "known": [
+      "cpu"
+    ]
+  }
+}

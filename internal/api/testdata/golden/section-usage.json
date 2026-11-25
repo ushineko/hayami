@@ -1,0 +1,55 @@
+{
+  "key": "usage",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "interval_s": 30,
+  "reading": {
+    "clock": null,
+    "bandwidth": null,
+    "usage": {
+      "accounts": [
+        {
+          "name": "an account whose label is forty bytes ..",
+          "plan_badge": "M",
+          "windows": [
+            {
+              "name": "5h",
+              "utilisation_pct": 12,
+              "resets_at": "2026-11-26T16:00:00Z",
+              "span_s": 18000,
+              "used": null,
+              "limit": null,
+              "severity": null,
+              "note": null
+            },
+            {
+              "name": "7d",
+              "utilisation_pct": 40,
+              "resets_at": "2026-11-26T16:00:00Z",
+              "span_s": 604800,
+              "used": null,
+              "limit": null,
+              "severity": null,
+              "note": null
+            }
+          ]
+        }
+      ],
+      "fetched_at": "2026-11-24T10:15:02Z"
+    },
+    "cooler": null,
+    "peripherals": null
+  },
+  "absences": [],
+  "error": null,
+  "details": [
+    {
+      "id": "accounts",
+      "title": "Development"
+    },
+    {
+      "id": "an account whose label is forty bytes ..",
+      "title": "an account whose label is forty bytes .."
+    }
+  ],
+  "truncated": false
+}

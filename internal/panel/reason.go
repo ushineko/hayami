@@ -27,6 +27,7 @@ func reason(base view.Reason, err error) view.Reason {
 			base.Detail = withoutHome(a.Detail)
 		}
 		base.Actionable = a.Actionable
+		base.Code = string(a.Code)
 		return base
 	}
 	if base.Detail == "" && err != nil {

@@ -218,7 +218,7 @@ func (b *Bandwidth) Section() view.Section {
 		reasons = append(reasons, reason(view.Reason{Label: "Wi-Fi", Status: view.Info, Aside: true}, err))
 	}
 	if b.vpnChosen() {
-		vpns := b.vpnReadings()
+		vpns := b.VPNReadings()
 		// The VPNs that are not down, in a run held to one tunnel's lines
 		// (specs 105, 110).
 		sec.Rows = append(sec.Rows, view.VPNRows(vpns)...)
@@ -249,8 +249,9 @@ var vpnStates = map[core.VPNState]view.VPNState{
 	core.VPNUp: view.VPNUp, core.VPNUnknown: view.VPNUnknown,
 }
 
-// vpnReadings are the chosen VPNs as the view takes them.
-func (b *Bandwidth) vpnReadings() []view.VPNReading {
+// VPNReadings are the chosen VPNs as the view takes them: the card's, and the
+// service's (spec 113).
+func (b *Bandwidth) VPNReadings() []view.VPNReading {
 	b.labelsMu.Lock()
 	labels := b.labels
 	b.labelsMu.Unlock()

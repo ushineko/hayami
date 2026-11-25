@@ -21,7 +21,8 @@ layers, in one direction:
 ```
  devices ──► sanshoku ─┐
  OS APIs ──► core ─────┼─► panel (sources) ──► view (sections) ──► gui │ tui │ cli
- web APIs ─► usage ────┘          ▲                                    ▲
+ web APIs ─► usage ────┘          ▲     │                              ▲
+                                  │     └──────► api (contract) ──► other programs
                                 config ◄────────────── prefs ──────────┘
 ```
 
@@ -33,6 +34,7 @@ layers, in one direction:
 | Sources | `internal/panel` | Polling: which readers a section asks, how often, what it remembers between polls (trails, held devices, the last good reading), and turning readings and absences into a `view.Section` | Platform build tags, device protocols, toolkit calls |
 | View | `internal/view` | The section vocabulary (`Section`, `Row`, `Cell`, `Meter`, `Trail`, `Reason`, `Status`), fixed-width formatting, thresholds, the text arrangements | Imports from any other hayami package; any toolkit |
 | Shells | `internal/gui`, `internal/tui`, `internal/cli` | Arranging sections on a surface: the Fyne window, the Bubble Tea pane, `doctor`, `readings` | Deciding what a section says |
+| Service | `internal/api`, `internal/api/contract` | Serving the sources' readings and raw details to programs of the same account as the contract's JSON (spec 113, `api/openapi.yaml`): the leases that poll a section only while a client reads it, the socket and its peer check | Deciding what a section says; anything `view` has cut, padded or formatted |
 | Settings | `internal/config`, `internal/prefs`, `internal/desktop` | The settings file, the preferences window, window placement and the KWin rule | Reading devices or sensors |
 
 **Dependencies point one way.** A package imports only the layers to its left
@@ -244,6 +246,12 @@ adds a table, not a ladder.
   install`, through polkit's prompt (spec 078), or by hand with sudo. hayami
   asks to become root only for an action the person chose, through the
   system's own prompt, and never runs sudo.
+- **A socket for programs of the same account.** `hayami-tui serve` (spec
+  113) serves the readings as JSON on a Unix socket in the account's runtime
+  directory, `0600` in a `0700` directory, each connection's peer checked
+  against the account. No TCP port, loopback included; only `GET`; a
+  request carrying `Origin` is refused, so a browser reaches nothing. It
+  reads what the panel reads and has no right the panel lacks.
 - **No kernel driver of its own.** Where the OS needs one, as for the
   processor's temperature on Windows, hayami uses one the person installed:
   PawnIO, through the sensor helper and two signed modules hayami carries
@@ -325,6 +333,10 @@ These rules apply in addition to CONTRIBUTING.md's.
 | Forges read headless in `internal/forge`, drawn from plain values | 9 | In place | #360 |
 | Sources paced by the moment they want (`panel.Paced`) | Adding things | In place | #372 |
 | New default sections offered once to existing settings | Adding things | In place | #372 |
+| Details read once as plain values, drawn from them (`panel.RawDetailer`) | 3 | In place | #396 |
+| The service other programs read (`internal/api`): contract, leases, Linux socket | 9 | In place | #396 |
+| The service installed and started by its socket (systemd), the reference client | 9 | Planned | #396 |
+| The service on Windows (per-user service) and macOS (launchd agent) | 5, 9 | Planned | #396 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a

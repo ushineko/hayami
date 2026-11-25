@@ -384,7 +384,7 @@ const vpnDetailTrail = 60
 // R9).
 func (b *Bandwidth) vpnDetailReadings() []view.VPNDetailReading {
 	points := b.health.points()
-	card := b.vpnReadings()
+	card := b.VPNReadings()
 	vpns := b.vpns.Readings()
 	out := make([]view.VPNDetailReading, 0, len(vpns))
 	for i, v := range vpns {

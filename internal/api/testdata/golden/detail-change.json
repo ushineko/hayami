@@ -1,0 +1,71 @@
+{
+  "section": "usage",
+  "id": "accounts/github/2026-11-24/pr:someone/project#12",
+  "title": "GitHub",
+  "kind": "change",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [],
+  "truncated": false,
+  "processes": null,
+  "process": null,
+  "network": null,
+  "vpns": null,
+  "account": null,
+  "overview": null,
+  "day": null,
+  "change": {
+    "state": "found",
+    "forge": "GitHub",
+    "open": "pr",
+    "repo": "someone/project",
+    "ref": "#12",
+    "line": "#12 Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other th",
+    "reading": false,
+    "failed": null,
+    "change": {
+      "kind": "pr",
+      "ref": "#12",
+      "title": "Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other th",
+      "state": "open",
+      "state_reason": null,
+      "draft": false,
+      "opened": "2026-11-24T10:15:02Z",
+      "merged": null,
+      "closed": null,
+      "source": null,
+      "target": null,
+      "additions": 10,
+      "deletions": 2,
+      "files": 1,
+      "commits": 1,
+      "checks": null,
+      "approvals": 1,
+      "changes_wanted": 0,
+      "decision": null,
+      "labels": [
+        "enhancement"
+      ],
+      "body": "First line.\n\nSecond paragraph.",
+      "comments": 0,
+      "commit_list": [
+        {
+          "sha": "abc1234",
+          "title": "Do it",
+          "when": "2026-11-24T10:15:02Z",
+          "additions": null,
+          "deletions": null
+        }
+      ],
+      "file_list": [
+        {
+          "path": "main.go",
+          "additions": 10,
+          "deletions": 2,
+          "status": "modified"
+        }
+      ]
+    }
+  }
+}

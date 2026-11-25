@@ -1,0 +1,49 @@
+{
+  "section": "cooler",
+  "id": "cpu/a-program-with-a-name-of-forty-letters-x/41",
+  "title": "CPU by process",
+  "kind": "process",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [],
+  "truncated": false,
+  "processes": null,
+  "process": {
+    "list": "cpu",
+    "name": "a-program-with-a-name-of-forty-letters-x",
+    "now": {
+      "pid": 41,
+      "name": "a-program-with-a-name-of-forty-letters-x",
+      "cpu_pct": 10,
+      "gpu_pct": null,
+      "memory_bytes": 2000000000,
+      "memory_pct": 6.25,
+      "read_bps": null,
+      "write_bps": null
+    },
+    "idle": false,
+    "process": {
+      "pid": 41,
+      "name": "a-program-with-a-name-of-forty-letters-x",
+      "ppid": 1,
+      "parent_name": "systemd",
+      "state": "S (sleeping)",
+      "threads": 12,
+      "sockets": 3,
+      "children": [
+        {
+          "pid": 43,
+          "name": "a-program-with-a-name-of-forty-letters-x"
+        }
+      ],
+      "gone": false
+    }
+  },
+  "network": null,
+  "vpns": null,
+  "account": null,
+  "overview": null,
+  "day": null,
+  "change": null
+}

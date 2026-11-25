@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "not_found",
+    "message": "no such path; every path is under /v1",
+    "known": []
+  }
+}

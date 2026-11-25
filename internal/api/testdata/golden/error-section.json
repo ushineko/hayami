@@ -1,0 +1,13 @@
+{
+  "error": {
+    "code": "not_found",
+    "message": "no section \"nope\"",
+    "known": [
+      "clock",
+      "bandwidth",
+      "usage",
+      "cooler",
+      "peripherals"
+    ]
+  }
+}
