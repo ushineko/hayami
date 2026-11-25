@@ -1,0 +1,72 @@
+{
+  "section": "bandwidth",
+  "id": "vpn",
+  "title": "VPNs",
+  "kind": "vpns",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [],
+  "truncated": false,
+  "processes": null,
+  "process": null,
+  "network": null,
+  "vpns": [
+    {
+      "name": "office",
+      "label": null,
+      "state": "up",
+      "interface": "tun0",
+      "connected_since": null,
+      "latency_ms": 23.5,
+      "failing": false,
+      "stale": false,
+      "rx_bps": null,
+      "tx_bps": null,
+      "keepalive": "on",
+      "keepalive_disabled": false,
+      "addresses": [
+        "10.0.0.2/24"
+      ],
+      "gateway": "10.0.0.1",
+      "routes": [
+        "10.0.0.0/8"
+      ],
+      "checks": {
+        "count": 10,
+        "failures": 1,
+        "bounces": 0,
+        "average_ms": 22
+      },
+      "last_checks": [
+        {
+          "type": "ping",
+          "latency_ms": 23.5,
+          "ok": true,
+          "ran": true
+        },
+        {
+          "type": "dns",
+          "latency_ms": null,
+          "ok": false,
+          "ran": false
+        }
+      ],
+      "samples": [
+        {
+          "latency_ms": 21,
+          "ok": true
+        },
+        {
+          "latency_ms": 23.5,
+          "ok": false
+        }
+      ],
+      "check_every_s": 30
+    }
+  ],
+  "account": null,
+  "overview": null,
+  "day": null,
+  "change": null
+}

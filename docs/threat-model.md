@@ -296,6 +296,16 @@ fixed in 0.11.13 (specs 076, 077), as was #256 (the token endpoint had
 moved, and every refresh failed). No path gave another account anything or
 put a token into output; see "Checked".
 
+**The service (spec 113).** `hayami-tui serve` is a long-running process
+holding the usage reader and its OAuth refresh, as the panel does; what is
+new is that its responses leave the process, to any program of the account.
+Every response is built from the contract's types (`internal/api/contract`),
+which have no field a token, a key or a credential's path could go in, and
+an error or an absence's detail passes `safetext.WithoutHome`. A test serves
+every section, every detail and the details below them over real sources,
+with a credential file and forge and API keys in the environment, and finds
+none of them in any response (`TestNothingSecretLeaves`).
+
 ## B4 What hayami parses
 
 **Assets.** The panel's availability; for the helper protocol, the
@@ -393,6 +403,21 @@ the settings, which are the user's own; hayami then fetches that URL.
   end the panel: it is the reading's error instead (`guarded`,
   `internal/panel/devchange.go`; `GitLabReader.ReadChange`). Fuzzed: `FuzzGitHubResponse`, `FuzzGitLabEvent`, and
   the secrets file's lines, `FuzzParseLine` (`internal/forge/fuzz_test.go`).
+
+**The service's requests (spec 113).** New input: HTTP requests on the
+service's socket, from programs of the same account only (the socket's mode
+and a peer check, `internal/api/listen_linux.go`) but not trusted to be well
+formed. Go's `net/http` parses them, with a 5 s limit on the headers, 16 KiB
+of them, no body accepted, only `GET`, and at most 64 connections and 16
+streams; over a limit the answer is 503, and a connection over it is answered
+by at most sixteen goroutines at once and closed past that. A panic while
+serving a request, or while reading a section or a detail, is that one's
+error and the service keeps running. A detail's ID is matched against what
+the section offers (`panel.Offers`) before anything reads it. A stream keeps
+only the latest event for each thing it names, so a client that stops
+reading cannot grow it, and is ended after 30 s unread. Fuzzed: `FuzzRequest`,
+any path and query through the router and the ID decoding, answered with a
+documented status and never a 500 (`internal/api/fuzz_test.go`).
 
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
 (ushineko/sanshoku#67).
@@ -536,6 +561,19 @@ desk is on.
   `internal/safetext/safetext.go`; #361): a title someone else wrote could
   otherwise reorder its line in a terminal that does bidi.
 
+**The service (spec 113).** The readings and every detail, the on-request
+ones included (a VPN's addresses, spec 085 R9; the Development drawer's
+activity, spec 107), are served whole to any program the account runs:
+`hayami-tui detail` gives the same account the same facts today, cut; the
+service gives them continuously, whole, and needs no terminal. A peer's host
+name is served whole where the shells shorten it. No other account reaches
+them: the socket is `0600` in a `0700` directory and a connection whose peer
+is another account is closed without a word. A browser reaches nothing: there
+is no TCP port, and a request carrying `Origin` is refused. Every string is
+cleaned of control and bidirectional characters (`internal/api/text.go`), and
+one past 4 KiB is cut and the response marked `truncated`, so a hostile
+device name cannot make a response unbounded.
+
 **Not yet known.** The rest of `doctor` and the JSON outputs has not been
 audited for identifiers other than the home path.
 
@@ -668,6 +706,11 @@ it is the administrator who may create a tag and may edit a ruleset or turn a
 setting off. Whether a token without the `workflow` scope can push a new commit
 on an old base was not tested.
 
+**The service's contract checker (spec 113).** A test dependency,
+`github.com/santhosh-tekuri/jsonschema/v6` v6.0.3 (Apache-2.0), checks every
+response a test gets against `api/openapi.yaml`. It is linked into no
+binary: `go.mod` lists it, and only `internal/api`'s tests import it.
+
 ---
 
 ## Keeping it true
@@ -722,6 +765,7 @@ the goal of a working proof of concept.
 | 2026-11-19 | B3, B4, B6, B7 | The adversarial review of spec 102 (the forges, #360): one reviewer given the change and the attackers, then a separate refutation pass. Read-only; overlay tests on a desk. | Nothing refuted. Fixed before merge: titles reaching the terminal drawer with escapes (parts were not cleaned); the secrets file's GitLab key lent to whichever host was found, and a host saved half typed; GitHub failures naming a proxy's host; a host able to fill memory; the host in screenshots; repositories named for their owner. #361 (bidi characters, older than the change) filed and fixed in the same PR. |
 | 2026-11-22 | B3, B4, B5, B6 | The adversarial review of spec 111 (change pages, #390): one reviewer given the change and three attackers (a hostile GitLab host, a public repository's contributors, a crafted detail ID), then a refutation pass against the code. | Fixed before merge: a host answering longer lists than asked, or a huge title or label list, building a widget a line in the drawer (pages kept to 100 commits and files, 20 labels, 64 KiB of description, six lines of title; the view built once a reading); a day of pushes asking once a push (once a head, ten at most); a short hash cut inside a character. Refuted as a fix: salting the page key, which `hayami-tui detail <id>` needs stable across processes; the comment that claimed it hid names now says it only keeps them out of plain sight. Checked: no key sent off its forge, no path or query injection, no uncleaned text, no panic, `-race` clean. |
 | 2026-11-20 | B1, B2, B7 | The adversarial review of spec 103 (the sensor helper, #365): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. A separate review of PawnIO itself (published issues, signing, the site). | No path to LocalSystem or the kernel; no regression in the network helper. Fixed before merge: a held PCI mutex stopping the helper (now a missed reading); PawnIO's library able to load its own imports from the machine's PATH (now System32 only); the server's wake-up open allowing impersonation (now anonymous). Accepted above: the mutex convention, the whole program as LocalSystem, the modules' pin being one test. |
+| 2026-11-25 | B3, B4, B6, B7 | The adversarial review of spec 113's service, its first part (the contract, the server, `serve` on Linux, #396): one reviewer given the change and six attackers (another account, a same-account program after a credential, a browser, a hostile string's author, a client exhausting the service, someone racing the socket's directory), then each finding held against a test written to show it. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test (`internal/api/review_test.go`, `listen_linux_test.go`): made-up drill IDs each starting a poller and never let go (now 32 at once a section, 16 a stream, and let go when unread); the write deadline shorter than a first read's wait; `--listen` following a link to chmod its target; a NaN answered as an empty 200; an error's text not cleaned. Filed: #401, a usage reading's decimal places unbounded (older than the change). |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
@@ -799,6 +843,29 @@ stops each. A review starts by reading these.
   numbers and labels only, and an unreadable cache is no cache.
 - Corrupting the credential store with a bad refresh reply: a store that
   does not parse is never written, and an empty token is refused.
+
+### B3, B4, B6, spec 113, 2026-11-25
+
+- **Another account.** The default socket is in `$XDG_RUNTIME_DIR`, made
+  `0700` and `0600`; the peer is checked (`SO_PEERCRED`) before a
+  connection counts toward the limit, so another account cannot take a
+  place. A socket handed over by systemd that is not a Unix socket closes
+  every connection.
+- **A socket left behind** is removed only once it is looked at without
+  following a link and found not answering.
+- **A browser** cannot reach a Unix socket, so DNS rebinding does not apply;
+  a request with `Origin` is refused, only `GET` is served, and a body is
+  refused.
+- **Credentials.** A token goes only into an Authorization header; a token
+  endpoint's error carries only its status; errors and absences pass
+  `WithoutHome`; `TestNothingSecretLeaves` serves every section and detail
+  over real sources with a credential file and keys in the environment.
+- **Hostile strings.** Every exported string of a response is cleaned,
+  through pointers and maps; the contract has no field typed as an interface
+  for one to slip past. An event's name is a constant and its data one line
+  of JSON, so a string cannot add an event.
+- **Forge pages** are read only for items a forge's reading already listed,
+  so the service asks a forge nothing more than the panel does.
 
 ### B3, spec 102, 2026-11-19
 

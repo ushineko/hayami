@@ -114,6 +114,14 @@ func (u *Usage) Data() any {
 	return u.windows
 }
 
+// FetchedAt is when the oldest of the reading's figures was fetched, which is
+// how old the section is (spec 113 R18); zero before the first.
+func (u *Usage) FetchedAt() time.Time {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.fetchedAt
+}
+
 // gather is every account this machine has, fetched where it can be and read
 // where it cannot.
 //

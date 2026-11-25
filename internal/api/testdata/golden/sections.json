@@ -1,0 +1,39 @@
+{
+  "sections": [
+    {
+      "key": "clock",
+      "title": "Clock",
+      "default": true,
+      "shown": true,
+      "interval_s": 1
+    },
+    {
+      "key": "bandwidth",
+      "title": "Network",
+      "default": true,
+      "shown": false,
+      "interval_s": 2
+    },
+    {
+      "key": "usage",
+      "title": "Development",
+      "default": true,
+      "shown": true,
+      "interval_s": 30
+    },
+    {
+      "key": "cooler",
+      "title": "Hardware",
+      "default": true,
+      "shown": false,
+      "interval_s": 5
+    },
+    {
+      "key": "peripherals",
+      "title": "Peripherals",
+      "default": true,
+      "shown": false,
+      "interval_s": 15
+    }
+  ]
+}

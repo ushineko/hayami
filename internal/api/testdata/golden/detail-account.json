@@ -1,0 +1,44 @@
+{
+  "section": "usage",
+  "id": "an account whose label is forty bytes ..",
+  "title": "an account whose label is forty bytes ..",
+  "kind": "account",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [],
+  "truncated": false,
+  "processes": null,
+  "process": null,
+  "network": null,
+  "vpns": null,
+  "account": {
+    "account": "an account whose label is forty bytes ..",
+    "plan": "Max",
+    "limits": [
+      {
+        "name": "Week",
+        "utilisation_pct": 40,
+        "resets_at": "2026-11-26T16:00:00Z",
+        "severity": null,
+        "amount": null
+      }
+    ],
+    "shares_title": null,
+    "shares": [
+      {
+        "name": "Opus",
+        "pct": 25
+      }
+    ],
+    "facts": [
+      {
+        "name": "Extra usage",
+        "value": "off"
+      }
+    ]
+  },
+  "overview": null,
+  "day": null,
+  "change": null
+}

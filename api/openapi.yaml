@@ -1,0 +1,846 @@
+openapi: 3.1.0
+info:
+  title: hayami
+  version: "1.0"
+  summary: The readings of a hayami panel, for programs of the same account.
+  description: |
+    hayami's readings, their details and drills, as JSON (spec 113). The
+    service serves facts and no formatting: names whole, numbers as numbers
+    in base units, times as RFC 3339 in UTC, durations in seconds.
+
+    ## Where it is
+
+    HTTP/1.1 over a local socket that only the account running the service
+    can open. There is no TCP port.
+
+    - Linux: the Unix socket `$XDG_RUNTIME_DIR/hayami/api.sock`.
+    - Windows: the named pipe `\\.\pipe\hayami-api-<SID>`, the SID being the
+      account's.
+    - macOS: the Unix socket `$TMPDIR/hayami/api.sock`, `$TMPDIR` being the
+      per-user directory under `/var/folders`.
+
+    A path longer than the system's socket path (108 bytes on Linux, 104 on
+    macOS) is never cut short; `hayami-tui api address` prints the address.
+    The host part of a URL is ignored: `http://hayami/v1`.
+
+    ## Rules every response keeps
+
+    - A value that is unknown is `null`, never left out. A list is never
+      `null`; an empty list is `[]`.
+    - A string is cleaned of control and bidirectional-override characters
+      and is never padded, cut or ellipsised, except a string longer than
+      4096 bytes, which is cut to that and marks its response `truncated`.
+    - Within `/v1` a field or an endpoint may be added and none is removed,
+      renamed, retyped or made required where it was optional. A client
+      ignores a field it does not know.
+    - Only `GET` is served. A request with a body is 400; one with an
+      `Origin` header is 403.
+
+    ## Reading
+
+    A section is read only while a client reads it: a request for it within
+    the last three of its intervals (never less than 30 s), or a stream that
+    names it. The first request for a section nobody was reading waits for a
+    reading; after that, a request is answered from the latest one. A rate
+    needs two readings, so the first answer has `null` rates.
+  license:
+    name: MIT
+servers:
+  - url: http://hayami/v1
+    description: The local socket; see the description for its path.
+paths:
+  /:
+    get:
+      operationId: index
+      summary: What this is
+      responses:
+        "200":
+          description: The service, its version, and its sections.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Index" }
+        default: { $ref: "#/components/responses/Error" }
+  /health:
+    get:
+      operationId: health
+      summary: Whether the service answers; polls nothing
+      responses:
+        "200":
+          description: It answers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        default: { $ref: "#/components/responses/Error" }
+  /sections:
+    get:
+      operationId: sections
+      summary: The sections, in the panel's order
+      responses:
+        "200":
+          description: One entry a section.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SectionList" }
+        default: { $ref: "#/components/responses/Error" }
+  /sections/{key}:
+    get:
+      operationId: section
+      summary: One section's latest reading
+      parameters:
+        - { $ref: "#/components/parameters/Key" }
+      responses:
+        "200":
+          description: The reading.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Section" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /sections/{key}/details/{id}:
+    get:
+      operationId: detail
+      summary: One detail's latest reading
+      description: |
+        `id` is the detail's ID, which for a drill is its path: each
+        `/`-separated step percent-encoded and the steps joined by `/`,
+        `details/cpu/firefox/4411`, `details/CC%20max`. A detail's
+        `children` are the IDs below it.
+      parameters:
+        - { $ref: "#/components/parameters/Key" }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The detail.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Detail" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /readings:
+    get:
+      operationId: readings
+      summary: Several sections at once
+      parameters:
+        - name: sections
+          in: query
+          description: Comma-separated keys; every section when absent.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The sections named, by key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readings" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /events:
+    get:
+      operationId: events
+      summary: A stream of readings (Server-Sent Events)
+      description: |
+        An `event: section` (data: a `Section`) for each section named and an
+        `event: detail` (data: a `Detail`) for each detail named, with the
+        latest reading at once, then one for each new reading. A comment line
+        every 15 s keeps an idle stream from looking dead. A stream that
+        leaves events unread for 30 s is ended. At most 16 streams are open
+        at once; over that the answer is 503 with `Retry-After`.
+      parameters:
+        - name: sections
+          in: query
+          description: Comma-separated section keys.
+          schema: { type: string }
+        - name: details
+          in: query
+          description: Comma-separated details, each `key/id`.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+              x-events:
+                section: { $ref: "#/components/schemas/Section" }
+                detail: { $ref: "#/components/schemas/Detail" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+components:
+  parameters:
+    Key:
+      name: key
+      in: path
+      required: true
+      description: A section's key, from `/sections`.
+      schema: { type: string }
+  responses:
+    Error:
+      description: |
+        Anything but a 2xx: 400 bad request, 403 a browser's request, 404 a
+        section or detail that is not there (`known` lists what is), 405 not
+        GET, 500 a request that failed, 503 over a limit (with `Retry-After`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: "#/components/schemas/ErrorBody" }
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [code, message, known]
+      properties:
+        code:
+          type: string
+          enum: [not_found, method_not_allowed, bad_request, forbidden, busy, internal, unavailable]
+        message: { type: string }
+        known:
+          description: What there is, for a key or an ID that names nothing.
+          type: array
+          items: { type: string }
+    Index:
+      type: object
+      additionalProperties: false
+      required: [service, version, api, sections]
+      properties:
+        service: { type: string, const: hayami }
+        version: { type: string, description: hayami's version. }
+        api: { type: string, description: This contract's version. }
+        sections: { type: array, items: { type: string } }
+    Health:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+    SectionList:
+      type: object
+      additionalProperties: false
+      required: [sections]
+      properties:
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/SectionInfo" }
+    SectionInfo:
+      type: object
+      additionalProperties: false
+      required: [key, title, default, shown, interval_s]
+      properties:
+        key: { type: string }
+        title: { type: string }
+        default: { type: boolean, description: On in a new panel. }
+        shown: { type: boolean, description: On in the person's panel now. }
+        interval_s: { type: number }
+    Status:
+      type: string
+      description: A band's verdict on a value, which a client may use or ignore.
+      enum: [good, warn, bad, info, dim]
+    Absence:
+      type: object
+      additionalProperties: false
+      required: [code, label, text, detail, status, actionable]
+      properties:
+        code: { type: [string, "null"], description: The source's typed absence. }
+        label: { type: [string, "null"], description: The reading that is missing. }
+        text: { type: string }
+        detail: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/Status" }
+        actionable: { type: boolean, description: A person can do something about it. }
+    DetailRef:
+      type: object
+      additionalProperties: false
+      required: [id, title]
+      properties:
+        id: { type: string }
+        title: { type: string }
+    Timestamp:
+      type: [string, "null"]
+      format: date-time
+    Section:
+      type: object
+      additionalProperties: false
+      required: [key, polled_at, interval_s, reading, absences, error, details, truncated]
+      properties:
+        key: { type: string }
+        polled_at: { $ref: "#/components/schemas/Timestamp" }
+        interval_s: { type: number }
+        reading: { $ref: "#/components/schemas/Reading" }
+        absences: { type: array, items: { $ref: "#/components/schemas/Absence" } }
+        error: { type: [string, "null"] }
+        details: { type: array, items: { $ref: "#/components/schemas/DetailRef" } }
+        truncated: { type: boolean }
+    Reading:
+      type: object
+      description: The section's reading under its key; every other key is null.
+      additionalProperties: false
+      required: [clock, bandwidth, usage, cooler, peripherals]
+      properties:
+        clock: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Clock" }] }
+        bandwidth: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Bandwidth" }] }
+        usage: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Usage" }] }
+        cooler: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Cooler" }] }
+        peripherals: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Peripherals" }] }
+    Readings:
+      type: object
+      additionalProperties: false
+      required: [readings]
+      properties:
+        readings:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/Section" }
+    Clock:
+      type: object
+      additionalProperties: false
+      required: [time, zone, utc_offset_s]
+      properties:
+        time: { type: string, format: date-time }
+        zone: { type: string, description: The zone the machine keeps. }
+        utc_offset_s: { type: integer }
+    Bandwidth:
+      type: object
+      additionalProperties: false
+      required: [interfaces, vpns]
+      properties:
+        interfaces: { type: array, items: { $ref: "#/components/schemas/Interface" } }
+        vpns: { type: array, items: { $ref: "#/components/schemas/VPN" } }
+    Rate:
+      type: [number, "null"]
+      description: Bytes a second; null until there are two readings.
+    Interface:
+      type: object
+      additionalProperties: false
+      required: [name, present, rx_bps, tx_bps, rx_bytes, tx_bytes, trail, wireless]
+      properties:
+        name: { type: string }
+        present: { type: boolean }
+        rx_bps: { $ref: "#/components/schemas/Rate" }
+        tx_bps: { $ref: "#/components/schemas/Rate" }
+        rx_bytes: { type: integer, minimum: 0 }
+        tx_bytes: { type: integer, minimum: 0 }
+        trail: { $ref: "#/components/schemas/RateTrail" }
+        wireless: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Wireless" }] }
+    RateTrail:
+      type: object
+      additionalProperties: false
+      required: [rx, tx]
+      properties:
+        rx: { type: array, items: { type: number } }
+        tx: { type: array, items: { type: number } }
+    Wireless:
+      type: object
+      additionalProperties: false
+      required: [connected, signal_pct, rssi_dbm, frequency_mhz, channel, generation, rx_rate_mbps, tx_rate_mbps]
+      properties:
+        connected: { type: boolean }
+        signal_pct: { type: [integer, "null"] }
+        rssi_dbm: { type: [integer, "null"] }
+        frequency_mhz: { type: [integer, "null"] }
+        channel: { type: [integer, "null"] }
+        generation: { type: [string, "null"] }
+        rx_rate_mbps: { type: [number, "null"] }
+        tx_rate_mbps: { type: [number, "null"] }
+    VPN:
+      type: object
+      additionalProperties: false
+      required: [name, label, state, interface, connected_since, latency_ms, failing, stale, rx_bps, tx_bps]
+      properties:
+        name: { type: string }
+        label: { type: [string, "null"] }
+        state: { type: string, enum: [up, down, connecting, unknown] }
+        interface: { type: [string, "null"] }
+        connected_since: { $ref: "#/components/schemas/Timestamp" }
+        latency_ms: { type: [number, "null"] }
+        failing: { type: boolean }
+        stale: { type: boolean }
+        rx_bps: { $ref: "#/components/schemas/Rate" }
+        tx_bps: { $ref: "#/components/schemas/Rate" }
+    Usage:
+      type: object
+      additionalProperties: false
+      required: [accounts, fetched_at]
+      properties:
+        accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        fetched_at: { $ref: "#/components/schemas/Timestamp" }
+    Account:
+      type: object
+      additionalProperties: false
+      required: [name, plan_badge, windows]
+      properties:
+        name: { type: string }
+        plan_badge: { type: [string, "null"] }
+        windows: { type: array, items: { $ref: "#/components/schemas/UsageWindow" } }
+    UsageWindow:
+      type: object
+      additionalProperties: false
+      required: [name, utilisation_pct, resets_at, span_s, used, limit, severity, note]
+      properties:
+        name: { type: string }
+        utilisation_pct: { type: number }
+        resets_at: { $ref: "#/components/schemas/Timestamp" }
+        span_s: { type: [number, "null"] }
+        used: { type: [string, "null"] }
+        limit: { type: [string, "null"] }
+        severity: { type: [string, "null"] }
+        note: { type: [string, "null"] }
+    Cooler:
+      type: object
+      additionalProperties: false
+      required: [probes, uptime_s]
+      properties:
+        probes: { type: array, items: { $ref: "#/components/schemas/Probe" } }
+        uptime_s: { type: [number, "null"] }
+    Probe:
+      type: object
+      additionalProperties: false
+      required: [id, role, name, load_pct, temp_c, rpm, bytes, of_bytes, read_bps, write_bps, trail, stale]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [cpu, gpu, memory, io, coolant, fan, pump] }
+        name: { type: [string, "null"] }
+        load_pct: { type: [number, "null"] }
+        temp_c: { type: [number, "null"] }
+        rpm: { type: [integer, "null"] }
+        bytes: { type: [number, "null"] }
+        of_bytes: { type: [number, "null"] }
+        read_bps: { type: [number, "null"] }
+        write_bps: { type: [number, "null"] }
+        trail: { type: array, items: { type: number } }
+        stale: { type: boolean }
+    Peripherals:
+      type: object
+      additionalProperties: false
+      required: [devices]
+      properties:
+        devices: { type: array, items: { $ref: "#/components/schemas/Device" } }
+    Device:
+      type: object
+      additionalProperties: false
+      required: [name, kind, battery_pct, band, segments, charge, stale, last_seen]
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [mouse, keyboard, headset, gamepad, other] }
+        battery_pct: { type: [integer, "null"] }
+        band: { type: [string, "null"] }
+        segments: { type: [integer, "null"] }
+        charge: { type: string, enum: [draining, charging, charged] }
+        stale: { type: boolean }
+        last_seen: { $ref: "#/components/schemas/Timestamp" }
+    Detail:
+      type: object
+      description: |
+        One detail. `kind` names the body: the field it names is set and the
+        other body fields are null.
+      additionalProperties: false
+      required: [section, id, title, kind, polled_at, absences, error, children, truncated,
+                 processes, process, network, vpns, account, overview, day, change]
+      properties:
+        section: { type: string }
+        id: { type: string }
+        title: { type: string }
+        kind:
+          type: [string, "null"]
+          enum: [processes, process, network, vpns, account, overview, day, change, null]
+        polled_at: { $ref: "#/components/schemas/Timestamp" }
+        absences: { type: array, items: { $ref: "#/components/schemas/Absence" } }
+        error: { type: [string, "null"] }
+        children: { type: array, items: { type: string } }
+        truncated: { type: boolean }
+        processes: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/ProcessList" }] }
+        process: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/ProcessPage" }] }
+        network: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Network" }] }
+        vpns:
+          oneOf:
+            - { type: "null" }
+            - { type: array, items: { $ref: "#/components/schemas/VPNDetail" } }
+        account: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/AccountDetail" }] }
+        overview: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Overview" }] }
+        day: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/ForgeDay" }] }
+        change: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/ChangePage" }] }
+    ProcessList:
+      type: object
+      additionalProperties: false
+      required: [list, name, note, processes, summary]
+      properties:
+        list: { type: string, enum: [cpu, gpu, memory, io] }
+        name: { type: [string, "null"], description: A drill's process name. }
+        note: { type: [string, "null"] }
+        processes: { type: array, items: { $ref: "#/components/schemas/ProcessUse" } }
+        summary: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/ProcessSummary" }] }
+    ProcessUse:
+      type: object
+      additionalProperties: false
+      required: [pid, name, cpu_pct, gpu_pct, memory_bytes, memory_pct, read_bps, write_bps]
+      properties:
+        pid: { type: integer }
+        name: { type: [string, "null"] }
+        cpu_pct: { type: [number, "null"] }
+        gpu_pct: { type: [number, "null"] }
+        memory_bytes: { type: [number, "null"] }
+        memory_pct: { type: [number, "null"] }
+        read_bps: { type: [number, "null"] }
+        write_bps: { type: [number, "null"] }
+    ProcessSummary:
+      type: object
+      additionalProperties: false
+      required: [cpu, gpu, memory, io]
+      properties:
+        cpu: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/CPUSummary" }] }
+        gpu: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/GPUSummary" }] }
+        memory: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/MemorySummary" }] }
+        io: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/IOSummary" }] }
+    CPUSummary:
+      type: object
+      additionalProperties: false
+      required: [load_pct, trail, trail_every_s, cores_pct, clock_mhz, max_clock_mhz, load_average, queue, processes, threads]
+      properties:
+        load_pct: { type: [number, "null"] }
+        trail: { type: array, items: { type: number } }
+        trail_every_s: { type: number }
+        cores_pct: { type: array, items: { type: number } }
+        clock_mhz: { type: [number, "null"] }
+        max_clock_mhz: { type: [number, "null"] }
+        load_average: { type: array, items: { type: number }, maxItems: 3 }
+        queue: { type: [number, "null"] }
+        processes: { type: [integer, "null"] }
+        threads: { type: [integer, "null"] }
+    GPUSummary:
+      type: object
+      additionalProperties: false
+      required: [vram_bytes, vram_total_bytes, clock_mhz, mem_clock_mhz, power_w, power_limit_w]
+      properties:
+        vram_bytes: { type: [number, "null"] }
+        vram_total_bytes: { type: [number, "null"] }
+        clock_mhz: { type: [number, "null"] }
+        mem_clock_mhz: { type: [number, "null"] }
+        power_w: { type: [number, "null"] }
+        power_limit_w: { type: [number, "null"] }
+    MemorySummary:
+      type: object
+      additionalProperties: false
+      required: [used_bytes, total_bytes, cache_bytes, swap_bytes, swap_total_bytes, swap_name]
+      properties:
+        used_bytes: { type: number }
+        total_bytes: { type: number }
+        cache_bytes: { type: [number, "null"] }
+        swap_bytes: { type: [number, "null"] }
+        swap_total_bytes: { type: number }
+        swap_name: { type: [string, "null"] }
+    IOSummary:
+      type: object
+      additionalProperties: false
+      required: [read_bps, write_bps, read_trail, write_trail, trail_every_s, busy_pct, pressure_pct, queue, swap_in_bps, swap_out_bps]
+      properties:
+        read_bps: { type: [number, "null"] }
+        write_bps: { type: [number, "null"] }
+        read_trail: { type: array, items: { type: number } }
+        write_trail: { type: array, items: { type: number } }
+        trail_every_s: { type: number }
+        busy_pct: { type: array, items: { type: [number, "null"] } }
+        pressure_pct: { type: [number, "null"] }
+        queue: { type: [number, "null"] }
+        swap_in_bps: { type: [number, "null"] }
+        swap_out_bps: { type: [number, "null"] }
+    ProcessPage:
+      type: object
+      additionalProperties: false
+      required: [list, name, now, idle, process]
+      properties:
+        list: { type: string }
+        name: { type: string }
+        now: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/ProcessUse" }] }
+        idle: { type: boolean }
+        process: { $ref: "#/components/schemas/Process" }
+    Process:
+      type: object
+      description: A process; never its command line, path or owner.
+      additionalProperties: false
+      required: [pid, name, ppid, parent_name, state, threads, sockets, children, gone]
+      properties:
+        pid: { type: integer }
+        name: { type: [string, "null"] }
+        ppid: { type: [integer, "null"] }
+        parent_name: { type: [string, "null"] }
+        state: { type: [string, "null"] }
+        threads: { type: [integer, "null"] }
+        sockets: { type: [integer, "null"] }
+        children: { type: array, items: { $ref: "#/components/schemas/ProcessRef" } }
+        gone: { type: boolean }
+    ProcessRef:
+      type: object
+      additionalProperties: false
+      required: [pid, name]
+      properties:
+        pid: { type: integer }
+        name: { type: string }
+    Network:
+      type: object
+      additionalProperties: false
+      required: [counts, measuring, complete, processes, forwarded, interfaces, process]
+      properties:
+        counts: { type: string, description: What the reader counts, in its own words. }
+        measuring: { type: boolean, description: A first reading, with no rates yet. }
+        complete: { type: boolean }
+        processes: { type: array, items: { $ref: "#/components/schemas/NetProcess" } }
+        forwarded: { type: array, items: { $ref: "#/components/schemas/Forwarded" } }
+        interfaces: { type: array, items: { $ref: "#/components/schemas/InterfaceRate" } }
+        process: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Process" }] }
+    NetProcess:
+      type: object
+      additionalProperties: false
+      required: [pid, name, interface, rx_bps, tx_bps, tunnel, peers]
+      properties:
+        pid: { type: integer }
+        name: { type: [string, "null"] }
+        interface: { type: [string, "null"] }
+        rx_bps: { type: number }
+        tx_bps: { type: number }
+        tunnel: { type: boolean }
+        peers: { type: array, items: { $ref: "#/components/schemas/NetPeer" } }
+    NetPeer:
+      type: object
+      additionalProperties: false
+      required: [address, name, rx_bps, tx_bps, served, sockets]
+      properties:
+        address: { type: string }
+        name: { type: [string, "null"], description: The address's whole host name, where known. }
+        rx_bps: { type: number }
+        tx_bps: { type: number }
+        served: { type: boolean }
+        sockets: { type: array, items: { $ref: "#/components/schemas/NetSocket" } }
+    NetSocket:
+      type: object
+      additionalProperties: false
+      required: [local_port, peer_port, rx_bps, tx_bps]
+      properties:
+        local_port: { type: integer }
+        peer_port: { type: integer }
+        rx_bps: { type: number }
+        tx_bps: { type: number }
+    Forwarded:
+      type: object
+      additionalProperties: false
+      required: [interface, via, rx_bps, tx_bps]
+      properties:
+        interface: { type: string }
+        via: { type: string }
+        rx_bps: { type: number }
+        tx_bps: { type: number }
+    InterfaceRate:
+      type: object
+      additionalProperties: false
+      required: [name, rx_bps, tx_bps]
+      properties:
+        name: { type: string }
+        rx_bps: { $ref: "#/components/schemas/Rate" }
+        tx_bps: { $ref: "#/components/schemas/Rate" }
+    VPNDetail:
+      type: object
+      additionalProperties: false
+      required: [name, label, state, interface, connected_since, latency_ms, failing, stale, rx_bps, tx_bps,
+                 keepalive, keepalive_disabled, addresses, gateway, routes, checks, last_checks, samples, check_every_s]
+      properties:
+        name: { type: string }
+        label: { type: [string, "null"] }
+        state: { type: string, enum: [up, down, connecting, unknown] }
+        interface: { type: [string, "null"] }
+        connected_since: { $ref: "#/components/schemas/Timestamp" }
+        latency_ms: { type: [number, "null"] }
+        failing: { type: boolean }
+        stale: { type: boolean }
+        rx_bps: { $ref: "#/components/schemas/Rate" }
+        tx_bps: { $ref: "#/components/schemas/Rate" }
+        keepalive: { type: [string, "null"] }
+        keepalive_disabled: { type: boolean }
+        addresses: { type: array, items: { type: string } }
+        gateway: { type: [string, "null"] }
+        routes: { type: array, items: { type: string } }
+        checks: { $ref: "#/components/schemas/VPNStats" }
+        last_checks: { type: array, items: { $ref: "#/components/schemas/VPNCheck" } }
+        samples: { type: array, items: { $ref: "#/components/schemas/VPNSample" } }
+        check_every_s: { type: number }
+    VPNStats:
+      type: object
+      additionalProperties: false
+      required: [count, failures, bounces, average_ms]
+      properties:
+        count: { type: integer }
+        failures: { type: integer }
+        bounces: { type: integer }
+        average_ms: { type: number }
+    VPNCheck:
+      type: object
+      additionalProperties: false
+      required: [type, latency_ms, ok, ran]
+      properties:
+        type: { type: string }
+        latency_ms: { type: [number, "null"] }
+        ok: { type: boolean }
+        ran: { type: boolean }
+    VPNSample:
+      type: object
+      additionalProperties: false
+      required: [latency_ms, ok]
+      properties:
+        latency_ms: { type: number }
+        ok: { type: boolean }
+    AccountDetail:
+      type: object
+      additionalProperties: false
+      required: [account, plan, limits, shares_title, shares, facts]
+      properties:
+        account: { type: string }
+        plan: { type: [string, "null"] }
+        limits: { type: array, items: { $ref: "#/components/schemas/UsageLimit" } }
+        shares_title: { type: [string, "null"] }
+        shares: { type: array, items: { $ref: "#/components/schemas/UsageShare" } }
+        facts: { type: array, items: { $ref: "#/components/schemas/UsageFact" } }
+    UsageLimit:
+      type: object
+      additionalProperties: false
+      required: [name, utilisation_pct, resets_at, severity, amount]
+      properties:
+        name: { type: string }
+        utilisation_pct: { type: number }
+        resets_at: { $ref: "#/components/schemas/Timestamp" }
+        severity: { type: [string, "null"] }
+        amount: { type: [string, "null"] }
+    UsageShare:
+      type: object
+      additionalProperties: false
+      required: [name, pct]
+      properties:
+        name: { type: string }
+        pct: { type: number }
+    UsageFact:
+      type: object
+      additionalProperties: false
+      required: [name, value]
+      properties:
+        name: { type: string }
+        value: { type: string }
+    Overview:
+      type: object
+      additionalProperties: false
+      required: [accounts, forges]
+      properties:
+        accounts: { type: array, items: { $ref: "#/components/schemas/OverviewAccount" } }
+        forges: { type: array, items: { $ref: "#/components/schemas/Forge" } }
+    OverviewAccount:
+      type: object
+      additionalProperties: false
+      required: [account, breakdown, error]
+      properties:
+        account: { type: string }
+        breakdown: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/AccountDetail" }] }
+        error: { type: [string, "null"] }
+    Forge:
+      type: object
+      additionalProperties: false
+      required: [provider, title, unit, read_at, reading, failed, days, items]
+      properties:
+        provider: { type: string }
+        title: { type: string }
+        unit: { type: [string, "null"] }
+        read_at: { $ref: "#/components/schemas/Timestamp" }
+        reading: { type: boolean }
+        failed: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Absence" }] }
+        days: { type: array, items: { $ref: "#/components/schemas/ForgeCount" } }
+        items: { type: array, items: { $ref: "#/components/schemas/ForgeItem" } }
+    ForgeCount:
+      type: object
+      additionalProperties: false
+      required: [date, count]
+      properties:
+        date: { type: string, format: date }
+        count: { type: integer }
+    ForgeItem:
+      type: object
+      additionalProperties: false
+      required: [date, repo, kind, ref, title, action, count]
+      properties:
+        date: { type: string, format: date }
+        repo: { type: string }
+        kind: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        action: { type: string }
+        count: { type: integer }
+    ForgeDay:
+      type: object
+      additionalProperties: false
+      required: [date, forge]
+      properties:
+        date: { type: string, format: date }
+        forge: { $ref: "#/components/schemas/Forge" }
+    ChangePage:
+      type: object
+      additionalProperties: false
+      required: [state, forge, open, repo, ref, line, reading, failed, change]
+      properties:
+        state: { type: string, enum: [waiting, gone, found] }
+        forge: { type: string }
+        open: { type: [string, "null"] }
+        repo: { type: [string, "null"] }
+        ref: { type: [string, "null"] }
+        line: { type: [string, "null"] }
+        reading: { type: boolean }
+        failed: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Absence" }] }
+        change: { oneOf: [{ type: "null" }, { $ref: "#/components/schemas/Change" }] }
+    Change:
+      type: object
+      additionalProperties: false
+      required: [kind, ref, title, state, state_reason, draft, opened, merged, closed, source, target,
+                 additions, deletions, files, commits, checks, approvals, changes_wanted, decision, labels,
+                 body, comments, commit_list, file_list]
+      properties:
+        kind: { type: string }
+        ref: { type: string }
+        title: { type: string }
+        state: { type: [string, "null"] }
+        state_reason: { type: [string, "null"] }
+        draft: { type: boolean }
+        opened: { $ref: "#/components/schemas/Timestamp" }
+        merged: { $ref: "#/components/schemas/Timestamp" }
+        closed: { $ref: "#/components/schemas/Timestamp" }
+        source: { type: [string, "null"] }
+        target: { type: [string, "null"] }
+        additions: { type: [integer, "null"] }
+        deletions: { type: [integer, "null"] }
+        files: { type: [integer, "null"] }
+        commits: { type: [integer, "null"] }
+        checks: { type: [string, "null"] }
+        approvals: { type: integer }
+        changes_wanted: { type: integer }
+        decision: { type: [string, "null"] }
+        labels: { type: array, items: { type: string } }
+        body: { type: string, description: The description, its line breaks kept. }
+        comments: { type: integer }
+        commit_list: { type: array, items: { $ref: "#/components/schemas/Commit" } }
+        file_list: { type: array, items: { $ref: "#/components/schemas/ChangedFile" } }
+    Commit:
+      type: object
+      additionalProperties: false
+      required: [sha, title, when, additions, deletions]
+      properties:
+        sha: { type: string }
+        title: { type: string }
+        when: { $ref: "#/components/schemas/Timestamp" }
+        additions: { type: [integer, "null"] }
+        deletions: { type: [integer, "null"] }
+    ChangedFile:
+      type: object
+      additionalProperties: false
+      required: [path, additions, deletions, status]
+      properties:
+        path: { type: string }
+        additions: { type: integer }
+        deletions: { type: integer }
+        status: { type: string }

@@ -455,13 +455,8 @@ func (p *Panel) Apply(c config.Config) {
 	}
 	p.order(c.Sections)
 	for _, s := range p.opts.Sources {
-		if b, ok := s.(*panel.Bandwidth); ok {
-			settings := config.Bandwidth.Get(c)
-			b.SetInterfaces(settings.Interfaces)
-			b.SetVPNs(settings)
-		}
+		panel.ApplySettings(s, c)
 		if u, ok := s.(*panel.Usage); ok {
-			u.SetDevelopment(config.Usage.Get(c))
 			p.rereadDrawers(u)
 		}
 	}

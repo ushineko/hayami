@@ -1,0 +1,20 @@
+{
+  "key": "clock",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "interval_s": 1,
+  "reading": {
+    "clock": {
+      "time": "2026-11-24T10:15:02Z",
+      "zone": "UTC",
+      "utc_offset_s": 0
+    },
+    "bandwidth": null,
+    "usage": null,
+    "cooler": null,
+    "peripherals": null
+  },
+  "absences": [],
+  "error": null,
+  "details": [],
+  "truncated": false
+}

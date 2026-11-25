@@ -797,6 +797,16 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Added**: `hayami-tui serve`, a service that gives other programs of the
+  same account the readings, their details and drills as JSON over a local
+  socket, under a published contract (`api/openapi.yaml`): names whole,
+  numbers in their units, times as times. Linux, run by hand for now; the
+  installer, Windows and macOS follow (spec 113, #396).
+- **Changed**: a detail is read once, as plain values, and the window and
+  the terminal draw it from them (spec 113, #400).
+
 ### 0.22.1 (2026-11-22)
 
 - **Fixed**: a change's description and title fill the drawer's width

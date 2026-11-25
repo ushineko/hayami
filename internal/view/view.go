@@ -187,6 +187,11 @@ type Reason struct {
 	// set from the source's own account of the absence (spec 040), never
 	// inferred from the words.
 	Actionable bool
+
+	// Code is the source's typed absence (core.AbsenceCode), where it gave
+	// one, for a program that reads the reason rather than a person (spec
+	// 113 R12). Empty for a reason with no code. Drawn nowhere.
+	Code string
 }
 
 // Status is a verdict on a reading. It is the same vocabulary the design

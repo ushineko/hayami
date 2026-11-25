@@ -1,0 +1,52 @@
+{
+  "section": "usage",
+  "id": "accounts/github/2026-11-24",
+  "title": "GitHub",
+  "kind": "day",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [
+    "accounts/github/2026-11-24/pr:someone/project#12"
+  ],
+  "truncated": false,
+  "processes": null,
+  "process": null,
+  "network": null,
+  "vpns": null,
+  "account": null,
+  "overview": null,
+  "day": {
+    "date": "2026-11-24",
+    "forge": {
+      "provider": "github",
+      "title": "GitHub",
+      "unit": "contributions",
+      "read_at": "2026-11-24T10:15:02Z",
+      "reading": false,
+      "failed": null,
+      "days": [
+        {
+          "date": "2026-11-23",
+          "count": 1
+        },
+        {
+          "date": "2026-11-24",
+          "count": 3
+        }
+      ],
+      "items": [
+        {
+          "date": "2026-11-24",
+          "repo": "someone/project",
+          "kind": "pr",
+          "ref": "#12",
+          "title": "Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other thing Make the thing do the other th",
+          "action": "opened",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "change": null
+}

@@ -1,0 +1,73 @@
+{
+  "readings": {
+    "clock": {
+      "key": "clock",
+      "polled_at": "2026-11-24T10:15:02Z",
+      "interval_s": 1,
+      "reading": {
+        "clock": {
+          "time": "2026-11-24T10:15:02Z",
+          "zone": "UTC",
+          "utc_offset_s": 0
+        },
+        "bandwidth": null,
+        "usage": null,
+        "cooler": null,
+        "peripherals": null
+      },
+      "absences": [],
+      "error": null,
+      "details": [],
+      "truncated": false
+    },
+    "peripherals": {
+      "key": "peripherals",
+      "polled_at": "2026-11-24T10:15:02Z",
+      "interval_s": 15,
+      "reading": {
+        "clock": null,
+        "bandwidth": null,
+        "usage": null,
+        "cooler": null,
+        "peripherals": {
+          "devices": [
+            {
+              "name": "A Wireless Mouse With A Forty-Byte Name!",
+              "kind": "mouse",
+              "battery_pct": 76,
+              "band": null,
+              "segments": null,
+              "charge": "draining",
+              "stale": false,
+              "last_seen": "2026-11-24T10:15:02Z"
+            },
+            {
+              "name": "Headset",
+              "kind": "headset",
+              "battery_pct": null,
+              "band": "good",
+              "segments": 3,
+              "charge": "charging",
+              "stale": false,
+              "last_seen": null
+            },
+            {
+              "name": "Keyboard",
+              "kind": "keyboard",
+              "battery_pct": null,
+              "band": null,
+              "segments": null,
+              "charge": "charged",
+              "stale": true,
+              "last_seen": null
+            }
+          ]
+        }
+      },
+      "absences": [],
+      "error": null,
+      "details": [],
+      "truncated": false
+    }
+  }
+}

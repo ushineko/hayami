@@ -1,0 +1,62 @@
+{
+  "section": "bandwidth",
+  "id": "peers/eth0/a-program-with-a-name-of-forty-letters-x",
+  "title": "Bandwidth by peer",
+  "kind": "network",
+  "polled_at": "2026-11-24T10:15:02Z",
+  "absences": [],
+  "error": null,
+  "children": [
+    "peers/eth0/a-program-with-a-name-of-forty-letters-x/4411",
+    "peers/eth0/a-program-with-a-name-of-forty-letters-x/@192.0.2.10"
+  ],
+  "truncated": false,
+  "processes": null,
+  "process": null,
+  "network": {
+    "counts": "TCP and UDP",
+    "measuring": false,
+    "complete": false,
+    "processes": [
+      {
+        "pid": 4411,
+        "name": "a-program-with-a-name-of-forty-letters-x",
+        "interface": "eth0",
+        "rx_bps": 120000,
+        "tx_bps": 2000,
+        "tunnel": false,
+        "peers": [
+          {
+            "address": "192.0.2.10",
+            "name": "edge-7.cache.example.com",
+            "rx_bps": 120000,
+            "tx_bps": 2000,
+            "served": false,
+            "sockets": [
+              {
+                "local_port": 51000,
+                "peer_port": 443,
+                "rx_bps": 120000,
+                "tx_bps": 2000
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "forwarded": [],
+    "interfaces": [
+      {
+        "name": "eth0",
+        "rx_bps": 125000,
+        "tx_bps": 2500
+      }
+    ],
+    "process": null
+  },
+  "vpns": null,
+  "account": null,
+  "overview": null,
+  "day": null,
+  "change": null
+}
