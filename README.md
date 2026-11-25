@@ -799,6 +799,13 @@ MIT. See
 
 ### Unreleased
 
+- **Added**: the service runs on Windows, as a per-user service Windows
+  starts as each account that signs in, on the pipe
+  `\\.\pipe\hayami-api-<SID>` only that account can open. The installer's
+  Service page sets it up by default, asking for an administrator once; it
+  runs a copy of `hayami-tui` in Program Files, which an upgrade updates.
+  The reference client checks which account serves the pipe before it
+  writes (spec 113, #396).
 - **Added**: `hayami-tui serve`, a service that gives other programs of the
   same account the readings, their details and drills as JSON over a local
   socket, under a published contract (`api/openapi.yaml`): names whole,

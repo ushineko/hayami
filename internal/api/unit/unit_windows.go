@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 
+	"github.com/ushineko/hayami/internal/api/client"
 	"github.com/ushineko/hayami/internal/nethelper"
 )
 
@@ -92,27 +93,32 @@ Status is the template's being there, and this account's service answering:
 an instance is one per signed-in account, and the one that is this account's
 is the one whose pipe is this account's.
 */
-func Status(context.Context) State {
+func Status(ctx context.Context) State {
 	if !Installed() {
 		return State{}
 	}
-	running := pipeThere()
+	running := ours(ctx)
 	return State{Installed: true, Listening: running, Running: running}
 }
 
-// pipeThere reports whether this account's pipe exists.
-func pipeThere() bool {
-	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+/*
+ours reports whether this account's pipe is served by this account: the
+client's own dial, with its check of who serves the pipe. A name taken by
+someone else is not the service running (the adversarial review, B6).
+*/
+func ours(ctx context.Context) bool {
+	addr, err := client.Address()
 	if err != nil {
 		return false
 	}
-	name, err := windows.UTF16PtrFromString(`\\.\pipe\hayami-api-` + user.User.Sid.String())
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	c, err := client.Dial(ctx, addr)
 	if err != nil {
 		return false
 	}
-	// A pipe's attributes are read without opening one of its instances.
-	_, err = windows.GetFileAttributes(name)
-	return err == nil
+	_ = c.Close()
+	return true
 }
 
 /*
@@ -134,6 +140,10 @@ func Install(ctx context.Context, program string) error {
 	defer func() { _ = m.Disconnect() }()
 
 	running, err := stopInstances(ctx, m, false)
+	// Those stopped are started again however this ends: a step that fails
+	// after them leaves the old copy, which serves, rather than no service
+	// until the next sign-in.
+	defer func() { startAgain(m, running) }()
 	if err != nil {
 		return err
 	}
@@ -178,16 +188,17 @@ func Install(ctx context.Context, program string) error {
 	}, 24*60*60); err != nil {
 		return fmt.Errorf("setting what Windows does when the service fails: %w", err)
 	}
-	for _, name := range running {
-		if is, err := m.OpenService(name); err == nil {
-			if err := is.Start(); err != nil {
-				_ = is.Close()
-				return fmt.Errorf("starting %s again on the new program: %w", name, err)
-			}
-			_ = is.Close()
+	return nil
+}
+
+// startAgain starts each of the instances named, as best it can.
+func startAgain(m *mgr.Mgr, names []string) {
+	for _, name := range names {
+		if s, err := m.OpenService(name); err == nil {
+			_ = s.Start()
+			_ = s.Close()
 		}
 	}
-	return nil
 }
 
 /*
@@ -229,7 +240,8 @@ func isInstance(name string) bool {
 
 /*
 stopInstances stops each instance of the template, and unregisters it too
-where remove, returning those that were running.
+where remove, returning those that were running: all of them, or those
+stopped before a step failed.
 */
 func stopInstances(ctx context.Context, m *mgr.Mgr, remove bool) ([]string, error) {
 	names, err := m.ListServices()
@@ -252,11 +264,12 @@ func stopInstances(ctx context.Context, m *mgr.Mgr, remove bool) ([]string, erro
 			}
 		}
 		_ = s.Close()
-		if err != nil {
-			return nil, err
-		}
 		if was {
 			running = append(running, name)
+		}
+		if err != nil {
+			// Those stopped so far, so they can be started again.
+			return running, err
 		}
 	}
 	return running, nil

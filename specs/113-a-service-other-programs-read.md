@@ -704,6 +704,26 @@ fynstall CLI installer, user scope.
 | Then `--api yes` | Set up again; panel restarted |
 | Uninstall of hayami | Not run on the desk (decided with the user): it would also remove the network helper, the VPN keepalive the work VPN depends on and the device rule. The uninstall path is held by the installer's tests (`dropAPI`) and `uninstall.sh`'s dry runs; the real uninstall runs on the Windows VM and the Mac in 4 and 5 |
 
+### Results: the Windows VM, 4, 2026-11-25
+
+Windows 11, build 26200. `hayami-tui.exe` cross-built from this branch; the
+installer built on the VM from it (`scripts/installer_windows.ps1
+-WithCliOnly`). The ssh session is elevated, so the installer's UAC prompt
+is not shown there; on a desktop it is the one prompt the page names.
+
+| Step | Result |
+|---|---|
+| `api-service install` | `hayami-api` registered: type `0x50` (`USER_OWN_PROCESS TEMPLATE`), automatic, `"C:\Program Files\hayami\hayami-api.exe" serve`, restart after 5 s twice, reset after a day. The copy in Program Files. `api status`: installed, not running for this account yet, starts at the next sign-in |
+| Sign out and in at the console | `hayami-api_<n>` made: type `0xd0` (`USER_OWN_PROCESS INSTANCE`), running as the account in its console session, serving |
+| `api check` over ssh (session 0) | Passed: 36 requests, 5 sections, 24 details, 5 events |
+| A second `hayami-tui serve` | Refused, exit 1: "a service is already listening at `\\.\pipe\hayami-api-<SID>`, or someone else made the pipe first" |
+| A pipe made first by SYSTEM, open to everyone, dialled by the client | Refused before writing, `ErrNotOurs` (`TestAPipeOfAnotherAccountIsRefused`). Falsified: with the owner check skipped the test fails |
+| `api load --clients 32 --streams 8 --duration 5m`, working set every 10 s | 6,375,581 requests (200 and the 404s it asks for), 0 errors, p99 5.0 ms, max 76 ms. Working set 92–94 MB throughout. `api check` straight afterwards passed |
+| `taskkill /f` on the instance | Restarted by Windows under a new PID within 9 s |
+| `sc stop` on the instance | Stays stopped; `sc start` brings it back |
+| Upgrade: `api-service install` from a build of another version, the instance running | The instance stopped, the copy replaced, the instance started again under a new PID on the new version |
+| The template's registration, update and removal (`TestTheTemplateIsRegisteredAndRemoved`, elevated) | Registered with its type, start, program and recovery actions; registered again, updated in place; removed with its program. Falsified: with the first recovery action changed the test fails |
+
 ### Prod visibility
 
 Not applicable: hayami is a desktop program with no telemetry. A person's

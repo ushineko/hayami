@@ -229,7 +229,13 @@ place updates the guide's Status table in the same PR.
   starts and that stops itself idle; it asks for no administrator. Unlike the
   helpers it is on by default: the installer's Service page sets it up on a
   first install, and its `api` parameter is `auto` and `once`, so a `--yes`
-  upgrade never gives back one that was removed. The reference client,
+  upgrade never gives back one that was removed. On Windows it is a
+  per-user service, `hayami-api`, an instance of which Windows starts as each
+  account that signs in, serving the pipe `\\.\pipe\hayami-api-<SID>`; because
+  every account runs it, its program is a copy in Program Files, never the
+  install under `%LOCALAPPDATA%`, and registering or updating it asks for an
+  administrator once (`hayami-tui api-service`, the installer's step).
+  The reference client,
   `internal/api/client` and `hayami-tui api`, imports only the contract and the
   standard library, and `api check` is what an end-to-end run runs.
 - **Long-running work is cancellable** (`context.Context`); the GUI never

@@ -196,6 +196,21 @@ name.
   socket is `0600` in a `0700` directory, and `RemoveOnStop` takes its file when it
   stops, so a removal leaves no socket behind. The tarball's scripts restart it and
   remove it by the same mark, and set none up.
+- On Windows the service is a per-user service template, `hayami-api`, which Windows
+  instantiates as every account that signs in (spec 113 R6). Its program is therefore a
+  copy of `hayami-tui.exe` in Program Files, `hayami\hayami-api.exe` under the known
+  folder (not `%ProgramFiles%`), which only an administrator can change: the install
+  under `%LOCALAPPDATA%` is the person's to write, and a template running it would run
+  one account's file as the next account to sign in. The copy is taken from a handle
+  held shut against writes and renames (`nethelper.CopyToProgramFiles`, #244), and
+  registering it and updating it on an upgrade are one elevated step, the installed
+  `hayami-tui`'s own `api-service install`, which the installer runs after one UAC
+  prompt, a `--yes` upgrade's included; refused, the old copy keeps serving and the
+  installer says so. An update changes only the template's program; its type, account
+  and recovery actions are set once, when it is registered. A removal stops and deletes
+  each instance before the template, which would otherwise leave them registered, then
+  removes the copy. An instance for an account that has never run hayami stops at once
+  without serving.
 - The Linux helper is removed by its own root-owned copy in
   `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
@@ -589,7 +604,14 @@ activity, spec 107), are served whole to any program the account runs:
 service gives them continuously, whole, and needs no terminal. A peer's host
 name is served whole where the shells shorten it. No other account reaches
 them: the socket is `0600` in a `0700` directory and a connection whose peer
-is another account is closed without a word. A browser reaches nothing: there
+is another account is closed without a word. On Windows the pipe's access
+list grants the account alone, it is made as the pipe's first instance so a
+name taken first is a refusal to start, it takes no client from another
+machine, and the reference client asks which process serves a pipe and that
+process's account before it writes, opening it anonymously, so a pipe someone
+else made under the name is refused (`Dial`, `internal/api/client`;
+`TestAPipeOfAnotherAccountIsRefused`, run on the Windows VM with SYSTEM as
+the other account). A browser reaches nothing: there
 is no TCP port, and a request carrying `Origin` is refused. Every string is
 cleaned of control and bidirectional characters (`internal/api/text.go`), and
 one past 4 KiB is cut and the response marked `truncated`, so a hostile
@@ -739,6 +761,12 @@ OpenAPI Initiative's schema for a 3.1 document is vendored as a test fixture
 it) to check the contract is one. The reference client that ships in
 `hayami-tui` checks responses with the standard library and the contract
 types' tags, so the checker stays out of the binary.
+
+**The service's pipe on Windows (spec 113).** `github.com/Microsoft/go-winio`
+v0.6.4 (MIT), Microsoft's, makes the service's pipe with its access list
+(`winio.ListenPipe`). It ships, in `hayami-tui.exe` on Windows only, chosen by
+the operator on 2026-11-24 over a listener written on `x/sys`. The reference
+client does not import it: its dial is on `x/sys` alone, as any client's can be.
 
 ---
 

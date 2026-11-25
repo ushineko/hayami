@@ -37,6 +37,47 @@ func TestTheProgramIsInProgramFiles(t *testing.T) {
 }
 
 /*
+An update that fails after stopping the instances starts them again on the
+copy there, rather than leaving the account without its service until the
+next sign-in (the adversarial review). Run elevated, with
+HAYAMI_SCM_INSTANCE_TEST=1, on the Windows VM with the service installed and
+an instance running.
+*/
+func TestAFailedUpdateLeavesTheServiceRunning(t *testing.T) {
+	if os.Getenv("HAYAMI_SCM_INSTANCE_TEST") != "1" || !nethelper.Elevated() {
+		t.Skip("stops the installed service: run elevated with HAYAMI_SCM_INSTANCE_TEST=1, on the Windows VM")
+	}
+	require.True(t, Installed())
+	running := func() []string {
+		m, err := mgr.Connect()
+		require.NoError(t, err)
+		defer func() { _ = m.Disconnect() }()
+		names, err := m.ListServices()
+		require.NoError(t, err)
+		var up []string
+		for _, n := range names {
+			if !isInstance(n) {
+				continue
+			}
+			s, err := m.OpenService(n)
+			require.NoError(t, err)
+			if st, err := s.Query(); err == nil && st.State == 4 /* SERVICE_RUNNING */ {
+				up = append(up, n)
+			}
+			_ = s.Close()
+		}
+		return up
+	}
+	before := running()
+	require.NotEmpty(t, before, "an instance must be running")
+
+	err := Install(context.Background(), filepath.Join(t.TempDir(), "absent.exe"))
+	require.Error(t, err)
+	assert.Eventually(t, func() bool { return len(running()) == len(before) }, 15*time.Second, 250*time.Millisecond,
+		"the instances stopped for the update run again")
+}
+
+/*
 R6, R25, on a machine where the test may register services: the template is
 registered as a per-user service, automatic, running a copy in Program Files
 with `serve`, with its recovery actions; installed again it is updated in
