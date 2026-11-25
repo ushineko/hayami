@@ -203,5 +203,14 @@ func TestSystemdVerifiesTheUnits(t *testing.T) {
 		filepath.Join(units, SocketName), filepath.Join(units, ServiceName))
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "systemd-analyze verify: %s", out)
-	assert.Empty(t, strings.TrimSpace(string(out)), "verify had something to say")
+	// verify loads the units ours depend on and reports on those too: a CI
+	// runner's own xfs_scrub_all.service drew a warning. Only what it says
+	// about the units in this directory is ours to answer for.
+	var ours []string
+	for line := range strings.Lines(string(out)) {
+		if strings.Contains(line, units) {
+			ours = append(ours, strings.TrimSpace(line))
+		}
+	}
+	assert.Empty(t, ours, "verify had something to say about hayami's units:\n%s", out)
 }
