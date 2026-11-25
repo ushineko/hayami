@@ -18,7 +18,8 @@ const (
 Detail is GET /v1/sections/{key}/details/{id} (R20): one detail's raw form.
 
 Kind names the body: exactly one of the fields after Children is set, the
-one Kind names, and the rest are null. Children are the IDs of the details
+one Kind names, and the rest are null. VPNs is the one list that may be null,
+and its `nullable` tag says so. Children are the IDs of the details
 below this one, which a client opens the same way. No action (ending a
 process, a VPN's controls) is ever part of a detail.
 */
@@ -26,7 +27,7 @@ type Detail struct {
 	Section   string     `json:"section"`
 	ID        string     `json:"id"`
 	Title     string     `json:"title"`
-	Kind      *string    `json:"kind"`
+	Kind      *string    `json:"kind" enum:"processes,process,network,vpns,account,overview,day,change"`
 	PolledAt  *time.Time `json:"polled_at"`
 	Absences  []Absence  `json:"absences"`
 	Error     *string    `json:"error"`
@@ -36,7 +37,7 @@ type Detail struct {
 	Processes *ProcessList   `json:"processes"`
 	Process   *ProcessPage   `json:"process"`
 	Network   *Network       `json:"network"`
-	VPNs      []VPNDetail    `json:"vpns"`
+	VPNs      []VPNDetail    `json:"vpns" nullable:"true"`
 	Account   *AccountDetail `json:"account"`
 	Overview  *Overview      `json:"overview"`
 	Day       *ForgeDay      `json:"day"`
@@ -49,7 +50,7 @@ processes of one name in it. One entry a process, by PID: summing a name's
 processes is the client's choice.
 */
 type ProcessList struct {
-	List string `json:"list"`
+	List string `json:"list" enum:"cpu,gpu,memory,io"`
 	// Name is a drill's process name; null for the whole list.
 	Name      *string         `json:"name"`
 	Note      *string         `json:"note"`
@@ -322,13 +323,13 @@ type Forge struct {
 
 // ForgeCount is one day's count.
 type ForgeCount struct {
-	Date  string `json:"date"`
+	Date  string `json:"date" format:"date"`
 	Count int    `json:"count"`
 }
 
 // ForgeItem is one thing done.
 type ForgeItem struct {
-	Date   string `json:"date"`
+	Date   string `json:"date" format:"date"`
 	Repo   string `json:"repo"`
 	Kind   string `json:"kind"`
 	Ref    string `json:"ref"`
@@ -340,7 +341,7 @@ type ForgeItem struct {
 // ForgeDay is one day of a forge's fortnight: the forge, with its items for
 // that day only.
 type ForgeDay struct {
-	Date  string `json:"date"`
+	Date  string `json:"date" format:"date"`
 	Forge Forge  `json:"forge"`
 }
 
@@ -354,7 +355,7 @@ const (
 // ChangePage is a change's page: what the day's line said, and the change
 // once read.
 type ChangePage struct {
-	State   string   `json:"state"`
+	State   string   `json:"state" enum:"waiting,gone,found"`
 	Forge   string   `json:"forge"`
 	Open    *string  `json:"open"`
 	Repo    *string  `json:"repo"`

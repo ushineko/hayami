@@ -65,7 +65,7 @@ type Absence struct {
 	Label      *string `json:"label"`
 	Text       string  `json:"text"`
 	Detail     *string `json:"detail"`
-	Status     Status  `json:"status"`
+	Status     Status  `json:"status" enum:"good,warn,bad,info,dim"`
 	Actionable bool    `json:"actionable"`
 }
 
@@ -130,7 +130,7 @@ const (
 // ErrorBody says what went wrong. Known lists what there is, for a key or
 // an ID that names nothing: the sections, or the details a section offers.
 type ErrorBody struct {
-	Code    string   `json:"code"`
+	Code    string   `json:"code" enum:"not_found,method_not_allowed,bad_request,forbidden,busy,internal,unavailable"`
 	Message string   `json:"message"`
 	Known   []string `json:"known"`
 }
@@ -194,7 +194,7 @@ const (
 type VPN struct {
 	Name           string     `json:"name"`
 	Label          *string    `json:"label"`
-	State          string     `json:"state"`
+	State          string     `json:"state" enum:"up,down,connecting,unknown"`
 	Interface      *string    `json:"interface"`
 	ConnectedSince *time.Time `json:"connected_since"`
 	LatencyMS      *float64   `json:"latency_ms"`
@@ -239,7 +239,7 @@ type Cooler struct {
 // Probe is one part: a processor, a card, the coolant, the memory, the disks.
 type Probe struct {
 	ID       string    `json:"id"`
-	Role     string    `json:"role"`
+	Role     string    `json:"role" enum:"cpu,gpu,memory,io,coolant,fan,pump"`
 	Name     *string   `json:"name"`
 	LoadPct  *float64  `json:"load_pct"`
 	TempC    *float64  `json:"temp_c"`
@@ -267,13 +267,13 @@ const (
 // Device is one peripheral's battery.
 type Device struct {
 	Name string `json:"name"`
-	Kind string `json:"kind"`
+	Kind string `json:"kind" enum:"mouse,keyboard,headset,gamepad,other"`
 	// BatteryPct is null for a device that reports a band, or none.
 	BatteryPct *int `json:"battery_pct"`
 	// Band and Segments are a band a device without a fuel gauge reports.
 	Band     *string `json:"band"`
 	Segments *int    `json:"segments"`
-	Charge   string  `json:"charge"`
+	Charge   string  `json:"charge" enum:"draining,charging,charged"`
 	Stale    bool    `json:"stale"`
 	// LastSeen is when it last answered.
 	LastSeen *time.Time `json:"last_seen"`

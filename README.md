@@ -804,6 +804,10 @@ MIT. See
   socket, under a published contract (`api/openapi.yaml`): names whole,
   numbers in their units, times as times. Linux, run by hand for now; the
   installer, Windows and macOS follow (spec 113, #396).
+- **Added**: `hayami-tui api`, the service's reference client: `address`,
+  `status`, `get`, `watch`, `check` (walks every section, detail and drill
+  and holds each response to the contract) and `load` (many clients and
+  streams at once, at low priority) (spec 113, #396).
 - **Changed**: a detail is read once, as plain values, and the window and
   the terminal draw it from them (spec 113, #400).
 

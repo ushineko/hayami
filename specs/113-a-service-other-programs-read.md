@@ -108,8 +108,8 @@ meets them lands.
 |---|---|---|
 | 1 | Spike findings (above) | Merged |
 | 2 | R14: `panel.RawDetailer` on the bandwidth, cooler and usage sources. `ReadDetail` returns a `panel.RawDetail` (processes with their PIDs and whole names, the network reading with the peers' whole host names, a process's page without its command line, an account's breakdown, the overview, a forge's day, a change's page); `DrawDetail` builds the `view.Detail` from it and reads nothing; `PollDetail` is the one drawn from the other. `core.PeerNames` keeps whole names (`Full`) and shortens for a column (`Name`); a process's parent and children are names and PIDs. The shells are unchanged: the existing tests pass unmodified, and the bandwidth breakdown's pages, which had none, are pinned by tests that pass on the code before the change too. Found on the way: #399, a cooler row with a long name opens an idle page, fixed on its own | This PR |
-| 3a | The contract (`api/openapi.yaml`, `internal/api/contract`), the server (`internal/api`: leases, one poller a source, snapshots, SSE with a latest-only queue, the limits, panic recovery), the Linux socket with its peer check and systemd's hand-over, and `hayami-tui serve`. Tests: every endpoint's golden response checked against the contract, each Go type held to its schema, the behaviour over a real socket, nothing secret over real sources, a fuzz target, and the load test. The adversarial review's five findings fixed and pinned; #401 filed | This PR |
-| 3b | The reference client (`internal/api/client`) and `hayami-tui api address/status/get/watch/check/load` | — |
+| 3a | The contract (`api/openapi.yaml`, `internal/api/contract`), the server (`internal/api`: leases, one poller a source, snapshots, SSE with a latest-only queue, the limits, panic recovery), the Linux socket with its peer check and systemd's hand-over, and `hayami-tui serve`. Tests: every endpoint's golden response checked against the contract, each Go type held to its schema, the behaviour over a real socket, nothing secret over real sources, a fuzz target, and the load test. The adversarial review's five findings fixed and pinned; #401 filed | Merged (#402) |
+| 3b | The reference client (`internal/api/client`: the address rule, strict decoding against the contract types, the stream, `Check`, `Load`) and `hayami-tui api address/status/get/watch/check/load`. The contract types carry `enum`, `format` and `nullable` tags, held to the schema by the parity test; `api/openapi.yaml` is validated as an OpenAPI 3.1 document against the OpenAPI Initiative's schema, vendored as a test fixture. The adversarial review's six findings fixed and pinned | This PR |
 | 3c | The systemd units, the installer page, `docs/api.md`, CLAUDE.md, the desk's end-to-end run | — |
 | 4 | Windows per-user service | — |
 | 5 | macOS agent and CI job | — |
@@ -435,7 +435,7 @@ for review.
 
 ### Contract and full values
 
-- [ ] `api/openapi.yaml` exists, validates as OpenAPI 3.1, and describes
+- [x] `api/openapi.yaml` exists, validates as OpenAPI 3.1, and describes
       every endpoint, every section's reading, every detail's raw form, the
       SSE events and the errors
 - [x] Golden responses for every endpoint over fixture sources validate
@@ -550,12 +550,38 @@ for review.
 
 ### Reference client and documents
 
-- [ ] `internal/api/client` imports no `panel`, `view` or `core` (a test
+- [x] `internal/api/client` imports no `panel`, `view` or `core` (a test
       reads its imports)
 - [ ] `hayami-tui api check` passes against the installed service on the
       desk, on the Windows VM and on the Mac, and fails, naming the violation, against a test server
       that serves a padded name, a string where a number belongs, and a
       missing field (falsified)
+
+  As built in 3b: the test server's half holds (`TestCheckNamesWhatIsWrong`:
+  a padded name, a name cut with an ellipsis, a string where a number
+  belongs and a missing field each fail, named by path; the same stand-in
+  unbroken passes). Against the real server over the fixtures it passes
+  (`TestCheckPassesAgainstTheService`), and against `serve` on the desk over
+  the real sources, run by hand on 2026-11-25, it passed: 45 details,
+  every reading at once, the 404s and a stream, and again after a 20 s
+  `api load` of 32 clients and 8 streams (about 300,000 requests, no
+  errors, p99 2.9 ms). The installed service on the three machines is 3c,
+  4 and 5.
+
+  Two choices made in 3b. **Strict decoding, not the schema, in the
+  client** (decided with the user): the client checks a response with the
+  standard library against the contract types, every field present, none
+  the contract lacks, null only for a pointer or a field tagged `nullable`,
+  an `enum` tag's values, a `format:"date"` date, a `time.Time` as RFC
+  3339. The parity test holds every tag to the schema, both ways, so the
+  checker stays out of the binary (B7 unchanged) and `hayami-js` can do
+  the same. **`api check` follows three drills of each detail by default**
+  (`--breadth 3`, `0` for every one), to a depth of three (`cpu`,
+  `cpu/firefox`, `cpu/firefox/4411`). A process list's drills are every
+  process name on the machine, and the service reads at most 32 details of
+  a section at once (R23), so every one is minutes of waiting for leases
+  to lapse. Over that limit `check` waits as the 503 says and asks again,
+  and a drill whose process ended between two reads is counted, not failed.
 - [ ] `docs/api.md`, `docs/architecture.md`, CLAUDE.md and
       `docs/threat-model.md` are updated in the PR
 - [ ] `cmd/hayami-tui` still builds with `CGO_ENABLED=0`
@@ -568,7 +594,7 @@ for review.
 | B1 Privileged helpers | No new privileged component: the service runs as the person. But on Windows a service template is registered in the Service Control Manager, and its program path is a target: it is the installed `hayami-tui.exe`, in a directory only the installer writes (as for the network helper's copy, spec 061), checked by the adversarial review | B1 |
 | B2 Installing | The installer, by default, writes a systemd user socket and service (Linux; no root), registers a per-user service template (Windows; one UAC prompt), or writes a launchd agent into `~/Library/LaunchAgents` (macOS; no administrator). A path in a unit gets the keepalive's quoting rules (spec 085's findings). The plist is written as XML by an encoder, never by joining strings, so a path cannot add a key. On macOS anything running as the person can rewrite their own agent, which is no more than it can already do to their shell profile | B2 |
 | B3 Credentials | A long-running process holds the usage reader and its OAuth refresh, as the panel does. New: its responses leave the process, so a credential reaching a response would be served to every program of the account. R24's test is the defence | B3 |
-| B4 What hayami parses | New input: HTTP requests on the socket or pipe, from the same account only (R4) but not trusted to be well formed. Request limits (R23) and a fuzz target on the router and the ID decoding | B4 |
+| B4 What hayami parses | New input: HTTP requests on the socket or pipe, from the same account only (R4) but not trusted to be well formed. Request limits (R23) and a fuzz target on the router and the ID decoding. The reference client parses what answers on the socket: a response and a stream's event are read to 16 MiB at most and decoded strictly, and what it prints to a terminal is cleaned again (3b) | B4, B6 |
 | B6 What hayami shows | The readings and every detail, the on-request ones included (a VPN's addresses, spec 085 R9; the Development drawer's activity, spec 107), are served whole to any program the account runs. `hayami-tui detail` gives the same account the same facts today, cut; now they are continuous, whole, and need no terminal. No other account reaches them (R4). Windows pipe-name squatting: another account creating the pipe first is defeated by the SID in the name, the access list and `FILE_FLAG_FIRST_PIPE_INSTANCE`; `docs/api.md` says how a client checks the server's process owner (`GetNamedPipeServerProcessId`), and the reference client does | B6 |
 | B7 Supply chain | Possibly a JSON Schema validator as a test dependency (spike); nothing new in the shipped binaries beyond `golang.org/x/sys`, already present. A macOS release artefact is new: it carries the provenance the others do. Signing and notarising it is fynstall's open item ("signing the installer"), and until then Gatekeeper's quarantine applies to a downloaded installer | B7 |
 | B5 Outside itself | Unchanged: nothing here acts | — |
