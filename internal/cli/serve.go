@@ -45,7 +45,7 @@ func serveCmd(f *flags, version string) *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return api.Run(ctx, api.Options{
+			return api.Serve(ctx, api.Options{
 				Listen: listen, SettingsPath: path, Idle: idle, Version: version,
 				Log: slog.New(slog.NewTextHandler(cmd.ErrOrStderr(), nil)),
 			})

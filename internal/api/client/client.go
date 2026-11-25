@@ -55,8 +55,7 @@ read waits for its first poll, up to 15 s, so a deadline is longer than that.
 func New(address string) *Client {
 	return &Client{http: &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", address)
+			return Dial(ctx, address)
 		},
 		MaxIdleConnsPerHost: 4,
 	}}}

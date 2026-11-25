@@ -11,7 +11,6 @@ import (
 	"github.com/ushineko/fynstall/extension"
 
 	"github.com/ushineko/hayami/internal/api/unit"
-	"github.com/ushineko/hayami/internal/nethelper"
 )
 
 // ParamAPI is the parameter the API page sets, declared in fynstall.yaml:
@@ -44,8 +43,8 @@ type API struct {
 }
 
 // applies is everywhere the service is set up, and Linux without a service
-// manager, where the page says how to run it by hand. Windows and macOS come
-// in their own phases of spec 113.
+// manager, where the page says how to run it by hand. macOS comes in its own
+// phase of spec 113.
 func (a API) applies() bool   { return a.Offered || runtime.GOOS == "linux" }
 func (a API) why() string     { return unit.OfferWhy }
 func (a API) caution() string { return unit.OfferCaution }
@@ -140,12 +139,8 @@ func markerThere(path string) bool {
 // it on that program, and removeAPI removes it. Variables, for the same
 // reason.
 var (
-	setUpAPI = func(ctx context.Context, c *extension.Context) error {
-		return unit.Install(ctx, filepath.Join(c.Root(), "bin", nethelper.ProgramName)) //nolint:wrapcheck // says which step
-	}
-	removeAPI = func(ctx context.Context, _ *extension.Context) error {
-		return unit.Remove(ctx) //nolint:wrapcheck // says which step
-	}
+	setUpAPI  = setUpAPIHere
+	removeAPI = removeAPIHere
 )
 
 /*
@@ -219,7 +214,7 @@ func placeAPI(ctx context.Context, c *extension.Context) {
 		if a.Installed {
 			c.Log(extension.Info, "The service other programs read was kept, on this version")
 		} else {
-			c.Log(extension.Info, "The service other programs read is set up: hayami-tui api status")
+			c.Log(extension.Info, unit.SetUpNote)
 		}
 	case a.Installed:
 		c.Log(extension.Info, "Removing the service other programs read")
@@ -251,7 +246,5 @@ func dropAPI(ctx context.Context, c *extension.Context) {
 
 // warnNotRemoved says a removal failed, and how to finish it by hand.
 func warnNotRemoved(c *extension.Context, err error) {
-	c.Logf(extension.Warn, "The service other programs read was not removed: %v. "+
-		"To remove it: systemctl --user disable --now %s, then delete %s and %s from ~/.config/systemd/user",
-		err, unit.SocketName, unit.SocketName, unit.ServiceName)
+	c.Logf(extension.Warn, "The service other programs read was not removed: %v. %s", err, unit.RemoveByHand)
 }

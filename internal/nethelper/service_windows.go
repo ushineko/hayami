@@ -257,6 +257,22 @@ func allowStart(service *mgr.Service, sid *windows.SID) error {
 	return nil
 }
 
+/*
+CopyToProgramFiles puts the program at path in Program Files' hayami as name,
+and returns where. The file is opened shut against writes and renames before
+it is read, as this program is for the helpers (#244): a program the user can
+change, copied for a service that runs it as someone else. It needs an
+administrator.
+*/
+func CopyToProgramFiles(path, name string) (string, error) {
+	in, err := openLocked(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = in.Close() }()
+	return copyProgram(in, name)
+}
+
 // copyProgram puts this program in Program Files as the service's own, and
 // returns where. The directory inherits Program Files' access list: readable
 // by everyone, written by administrators.

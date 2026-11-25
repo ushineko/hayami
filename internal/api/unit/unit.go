@@ -22,24 +22,10 @@ const (
 // known to be hayami's own and so hayami's to replace or remove.
 const mark = "# Written by hayami's installer (spec 113). Running the installer again, or uninstalling hayami, removes it."
 
-// What the installer says of the service, so there is one account of it.
-const (
-	OfferWhy = "The service gives the readings, their details and drills to other programs of your account, " +
-		"as JSON over a local socket: a status bar, a script, another panel. It is what hayami-tui api reads."
-	OfferCaution = "Only your account can open its socket, and it has no right the panel lacks. It reads " +
-		"a section only while a program asks for it, and stops itself after five minutes with nobody reading. " +
-		"It needs no administrator, and an uninstall removes it."
-	OfferNotHere = "This system has no service manager of your own (a systemd user manager), so the service " +
-		"is not set up here. hayami-tui serve runs it by hand."
-)
-
-// OfferSteps are what installing it does, in order.
-func OfferSteps() []string {
-	return []string{
-		"Writes a socket and a service for your account, " + SocketName + " and " + ServiceName + ", under ~/.config/systemd/user",
-		"Listens on the socket now and with every session; the first program to connect starts the service",
-	}
-}
+// What the installer says of the service, so there is one account of it;
+// what differs by system is in the system's file.
+const OfferWhy = "The service gives the readings, their details and drills to other programs of your account, " +
+	"as JSON over a local socket: a status bar, a script, another panel. It is what hayami-tui api reads."
 
 // Errors the installer can be answered with.
 var (

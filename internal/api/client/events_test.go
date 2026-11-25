@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -95,10 +92,6 @@ func (endless) Read(p []byte) (int, error) {
 // serveStream answers /v1/events with body, as an event stream.
 func serveStream(t *testing.T, body io.Reader) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "hy")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "api.sock")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/events", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -110,9 +103,7 @@ func serveStream(t *testing.T, body io.Reader) string {
 			}
 		}
 	})
-	var lc net.ListenConfig
-	l, err := lc.Listen(context.Background(), "unix", sock)
-	require.NoError(t, err)
+	l, sock := listen(t)
 	srv := &http.Server{Handler: mux, ReadHeaderTimeout: time.Second}
 	go func() { _ = srv.Serve(l) }()
 	t.Cleanup(func() { _ = srv.Close() })

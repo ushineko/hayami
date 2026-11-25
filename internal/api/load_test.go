@@ -104,7 +104,7 @@ func TestManyClientsAtOnce(t *testing.T) {
 		}
 	}
 	newClient := func() *http.Client {
-		c := unixClient(h.sock)
+		c := serviceClient(h.sock)
 		mu.Lock()
 		defer mu.Unlock()
 		clients = append(clients, c)

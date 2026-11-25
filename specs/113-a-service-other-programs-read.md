@@ -111,7 +111,7 @@ meets them lands.
 | 3a | The contract (`api/openapi.yaml`, `internal/api/contract`), the server (`internal/api`: leases, one poller a source, snapshots, SSE with a latest-only queue, the limits, panic recovery), the Linux socket with its peer check and systemd's hand-over, and `hayami-tui serve`. Tests: every endpoint's golden response checked against the contract, each Go type held to its schema, the behaviour over a real socket, nothing secret over real sources, a fuzz target, and the load test. The adversarial review's five findings fixed and pinned; #401 filed | Merged (#402) |
 | 3b | The reference client (`internal/api/client`: the address rule, strict decoding against the contract types, the stream, `Check`, `Load`) and `hayami-tui api address/status/get/watch/check/load`. The contract types carry `enum`, `format` and `nullable` tags, held to the schema by the parity test; `api/openapi.yaml` is validated as an OpenAPI 3.1 document against the OpenAPI Initiative's schema, vendored as a test fixture. The adversarial review's six findings fixed and pinned | Merged (#403) |
 | 3c | The systemd user units (`internal/api/unit`, standard library only: written as the person, hayami's mark on each, `RemoveOnStop`, `try-restart` on an upgrade), the installer's Service page (`api`: `auto`, `once`; `auto` sets the service up the first time the installer decides, by a marker in the install directory, and never gives back one removed), `install.sh` and `uninstall.sh`, `hayami-tui api status` with the manager's state, `docs/api.md`, CLAUDE.md, and the desk's end-to-end run. The adversarial review's two findings fixed and pinned | This PR |
-| 4 | Windows per-user service | — |
+| 4 | Windows per-user service: the pipe address and listener, `serve` under the service manager, the client's pipe dial with its owner check, the template with its Program Files copy, the installer page on Windows | This PR |
 | 5 | macOS agent and CI job | — |
 
 ## Requirements
@@ -151,8 +151,15 @@ meets them lands.
   the first connection starts the service, and the service exits after five
   minutes with no request and no open stream.
 - **R6 Windows lifetime.** A per-user service template, `hayami-api`, of type
-  `SERVICE_USER_OWN_PROCESS`, start type automatic, whose program is the
-  installed `hayami-tui.exe` with the argument `serve`. Windows starts an
+  `SERVICE_USER_OWN_PROCESS`, start type automatic, whose program is a copy
+  of `hayami-tui.exe` in Program Files, `hayami\hayami-api.exe` under the
+  known folder (not `%ProgramFiles%`, which the environment sets), with the
+  argument `serve`. Not the installed `hayami-tui.exe`: hayami installs under
+  `%LOCALAPPDATA%`, which the person can write, and Windows makes an instance
+  of the template for every account that signs in, so a program one account
+  can write would run as another (decided with the operator, 2026-11-25). An
+  instance for an account that has never run hayami (no settings directory)
+  exits at once with success, which the recovery actions leave alone. Windows starts an
   instance as each signed-in account and stops it at sign-out. The instance
   restarts on failure (the service's recovery actions: restart after 5 s,
   twice, then stay stopped), which are set on the template when it is
@@ -601,7 +608,7 @@ for review.
 
 | Boundary | What changes for an attacker | Section updated |
 |---|---|---|
-| B1 Privileged helpers | No new privileged component: the service runs as the person. But on Windows a service template is registered in the Service Control Manager, and its program path is a target: it is the installed `hayami-tui.exe`, in a directory only the installer writes (as for the network helper's copy, spec 061), checked by the adversarial review | B1 |
+| B1 Privileged helpers | No new privileged component: the service runs as the person. But on Windows a service template is registered in the Service Control Manager, and its program path is a target: every account that signs in runs it. It is a copy in Program Files, which only an administrator writes (as the network helper's is, spec 061), never the installed `hayami-tui.exe` under `%LOCALAPPDATA%`, which one account could change to run code as the next to sign in. The copy is taken from a handle held shut against writes (#244), and an upgrade replaces it under the same UAC prompt, a `--yes` upgrade included (decided with the operator: one prompt, so the service is not left on an old program); refused, the old copy keeps serving and the installer says so. Checked by the adversarial review | B1 |
 | B2 Installing | The installer, by default, writes a systemd user socket and service (Linux; no root), registers a per-user service template (Windows; one UAC prompt), or writes a launchd agent into `~/Library/LaunchAgents` (macOS; no administrator). A path in a unit gets the keepalive's quoting rules (spec 085's findings). The plist is written as XML by an encoder, never by joining strings, so a path cannot add a key. On macOS anything running as the person can rewrite their own agent, which is no more than it can already do to their shell profile | B2 |
 | B3 Credentials | A long-running process holds the usage reader and its OAuth refresh, as the panel does. New: its responses leave the process, so a credential reaching a response would be served to every program of the account. R24's test is the defence | B3 |
 | B4 What hayami parses | New input: HTTP requests on the socket or pipe, from the same account only (R4) but not trusted to be well formed. Request limits (R23) and a fuzz target on the router and the ID decoding. The reference client parses what answers on the socket: a response and a stream's event are read to 16 MiB at most and decoded strictly, and what it prints to a terminal is cleaned again (3b) | B4, B6 |
