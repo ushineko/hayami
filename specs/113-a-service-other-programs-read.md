@@ -66,7 +66,7 @@ before code beyond the spike is reviewed.
 
 | Question | Why it matters |
 |---|---|
-| Does a service registered with `SERVICE_USER_OWN_PROCESS` (a per-user service template) through `golang.org/x/sys/windows/svc/mgr` get an instance per signed-in account on w11-kvm, running as that account, started at sign-in and stopped at sign-out? Does the instance see the account's profile (`%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%\.claude`)? | R6 rests on it. Per-user services are documented by Microsoft mainly for its own services; a third-party template is expected to work and must be seen to |
+| Does a service registered with `SERVICE_USER_OWN_PROCESS` (a per-user service template) through `golang.org/x/sys/windows/svc/mgr` get an instance per signed-in account on the Windows VM, running as that account, started at sign-in and stopped at sign-out? Does the instance see the account's profile (`%APPDATA%`, `%LOCALAPPDATA%`, `%USERPROFILE%\.claude`)? | R6 rests on it. Per-user services are documented by Microsoft mainly for its own services; a third-party template is expected to work and must be seen to |
 | Can the instance be stopped and the template removed cleanly (instance `hayami-api_<LUID>` and template `hayami-api`), with no reboot, and can an upgrade replace the program and restart the instance? | R21–R23 |
 | Does the instance's named pipe, created with an access list naming the account's SID, open from a program the person runs in their desktop session? | The transport on Windows |
 | Does a systemd user socket unit (`ListenStream=%t/hayami/api.sock`, `SocketMode=0600`) start the service on first connect and let it exit when idle, on this desk? | R6 on Linux |
@@ -377,7 +377,7 @@ for review.
 ### Spike
 
 - [ ] Spike findings are recorded in this spec: the per-user service on
-      w11-kvm, the systemd socket unit on the desk, the launchd socket
+      the Windows VM, the systemd socket unit on the desk, the launchd socket
       hand-over, Keychain access and `$TMPDIR` on the Mac, the fynstall default,
       the schema validator's choice. A fynstall change is under "Gaps found"
       with its own issue
@@ -449,7 +449,7 @@ for review.
       poll taken under the request's lock, makes it fail. The fault is then
       put back
 - [ ] `hayami-tui api load --clients 32 --streams 8 --duration 5m` against
-      the installed service on the desk, on w11-kvm and on the Mac runs with
+      the installed service on the desk, on the Windows VM and on the Mac runs with
       no errors.
       The service's RSS is flat in the last three minutes, `api check`
       passes straight afterwards, and the panels keep updating throughout
@@ -463,7 +463,7 @@ for review.
 - [ ] Windows: the template is registered as `SERVICE_USER_OWN_PROCESS`; an
       instance runs as the signed-in account after sign-in and is gone after
       sign-out; the pipe's access list holds that account alone; a second
-      `serve` against an existing pipe refuses to start (w11-kvm)
+      `serve` against an existing pipe refuses to start (the Windows VM)
 - [ ] macOS: the socket is `0600` in a `0700` directory under the per-user
       `$TMPDIR`; a connection from another UID is closed with no response
       (`LOCAL_PEERCRED`); the agent is loaded in `gui/<uid>`, restarts after
@@ -477,18 +477,18 @@ for review.
 - [ ] The installer page installs by default on a first install, keeps an
       installed service by default, offers removal, and does not reinstall a
       removed one under `--yes` on an upgrade (installer tests, plus real
-      runs on the desk, on w11-kvm and on the Mac)
+      runs on the desk, on the Windows VM and on the Mac)
 - [ ] An upgrade restarts the installed service on the new program (desk,
-      w11-kvm and the Mac)
+      the Windows VM and the Mac)
 - [ ] Uninstalling hayami removes the units, the instance and template, or
-      the agent, and the socket (desk, w11-kvm and the Mac)
+      the agent, and the socket (desk, the Windows VM and the Mac)
 
 ### Reference client and documents
 
 - [ ] `internal/api/client` imports no `panel`, `view` or `core` (a test
       reads its imports)
 - [ ] `hayami-tui api check` passes against the installed service on the
-      desk, on w11-kvm and on the Mac, and fails, naming the violation, against a test server
+      desk, on the Windows VM and on the Mac, and fails, naming the violation, against a test server
       that serves a padded name, a string where a number belongs, and a
       missing field (falsified)
 - [ ] `docs/api.md`, `docs/architecture.md`, CLAUDE.md and
@@ -563,13 +563,13 @@ run against the installed service, plus the lifecycle steps around it.
 | Desk | Wait past the idle period with no client | Service inactive, socket listening; the next `api get` starts it | R5 |
 | Desk | `sudo -u nobody curl --unix-socket … http://hayami/v1/health` | Refused by mode or closed by the peer check | R4 |
 | Desk | Re-run the installer and choose remove; then re-run with `--yes` | Units and socket gone; not reinstalled | installer |
-| w11-kvm | Install with defaults (one UAC prompt); sign out and in; `hayami-tui api check` | Instance running as the account; check passes | R6, contract |
-| w11-kvm | A process started from a program named with 40 characters, then `api get /v1/sections/cooler/details/cpu` | The name whole | full values |
-| w11-kvm | The same `api load` run against the pipe, sampling the instance's working set | As on the desk | concurrency |
-| w11-kvm | Second `hayami-tui serve` while the instance runs | Refuses to start, naming the existing pipe | R4 |
-| w11-kvm | Sign out; check from an administrator's session that no instance runs | No instance | R6 |
-| w11-kvm | Re-run removing it; then reinstall and uninstall hayami | Instance and template gone each time; no pipe left | installer |
-| The Mac (ssh; host recorded here when given) | Install with the macOS installer, defaults; `launchctl print gui/$(id -u)/io.ushineko.hayami.api` | Agent loaded, running `hayami-tui serve` | installer default, R7 |
+| The Windows VM | Install with defaults (one UAC prompt); sign out and in; `hayami-tui api check` | Instance running as the account; check passes | R6, contract |
+| The Windows VM | A process started from a program named with 40 characters, then `api get /v1/sections/cooler/details/cpu` | The name whole | full values |
+| The Windows VM | The same `api load` run against the pipe, sampling the instance's working set | As on the desk | concurrency |
+| The Windows VM | Second `hayami-tui serve` while the instance runs | Refuses to start, naming the existing pipe | R4 |
+| The Windows VM | Sign out; check from an administrator's session that no instance runs | No instance | R6 |
+| The Windows VM | Re-run removing it; then reinstall and uninstall hayami | Instance and template gone each time; no pipe left | installer |
+| The Mac | Install with the macOS installer, defaults; `launchctl print gui/$(id -u)/io.ushineko.hayami.api` | Agent loaded, running `hayami-tui serve` | installer default, R7 |
 | The Mac | `hayami-tui api check`, then `api get /v1/sections/usage` | Check passes; usage read from the Keychain, the same figures the panel shows | contract, usage on macOS |
 | The Mac | The same `api load` run, sampling the agent's RSS | As on the desk | concurrency |
 | The Mac | `kill -9` the agent; then `launchctl kill TERM` it | Restarted after the crash; stays down after the clean stop | R7 |
