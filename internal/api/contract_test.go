@@ -124,6 +124,91 @@ func jsonFields(t reflect.Type) []string {
 	return out
 }
 
+/*
+propertyRule is what a property's schema says of its values that a client
+checks without the schema (spec 113 R29): its enum, without null, joined by
+commas, followed through a $ref; and its string format, where it is "date"
+(a time.Time field is date-time by its type, so needs no tag).
+*/
+func propertyRule(schemas map[string]any, p map[string]any) (enum, format string) {
+	if ref, ok := p["$ref"].(string); ok {
+		p = schemas[strings.TrimPrefix(ref, "#/components/schemas/")].(map[string]any)
+	}
+	if values, ok := p["enum"].([]any); ok {
+		var out []string
+		for _, e := range values {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		enum = strings.Join(out, ",")
+	}
+	if f, _ := p["format"].(string); f == "date" {
+		format = f
+	}
+	return enum, format
+}
+
+// allowsNull reports whether a property's schema takes null: by its type, or
+// by a oneOf that has it.
+func allowsNull(schemas, p map[string]any) bool {
+	if ref, ok := p["$ref"].(string); ok {
+		p = schemas[strings.TrimPrefix(ref, "#/components/schemas/")].(map[string]any)
+	}
+	switch typ := p["type"].(type) {
+	case string:
+		if typ == "null" {
+			return true
+		}
+	case []any:
+		if slices.Contains(typ, any("null")) {
+			return true
+		}
+	}
+	if one, ok := p["oneOf"].([]any); ok {
+		for _, o := range one {
+			if allowsNull(schemas, o.(map[string]any)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// arrayItems is the items schema of a property that is a list, directly or
+// as one of a oneOf; nil for any other.
+func arrayItems(p map[string]any) map[string]any {
+	if items, ok := p["items"].(map[string]any); ok {
+		return items
+	}
+	if one, ok := p["oneOf"].([]any); ok {
+		for _, o := range one {
+			if items := arrayItems(o.(map[string]any)); items != nil {
+				return items
+			}
+		}
+	}
+	return nil
+}
+
+// jsonField is a struct's field by its JSON name, an embedded struct's
+// included.
+func jsonField(t reflect.Type, name string) (reflect.StructField, bool) {
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if f.Anonymous {
+			if inner, ok := jsonField(f.Type, name); ok {
+				return inner, true
+			}
+			continue
+		}
+		if n, _, _ := strings.Cut(f.Tag.Get("json"), ","); n == name {
+			return f, true
+		}
+	}
+	return reflect.StructField{}, false
+}
+
 // R28. A Go contract type and its schema have the same fields, every one of
 // them required (a value unknown is null, never left out), and no field the
 // other lacks.
@@ -153,6 +238,20 @@ func TestEveryContractTypeIsItsSchema(t *testing.T) {
 		assert.Equal(t, props, jsonFields(reflect.TypeOf(v)), "%s: the schema's fields and the Go type's", name)
 		assert.Equal(t, props, required, "%s: every field is required; an unknown value is null", name)
 		assert.Equal(t, false, obj["additionalProperties"], "%s: a response has no field the contract lacks", name)
+		for p, ps := range obj["properties"].(map[string]any) {
+			enum, format := propertyRule(schemas, ps.(map[string]any))
+			f, ok := jsonField(reflect.TypeOf(v), p)
+			if !ok {
+				continue
+			}
+			assert.Equal(t, enum, f.Tag.Get("enum"), "%s.%s: the Go type's enum tag is the schema's enum", name, p)
+			assert.Equal(t, format, f.Tag.Get("format"), "%s.%s: the Go type's format tag is the schema's string format", name, p)
+			goNull := f.Type.Kind() == reflect.Pointer || f.Tag.Get("nullable") == "true"
+			assert.Equal(t, allowsNull(schemas, ps.(map[string]any)), goNull, "%s.%s: null in the schema is a pointer or a nullable tag in Go", name, p)
+			if items := arrayItems(ps.(map[string]any)); items != nil && f.Type.Kind() == reflect.Slice {
+				assert.Equal(t, allowsNull(schemas, items), f.Type.Elem().Kind() == reflect.Pointer, "%s.%s: a null item is a pointer item in Go", name, p)
+			}
+		}
 	}
 	for name := range contractTypes {
 		_, ok := schemas[name]
@@ -166,6 +265,53 @@ func TestTheContractsVersionIsTheServices(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, contract.Version, doc["info"].(map[string]any)["version"])
 	assert.Equal(t, "3.1.0", doc["openapi"])
+}
+
+/*
+R26. The contract is an OpenAPI 3.1 document: it keeps the OpenAPI
+Initiative's own schema for one (vendored in testdata/openapi, with its
+source), so a generator in another language reads it. Its schemas are each
+checked against JSON Schema 2020-12 when the tests compile them.
+*/
+func TestTheContractIsAnOpenAPIDocument(t *testing.T) {
+	f, err := os.Open("testdata/openapi/schema-2022-10-07.json")
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	meta, err := jsonschema.UnmarshalJSON(f)
+	require.NoError(t, err)
+	c := jsonschema.NewCompiler()
+	c.AssertFormat()
+	require.NoError(t, c.AddResource("https://spec.openapis.org/oas/3.1/schema/2022-10-07", meta))
+	oas, err := c.Compile("https://spec.openapis.org/oas/3.1/schema/2022-10-07")
+	require.NoError(t, err)
+
+	doc, err := openAPI()
+	require.NoError(t, err)
+	js, err := json.Marshal(doc)
+	require.NoError(t, err)
+	v, err := jsonschema.UnmarshalJSON(bytes.NewReader(js))
+	require.NoError(t, err)
+	require.NoError(t, oas.Validate(v), "api/openapi.yaml is not an OpenAPI 3.1 document")
+
+	// And it fails one that is not, falsified a way at a time: an info with
+	// no title, a parameter in a place there is none, a 3.0 document.
+	faults := map[string]func(doc map[string]any){
+		"no title": func(doc map[string]any) { delete(doc["info"].(map[string]any), "title") },
+		"a parameter in the body": func(doc map[string]any) {
+			doc["components"].(map[string]any)["parameters"].(map[string]any)["Key"].(map[string]any)["in"] = "body"
+		},
+		"3.0": func(doc map[string]any) { doc["openapi"] = "3.0.3" },
+	}
+	for name, fault := range faults {
+		broken := map[string]any{}
+		require.NoError(t, json.Unmarshal(js, &broken))
+		fault(broken)
+		bj, err := json.Marshal(broken)
+		require.NoError(t, err)
+		bv, err := jsonschema.UnmarshalJSON(bytes.NewReader(bj))
+		require.NoError(t, err)
+		assert.Error(t, oas.Validate(bv), "%s: not an OpenAPI 3.1 document", name)
+	}
 }
 
 // Every path the server routes is in the contract, and the reverse.

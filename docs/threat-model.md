@@ -419,6 +419,14 @@ reading cannot grow it, and is ended after 30 s unread. Fuzzed: `FuzzRequest`,
 any path and query through the router and the ID decoding, answered with a
 documented status and never a 500 (`internal/api/fuzz_test.go`).
 
+**The reference client's input (spec 113 R29).** `hayami-tui api` parses
+what answers on the socket, and does not take it to be the service: a
+response is read to at most 16 MiB, a stream's line and event to the same,
+and each is decoded strictly against the contract types (every field present,
+none the contract lacks, null only where it has it, enums and dates checked),
+so a malformed answer is an error naming the field, never a zero value
+(`internal/api/client/strict.go`, `events.go`; `TestAStreamsLineIsBounded`).
+
 **Not yet known.** The HID decoders are sanshoku's and are not fuzzed
 (ushineko/sanshoku#67).
 
@@ -572,7 +580,10 @@ is another account is closed without a word. A browser reaches nothing: there
 is no TCP port, and a request carrying `Origin` is refused. Every string is
 cleaned of control and bidirectional characters (`internal/api/text.go`), and
 one past 4 KiB is cut and the response marked `truncated`, so a hostile
-device name cannot make a response unbounded.
+device name cannot make a response unbounded. Everything `hayami-tui api`
+prints, and its errors, which can carry a key the socket's peer chose, is
+cleaned again before it reaches the terminal, whoever answered (`run` and
+`cleanLines`, `internal/cli/api.go`; `TestTheAPICommandsPrintOnlyPrintableText`).
 
 **Not yet known.** The rest of `doctor` and the JSON outputs has not been
 audited for identifiers other than the home path.
@@ -709,7 +720,12 @@ on an old base was not tested.
 **The service's contract checker (spec 113).** A test dependency,
 `github.com/santhosh-tekuri/jsonschema/v6` v6.0.3 (Apache-2.0), checks every
 response a test gets against `api/openapi.yaml`. It is linked into no
-binary: `go.mod` lists it, and only `internal/api`'s tests import it.
+binary: `go.mod` lists it, and only `internal/api`'s tests import it. The
+OpenAPI Initiative's schema for a 3.1 document is vendored as a test fixture
+(`internal/api/testdata/openapi`, Apache-2.0, its source and SHA-256 beside
+it) to check the contract is one. The reference client that ships in
+`hayami-tui` checks responses with the standard library and the contract
+types' tags, so the checker stays out of the binary.
 
 ---
 
@@ -766,6 +782,7 @@ the goal of a working proof of concept.
 | 2026-11-22 | B3, B4, B5, B6 | The adversarial review of spec 111 (change pages, #390): one reviewer given the change and three attackers (a hostile GitLab host, a public repository's contributors, a crafted detail ID), then a refutation pass against the code. | Fixed before merge: a host answering longer lists than asked, or a huge title or label list, building a widget a line in the drawer (pages kept to 100 commits and files, 20 labels, 64 KiB of description, six lines of title; the view built once a reading); a day of pushes asking once a push (once a head, ten at most); a short hash cut inside a character. Refuted as a fix: salting the page key, which `hayami-tui detail <id>` needs stable across processes; the comment that claimed it hid names now says it only keeps them out of plain sight. Checked: no key sent off its forge, no path or query injection, no uncleaned text, no panic, `-race` clean. |
 | 2026-11-20 | B1, B2, B7 | The adversarial review of spec 103 (the sensor helper, #365): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. A separate review of PawnIO itself (published issues, signing, the site). | No path to LocalSystem or the kernel; no regression in the network helper. Fixed before merge: a held PCI mutex stopping the helper (now a missed reading); PawnIO's library able to load its own imports from the machine's PATH (now System32 only); the server's wake-up open allowing impersonation (now anonymous). Accepted above: the mutex convention, the whole program as LocalSystem, the modules' pin being one test. |
 | 2026-11-25 | B3, B4, B6, B7 | The adversarial review of spec 113's service, its first part (the contract, the server, `serve` on Linux, #396): one reviewer given the change and six attackers (another account, a same-account program after a credential, a browser, a hostile string's author, a client exhausting the service, someone racing the socket's directory), then each finding held against a test written to show it. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test (`internal/api/review_test.go`, `listen_linux_test.go`): made-up drill IDs each starting a poller and never let go (now 32 at once a section, 16 a stream, and let go when unread); the write deadline shorter than a first read's wait; `--listen` following a link to chmod its target; a NaN answered as an empty 200; an error's text not cleaned. Filed: #401, a usage reading's decimal places unbounded (older than the change). |
+| 2026-11-25 | B4, B6, B7 | The adversarial review of spec 113's reference client (`internal/api/client`, `hayami-tui api`, the vendored OpenAPI schema; 3b): one reviewer given the change and the attackers (whatever answers on the socket, a hostile string's author, the supply chain), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary: the only peer is the same account, or a path the person names. Fixed before merge, each pinned by a test: text from the socket reaching the terminal uncleaned through `status`, `load`'s report, `watch --json` and error messages (now cleaned once, for every subcommand); an embedded struct's fields read by the wrong index in `check` (it held only while two structs had as many fields); a response cap of 64 MiB, several times that once decoded (now 16 MiB); no deadline on `get` and `check` (now 1 m and 15 m, `--timeout`); a stream reconnecting without a pause; a negative `--streams` panicking. Checked: below. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
@@ -866,6 +883,23 @@ stops each. A review starts by reading these.
   of JSON, so a string cannot add an event.
 - **Forge pages** are read only for items a forge's reading already listed,
   so the service asks a forge nothing more than the panel does.
+
+### B4, B6, B7, spec 113's reference client, 2026-11-25
+
+- **Supply chain.** `go.mod` and `go.sum` are unchanged; the client imports
+  the standard library, the contract types and `golang.org/x/sys` only, and
+  a test reads its imports. The vendored OpenAPI schema is read only by a
+  test, matches its recorded SHA-256, and the validator fetches no remote
+  reference.
+- **Redirects and proxies.** The client's transport dials the socket for
+  every request and has no proxy, so no answer sends it anywhere else.
+- **A malformed answer.** Duplicate keys resolve the same way in both
+  decoding passes; a key differing only in case is refused before
+  `encoding/json`'s case-insensitive match; numbers out of range, fractions
+  in whole numbers, bad times and dates are refused; nesting is bounded by
+  the contract types and by `encoding/json`.
+- **A panic in `watch`.** A section or detail event always carries its
+  reading; anything else is an error before it is used.
 
 ### B3, spec 102, 2026-11-19
 
