@@ -47,6 +47,11 @@ Made by the operator on 2026-11-24.
   key. It must run as the person, because it reads their settings, their
   usage credentials and their cache: a per-user service (R6), which Windows
   instantiates for each signed-in account from one registered template.
+- **macOS is in scope.** hayami runs on macOS for the usage readings, so
+  the service runs there too. It is a launchd agent of the person's own
+  (R7). Its install and removal go through the same installer page as on
+  the other systems, which needs fynstall to gain a macOS target first
+  (Gaps found).
 - **Full values, regardless of the shells.** The service serves names whole
   and values unformatted. The shells' cutting and padding are presentation
   and stay in `view`; the service does not go through it.
@@ -66,6 +71,9 @@ before code beyond the spike is reviewed.
 | Does the instance's named pipe, created with an access list naming the account's SID, open from a program the person runs in their desktop session? | The transport on Windows |
 | Does a systemd user socket unit (`ListenStream=%t/hayami/api.sock`, `SocketMode=0600`) start the service on first connect and let it exit when idle, on this desk? | R6 on Linux |
 | Can a fynstall extension page take its default from what it found (installed: keep; not installed on an upgrade: leave off), or does fynstall need a change? | R21–R23. A fynstall change goes under "Gaps found" |
+| On the Mac: can `hayami-tui` (built with `CGO_ENABLED=0`) take a socket launchd made from a `Sockets` entry (`launch_activate_socket`, in libSystem)? If not, the agent runs at sign-in and stays running, idle, as on Windows | R7's lifetime |
+| On the Mac: does the agent, running in the `gui/<uid>` domain, read the login Keychain item the usage reader uses (spec 101, through `/usr/bin/security`) with no prompt beyond the one the panel already gets? | The usage section, which is why macOS is in scope |
+| On the Mac: is the `$TMPDIR` the agent sees the same one a program the person starts sees (`os.tmpdir()` in Node, `os.TempDir()` in Go), and does the socket's path fit in macOS's 104-byte `sun_path` limit? | R3 on macOS |
 | Which JSON Schema validator, if any, is added as a test dependency to check responses against the contract (R28)? | B7: a new dependency is a supply-chain decision, recorded here with its version and licence |
 
 If a per-user service does not hold up, the spike stops and the operator
@@ -76,8 +84,8 @@ chooses again; this spec does not fall back to a Startup entry on its own.
 ### The process
 
 - **R1 One subcommand.** `hayami-tui serve` runs the service in the
-  foreground until stopped; it is what the systemd unit and the Windows
-  service run. Under the Service Control Manager it speaks the service
+  foreground until stopped; it is what the systemd unit, the Windows
+  service and the launchd agent run. Under the Service Control Manager it speaks the service
   protocol (`svc.Run`); started from a terminal it runs as a plain
   process. `--listen <path>` names the socket or pipe, for tests and for
   running by hand; empty is the default address (R3).
@@ -86,11 +94,15 @@ chooses again; this spec does not fall back to a Startup entry on its own.
   (R26), and decides nothing about what a section reads. It does not import
   `view`'s formatters and serves nothing `view` has cut or padded. The
   listener's platform code (socket, pipe, peer check, service protocol)
-  follows rule 5: `_linux`, `_windows` and `_other` files.
+  follows rule 5: `_linux`, `_windows`, `_darwin` and `_other` files.
 - **R3 The address is one function.** `api.Address()` returns the default:
   `$XDG_RUNTIME_DIR/hayami/api.sock` on Linux; `\\.\pipe\hayami-api-<SID>`
   on Windows, the SID being the account's; `$TMPDIR/hayami/api.sock` on
-  macOS. `hayami-tui api address` prints it. The contract (R26) states the
+  macOS, where `$TMPDIR` is the per-user directory under `/var/folders`
+  (`confstr(_CS_DARWIN_USER_TEMP_DIR)` if the variable is unset). A path
+  longer than the platform's `sun_path` (104 bytes on macOS, 108 on Linux)
+  is refused with an error naming the limit, never cut short.
+  `hayami-tui api address` prints it. The contract (R26) states the
   rule, and every client follows it.
 - **R4 Only the account that runs it.** Linux and macOS: the directory is
   `0700` and the socket `0600`, and each connection's peer credentials
@@ -112,7 +124,16 @@ chooses again; this spec does not fall back to a Startup entry on its own.
   template needs an administrator, once, through the installer's UAC
   prompt, as the network helper's install does; the instance has no right
   the account lacks.
-- **R7 macOS.** `serve` runs by hand. No launch agent in this spec.
+- **R7 macOS lifetime.** A launchd agent of the person's own,
+  `io.ushineko.hayami.api`, at `~/Library/LaunchAgents/io.ushineko.hayami.api.plist`
+  and loaded into `gui/<uid>` (`launchctl bootstrap`). Its program is the
+  installed `hayami-tui` with the argument `serve`. It is restarted if it
+  fails (`KeepAlive` with `SuccessfulExit` false, `ThrottleInterval` 5 s) and
+  not restarted after a clean exit. If the spike finds launchd can hand over
+  the socket, launchd holds the socket and the agent exits when idle, as on
+  Linux (R5). Otherwise it starts at sign-in (`RunAtLoad`), makes its own
+  socket, and stays running; idle, it polls nothing (R9). No administrator
+  is asked for: the agent is the person's, in their home.
 - **R8 The person's settings, followed.** The service reads the same
   settings file the panels do: chosen interfaces, VPNs, accounts and every
   `sectionSettings` value. A change to the file is picked up before the next
@@ -262,13 +283,16 @@ for review.
     leaving it off, so a person who removed it is not given it back by
     `--yes`. An upgrade restarts an installed service on the new program.
   - **Removal is complete.** Removing it, by the page or by uninstalling
-    hayami, stops it and removes the socket and service units (Linux) or the
-    running instance and the template (Windows), and leaves no socket file
-    behind. A step that fails is a warning, as on the other pages: hayami
-    works without it.
+    hayami, stops it and removes the socket and service units (Linux), the
+    running instance and the template (Windows), or the agent (macOS:
+    `launchctl bootout`, then the plist). No socket file is left behind. A
+    step that fails is a warning, as on the other pages: hayami works without
+    it.
+  - **The page on macOS** is the same page, in the macOS installer fynstall
+    builds once it has the target (Gaps found).
   - **Where there is no service manager**, Linux without a systemd user
-    manager and macOS: the page says the service is not set up on this
-    system and that `hayami-tui serve` runs it by hand.
+    manager: the page says the service is not set up on this system and that
+    `hayami-tui serve` runs it by hand.
   - `hayami-tui api status` says whether it is installed, running, and at
     which address. Install and removal are the installer's; there is no
     `api install`.
@@ -353,7 +377,8 @@ for review.
 ### Spike
 
 - [ ] Spike findings are recorded in this spec: the per-user service on
-      w11-kvm, the systemd socket unit on the desk, the fynstall default,
+      w11-kvm, the systemd socket unit on the desk, the launchd socket
+      hand-over, Keychain access and `$TMPDIR` on the Mac, the fynstall default,
       the schema validator's choice. A fynstall change is under "Gaps found"
       with its own issue
 
@@ -424,7 +449,8 @@ for review.
       poll taken under the request's lock, makes it fail. The fault is then
       put back
 - [ ] `hayami-tui api load --clients 32 --streams 8 --duration 5m` against
-      the installed service on the desk and on w11-kvm runs with no errors.
+      the installed service on the desk, on w11-kvm and on the Mac runs with
+      no errors.
       The service's RSS is flat in the last three minutes, `api check`
       passes straight afterwards, and the panels keep updating throughout
 
@@ -438,21 +464,31 @@ for review.
       instance runs as the signed-in account after sign-in and is gone after
       sign-out; the pipe's access list holds that account alone; a second
       `serve` against an existing pipe refuses to start (w11-kvm)
+- [ ] macOS: the socket is `0600` in a `0700` directory under the per-user
+      `$TMPDIR`; a connection from another UID is closed with no response
+      (`LOCAL_PEERCRED`); the agent is loaded in `gui/<uid>`, restarts after
+      a crash, and stays down after a clean stop; the usage section reads
+      through the Keychain from the agent (the Mac)
+- [ ] An address longer than `sun_path` is refused with an error naming the
+      limit (unit test, Linux and macOS)
+- [ ] CI runs the `internal/api` tests, the load test included, on Linux,
+      Windows and macOS runners (a `macos-latest` job is added to
+      `build.yml`)
 - [ ] The installer page installs by default on a first install, keeps an
       installed service by default, offers removal, and does not reinstall a
       removed one under `--yes` on an upgrade (installer tests, plus real
-      runs on the desk and on w11-kvm)
-- [ ] An upgrade restarts the installed service on the new program (desk and
-      w11-kvm)
-- [ ] Uninstalling hayami removes the units, or the instance and template,
-      and the socket (desk and w11-kvm)
+      runs on the desk, on w11-kvm and on the Mac)
+- [ ] An upgrade restarts the installed service on the new program (desk,
+      w11-kvm and the Mac)
+- [ ] Uninstalling hayami removes the units, the instance and template, or
+      the agent, and the socket (desk, w11-kvm and the Mac)
 
 ### Reference client and documents
 
 - [ ] `internal/api/client` imports no `panel`, `view` or `core` (a test
       reads its imports)
-- [ ] `hayami-tui api check` passes against the installed service on the desk
-      and on w11-kvm, and fails, naming the violation, against a test server
+- [ ] `hayami-tui api check` passes against the installed service on the
+      desk, on w11-kvm and on the Mac, and fails, naming the violation, against a test server
       that serves a padded name, a string where a number belongs, and a
       missing field (falsified)
 - [ ] `docs/api.md`, `docs/architecture.md`, CLAUDE.md and
@@ -465,11 +501,11 @@ for review.
 | Boundary | What changes for an attacker | Section updated |
 |---|---|---|
 | B1 Privileged helpers | No new privileged component: the service runs as the person. But on Windows a service template is registered in the Service Control Manager, and its program path is a target: it is the installed `hayami-tui.exe`, in a directory only the installer writes (as for the network helper's copy, spec 061), checked by the adversarial review | B1 |
-| B2 Installing | The installer, by default, writes a systemd user socket and service (Linux; no root) or registers a per-user service template (Windows; one UAC prompt). A path in a unit gets the keepalive's quoting rules (spec 085's findings) | B2 |
+| B2 Installing | The installer, by default, writes a systemd user socket and service (Linux; no root), registers a per-user service template (Windows; one UAC prompt), or writes a launchd agent into `~/Library/LaunchAgents` (macOS; no administrator). A path in a unit gets the keepalive's quoting rules (spec 085's findings). The plist is written as XML by an encoder, never by joining strings, so a path cannot add a key. On macOS anything running as the person can rewrite their own agent, which is no more than it can already do to their shell profile | B2 |
 | B3 Credentials | A long-running process holds the usage reader and its OAuth refresh, as the panel does. New: its responses leave the process, so a credential reaching a response would be served to every program of the account. R24's test is the defence | B3 |
 | B4 What hayami parses | New input: HTTP requests on the socket or pipe, from the same account only (R4) but not trusted to be well formed. Request limits (R23) and a fuzz target on the router and the ID decoding | B4 |
 | B6 What hayami shows | The readings and every detail, the on-request ones included (a VPN's addresses, spec 085 R9; the Development drawer's activity, spec 107), are served whole to any program the account runs. `hayami-tui detail` gives the same account the same facts today, cut; now they are continuous, whole, and need no terminal. No other account reaches them (R4). Windows pipe-name squatting: another account creating the pipe first is defeated by the SID in the name, the access list and `FILE_FLAG_FIRST_PIPE_INSTANCE`; `docs/api.md` says how a client checks the server's process owner (`GetNamedPipeServerProcessId`), and the reference client does | B6 |
-| B7 Supply chain | Possibly a JSON Schema validator as a test dependency (spike); nothing new in the shipped binaries beyond `golang.org/x/sys`, already present | B7 |
+| B7 Supply chain | Possibly a JSON Schema validator as a test dependency (spike); nothing new in the shipped binaries beyond `golang.org/x/sys`, already present. A macOS release artefact is new: it carries the provenance the others do. Signing and notarising it is fynstall's open item ("signing the installer"), and until then Gatekeeper's quarantine applies to a downloaded installer | B7 |
 | B5 Outside itself | Unchanged: nothing here acts | — |
 
 B1, B2, B3 and B7 are touched, so the PR gets the document's adversarial
@@ -484,6 +520,13 @@ that tries to refute each finding.
   10 1709+ mechanism, documented by Microsoft mostly for its own services.
   The spike tests it before anything else; if it fails, the operator decides
   again.
+- **The macOS installer depends on fynstall.** fynstall has no macOS
+  target today, and hayami's release builds no macOS binaries. Until both
+  exist, the macOS installer criteria cannot be met. The rest of the macOS
+  half (the agent's code, the socket, the peer check, the CI job, `serve` run
+  by hand on the Mac) can land without them. Whether to ship Linux and
+  Windows first and add the macOS page in a second PR is for the operator to
+  decide once fynstall's spec has a size.
 - **R14 touches every Detailer.** Each source that offers details gains a raw
   form and builds its `view.Detail` from it. This is the largest part of the
   work and changes code the shells depend on; the parity test and the
@@ -500,7 +543,8 @@ that tries to refute each finding.
   panels. Reverting the PR removes the subcommand and the page; an installed
   unit or template then fails to start and is removed by the next installer
   run, or by hand (`systemctl --user disable --now hayami-api.socket`;
-  `sc.exe delete hayami-api`).
+  `sc.exe delete hayami-api`; `launchctl bootout gui/$(id -u)/io.ushineko.hayami.api`
+  and removing the plist).
 - **Query budget.** None: no database. Upstream calls are bounded by the
   usage cache gate (R10).
 
@@ -525,6 +569,12 @@ run against the installed service, plus the lifecycle steps around it.
 | w11-kvm | Second `hayami-tui serve` while the instance runs | Refuses to start, naming the existing pipe | R4 |
 | w11-kvm | Sign out; check from an administrator's session that no instance runs | No instance | R6 |
 | w11-kvm | Re-run removing it; then reinstall and uninstall hayami | Instance and template gone each time; no pipe left | installer |
+| The Mac (ssh; host recorded here when given) | Install with the macOS installer, defaults; `launchctl print gui/$(id -u)/io.ushineko.hayami.api` | Agent loaded, running `hayami-tui serve` | installer default, R7 |
+| The Mac | `hayami-tui api check`, then `api get /v1/sections/usage` | Check passes; usage read from the Keychain, the same figures the panel shows | contract, usage on macOS |
+| The Mac | The same `api load` run, sampling the agent's RSS | As on the desk | concurrency |
+| The Mac | `kill -9` the agent; then `launchctl kill TERM` it | Restarted after the crash; stays down after the clean stop | R7 |
+| The Mac | `sudo -u nobody` connection to the socket | Refused by mode or closed by the peer check | R4 |
+| The Mac | Re-run removing it; then reinstall and uninstall hayami | Agent unloaded and plist gone each time; no socket left | installer |
 
 ### Prod visibility
 
@@ -548,4 +598,10 @@ report is `hayami-tui api status`, `api check` and `doctor`.
 
 ## Gaps found
 
-None yet. The spike's fynstall question may add one.
+- **fynstall has no macOS target.** It needs one that builds a macOS
+  installer from `fynstall.yaml`, runs hayami's extension pages there, and
+  installs into the person's home. This is fynstall's own spec, issue and
+  release, and hayami's release workflow gains macOS builds of both
+  binaries (the windowed one with cgo, on a macOS runner). This blocks R25's
+  macOS criteria only.
+- The spike's question on an extension page's default may add another.
