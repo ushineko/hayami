@@ -79,6 +79,26 @@ before code beyond the spike is reviewed.
 If a per-user service does not hold up, the spike stops and the operator
 chooses again; this spec does not fall back to a Startup entry on its own.
 
+## Spike findings
+
+Run on 2026-11-24 with a throwaway program, built with `CGO_ENABLED=0` for
+each platform. It serves `/v1/health` and a five-event SSE stream on a socket
+it is given or makes, checks each peer's credentials, and exits when idle.
+
+| Question | Finding | Consequence |
+|---|---|---|
+| systemd user socket unit (desk) | systemd made `%t/hayami-spike/api.sock` with mode `0600` in a `0700` directory. The first connection started the service on fd 3 (`LISTEN_FDS`), and the peer check (`SO_PEERCRED`) read the account's UID. SSE passed through. The service exited after its idle limit while the socket kept listening, and the next request started it again. `Restart=on-failure` did not restart it after the clean idle exit. **Stopping the socket unit left the socket file behind** | R5 holds. The unit sets `RemoveOnStop=yes`, so removal leaves no file (R25) |
+| launchd socket hand-over without cgo (the Mac, macOS 27.2) | `launch_activate_socket` reached from Go with no cgo, through `//go:cgo_import_dynamic` and an assembly trampoline, as `golang.org/x/sys/unix` does for libSystem. launchd made the `SockPathName` socket at mode `0600` (`SockPathMode` 384) in a `0700` directory under the per-user temp directory. `LOCAL_PEERCRED` read the UID. SSE passed through. With `KeepAlive`/`SuccessfulExit` false, launchd started the agent at load, restarted it after `kill -9`, left it down after its idle exit (code 0), and started it again on the next connection. **`launchctl bootout` left the socket file behind** | R7 takes launchd's socket, and the agent exits when idle, as on Linux. Removal deletes the socket and its directory. `cmd/hayami-tui` stays `CGO_ENABLED=0` |
+| Keychain from the agent (the Mac) | `/usr/bin/security find-generic-password -s "Claude Code-credentials"` from inside the agent returned the item with no prompt, as it does for the panel | The usage section reads from the service on macOS |
+| `$TMPDIR` and `sun_path` (the Mac) | The agent's `TMPDIR` and `os.TempDir()` equal the shell's, `getconf DARWIN_USER_TEMP_DIR`. The socket's path was 70 bytes, under the 104 limit. launchd's `SockPathName` takes no variables, so the plist holds the absolute path, resolved when it is written | R3 holds. The installer resolves the directory with `confstr` when it writes the plist |
+| Per-user service template (the Windows VM, build 26200) | `sc.exe create … type= userown` registered `hayami-api-spike` as `USER_OWN_PROCESS TEMPLATE` (type 0x50). **An ssh sign-in made no instance**: the template stayed stopped (exit 1077, never started), since sshd's key sign-in is not an interactive one. A console sign-in made `hayami-api-spike_<LUID>` (type 0xd0, `USER_OWN_PROCESS INSTANCE`), running as the account in session 1, with `%APPDATA%`, `%LOCALAPPDATA%`, the profile and `.claude` visible. Sign-out removed it; the next sign-in made a new one with a new LUID. **Registering the template while the account was signed in made no instance**, and starting the template fails (1058): the first instance comes at the next sign-in | R6 holds. Clients started from an ssh session find a service only while the account is also signed in at the console; `docs/api.md` says so. A first install takes effect at the next sign-in, and the installer page says so |
+| Recovery actions (the Windows VM) | `sc failure` on an instance fails (87); on the template it succeeds. An instance made before the template had them did not restart after `taskkill /f` (exit 1067, stopped); the instance made at the next sign-in carried them and restarted under a new PID within seconds | The installer sets the recovery actions when it registers the template, before any instance exists. Changing them later takes effect at the next sign-in |
+| The instance's pipe (the Windows VM) | `winio.ListenPipe` at `\\.\pipe\hayami-spike-<SID>` with `D:P(A;;GA;;;<SID>)`. A client in the desktop session (session 1, a `schtasks /it` task) and one over ssh (session 0) both read `/v1/health` and the SSE stream. A second server on the same name was refused ("Access to the path is denied") | The transport on Windows holds. R4's second-`serve` refusal is the pipe's |
+| Stop, upgrade, removal (the Windows VM) | The running program could not be overwritten ("being used by another process"). `sc stop` on the instance, replacing the program, then `sc start` on the instance ran the new program. **`sc delete` on the template left the stopped instance registered**; `sc delete` on the instance removed it, with no reboot, and no `hayami-api-spike` key remained under `Services` | An upgrade stops each `hayami-api_*` instance, replaces the program and starts them again. Removal stops and deletes each instance, then deletes the template (R25) |
+| fynstall page default | Read from fynstall 0.2.6 (`extension.Page`): under `--yes` a page is not run and each parameter takes its static default from `fynstall.yaml`, so a default of `yes` would reinstall a removed service on every `--yes` upgrade | No fynstall change. The `api` parameter is three-valued, with `once: true` and default `auto`: `auto` installs on a first install and leaves an upgrade as it found the service, and an explicit `yes` or `no` always wins. The page asks with what it found as the default |
+| JSON Schema validator | `github.com/santhosh-tekuri/jsonschema/v6` v6.0.3: JSON Schema 2020-12, which OpenAPI 3.1's schemas are written in, Apache-2.0. The YAML is read with `go.yaml.in/yaml/v3`, already a dependency | Test-only. Recorded under B7 |
+| Pipe listener | `github.com/Microsoft/go-winio` v0.6.4, `winio.ListenPipe` with an SDDL, chosen by the operator on 2026-11-24 over a listener written on `x/sys` | A shipped dependency on Windows. Recorded under B7 |
+
 ## Requirements
 
 ### The process
@@ -120,10 +140,14 @@ chooses again; this spec does not fall back to a Startup entry on its own.
   installed `hayami-tui.exe` with the argument `serve`. Windows starts an
   instance as each signed-in account and stops it at sign-out. The instance
   restarts on failure (the service's recovery actions: restart after 5 s,
-  twice, then stay stopped). Idle, it polls nothing (R9). Registering the
+  twice, then stay stopped), which are set on the template when it is
+  registered, since an instance takes them from the template when it is
+  made and refuses them afterwards. Idle, it polls nothing (R9). Registering the
   template needs an administrator, once, through the installer's UAC
   prompt, as the network helper's install does; the instance has no right
-  the account lacks.
+  the account lacks. Windows makes instances only at an interactive
+  sign-in, so a first install takes effect at the next sign-in and the
+  installer page says so; an ssh sign-in makes none.
 - **R7 macOS lifetime.** A launchd agent of the person's own,
   `io.ushineko.hayami.api`, at `~/Library/LaunchAgents/io.ushineko.hayami.api.plist`
   and loaded into `gui/<uid>` (`launchctl bootstrap`). Its program is the
@@ -284,7 +308,9 @@ for review.
     `--yes`. An upgrade restarts an installed service on the new program.
   - **Removal is complete.** Removing it, by the page or by uninstalling
     hayami, stops it and removes the socket and service units (Linux), the
-    running instance and the template (Windows), or the agent (macOS:
+    running instance and the template (Windows: each `hayami-api_*`
+    instance is stopped and deleted before the template, because deleting
+    the template leaves its instances registered), or the agent (macOS:
     `launchctl bootout`, then the plist). No socket file is left behind. A
     step that fails is a warning, as on the other pages: hayami works without
     it.
@@ -376,7 +402,7 @@ for review.
 
 ### Spike
 
-- [ ] Spike findings are recorded in this spec: the per-user service on
+- [x] Spike findings are recorded in this spec: the per-user service on
       the Windows VM, the systemd socket unit on the desk, the launchd socket
       hand-over, Keychain access and `$TMPDIR` on the Mac, the fynstall default,
       the schema validator's choice. A fynstall change is under "Gaps found"
@@ -603,5 +629,7 @@ report is `hayami-tui api status`, `api check` and `doctor`.
   installs into the person's home. This is fynstall's own spec, issue and
   release, and hayami's release workflow gains macOS builds of both
   binaries (the windowed one with cgo, on a macOS runner). This blocks R25's
-  macOS criteria only.
-- The spike's question on an extension page's default may add another.
+  macOS criteria only. Filed as ushineko/fynstall#75.
+- The spike's question on an extension page's default added none: a
+  three-valued `auto` parameter with `once: true` does it with fynstall
+  0.2.6 as it is (Spike findings).
