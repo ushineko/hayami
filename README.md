@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.22.1
+**Version**: 0.23.0
 
 *a chart you read at a glance*
 
@@ -797,7 +797,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.23.0 (2026-11-25)
 
 - **Added**: the service runs on Windows, as a per-user service Windows
   starts as each account that signs in, on the pipe
