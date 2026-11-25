@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,10 +57,12 @@ func TestThePipeIsThisAccountsAlone(t *testing.T) {
 
 	sd, err := windows.GetNamedSecurityInfo(addr, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	require.NoError(t, err)
-	sddl := sd.String()
-	assert.True(t, strings.HasPrefix(sddl, "D:P"), "the access list inherits: %s", sddl)
-	assert.Equal(t, 1, strings.Count(sddl, "(A;"), "one entry, this account's: %s", sddl)
-	assert.Contains(t, sddl, ";;;"+thisAccount(t)+")", sddl)
+	// Windows writes a well-known account by its alias (the built-in
+	// Administrator is LA), so the access list is compared with the one
+	// expected, written by Windows the same way.
+	want, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;" + thisAccount(t) + ")")
+	require.NoError(t, err)
+	assert.Equal(t, want.String(), sd.String(), "one entry, this account's, full access, nothing inherited")
 }
 
 // R4. A pipe already at the name is a refusal to start, not a second

@@ -722,6 +722,14 @@ is not shown there; on a desktop it is the one prompt the page names.
 | `taskkill /f` on the instance | Restarted by Windows under a new PID within 9 s |
 | `sc stop` on the instance | Stays stopped; `sc start` brings it back |
 | Upgrade: `api-service install` from a build of another version, the instance running | The instance stopped, the copy replaced, the instance started again under a new PID on the new version |
+| An administrator's instance (the account is in Administrators) | Runs with the limited token: not elevated, integrity Medium (`S-1-16-8192`), as the account's `explorer.exe` (the adversarial review's open question) |
+| An update that fails after stopping the instances (`TestAFailedUpdateLeavesTheServiceRunning`) | The instances start again on the copy there. Falsified: without the restart the test fails |
+| Installer `--yes`, `api` left at `auto`, the service installed on an older copy | "kept, on this version": the copy replaced, the instance started again under a new PID on the new version; the marker written |
+| Installer `--yes --api=no` | "Removing the service other programs read": no instance, no template, no copy, no pipe; the marker kept |
+| Then `--yes`, `api` at `auto` | Not set up again |
+| Then `--yes --api=yes` | Registered: "set up, and starts at your next sign-in"; `api status` says so |
+| Uninstall (`uninstall.exe --yes`) | The template, the copy and the marker gone |
+| First install, `--yes`, `api` at `auto` | Set up by default, as on a first install anywhere |
 | The template's registration, update and removal (`TestTheTemplateIsRegisteredAndRemoved`, elevated) | Registered with its type, start, program and recovery actions; registered again, updated in place; removed with its program. Falsified: with the first recovery action changed the test fails |
 
 ### Prod visibility

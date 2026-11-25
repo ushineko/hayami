@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/fynstall/extension"
+	"github.com/ushineko/hayami/internal/api/unit"
 )
 
 // answerAPI makes the check find a for the length of a test, and counts the
@@ -146,7 +147,7 @@ func TestAFailedServiceStepIsAWarning(t *testing.T) {
 	logged = nil
 	answerAPI(t, apiThere, errors.New("no manager"))
 	placeAPI(context.Background(), apiContext(No, true, &logged))
-	assert.Contains(t, strings.Join(logged, "\n"), "systemctl --user disable --now hayami-api.socket")
+	assert.Contains(t, strings.Join(logged, "\n"), unit.RemoveByHand)
 
 	logged = nil
 	answerAPI(t, apiNotHere, nil)
