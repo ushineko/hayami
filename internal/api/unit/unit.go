@@ -18,11 +18,7 @@ const (
 	ServiceName = "hayami-api.service"
 )
 
-// mark is each unit's first line, by which a file at the unit's path is
-// known to be hayami's own and so hayami's to replace or remove.
-const mark = "# Written by hayami's installer (spec 113). Running the installer again, or uninstalling hayami, removes it."
-
-// What the installer says of the service, so there is one account of it;
+// OfferWhy is what the installer says the service is for, on every system;
 // what differs by system is in the system's file.
 const OfferWhy = "The service gives the readings, their details and drills to other programs of your account, " +
 	"as JSON over a local socket: a status bar, a script, another panel. It is what hayami-tui api reads."
