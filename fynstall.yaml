@@ -80,6 +80,16 @@ parameters:
     description: "yes installs hayami's VPN keepalive helper, a service of your own account that keeps a chosen VPN working"
     default: "no"
     once: true
+  # Set by the API page. On the command line: --api=yes or --api=no. "auto"
+  # sets the service other programs read up on a first install and leaves an
+  # upgrade as it found it (spec 113 R25): a static "yes" would give a removed
+  # service back on every --yes upgrade. It needs no administrator, and an
+  # installed one is restarted by an upgrade whatever this says.
+  - name: api
+    label: Set up the service other programs read
+    description: "yes sets up hayami's service, which serves the readings to programs of your account over a local socket; no removes it; auto sets it up on a first install"
+    default: "auto"
+    once: true
 
 ui:
   launch: bin/hayami{exe}

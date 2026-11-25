@@ -111,6 +111,46 @@ if [ -f "${KEEPALIVE_UNIT}" ]; then
     fi
 fi
 
+# The service other programs read (spec 113): its socket and its service, hayami's
+# own only, by the line the installer writes first. Stopping the socket removes its
+# file.
+API_UNITS="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
+api_ours=()
+for unit in hayami-api.socket hayami-api.service; do
+    [ -f "${API_UNITS}/${unit}" ] || continue
+    if head -n 1 "${API_UNITS}/${unit}" | grep -q "^# Written by hayami's installer (spec 113)"; then
+        api_ours+=("${unit}")
+    else
+        echo
+        echo "Left ${API_UNITS}/${unit} alone: hayami did not write it."
+    fi
+done
+if [ "${#api_ours[@]}" -gt 0 ]; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "  would stop and remove ${api_ours[*]}"
+    else
+        echo "  stopping and removing ${api_ours[*]}"
+        # Each is stopped only if it is hayami's own.
+        for unit in "${api_ours[@]}"; do
+            case "${unit}" in
+                hayami-api.socket)
+                    systemctl --user disable --now hayami-api.socket >/dev/null 2>&1 || true
+                    # The link enable made, when there was no manager to take it.
+                    want="${API_UNITS}/sockets.target.wants/hayami-api.socket"
+                    if [ -L "${want}" ] && [ "$(readlink "${want}")" = "${API_UNITS}/hayami-api.socket" ]; then
+                        rm -f "${want}"
+                    fi
+                    ;;
+                hayami-api.service)
+                    systemctl --user stop hayami-api.service >/dev/null 2>&1 || true
+                    ;;
+            esac
+            rm -f "${API_UNITS}/${unit}"
+        done
+        systemctl --user daemon-reload >/dev/null 2>&1 || true
+    fi
+fi
+
 # The network helper was installed with sudo, and is removed the same way.
 # Its program is a copy of its own, so it outlives the one removed above.
 if [ -f /etc/systemd/system/hayami-network.service ]; then

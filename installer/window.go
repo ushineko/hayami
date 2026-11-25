@@ -36,7 +36,15 @@ func init() { //nolint:gochecknoinits // how fynstall is given a page's window
 			check: func(context.Context) offering { return probeKeep() },
 			shown: func() bool { return probeKeep().applies() }}
 	})
+	gui.Page(PageAPI, func(c *extension.Context) wizard.Page {
+		return &offerPage{c: c, title: "Service", param: ParamAPI, checking: CheckingAPI,
+			check: func(context.Context) offering { return probeAPI(c) },
+			shown: func() bool { return probeAPI(c).applies() }}
+	})
 }
+
+// CheckingAPI is what the API page says until the check answers.
+const CheckingAPI = "Checking for the service other programs read…"
 
 // Checking is what the sensors page says until the check answers.
 const Checking = "Checking for PawnIO and the sensor helper…"
@@ -124,6 +132,11 @@ func (p *offerPage) show(o offering) {
 		return
 	}
 	p.offer.Text = offer
+	// A page whose box does not start clear (the API page, spec 113 R25)
+	// says what it proposes first.
+	if r, ok := o.(interface{ resolve(*extension.Context) }); ok {
+		r.resolve(p.c)
+	}
 	p.offer.SetChecked(p.c.Param(p.param) == Yes)
 	p.offer.Refresh()
 	p.offer.Show()

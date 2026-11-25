@@ -206,6 +206,13 @@ if [ -f "${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/hayami-vpn-keepalive.s
     run systemctl --user try-restart hayami-vpn-keepalive.service
 fi
 
+# The service other programs read (spec 113) likewise, when the installer set it up.
+# This script sets none up: its socket starts it, and the installer's page is how
+# it is set up or taken away.
+if [ -f "${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/hayami-api.service" ]; then
+    run systemctl --user try-restart hayami-api.service
+fi
+
 # The network helper needs root and this script never asks for it: it says
 # the one line, which installs a copy of the program just built.
 if [ "$WITH_NETWORK" -eq 1 ]; then

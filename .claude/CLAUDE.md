@@ -220,6 +220,18 @@ place updates the guide's Status table in the same PR.
   administrator. It acts on a tunnel with nobody asking, only for a VPN switched on
   for it, and never on OpenVPN3's, which it only notifies on. It is installed only
   when asked: the installer's VPN page and `hayami-tui vpn-keepalive install`.
+- **Other programs read the panel through a service** (spec 113), `hayami-tui
+  serve`: the readings, details and drills as JSON on a socket only the account
+  can open, under the contract in `api/openapi.yaml` (prose: `docs/api.md`).
+  It is a fourth shell, `internal/api`, beside the window, the pane and the
+  command line, and serves facts, never what `view` formatted. On Linux it is
+  a systemd user socket and service, `hayami-api`, that the first connection
+  starts and that stops itself idle; it asks for no administrator. Unlike the
+  helpers it is on by default: the installer's Service page sets it up on a
+  first install, and its `api` parameter is `auto` and `once`, so a `--yes`
+  upgrade never gives back one that was removed. The reference client,
+  `internal/api/client` and `hayami-tui api`, imports only the contract and the
+  standard library, and `api check` is what an end-to-end run runs.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that

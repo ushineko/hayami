@@ -183,6 +183,19 @@ name.
   unit's path that does not start with hayami's mark is neither replaced nor removed. The
   unit is written with a rename, so a link at the path is replaced and not followed, with
   mode `0600`.
+- The service other programs read (spec 113) is a user socket and service written the
+  same way and held to the same rules (`internal/api/unit`): as the user, no elevation,
+  the program's path the one argument from outside, hayami's mark on each file, written
+  with a rename. Unlike the helpers it is set up by default on a first install; its
+  `api` parameter is `auto` and `once`, so an upgrade under `--yes` keeps one that is
+  there, restarted on the new program, and never gives back one that was removed:
+  fynstall's install half cannot tell an upgrade, so `auto` reads a marker the
+  installer writes in the install directory when it first decides, which an
+  uninstall removes. A removal stops each unit only if it is hayami's, and takes
+  `sockets.target.wants`' link to the socket even when the manager cannot be asked. The
+  socket is `0600` in a `0700` directory, and `RemoveOnStop` takes its file when it
+  stops, so a removal leaves no socket behind. The tarball's scripts restart it and
+  remove it by the same mark, and set none up.
 - The Linux helper is removed by its own root-owned copy in
   `/usr/lib/hayami`, not by elevating the user's `hayami-tui`
   (`nethelper.RemoveFromCopy`, `removeNetwork` in `installer/network.go`).
@@ -782,6 +795,7 @@ the goal of a working proof of concept.
 | 2026-11-22 | B3, B4, B5, B6 | The adversarial review of spec 111 (change pages, #390): one reviewer given the change and three attackers (a hostile GitLab host, a public repository's contributors, a crafted detail ID), then a refutation pass against the code. | Fixed before merge: a host answering longer lists than asked, or a huge title or label list, building a widget a line in the drawer (pages kept to 100 commits and files, 20 labels, 64 KiB of description, six lines of title; the view built once a reading); a day of pushes asking once a push (once a head, ten at most); a short hash cut inside a character. Refuted as a fix: salting the page key, which `hayami-tui detail <id>` needs stable across processes; the comment that claimed it hid names now says it only keeps them out of plain sight. Checked: no key sent off its forge, no path or query injection, no uncleaned text, no panic, `-race` clean. |
 | 2026-11-20 | B1, B2, B7 | The adversarial review of spec 103 (the sensor helper, #365): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. A separate review of PawnIO itself (published issues, signing, the site). | No path to LocalSystem or the kernel; no regression in the network helper. Fixed before merge: a held PCI mutex stopping the helper (now a missed reading); PawnIO's library able to load its own imports from the machine's PATH (now System32 only); the server's wake-up open allowing impersonation (now anonymous). Accepted above: the mutex convention, the whole program as LocalSystem, the modules' pin being one test. |
 | 2026-11-25 | B3, B4, B6, B7 | The adversarial review of spec 113's service, its first part (the contract, the server, `serve` on Linux, #396): one reviewer given the change and six attackers (another account, a same-account program after a credential, a browser, a hostile string's author, a client exhausting the service, someone racing the socket's directory), then each finding held against a test written to show it. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test (`internal/api/review_test.go`, `listen_linux_test.go`): made-up drill IDs each starting a poller and never let go (now 32 at once a section, 16 a stream, and let go when unread); the write deadline shorter than a first read's wait; `--listen` following a link to chmod its target; a NaN answered as an empty 200; an error's text not cleaned. Filed: #401, a usage reading's decimal places unbounded (older than the change). |
+| 2026-11-25 | B2, B4, B6 | The adversarial review of spec 113's units and installer page (`internal/api/unit`, the Service page, `install.sh` and `uninstall.sh`; 3c): one reviewer given the change and the attackers (another account, a same-account program or a unit planted in `~/.config/systemd/user`, the program's path, the upgrade and uninstall paths, systemd's hand-over), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test: a removal that found the service hayami's and the socket someone else's still disabled that socket (now each unit is stopped only when it is hayami's); a removal with no manager to ask left `sockets.target.wants`' link to the socket pointing at nothing (now removed where it is a link to hayami's socket). Checked: below. |
 | 2026-11-25 | B4, B6, B7 | The adversarial review of spec 113's reference client (`internal/api/client`, `hayami-tui api`, the vendored OpenAPI schema; 3b): one reviewer given the change and the attackers (whatever answers on the socket, a hostile string's author, the supply chain), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary: the only peer is the same account, or a path the person names. Fixed before merge, each pinned by a test: text from the socket reaching the terminal uncleaned through `status`, `load`'s report, `watch --json` and error messages (now cleaned once, for every subcommand); an embedded struct's fields read by the wrong index in `check` (it held only while two structs had as many fields); a response cap of 64 MiB, several times that once decoded (now 16 MiB); no deadline on `get` and `check` (now 1 m and 15 m, `--timeout`); a stream reconnecting without a pause; a negative `--streams` panicking. Checked: below. |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
@@ -883,6 +897,31 @@ stops each. A review starts by reading these.
   of JSON, so a string cannot add an event.
 - **Forge pages** are read only for items a forge's reading already listed,
   so the service asks a forge nothing more than the panel does.
+
+### B2, B4, B6, spec 113's units and installer page, 2026-11-25
+
+- **Another account and the socket.** `%t` is the account's runtime
+  directory, `0700`; the socket is `0600` in a `0700` directory; and the
+  socket systemd hands over is wrapped in the same peer check as one the
+  service makes (`Activated`, `PeerChecked`, `internal/api/listen_linux.go`),
+  so another account's connection is closed unanswered either way.
+- **The socket file after an idle exit.** The service does not unlink the
+  socket it was handed; systemd keeps listening on it, and removes it when the
+  socket unit stops (`RemoveOnStop`).
+- **A link at a unit's path.** A unit is written with a rename, which replaces
+  a link rather than writing through it; a removal deletes the link, never its
+  target.
+- **The program's path in `ExecStart`.** A line break, a control character, a
+  quote or a backslash is refused and a percent doubled, so the path cannot add
+  a line or a specifier to the unit.
+- **`--yes` giving back a removed service.** `api` is `once`, and `auto` reads
+  the installer's own marker, so after the first decision an upgrade leaves
+  the service as it found it (`TestARemovedServiceIsNotGivenBackByUpgrades`).
+- **Tests and the real manager.** Every install and removal step, the probe
+  and the marker are stand-ins in the installer's tests (`guard_test.go`);
+  the unit package's tests fake `systemctl` and the units' directory, and
+  `systemd-analyze verify` reads files in a test directory; the scripts' tests
+  are dry runs over a configuration directory of their own.
 
 ### B4, B6, B7, spec 113's reference client, 2026-11-25
 
