@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/ushineko/hayami/internal/api/client"
 )
 
 // plistValues reads a plist's strings, keys and booleans in order, by XML,
@@ -82,6 +83,44 @@ func TestAPathCannotAddAKey(t *testing.T) {
 	}
 }
 
+// program is a program file of the test's, the account's own and writable by
+// it alone.
+func program(t *testing.T) string {
+	t.Helper()
+	d := t.TempDir()
+	require.NoError(t, os.Chmod(d, 0o755))
+	p := filepath.Join(d, "hayami-tui")
+	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755)) //nolint:gosec // a program
+	return p
+}
+
+// B2, the adversarial review (5a). launchd runs the agent's program as this
+// account with nobody watching, so a program another account could change,
+// or one in a directory another account could change, is refused.
+func TestAProgramOthersCanChangeIsRefused(t *testing.T) {
+	fakeLaunchd(t)
+	ctx := context.Background()
+
+	p := program(t)
+	require.NoError(t, os.Chmod(p, 0o775))
+	err := Install(ctx, p)
+	require.ErrorIs(t, err, ErrBadProgram)
+	assert.Contains(t, err.Error(), "can be changed by other accounts")
+
+	p = program(t)
+	require.NoError(t, os.Chmod(filepath.Dir(p), 0o777))
+	require.ErrorIs(t, Install(ctx, p), ErrBadProgram)
+
+	link := filepath.Join(t.TempDir(), "hayami-tui")
+	p = program(t)
+	require.NoError(t, os.Chmod(p, 0o757))
+	require.NoError(t, os.Symlink(p, link))
+	require.ErrorIs(t, Install(ctx, link), ErrBadProgram, "the file the link leads to is what runs")
+
+	assert.False(t, Installed())
+	require.NoError(t, Install(ctx, program(t)))
+}
+
 // fakeLaunchd stands in for launchctl and the LaunchAgents directory.
 func fakeLaunchd(t *testing.T) (*[][]string, string) {
 	t.Helper()
@@ -109,6 +148,9 @@ func fakeLaunchd(t *testing.T) (*[][]string, string) {
 		return "", nil
 	}
 	dir = func() (string, error) { return agents, nil }
+	wasWait := waitAnswer
+	t.Cleanup(func() { waitAnswer = wasWait })
+	waitAnswer = func(context.Context, string) error { return nil }
 	// Short: a socket's path is capped at 104 bytes here, and t.TempDir is
 	// longer than that leaves room for.
 	tmp, err := os.MkdirTemp("", "hy")
@@ -126,21 +168,46 @@ func TestTheAgentIsInstalledAgainAndRemoved(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(agents, Label+".plist")
 
-	require.NoError(t, Install(ctx, "/Users/a/.local/bin/hayami-tui"))
+	require.NoError(t, Install(ctx, program(t)))
 	assert.True(t, Installed())
 	assert.Equal(t, State{Installed: true, Listening: true, Running: true}, Status(ctx))
 	assert.Contains(t, *calls, []string{"bootstrap", domain(), path})
 
 	*calls = nil
-	require.NoError(t, Install(ctx, "/Users/a/.local/bin/hayami-tui"))
-	assert.Equal(t, [][]string{{"bootout", domain() + "/" + Label}, {"bootstrap", domain(), path}}, *calls,
-		"an upgrade takes the agent out and loads it on the new program")
+	require.NoError(t, Install(ctx, program(t)))
+	assert.Equal(t, [][]string{{"bootout", domain() + "/" + Label}, {"print", domain() + "/" + Label}, {"bootstrap", domain(), path}}, *calls,
+		"an upgrade takes the agent out, waits until launchd has let it go, and loads it on the new program")
 
 	require.NoError(t, Remove(ctx))
 	assert.False(t, Installed())
 	_, err := os.Stat(path)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.NoError(t, Remove(ctx), "removing what is not there is not an error")
+}
+
+// R4, R7. launchd makes the socket but not its directory, so the install
+// makes it, this account's alone; a link at its place is refused, not
+// followed. Without the directory the agent fails at every start (found on
+// the Mac).
+func TestTheSocketsDirectoryIsMadeAndALinkRefused(t *testing.T) {
+	fakeLaunchd(t)
+	ctx := context.Background()
+	socket, err := client.Address()
+	require.NoError(t, err)
+
+	require.NoError(t, Install(ctx, program(t)))
+	info, err := os.Lstat(filepath.Dir(socket))
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+	require.NoError(t, Remove(ctx))
+
+	// The fake launchd made no socket, so the removal left the directory.
+	require.NoError(t, os.Remove(filepath.Dir(socket)))
+	require.NoError(t, os.Symlink(t.TempDir(), filepath.Dir(socket)))
+	err = Install(ctx, program(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a directory but a link")
 }
 
 // R25. A file at the agent's path that hayami did not write is neither
@@ -151,7 +218,7 @@ func TestAnAgentHayamiDidNotWriteIsLeftAlone(t *testing.T) {
 	theirs := "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict/></plist>\n"
 	require.NoError(t, os.WriteFile(path, []byte(theirs), 0o600))
 
-	require.ErrorIs(t, Install(context.Background(), "/Users/a/.local/bin/hayami-tui"), ErrNotOurs)
+	require.ErrorIs(t, Install(context.Background(), program(t)), ErrNotOurs)
 	require.ErrorIs(t, Remove(context.Background()), ErrNotOurs)
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)

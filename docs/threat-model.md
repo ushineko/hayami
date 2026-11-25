@@ -223,8 +223,10 @@ name.
   text, the tags its own, so a path cannot add a key; the program's path must be
   absolute with no control character; and a file at the plist's path without hayami's
   mark is neither replaced nor removed (`internal/api/unit/unit_darwin.go`). The agent
-  runs `hayami-tui` from wherever the person put it, a file the person can write, and
-  runs it as the person alone: anything that can rewrite it can already run as them.
+  runs `hayami-tui` from wherever the person put it, as the person, whenever any of
+  their programs connects, with nobody watching; so the install refuses a program, or
+  a directory it is in, that another account owns or that group or others can write
+  (`onlyTheirs`), and the file that runs is the person's or root's alone.
   launchd holds the socket at `0600` in a `0700` directory under the per-user
   `$TMPDIR`, and the service checks each peer's account (`LOCAL_PEERCRED`). A removal
   takes the agent out of launchd, then its file and its socket. Until fynstall builds a
@@ -841,6 +843,7 @@ the goal of a working proof of concept.
 | 2026-11-22 | B3, B4, B5, B6 | The adversarial review of spec 111 (change pages, #390): one reviewer given the change and three attackers (a hostile GitLab host, a public repository's contributors, a crafted detail ID), then a refutation pass against the code. | Fixed before merge: a host answering longer lists than asked, or a huge title or label list, building a widget a line in the drawer (pages kept to 100 commits and files, 20 labels, 64 KiB of description, six lines of title; the view built once a reading); a day of pushes asking once a push (once a head, ten at most); a short hash cut inside a character. Refuted as a fix: salting the page key, which `hayami-tui detail <id>` needs stable across processes; the comment that claimed it hid names now says it only keeps them out of plain sight. Checked: no key sent off its forge, no path or query injection, no uncleaned text, no panic, `-race` clean. |
 | 2026-11-20 | B1, B2, B7 | The adversarial review of spec 103 (the sensor helper, #365): one reviewer given the change and the attackers, then a separate refutation pass. Read-only. A separate review of PawnIO itself (published issues, signing, the site). | No path to LocalSystem or the kernel; no regression in the network helper. Fixed before merge: a held PCI mutex stopping the helper (now a missed reading); PawnIO's library able to load its own imports from the machine's PATH (now System32 only); the server's wake-up open allowing impersonation (now anonymous). Accepted above: the mutex convention, the whole program as LocalSystem, the modules' pin being one test. |
 | 2026-11-25 | B3, B4, B6, B7 | The adversarial review of spec 113's service, its first part (the contract, the server, `serve` on Linux, #396): one reviewer given the change and six attackers (another account, a same-account program after a credential, a browser, a hostile string's author, a client exhausting the service, someone racing the socket's directory), then each finding held against a test written to show it. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test (`internal/api/review_test.go`, `listen_linux_test.go`): made-up drill IDs each starting a poller and never let go (now 32 at once a section, 16 a stream, and let go when unread); the write deadline shorter than a first read's wait; `--listen` following a link to chmod its target; a NaN answered as an empty 200; an error's text not cleaned. Filed: #401, a usage reading's decimal places unbounded (older than the change). |
+| 2026-11-25 | B2, B4, B6, B7 | The adversarial review of spec 113's service on macOS (the socket, `LOCAL_PEERCRED`, launchd's socket taken over through a libSystem trampoline, the agent and its plist writer, `api-service` on macOS, the Fyne fork's bump; 5a): one reviewer given the change and the attackers (another account, a same-account program, someone planting in `$TMPDIR` or `~/Library/LaunchAgents`, a hostile program path, the supply chain), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test: the agent would run its program from a place another account could write, with nobody watching, and this document said otherwise (now refused, `TestAProgramOthersCanChangeIsRefused`, falsified); the socket's directory was not checked for its owner, as `Listen` checks it (now it is). Checked: below. |
 | 2026-11-25 | B1, B2, B6, B7 | The adversarial review of spec 113's service on Windows (the pipe, `serve` under the service manager, the client's dial, the per-user template and its copy in Program Files, `api-service`, the installer page and scripts, go-winio; phase 4): one reviewer given the change and the attackers (another account, a same-account program without administrator rights, a pipe squatter, someone writing the install directory during the elevated step, the upgrade and uninstall paths, the supply chain), finding and refuting in one pass, then its one open question tested on the Windows VM. Read-only. | Nothing crossed an account boundary. The open question, whether an administrator's instance runs with the full token, was tested: it runs with the limited one, Medium integrity, as its desktop does. Fixed before merge, each pinned by a test: `api status` read a pipe someone else made as the service running (now it dials with the owner check); an update that failed after stopping the instances left the account without its service until the next sign-in (now they start again on the copy there; `TestAFailedUpdateLeavesTheServiceRunning`, falsified). Accepted: another account taking the pipe's name first keeps the service down (above). Checked: below. |
 | 2026-11-25 | B2, B4, B6 | The adversarial review of spec 113's units and installer page (`internal/api/unit`, the Service page, `install.sh` and `uninstall.sh`; 3c): one reviewer given the change and the attackers (another account, a same-account program or a unit planted in `~/.config/systemd/user`, the program's path, the upgrade and uninstall paths, systemd's hand-over), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test: a removal that found the service hayami's and the socket someone else's still disabled that socket (now each unit is stopped only when it is hayami's); a removal with no manager to ask left `sockets.target.wants`' link to the socket pointing at nothing (now removed where it is a link to hayami's socket). Checked: below. |
 | 2026-11-25 | B4, B6, B7 | The adversarial review of spec 113's reference client (`internal/api/client`, `hayami-tui api`, the vendored OpenAPI schema; 3b): one reviewer given the change and the attackers (whatever answers on the socket, a hostile string's author, the supply chain), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary: the only peer is the same account, or a path the person names. Fixed before merge, each pinned by a test: text from the socket reaching the terminal uncleaned through `status`, `load`'s report, `watch --json` and error messages (now cleaned once, for every subcommand); an embedded struct's fields read by the wrong index in `check` (it held only while two structs had as many fields); a response cap of 64 MiB, several times that once decoded (now 16 MiB); no deadline on `get` and `check` (now 1 m and 15 m, `--timeout`); a stream reconnecting without a pause; a negative `--streams` panicking. Checked: below. |
@@ -944,6 +947,30 @@ stops each. A review starts by reading these.
   of JSON, so a string cannot add an event.
 - **Forge pages** are read only for items a forge's reading already listed,
   so the service asks a forge nothing more than the panel does.
+
+### B2, B4, B6, B7, spec 113's service on macOS, 2026-11-25
+
+- **Another account and the socket.** The per-user `$TMPDIR` under
+  `/var/folders` is the account's, `0700`; the socket is `0600` in a `0700`
+  directory; and `LOCAL_PEERCRED` closes a connection from another account
+  (`sudo -u nobody` refused on the Mac).
+- **Planting in `$TMPDIR/hayami`.** Only the account can write there; a link at
+  the directory's place is refused, not followed, and so is one someone else
+  owns.
+- **A hostile program path in the plist.** Every value is escaped as XML text
+  and control characters are refused first; the tags are the writer's own, so
+  a path is one `<string>` and cannot add a key (`TestAPathCannotAddAKey`).
+- **A file at the plist's path.** `~/Library` is `0700`; without hayami's mark
+  a file there is neither replaced nor removed, and a link there is replaced by
+  the rename, not written through.
+- **The trampoline and `linkname`.** The technique and the `syscall.syscall`
+  target `golang.org/x/sys/unix` uses; only libSystem's own
+  `launch_activate_socket` and `free` are imported, by absolute path; the
+  descriptors past the first are closed and the list freed.
+- **The Fyne fork's bump.** `v2.8.3-ushineko.5` differs from `.4` only in the
+  build tags of the scroller's two files; go.sum pins it.
+- **`getconf` where `TMPDIR` is unset.** An absolute system path with fixed
+  arguments; `TMPDIR` is the person's own setting.
 
 ### B1, B2, B6, B7, spec 113's service on Windows, 2026-11-25
 

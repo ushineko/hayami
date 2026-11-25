@@ -6,11 +6,14 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 	"unicode"
 
 	"github.com/ushineko/hayami/internal/api/client"
@@ -210,6 +213,9 @@ a service running the old program stops and the next connection starts the
 new one. It needs no administrator.
 */
 func Install(ctx context.Context, program string) error {
+	if err := onlyTheirs(program); err != nil {
+		return err
+	}
 	path, err := plistPath()
 	if err != nil {
 		return err
@@ -228,10 +234,123 @@ func Install(ctx context.Context, program string) error {
 	if err := write(path, text); err != nil {
 		return err
 	}
-	// Not loaded is not an error: a first install.
-	_, _ = launchctl(ctx, "bootout", domain()+"/"+Label)
-	_, err = launchctl(ctx, "bootstrap", domain(), path)
-	return err
+	// launchd makes the socket and not its directory: without it there is no
+	// socket, and the agent fails at each start (found on the Mac).
+	if err := socketDir(filepath.Dir(socket)); err != nil {
+		return err
+	}
+	// Not loaded is not an error: a first install. bootout returns before
+	// launchd has let the agent go, and loading it again meanwhile fails
+	// with "Input/output error" (found on the Mac), so this waits.
+	if _, err := launchctl(ctx, "bootout", domain()+"/"+Label); err == nil {
+		if err := unloaded(ctx); err != nil {
+			return err
+		}
+	}
+	if _, err := launchctl(ctx, "bootstrap", domain(), path); err != nil {
+		return err
+	}
+	// launchd makes the socket again a moment after the agent is loaded, and
+	// until then a client is refused (found on the Mac): done is when it
+	// answers.
+	return waitAnswer(ctx, socket)
+}
+
+// unloaded waits until launchd no longer has the agent.
+func unloaded(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, answerWait)
+	defer cancel()
+	for Loaded(ctx) {
+		select {
+		case <-ctx.Done():
+			return errors.New("launchd did not let the agent go in ten seconds") //nolint:err113 // said plainly
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return nil
+}
+
+// answerWait is how long Install waits for launchd's socket to answer.
+const answerWait = 10 * time.Second
+
+// waitAnswer is answers; a variable, so a test with no launchd does not wait.
+var waitAnswer = answers
+
+// answers waits until the socket at path takes a connection.
+func answers(ctx context.Context, path string) error {
+	ctx, cancel := context.WithTimeout(ctx, answerWait)
+	defer cancel()
+	var d net.Dialer
+	for {
+		c, err := d.DialContext(ctx, "unix", path)
+		if err == nil {
+			_ = c.Close()
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the agent is loaded, but its socket does not answer yet: %w", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+/*
+onlyTheirs refuses a program another account could change, and its directory:
+launchd runs the agent's program as this account whenever any of its programs
+connects, with nobody watching, so the file must be this account's or root's
+and writable by neither group nor others, and so must the directory it is in
+(the adversarial review, 5a). Links are followed to the file that runs.
+*/
+func onlyTheirs(program string) error {
+	runs, err := filepath.EvalSymlinks(program)
+	if err != nil {
+		return fmt.Errorf("finding the program %s: %w", program, err)
+	}
+	for _, p := range []string{runs, filepath.Dir(runs)} {
+		info, err := os.Stat(p)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", p, err)
+		}
+		if o := owner(info); o != uid() && o != 0 {
+			return fmt.Errorf("%w: %s belongs to another account, which could change what the agent runs as you", ErrBadProgram, p)
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			return fmt.Errorf("%w: %s can be changed by other accounts (%s), and the agent would run it as you", ErrBadProgram, p, info.Mode().Perm())
+		}
+	}
+	return nil
+}
+
+// owner is the account a file belongs to, or -1 when it cannot be told.
+func owner(info os.FileInfo) int {
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		return int(st.Uid)
+	}
+	return -1
+}
+
+// socketDir makes the socket's directory this account's alone, 0700, and
+// refuses one that is a link or not a directory: the directory is looked at
+// as it is, not through what it points to.
+func socketDir(path string) error {
+	if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("making the socket's directory: %w", err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("reading the socket's directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("%s is not a directory but a link or a file", path) //nolint:err113 // said plainly
+	}
+	if owner(info) != uid() {
+		return fmt.Errorf("%s belongs to another account", path) //nolint:err113 // said plainly
+	}
+	if err := os.Chmod(path, 0o700); err != nil { //nolint:gosec // a directory needs its search bit, and 0700 is this account's alone
+		return fmt.Errorf("making the socket's directory this account's alone: %w", err)
+	}
+	return nil
 }
 
 /*

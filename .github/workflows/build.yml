@@ -135,7 +135,7 @@ jobs:
       - name: Test the service
         env:
           CGO_ENABLED: "0"
-        run: go test ./internal/api/... ./internal/panel/...
+        run: go test ./internal/api/...
 
   # Spec 033. Both panels build and every test passes on Windows. The desktop
   # panel needs cgo; the runner image carries a mingw gcc on PATH.
