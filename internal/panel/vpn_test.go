@@ -72,6 +72,16 @@ func TestWithNoVPNChosenTheCardIsUnchanged(t *testing.T) {
 	assert.Equal(t, byte('['), raw[0], "the JSON is still a list of interfaces")
 }
 
+// A system with no VPN system to ask (macOS, a Linux without one) has no VPN
+// rows, and asking for them is an empty list, not a panic: the service asks on
+// every poll (spec 113; found on the Mac in phase 5).
+func TestWithNoVPNSystemThereAreNoVPNReadings(t *testing.T) {
+	b := panel.NewBandwidth([]string{"eth0"}, noCounters)
+	_, err := b.Poll(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, b.VPNReadings())
+}
+
 // Nothing but VPNs chosen is still a card with something to say, and not one
 // saying no interfaces were picked.
 func TestAVPNAloneDrawsTheCard(t *testing.T) {

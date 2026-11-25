@@ -112,7 +112,8 @@ meets them lands.
 | 3b | The reference client (`internal/api/client`: the address rule, strict decoding against the contract types, the stream, `Check`, `Load`) and `hayami-tui api address/status/get/watch/check/load`. The contract types carry `enum`, `format` and `nullable` tags, held to the schema by the parity test; `api/openapi.yaml` is validated as an OpenAPI 3.1 document against the OpenAPI Initiative's schema, vendored as a test fixture. The adversarial review's six findings fixed and pinned | Merged (#403) |
 | 3c | The systemd user units (`internal/api/unit`, standard library only: written as the person, hayami's mark on each, `RemoveOnStop`, `try-restart` on an upgrade), the installer's Service page (`api`: `auto`, `once`; `auto` sets the service up the first time the installer decides, by a marker in the install directory, and never gives back one removed), `install.sh` and `uninstall.sh`, `hayami-tui api status` with the manager's state, `docs/api.md`, CLAUDE.md, and the desk's end-to-end run. The adversarial review's two findings fixed and pinned | This PR |
 | 4 | Windows per-user service: the pipe (`\\.\pipe\hayami-api-<SID>`, `go-winio`, an access list of the account alone, made as the first instance), `serve` under the service manager (`svc.Run`; an account that never ran hayami is served nothing), the client's pipe dial on `x/sys` with its check of who serves the pipe, the template running a copy in Program Files (decided with the operator: every account that signs in runs it), its recovery actions, the upgrade that stops, replaces and restarts the instances, the removal that deletes them before the template, the hidden `api-service` step the installer and scripts run elevated, one UAC prompt on an upgrade under `--yes` too (decided with the operator), `api status` on Windows, the tests run on the Windows VM and on CI's runner, and the VM's end-to-end run. The adversarial review's open question tested on the VM (an administrator's instance has the limited token) and its two findings fixed and pinned | This PR |
-| 5 | macOS agent and CI job | — |
+| 5a | macOS: the socket in the per-user `$TMPDIR` with `LOCAL_PEERCRED`, launchd's socket taken over without cgo (a libSystem trampoline), the person's launchd agent written by hayami's own plist writer and loaded into `gui/<uid>`, `api-service install` and `remove` as the person until fynstall has a macOS target, the `macos-latest` CI job, and the Mac's end-to-end run. Found on the way, each fixed and pinned: the Fyne fork did not build on darwin without cgo (fork `v2.8.3-ushineko.5`); the bandwidth source's VPN rows panicked on a machine with no VPN system; launchd refuses `<false></false>`; launchd makes the socket and not its directory; two races in an upgrade. The adversarial review's two findings fixed and pinned | This PR |
+| 5b | The installer's Service page on macOS, when fynstall builds a macOS installer (ushineko/fynstall#75) | — |
 
 ## Requirements
 
@@ -532,23 +533,31 @@ for review.
   As built in 4: passed on the Windows VM against the installed instance
   (E2E results below). The Mac is 5.
 
+  As built in 5a: on the Mac, 7,571,558 requests with no errors, p99 10 ms,
+  `api check` passing straight afterwards, the agent the same process
+  throughout. Its RSS rose from 34 to 37.8 MB, 1.1 MB of that in the last
+  three minutes and slowing: settling, but not flat as the criterion has
+  it, so this stays open for the operator to judge, or for a longer run.
+
 ### Platforms and installer
 
-- [ ] Linux: the socket is `0600` in a `0700` directory; a connection from
-      another UID is closed with no response
-- [ ] Linux: the socket unit starts the service on connect and the service
-      exits after the idle period (real user manager on the desk)
+- [x] Linux: the socket is `0600` in a `0700` directory; a connection from
+      another UID is closed with no response (the desk, 3c: `nobody` refused
+      by the mode; the peer check by `TestTheSocketIsThisAccountsAlone`)
+- [x] Linux: the socket unit starts the service on connect and the service
+      exits after the idle period (real user manager on the desk; 3c's results)
 - [x] Windows: the template is registered as `SERVICE_USER_OWN_PROCESS`; an
       instance runs as the signed-in account after sign-in and is gone after
       sign-out; the pipe's access list holds that account alone; a second
       `serve` against an existing pipe refuses to start (the Windows VM)
-- [ ] macOS: the socket is `0600` in a `0700` directory under the per-user
+- [x] macOS: the socket is `0600` in a `0700` directory under the per-user
       `$TMPDIR`; a connection from another UID is closed with no response
       (`LOCAL_PEERCRED`); the agent is loaded in `gui/<uid>`, restarts after
       a crash, and stays down after a clean stop; the usage section reads
       through the Keychain from the agent (the Mac)
-- [ ] An address longer than `sun_path` is refused with an error naming the
-      limit (unit test, Linux and macOS)
+- [x] An address longer than `sun_path` is refused with an error naming the
+      limit (unit test, Linux and macOS: `TestTheClientsAddressIsTheServices`,
+      `TestTheAddressIsInThePerUserTemporaryDirectory`)
 - [ ] CI runs the `internal/api` tests, the load test included, on Linux,
       Windows and macOS runners (a `macos-latest` job is added to
       `build.yml`)
@@ -580,7 +589,7 @@ for review.
 
 - [x] `internal/api/client` imports no `panel`, `view` or `core` (a test
       reads its imports)
-- [ ] `hayami-tui api check` passes against the installed service on the
+- [x] `hayami-tui api check` passes against the installed service on the
       desk, on the Windows VM and on the Mac, and fails, naming the violation, against a test server
       that serves a padded name, a string where a number belongs, and a
       missing field (falsified)
@@ -745,6 +754,49 @@ is not shown there; on a desktop it is the one prompt the page names.
 | The template's registration, update and removal (`TestTheTemplateIsRegisteredAndRemoved`, elevated) | Registered with its type, start, program and recovery actions; registered again, updated in place; removed with its program. Falsified: with the first recovery action changed the test fails |
 | Sign out and in at the console, again | The instance before gone, deleted at the sign-out; a new `hayami-api_<n>` made at the sign-in, running |
 
+### Results: the Mac, 5a, 2026-11-25
+
+macOS 27.2.1, Apple silicon. `hayami-tui` cross-built from this branch
+(`CGO_ENABLED=0`, darwin/arm64) into `~/.local/bin`, set up with
+`hayami-tui api-service install`.
+
+| Step | Result |
+|---|---|
+| `serve` by hand | The socket at `$TMPDIR/hayami/api.sock`, `0600` in a `0700` directory; `api check` and the throwaway client passed |
+| `api-service install` | The agent written to `~/Library/LaunchAgents` (`plutil -lint` OK) and loaded into `gui/501`; launchd made the socket, `0600`, and started `hayami-tui serve` for it |
+| `api check` | Passed: 17 requests, 5 sections, 5 details, 5 events |
+| The throwaway client (Python, standard library, `docs/api.md` alone) | 387 checks, 0 failed |
+| The usage section | Read through the Keychain from the agent: the account, no absence, no error |
+| `sudo -u nobody`, connecting to the socket | Refused, permission denied |
+| `kill -9` on the agent | launchd started it again under a new PID |
+| `launchctl kill TERM` | Stopped and stayed down; the next connection started it, through the socket |
+| Idle | Exited 0 after five minutes with nobody reading; launchd kept listening; the next request started it |
+| `api load --clients 32 --streams 8 --duration 5m`, RSS every 10 s | 7,571,558 requests, 0 errors, p99 10.2 ms, max 1.2 s; the same process throughout. RSS 34 to 37.8 MB, slowing. `api check` straight afterwards passed |
+| `api-service remove` | Not loaded; the plist, the socket and its directory gone. Again: nothing to do, no error |
+| Install, check, remove, twice from nothing; then install | Each install made the directory and the socket and `api check` passed; each removal left nothing; left installed |
+| The `internal/api`, client and unit tests, cross-built, on the Mac | Pass, the load test and the shared Unix listener tests included |
+
+Found on the Mac, each fixed and pinned by a test, each falsified: launchd
+refused the agent with "Bootstrap failed: 5: Input/output error" because of
+`<false></false>`, which `plutil -lint` accepts and `encoding/xml` writes
+(`TestTheAgentIsWhatLaunchdLoads`); launchd makes the socket and not its
+directory, so a first install with no directory left an agent failing at every
+start (`TestTheSocketsDirectoryIsMadeAndALinkRefused`); the bandwidth
+section's read panicked with no VPN system, recovered by the service
+(`TestWithNoVPNSystemThereAreNoVPNReadings`). And a binary copied over one
+macOS had already run is killed (137) until it is replaced, not rewritten:
+the kernel keeps the old signature for the file.
+
+Two races in an upgrade, found on the Mac and fixed: `launchctl bootout`
+returns before launchd has let the agent go, and loading it again meanwhile
+fails with the same "Input/output error", so the install waits until launchd
+no longer has it; and launchd makes the socket again a moment after loading,
+refusing a client until then, so the install returns only when the socket
+answers. Five upgrades in a row over a running agent, each followed at once by
+`api check`, passed. And from the review: the install refuses a program, or its
+directory, that another account owns or can write
+(`TestAProgramOthersCanChangeIsRefused`, falsified).
+
 ### Prod visibility
 
 Not applicable: hayami is a desktop program with no telemetry. A person's
@@ -767,6 +819,11 @@ report is `hayami-tui api status`, `api check` and `doctor`.
 
 ## Gaps found
 
+- **The Fyne fork did not build on darwin without cgo** (found in 5a): its
+  scroller's darwin file imports C and its fallback was excluded on darwin,
+  so nothing defined the scroller's behaviour. Fixed in the fork
+  (`v2.8.3-ushineko.5`, the fallback covers `!cgo`), which the terminal panel
+  needs on macOS.
 - **fynstall has no macOS target.** It needs one that builds a macOS
   installer from `fynstall.yaml`, runs hayami's extension pages there, and
   installs into the person's home. This is fynstall's own spec, issue and

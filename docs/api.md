@@ -38,7 +38,15 @@ service is checked: everything it does, any client can.
   Windows restarts one that fails, twice, five seconds apart. Removing it, by
   the page or by uninstalling, stops and deletes each instance, then the
   template, then the copy.
-- **macOS** is a later phase of spec 113: a launchd agent.
+- **macOS.** A launchd agent of the person's own, `io.ushineko.hayami.api`,
+  at `~/Library/LaunchAgents/io.ushineko.hayami.api.plist` and loaded into
+  `gui/<uid>`. launchd holds the socket and starts the service on the first
+  connection; it stops itself after five minutes with nobody reading, as on
+  Linux. launchd restarts it after a crash, five seconds apart, and not after a
+  clean exit. It needs no administrator. Until the installer is built for
+  macOS (ushineko/fynstall#75), it is set up with `hayami-tui api-service
+  install` and removed with `hayami-tui api-service remove`, run as the person,
+  from where `hayami-tui` will stay: the agent runs that file.
 
 ```console
 $ hayami-tui api status
@@ -64,7 +72,7 @@ machine reaches it.
 |---|---|
 | Linux | the Unix socket `$XDG_RUNTIME_DIR/hayami/api.sock` |
 | Windows | the named pipe `\\.\pipe\hayami-api-<SID>`, the account's SID |
-| macOS (later) | the Unix socket `$TMPDIR/hayami/api.sock`, the per-user `$TMPDIR` |
+| macOS | the Unix socket `$TMPDIR/hayami/api.sock`, the per-user `$TMPDIR` (`getconf DARWIN_USER_TEMP_DIR` where the variable is unset) |
 
 A path longer than the system takes in a socket address (108 bytes on Linux,
 104 on macOS) is an error, never cut short. `hayami-tui api address` prints the

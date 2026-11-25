@@ -16,8 +16,10 @@ import (
 apiServiceCmd is the installer's step for the service other programs read on
 Windows (spec 113 R6, R25), and the install scripts': `api-service install`
 registers the service or updates it on this program, `remove` removes it.
-Each needs an administrator, and run without one asks Windows for one (one
-UAC prompt), as `network-helper` does. Hidden: install and removal are the
+Each needs an administrator there, and run without one asks Windows for one
+(one UAC prompt), as `network-helper` does. On macOS it writes and loads the
+person's launchd agent, or removes it, as the person (R7): the route there
+until fynstall builds a macOS installer. Hidden: install and removal are the
 installer's, and there is no `api install` for a person to run.
 */
 func apiServiceCmd() *cobra.Command {
@@ -28,10 +30,17 @@ func apiServiceCmd() *cobra.Command {
 	// step runs do as an administrator: here, or in this program run again
 	// as one.
 	step := func(cmd *cobra.Command, name string, do func() error) error {
-		if runtime.GOOS != "windows" {
-			// Elsewhere the installer sets the service up as the person,
+		switch runtime.GOOS {
+		case "darwin":
+			// The agent is the person's own, and needs no administrator.
+			// Until fynstall builds an installer for macOS, this is how it
+			// is set up there (spec 113, phase 5a).
+			return do()
+		case "windows":
+		default:
+			// On Linux the installer sets the service up as the person,
 			// never as an administrator.
-			return errors.New("this is the installer's step on Windows; here it sets the service up as you") //nolint:err113 // said plainly
+			return errors.New("this is the installer's step on Windows and macOS; here the installer sets the service up as you") //nolint:err113 // said plainly
 		}
 		if !nethelper.Elevated() {
 			return elevate(cmd, "api-service", name)

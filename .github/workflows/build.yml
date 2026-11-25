@@ -111,6 +111,32 @@ jobs:
       - name: Fuzz each parser
         run: make fuzz FUZZTIME=10s
 
+  # Spec 113, phase 5. The terminal panel builds on macOS without cgo, and the
+  # service's tests pass there, the load test included: the socket and its
+  # peer check (LOCAL_PEERCRED), the address and the launchd agent. The
+  # desktop panel is not built for macOS yet.
+  macos:
+    name: Test on macOS
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: The terminal panel builds without cgo
+        env:
+          CGO_ENABLED: "0"
+        run: go build -o hayami-tui ./cmd/hayami-tui
+
+      - name: Test the service
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./internal/api/...
+
   # Spec 033. Both panels build and every test passes on Windows. The desktop
   # panel needs cgo; the runner image carries a mingw gcc on PATH.
   windows:

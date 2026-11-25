@@ -124,8 +124,8 @@ func TestTheClientsAddressIsTheServices(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 
-	if runtime.GOOS == "windows" {
-		return // a pipe's name has no sun_path to outgrow
+	if runtime.GOOS != "linux" {
+		return // a pipe's name has no sun_path to outgrow; macOS's is listen_darwin_test.go's
 	}
 	t.Setenv("XDG_RUNTIME_DIR", "/"+strings.Repeat("d", 100))
 	_, err = api.Address()

@@ -341,7 +341,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | The reference client (`internal/api/client`) and `hayami-tui api` | 9 | In place | #396 |
 | The service installed and started by its socket (systemd user units, the installer's Service page) | 9 | In place | #396 |
 | The service on Windows (a per-user service running a copy in Program Files, the pipe and its owner check) | 5, 9 | In place | #396 |
-| The service on macOS (launchd agent) | 5, 9 | Planned | #396 |
+| The service on macOS (a launchd agent, the socket handed over without cgo, `LOCAL_PEERCRED`) | 5, 9 | In place, without the installer page | #396 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a
