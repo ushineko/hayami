@@ -501,7 +501,10 @@ for review.
   buffer is full, well inside 30 s. The idle level is taken after a warm-up
   from 64 goroutines, and the heap is allowed 10% or 1 MiB over it, whichever
   is more: a heap profile showed what remains to be the runtime's own
-  threads, which it keeps once made. Falsified with the stream queue's
+  threads, which it keeps once made. The p99 bound is 50 ms on eight
+  processors or more and scales up on fewer, where the test's own clients
+  and the race detector compete with the server for them (a two-processor
+  CI runner measured 54 ms). Falsified with the stream queue's
   signal made blocking: the test fails, and the queue was put back.
 - [x] The 65th connection and the 17th stream get 503 with `Retry-After`
       within a second, and are never left hanging
