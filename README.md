@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.23.1
+**Version**: 0.23.2
 
 *a chart you read at a glance*
 
@@ -840,12 +840,16 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.23.2 (2026-11-26)
 
 - **Fixed**: the Development drawer's GitHub strip and day pages list your
   own private repositories' commits again. GitHub's contribution list leaves
   every private repository out, so they are read from each repository's
   default branch (spec 114, #411).
+- **Docs**: `ARCHITECTURE.md` maps every way hayami runs (the panels, the
+  one-shot commands, the service and the helpers) with what starts each and
+  as which account; the README describes the service and how it is set up on
+  each system; `SECURITY.md`'s scope follows the threat model's boundaries.
 
 ### 0.23.1 (2026-11-25)
 
