@@ -241,6 +241,12 @@ place updates the guide's Status table in the same PR.
   The reference client,
   `internal/api/client` and `hayami-tui api`, imports only the contract and the
   standard library, and `api check` is what an end-to-end run runs.
+- **hayami-js is not in this repository.** The JavaScript client of the
+  service, `hayami-js`, belongs to herdr-mods (`~/git/herdr-mods`,
+  `lib/hayami.js`, drawn by its `hayami-usage` mod; herdr-mods spec 010). Work
+  on that client, or on how herdr shows hayami's readings, is done there, not
+  here. This repository owns the service and its contract (`api/openapi.yaml`),
+  which hayami-js follows: a change to the contract is what concerns it.
 - **Long-running work is cancellable** (`context.Context`); the GUI never
   blocks its render thread (the design system's `fyne.Do` idiom).
 - **Nothing transient may reflow the panel** (glance rule): a value that
