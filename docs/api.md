@@ -247,3 +247,10 @@ statuses, latency percentiles, events per stream and errors.
 
 The reference client is `internal/api/client`: the standard library and the
 contract types, no more, so it shows what a client in any language needs.
+
+## Other clients
+
+`hayami-js`, the JavaScript client herdr uses to show hayami's readings, is not
+part of this repository: it lives in herdr-mods (`lib/hayami.js`, drawn by the
+`hayami-usage` mod), which owns it. It follows this contract, so a change to the
+contract is what concerns it.
