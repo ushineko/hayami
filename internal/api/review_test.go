@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,10 +27,18 @@ each finding fixed before merge, pinned here.
 // poller and a read of the source. A section reads at most MaxDetails at
 // once; past that the answer is 503; and a detail nobody reads is let go,
 // so made-up IDs do not pile up.
+//
+// The leases run on the test's clock (#413): it stands still while the
+// details are asked for, so none lapses however slow the machine is, and
+// then moves past every lease.
 func TestMadeUpDrillsAreBoundedAndLetGo(t *testing.T) {
 	f := coolerFixture()
 	f.anyDrill, f.interval = true, 10*time.Millisecond
-	h := start(t, []panel.Source{f}, options{tune: func(hub *api.Hub, _ *api.Server) { hub.MinLease = 60 * time.Millisecond }})
+	var clock atomic.Int64
+	clock.Store(polledAt.UnixNano())
+	h := start(t, []panel.Source{f}, options{tune: func(hub *api.Hub, _ *api.Server) {
+		hub.SetClock(func() time.Time { return time.Unix(0, clock.Load()) })
+	}})
 
 	busy := 0
 	for i := range api.MaxDetails + 8 {
@@ -46,6 +55,7 @@ func TestMadeUpDrillsAreBoundedAndLetGo(t *testing.T) {
 	}
 	assert.Equal(t, 8, busy, "past %d details at once, the rest come back later", api.MaxDetails)
 
+	clock.Add(int64(time.Hour))
 	waitFor(t, "the details to be let go", func() bool { _, d := h.hub.Active(); return d == 0 })
 	status, _, _ := h.get(t, "/v1/sections/cooler/details/cpu/made-up-again")
 	assert.Equal(t, http.StatusOK, status, "a detail let go gives its place back")
