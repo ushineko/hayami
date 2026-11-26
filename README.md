@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.23.0
+**Version**: 0.23.1
 
 *a chart you read at a glance*
 
@@ -797,7 +797,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.23.1 (2026-11-25)
 
 - **Added**: the service runs on macOS, as a launchd agent of your own that
   starts when a program connects to its socket in your temporary directory.
