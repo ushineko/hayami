@@ -364,6 +364,9 @@ hayami-tui detail cooler/cpu              # what is behind a reading: programs b
 hayami-tui detail bandwidth --json        # ... by network use, as JSON
 hayami-tui network-helper                 # whether the network helper is installed
 hayami-tui arrangements                   # the values --arrangement takes
+hayami-tui serve                          # the service, in the foreground
+hayami-tui api status                     # whether the service is installed and running
+hayami-tui api get sections/cooler        # one of its answers, as JSON
 ```
 
 `--sections` and `--arrangement` apply to that run only and never write to the
@@ -375,6 +378,44 @@ The desktop panel takes neither flag; it follows its settings.
 On Linux, move the panel as any frameless window (Alt-drag on KDE). On
 Windows, drag it from anywhere on it, and it opens where you left it.
 Right-click it for Preferences, Opacity and Quit.
+
+Every way hayami runs, the panels, the one-shot commands, the service and the
+helpers, with what starts each and which account it runs as, is in
+[ARCHITECTURE.md](https://github.com/ushineko/hayami/blob/main/ARCHITECTURE.md).
+
+### The service
+
+Other programs of your account, a status bar, a script or another panel, can
+read what the panel reads from a service: `hayami-tui serve` answers with the
+readings and what is behind each one, as JSON over a socket
+only your account can open, under a published contract
+([api/openapi.yaml](https://github.com/ushineko/hayami/blob/main/api/openapi.yaml)).
+It reads a section only while a program asks for it, and needs no
+administrator to run.
+
+It is set up by default:
+
+- **Linux.** The installer's Service page writes a systemd user socket and
+  service, `hayami-api`. The first program to connect to
+  `$XDG_RUNTIME_DIR/hayami/api.sock` starts it, and it stops after five
+  minutes with nobody reading. Clear the page's box (`--api=no`) to leave it
+  out; running the installer again with the box cleared, or uninstalling,
+  removes it.
+- **Windows.** The same page registers a per-user service, `hayami-api`,
+  that Windows starts as each account that signs in, on the pipe
+  `\\.\pipe\hayami-api-<SID>`. Its program is a copy in Program Files, so
+  registering or updating it asks for an administrator once.
+- **macOS.** A launchd agent of your own, `io.ushineko.hayami.api`, started
+  by the first connection: `hayami-tui api-service install` sets it up and
+  `hayami-tui api-service remove` removes it, until the installer is built
+  for macOS.
+- **Anywhere else**, or without a service manager, run `hayami-tui serve`
+  in the foreground.
+
+`hayami-tui api` is its reference client: `status`, `get`, `watch` for a
+stream, and `check`, which holds every answer to the contract.
+[docs/api.md](https://github.com/ushineko/hayami/blob/main/docs/api.md)
+describes what it serves.
 
 ## Preferences and settings
 
@@ -757,6 +798,8 @@ is a glance window from [fynedesygn](https://github.com/ushineko/fynedesygn).
 The layers, the rules a change is held to, and where to add a device, reading
 or section are in
 [docs/architecture.md](https://github.com/ushineko/hayami/blob/main/docs/architecture.md).
+How it runs, as panels, commands, the service and the helpers, is in
+[ARCHITECTURE.md](https://github.com/ushineko/hayami/blob/main/ARCHITECTURE.md).
 
 ## Development
 

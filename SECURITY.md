@@ -1,12 +1,12 @@
 # Security
 
-hayami is a desktop panel, and parts of it hold more than a panel's usual
-reach: a network helper that runs with rights the panel does not have (a
-Windows service; a Linux service with kernel capabilities), installers that
-run as an administrator or under sudo, the OAuth tokens it reads usage
-with, and what it shows about the machine and other accounts. What it
-defends, against whom, and how is in
-[docs/threat-model.md](docs/threat-model.md).
+hayami is a desktop panel, and parts of it reach further than a panel
+usually does: helpers that run with rights the panel does not have, a
+service that answers other programs, installers that ask for an
+administrator, the credentials it reads usage and forge activity with, and
+what it shows about the machine and other accounts. What it defends, against
+whom, and how is in [docs/threat-model.md](docs/threat-model.md); every way
+it runs, and as which account, is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Reporting a vulnerability
 
@@ -26,20 +26,37 @@ advisory.
 
 The boundaries in the threat model:
 
-- the network helpers and their sockets, pipes and protocol;
-- installing, upgrading and removing, on Linux and Windows;
-- the Claude and Codex tokens, their refresh and the shared usage cache;
-- what hayami parses: device and sensor data, the helper's lines,
-  LibreHardwareMonitor's `data.json`, the providers' responses;
-- what hayami does outside itself: ending processes, the KWin rule and
-  script, the udev rule, autostart entries;
-- what hayami shows and prints, including `doctor` and the JSON outputs;
-- the release workflow and its artifacts.
+- **The privileged helpers** (B1): the network helper, `hayami-network`
+  (Linux, with `CAP_BPF`, `CAP_NET_ADMIN`, `CAP_PERFMON`; Windows, as Local
+  Service), and the sensor helper, `hayami-sensors` (Windows, as LocalSystem,
+  with the PawnIO modules hayami carries), with their sockets, pipes and
+  protocol.
+- **Installing, upgrading and removing** (B2): the installers on Linux and
+  Windows, the polkit and administrator steps they take, `install.sh` and
+  `install_windows.ps1`, and the services they register: the helpers, the
+  VPN keepalive, and the service other programs read (`hayami-api`, as a
+  systemd user unit, a Windows per-user service or a macOS launchd agent).
+- **Credentials** (B3): the Claude and Codex tokens, their refresh and the
+  shared usage cache; the GitHub and GitLab keys read from `gh`, `glab`,
+  `~/.secrets.env` or the preferences.
+- **What hayami parses** (B4): device and sensor data, the helpers' lines,
+  LibreHardwareMonitor's `data.json`, the usage providers' and forges'
+  answers, the settings file, and requests to the service.
+- **What hayami does outside itself** (B5): ending processes, the KWin rule
+  and scripts, the udev rule, autostart entries, and connecting, bouncing or
+  disconnecting a VPN, by hand or through the keepalive.
+- **What hayami shows and prints** (B6): the panels, `doctor`, `readings`,
+  `detail`, and what the service serves.
+- **The supply chain and releases** (B7): the release workflow, its
+  artifacts and their provenance.
 
 ## Out of scope
 
-- LibreHardwareMonitor, the providers' APIs and the tools whose credential
-  stores hayami reads: report those to their own projects.
+- Programs hayami reads from or installs on request but does not ship:
+  PawnIO's driver, LibreHardwareMonitor, `gh`, `glab`, Claude Code, Codex,
+  NetworkManager and OpenVPN3. Report those to their own projects; how
+  hayami uses them is in scope.
+- The usage providers' and forges' APIs.
 - Anything that needs an administrator or root on the machine already.
 - What a person chooses to show: a screenshot or a shared screen of the
   panel shows what the panel shows.
