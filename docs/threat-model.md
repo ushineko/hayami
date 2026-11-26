@@ -436,7 +436,8 @@ the settings, which are the user's own; hayami then fetches that URL.
   every part of a detail as it is drawn (`Detail.printable`). A reading keeps
   at most 10 pages, 5,000 items and 200 project lookups, whatever a host
   sends; GitHub's lists are paged too, at most 10 requests a reading
-  however many pages a host says are left (spec 109). A day is counted
+  however many pages a host says are left (spec 109), the person's
+  private repositories' histories among them (spec 114). A day is counted
   from its items, and an item counting less than one is dropped, so no
   answer makes a day negative.
 - A change's page (spec 111) decodes a pull request, an issue, a merge
@@ -530,7 +531,9 @@ something else between hayami reading it and acting on it.
   drawer shows a forge a person switched on (they are off by default, #360),
   at most once per refresh interval or per click on the forge's heading
   (`forges`, `internal/panel/development.go`; spec 102); a reading is up to
-  10 requests to each (spec 109). A change's page (spec 111) is read on a
+  10 requests to each (spec 109); a later GitHub request may name one of
+  the person's own private repositories from the first answer, to read its
+  next page of commits (spec 114). A change's page (spec 111) is read on a
   click and kept for the refresh interval: one or two requests to GitHub,
   up to six to GitLab for a merge request or one per push of the day. It runs `gh auth
   token` and `glab config get token` for a key, from the user's `PATH`, as

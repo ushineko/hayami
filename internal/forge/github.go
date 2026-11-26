@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,10 +26,26 @@ each later one only for the lists with a page left, after their cursors.
 The calendar and the restricted count are not asked for: the calendar counts
 contributions in an organisation's private repositories that this sign-in
 cannot see and GitHub will not name, and a day is what it lists (spec 109).
+
+The collection lists no private repository's work to this sign-in, not even
+the person's own, which it only counts as restricted (spec 114). The first
+request also asks for the person's own private repositories pushed to
+lately, with their default branch's commits in the fortnight, and the commits
+the person wrote are counted as GitHub counts them: on their authored day,
+merges included. A repository whose history has more than a page is read on
+by historyQuery.
 */
-const contributionsQuery = `query($from: DateTime!, $to: DateTime!, $first: Boolean!,
+const contributionsQuery = `query($from: DateTime!, $to: DateTime!, $since: GitTimestamp!, $until: GitTimestamp!, $first: Boolean!,
   $prs: Boolean!, $prAfter: String, $reviews: Boolean!, $reviewAfter: String, $issues: Boolean!, $issueAfter: String) {
   viewer {
+    login @include(if: $first)
+    repositories(first: 50, privacy: PRIVATE, ownerAffiliations: [OWNER], isFork: false,
+      orderBy: {field: PUSHED_AT, direction: DESC}) @include(if: $first) {
+      nodes {
+        nameWithOwner createdAt
+        defaultBranchRef { target { ... on Commit { history(first: 100, since: $since, until: $until) { ...commits } } } }
+      }
+    }
     contributionsCollection(from: $from, to: $to) {
       commitContributionsByRepository(maxRepositories: 100) @include(if: $first) {
         repository { nameWithOwner }
@@ -49,6 +66,20 @@ const contributionsQuery = `query($from: DateTime!, $to: DateTime!, $first: Bool
       }
     }
   }
+}
+` + commitsFragment
+
+// historyQuery is the next page of one private repository's commits.
+const historyQuery = `query($owner: String!, $name: String!, $since: GitTimestamp!, $until: GitTimestamp!, $after: String!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef { target { ... on Commit { history(first: 100, since: $since, until: $until, after: $after) { ...commits } } } }
+  }
+}
+` + commitsFragment
+
+const commitsFragment = `fragment commits on CommitHistoryConnection {
+  pageInfo { hasNextPage endCursor }
+  nodes { authoredDate author { user { login } } }
 }`
 
 // maxGitHubPages bounds the requests one reading makes, as maxEventPages
@@ -73,9 +104,52 @@ type ghThing struct {
 	Repository ghRepo `json:"repository"`
 }
 
+// ghHistory is a page of a branch's commits.
+type ghHistory struct {
+	PageInfo ghPage `json:"pageInfo"`
+	Nodes    []struct {
+		AuthoredDate time.Time `json:"authoredDate"`
+		Author       struct {
+			User *struct {
+				Login string `json:"login"`
+			} `json:"user"`
+		} `json:"author"`
+	} `json:"nodes"`
+}
+
+// ghBranch is a default branch's commits, as a repository and historyQuery
+// both answer it.
+type ghBranch struct {
+	DefaultBranchRef *struct {
+		Target struct {
+			History ghHistory `json:"history"`
+		} `json:"target"`
+	} `json:"defaultBranchRef"`
+}
+
+// ghPrivateRepo is one of the person's own private repositories.
+type ghPrivateRepo struct {
+	NameWithOwner string    `json:"nameWithOwner"`
+	CreatedAt     time.Time `json:"createdAt"`
+	ghBranch
+}
+
+// history is the repository's commits, nil for an empty repository.
+func (b ghBranch) history() *ghHistory {
+	if b.DefaultBranchRef == nil {
+		return nil
+	}
+	return &b.DefaultBranchRef.Target.History
+}
+
 type ghResponse struct {
 	Data struct {
-		Viewer struct {
+		Repository ghBranch `json:"repository"`
+		Viewer     struct {
+			Login   string `json:"login"`
+			Private struct {
+				Nodes []ghPrivateRepo `json:"nodes"`
+			} `json:"repositories"`
 			CC struct {
 				Commits []struct {
 					Repository    ghRepo `json:"repository"`
@@ -146,19 +220,23 @@ func (r GitHubReader) Read(ctx context.Context, token string) (Activity, error) 
 	}
 	start, dates := Window(now())
 	end := start.AddDate(0, 0, Days).Add(-time.Second)
+	from, to := start.Format(time.RFC3339), end.Format(time.RFC3339)
 	vars := map[string]any{
-		"from": start.Format(time.RFC3339), "to": end.Format(time.RFC3339),
+		"from": from, "to": to, "since": from, "until": to,
 		"first": true, "prs": true, "reviews": true, "issues": true,
 	}
 	var all ghResponse
-	for range maxGitHubPages {
-		out, err := githubQuery(ctx, c, vars)
+	requests := 0
+	for requests < maxGitHubPages {
+		requests++
+		out, err := githubQuery(ctx, c, contributionsQuery, vars)
 		if err != nil {
 			return Activity{}, err
 		}
 		got, have := &out.Data.Viewer.CC, &all.Data.Viewer.CC
 		if vars["first"] == true {
 			have.Commits, have.Created = got.Commits, got.Created
+			all.Data.Viewer.Login, all.Data.Viewer.Private = out.Data.Viewer.Login, out.Data.Viewer.Private
 		}
 		have.PRs.Nodes = append(have.PRs.Nodes, got.PRs.Nodes...)
 		have.Reviews.Nodes = append(have.Reviews.Nodes, got.Reviews.Nodes...)
@@ -183,12 +261,33 @@ func (r GitHubReader) Read(ctx context.Context, token string) (Activity, error) 
 			break
 		}
 	}
+	// A private repository with more than a page of commits is read on,
+	// within what is left of the reading's requests.
+	for i := range all.Data.Viewer.Private.Nodes {
+		h := all.Data.Viewer.Private.Nodes[i].history()
+		owner, name, ok := strings.Cut(all.Data.Viewer.Private.Nodes[i].NameWithOwner, "/")
+		for ok && h != nil && h.PageInfo.HasNextPage && h.PageInfo.EndCursor != "" && requests < maxGitHubPages {
+			requests++
+			out, err := githubQuery(ctx, c, historyQuery, map[string]any{
+				"owner": owner, "name": name, "since": from, "until": to, "after": h.PageInfo.EndCursor,
+			})
+			if err != nil {
+				return Activity{}, err
+			}
+			next := out.Data.Repository.history()
+			if next == nil {
+				break
+			}
+			h.Nodes = append(h.Nodes, next.Nodes...)
+			h.PageInfo = next.PageInfo
+		}
+	}
 	return githubActivity(all, dates, now()), nil
 }
 
-// githubQuery is one request of contributionsQuery.
-func githubQuery(ctx context.Context, c *github.Client, vars map[string]any) (ghResponse, error) {
-	body := map[string]any{"query": contributionsQuery, "variables": vars}
+// githubQuery is one request of query.
+func githubQuery(ctx context.Context, c *github.Client, query string, vars map[string]any) (ghResponse, error) {
+	body := map[string]any{"query": query, "variables": vars}
 	req, err := c.NewRequest(ctx, http.MethodPost, "graphql", body)
 	if err != nil {
 		return ghResponse{}, fmt.Errorf("github: %w", err)
@@ -234,6 +333,7 @@ func githubActivity(out ghResponse, dates []string, now time.Time) Activity {
 	for _, n := range cc.Created.Nodes {
 		add(Item{Date: DateOf(n.OccurredAt), Repo: n.Repository.NameWithOwner, Kind: KindOther, Action: "created", Count: 1})
 	}
+	privateItems(out, add)
 	for _, n := range cc.PRs.Nodes {
 		pr := n.PullRequest
 		add(Item{Date: DateOf(n.OccurredAt), Repo: pr.Repository.NameWithOwner, Kind: KindPR,
@@ -252,6 +352,48 @@ func githubActivity(out ghResponse, dates []string, now time.Time) Activity {
 	// A day is what it lists (spec 109).
 	a.Days = countItems(dates, a.Items)
 	return a
+}
+
+// privateItems are the person's own private repositories' work (spec 114):
+// each day's commits the person wrote on the default branch, and a
+// repository created. A repository the collection already listed is left
+// to it, so nothing is counted twice if GitHub starts listing them.
+func privateItems(out ghResponse, add func(Item)) {
+	v := out.Data.Viewer
+	listed := map[string]bool{}
+	for _, r := range v.CC.Commits {
+		listed[strings.ToLower(r.Repository.NameWithOwner)] = true
+	}
+	for _, n := range v.CC.Created.Nodes {
+		listed[strings.ToLower(n.Repository.NameWithOwner)] = true
+	}
+	for _, r := range v.Private.Nodes {
+		if r.NameWithOwner == "" || listed[strings.ToLower(r.NameWithOwner)] {
+			continue
+		}
+		listed[strings.ToLower(r.NameWithOwner)] = true
+		add(Item{Date: DateOf(r.CreatedAt), Repo: r.NameWithOwner, Kind: KindOther, Action: "created", Count: 1})
+		h := r.history()
+		if h == nil || v.Login == "" {
+			continue
+		}
+		perDay := map[string]int{}
+		var days []string
+		for _, c := range h.Nodes {
+			if c.Author.User == nil || !strings.EqualFold(c.Author.User.Login, v.Login) {
+				continue
+			}
+			d := DateOf(c.AuthoredDate)
+			if perDay[d] == 0 {
+				days = append(days, d)
+			}
+			perDay[d]++
+		}
+		slices.Sort(days)
+		for _, d := range days {
+			add(Item{Date: d, Repo: r.NameWithOwner, Kind: KindCommits, Count: perDay[d]})
+		}
+	}
 }
 
 func dateIn(dates []string, d string) bool {

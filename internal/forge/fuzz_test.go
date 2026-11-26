@@ -36,6 +36,7 @@ func FuzzGitHubResponse(f *testing.F) {
 	f.Add([]byte(`{"data":{"viewer":{"contributionsCollection":{"contributionCalendar":{"weeks":[{"contributionDays":[{"date":"2026-03-10","contributionCount":7}]}]}}}}}`))
 	f.Add([]byte(`{"data":{"viewer":{"contributionsCollection":{"commitContributionsByRepository":[{"repository":{"nameWithOwner":"a/b"},"contributions":{"nodes":[{"occurredAt":"2026-03-10T12:00:00Z","commitCount":-5}]}}]}}}}`))
 	f.Add([]byte(`{"errors":[{"message":"x"}]}`))
+	f.Add([]byte(`{"data":{"viewer":{"login":"a","repositories":{"nodes":[{"nameWithOwner":"a/c","createdAt":"2026-03-12T00:00:00Z","defaultBranchRef":{"target":{"history":{"nodes":[{"authoredDate":"2026-03-12T10:00:00Z","author":{"user":{"login":"A"}}},{"authoredDate":"2026-03-12T10:00:00Z","author":{"user":null}}]}}}},{"nameWithOwner":"","defaultBranchRef":null}]}}}}`))
 	f.Add([]byte(`{"data":{"viewer":{"contributionsCollection":{"repositoryContributions":{"nodes":[{"occurredAt":"2026-03-10T12:00:00Z","repository":{"nameWithOwner":"a/b"}}]},"pullRequestContributions":{"pageInfo":{"hasNextPage":true,"endCursor":"x"},"nodes":[{"occurredAt":"2026-03-11T12:00:00Z","pullRequest":{"number":1,"title":"t","state":"OPEN","repository":{"nameWithOwner":"a/b"}}}]}}}}}`))
 	now := time.Date(2026, 3, 14, 12, 0, 0, 0, time.UTC)
 	_, dates := Window(now)

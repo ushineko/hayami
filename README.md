@@ -797,6 +797,13 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: the Development drawer's GitHub strip and day pages list your
+  own private repositories' commits again. GitHub's contribution list leaves
+  every private repository out, so they are read from each repository's
+  default branch (spec 114, #411).
+
 ### 0.23.1 (2026-11-25)
 
 - **Added**: the service runs on macOS, as a launchd agent of your own that

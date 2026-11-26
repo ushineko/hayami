@@ -383,3 +383,112 @@ func TestOnlyHTTPSAndBoundedInTime(t *testing.T) {
 	assert.True(t, errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "deadline"), err.Error())
 	assert.Less(t, time.Since(start), 5*time.Second)
 }
+
+// githubPrivate is the person's own private repositories, invented: one with
+// their commits on two days, a commit by someone else, one by an address no
+// account claims, and one before the window; one created in the window with
+// nothing on it yet; and one the collection already lists.
+const githubPrivate = `{"data":{"viewer":{"login":"Octo",
+  "repositories":{"nodes":[
+    {"nameWithOwner":"octo/secret","createdAt":"2025-01-01T00:00:00Z","defaultBranchRef":{"target":{"history":{"pageInfo":{"hasNextPage":false},"nodes":[
+      {"authoredDate":"2026-03-12T10:00:00Z","author":{"user":{"login":"octo"}}},
+      {"authoredDate":"2026-03-12T11:00:00Z","author":{"user":{"login":"octo"}}},
+      {"authoredDate":"2026-03-13T10:00:00Z","author":{"user":{"login":"octo"}}},
+      {"authoredDate":"2026-03-13T11:00:00Z","author":{"user":{"login":"someone"}}},
+      {"authoredDate":"2026-03-13T12:00:00Z","author":{"user":null}},
+      {"authoredDate":"2026-02-20T12:00:00Z","author":{"user":{"login":"octo"}}}]}}}},
+    {"nameWithOwner":"octo/fresh","createdAt":"2026-03-11T09:00:00Z","defaultBranchRef":null},
+    {"nameWithOwner":"octo/widget","createdAt":"2025-01-01T00:00:00Z","defaultBranchRef":{"target":{"history":{"pageInfo":{"hasNextPage":false},"nodes":[
+      {"authoredDate":"2026-03-10T12:00:00Z","author":{"user":{"login":"octo"}}}]}}}}]},
+  "contributionsCollection":{
+    "commitContributionsByRepository":[
+      {"repository":{"nameWithOwner":"octo/widget"},"contributions":{"nodes":[{"occurredAt":"2026-03-10T12:00:00Z","commitCount":5}]}}],
+    "repositoryContributions":{"nodes":[]},
+    "pullRequestContributions":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+    "pullRequestReviewContributions":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+    "issueContributions":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}`
+
+// Spec 114 R1, R2, R3. The collection lists none of a private repository's
+// work, so the person's own private repositories are asked for beside it:
+// the commits they wrote on each authored day, and a repository created,
+// and nothing the collection already counts.
+func TestGitHubListsThePersonsPrivateRepositories(t *testing.T) {
+	var asked struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}
+	srv, hc := tlsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&asked))
+		_, _ = io.WriteString(w, githubPrivate)
+	}))
+	a, err := forge.GitHubReader{Client: hc, BaseURL: srv.URL + "/", Now: func() time.Time { return now }}.Read(t.Context(), token)
+	require.NoError(t, err)
+	assert.Contains(t, asked.Query, "privacy: PRIVATE")
+	assert.Contains(t, asked.Query, "ownerAffiliations: [OWNER]", "an organisation's repositories were asked for")
+	assert.Equal(t, asked.Variables["from"], asked.Variables["since"])
+	assert.Equal(t, asked.Variables["to"], asked.Variables["until"])
+
+	var secret []forge.Item
+	var other []forge.Item
+	widget := 0
+	for _, it := range a.Items {
+		switch {
+		case it.Repo == "octo/secret":
+			secret = append(secret, it)
+		case it.Kind == forge.KindOther:
+			other = append(other, it)
+		case it.Repo == "octo/widget":
+			widget += it.Count
+		}
+	}
+	assert.Equal(t, []forge.Item{
+		{Date: "2026-03-12", Repo: "octo/secret", Kind: forge.KindCommits, Count: 2},
+		{Date: "2026-03-13", Repo: "octo/secret", Kind: forge.KindCommits, Count: 1},
+	}, secret, "a day's commits by the person, and only theirs, in the window")
+	assert.Equal(t, []forge.Item{{Date: "2026-03-11", Repo: "octo/fresh", Kind: forge.KindOther, Action: "created", Count: 1}}, other)
+	assert.Equal(t, 5, widget, "a repository the collection lists was counted twice")
+	assert.Equal(t, forge.Day{Date: "2026-03-12", Count: 2}, a.Days[11])
+	assert.Equal(t, forge.Day{Date: "2026-03-13", Count: 1}, a.Days[12])
+}
+
+// Spec 114 R4. A private repository with more than a page of commits is
+// read on after its cursor, and a host that always has another page is
+// stopped at the reading's ten requests.
+func TestGitHubReadsAPrivateHistoryToItsEnd(t *testing.T) {
+	commit := `{"authoredDate":"2026-03-12T10:00:00Z","author":{"user":{"login":"octo"}}}`
+	endless := false
+	var asked []map[string]any
+	srv, hc := tlsServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		asked = append(asked, body.Variables)
+		if strings.Contains(body.Query, "contributionsCollection") {
+			_, _ = io.WriteString(w, `{"data":{"viewer":{"login":"octo","repositories":{"nodes":[
+			  {"nameWithOwner":"octo/secret","createdAt":"2025-01-01T00:00:00Z","defaultBranchRef":{"target":{"history":{
+			    "pageInfo":{"hasNextPage":true,"endCursor":"c1"},"nodes":[`+commit+`,`+commit+`]}}}}]},
+			  "contributionsCollection":{}}}}`)
+			return
+		}
+		more := endless || body.Variables["after"] == "c1"
+		_, _ = fmt.Fprintf(w, `{"data":{"repository":{"defaultBranchRef":{"target":{"history":{
+		  "pageInfo":{"hasNextPage":%t,"endCursor":"c%d"},"nodes":[%s]}}}}}}`, more, len(asked), commit)
+	}))
+	r := forge.GitHubReader{Client: hc, BaseURL: srv.URL + "/", Now: func() time.Time { return now }}
+
+	a, err := r.Read(t.Context(), token)
+	require.NoError(t, err)
+	require.Len(t, asked, 3, "a request a page of the history")
+	assert.Equal(t, "octo", asked[1]["owner"])
+	assert.Equal(t, "secret", asked[1]["name"])
+	assert.Equal(t, "c1", asked[1]["after"])
+	assert.Equal(t, "c2", asked[2]["after"])
+	assert.Equal(t, forge.Day{Date: "2026-03-12", Count: 4}, a.Days[11], "a page of commits was left out")
+
+	endless, asked = true, nil
+	_, err = r.Read(t.Context(), token)
+	require.NoError(t, err)
+	assert.Len(t, asked, 10, "an endless history was read past the reading's bound")
+}
