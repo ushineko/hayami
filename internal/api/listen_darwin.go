@@ -22,6 +22,10 @@ const sunPath = 104
 // dictionary, which launch_activate_socket asks for.
 const LaunchdSockets = "Listeners"
 
+// LaunchdTCP is the name of the agent's TCP port in the same dictionary
+// (spec 115 R3).
+const LaunchdTCP = "TCP"
+
 /*
 Address is the service's address on this system (R3): $TMPDIR/hayami/api.sock,
 $TMPDIR being the per-user directory under /var/folders that only this account
@@ -80,6 +84,40 @@ func Activated(log *slog.Logger) (l net.Listener, ok bool, err error) {
 		return nil, true, fmt.Errorf("taking the socket launchd made: %w", err)
 	}
 	return PeerChecked(fl, log), true, nil
+}
+
+/*
+ActivatedTCP is the TCP port launchd made from the agent's TCP entry and
+handed over (spec 115 R3). launchd may hand over a descriptor for each
+address the name resolves to; the entry names 127.0.0.1, and a descriptor on
+any other address is closed.
+*/
+func ActivatedTCP() (net.Listener, bool, error) {
+	fds, err := launchActivateSocket(LaunchdTCP)
+	if errors.Is(err, syscall.ESRCH) || errors.Is(err, syscall.ENOENT) || (err == nil && len(fds) == 0) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, true, fmt.Errorf("taking the port launchd made: %w", err)
+	}
+	var found net.Listener
+	for _, fd := range fds {
+		f := os.NewFile(uintptr(fd), "launchd port")
+		fl, err := net.FileListener(f)
+		_ = f.Close()
+		if err != nil {
+			continue
+		}
+		if found == nil && loopbackOnly(fl) == nil {
+			found = fl
+			continue
+		}
+		_ = fl.Close()
+	}
+	if found == nil {
+		return nil, true, errors.New("launchd handed over no port on 127.0.0.1")
+	}
+	return found, true, nil
 }
 
 // peerUID is the user at the other end of a Unix socket (LOCAL_PEERCRED).

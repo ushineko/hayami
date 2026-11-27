@@ -122,6 +122,7 @@ const (
 	ErrMethodNotAllowed = "method_not_allowed"
 	ErrBadRequest       = "bad_request"
 	ErrForbidden        = "forbidden"
+	ErrUnauthorized     = "unauthorized"
 	ErrBusy             = "busy"
 	ErrInternal         = "internal"
 	ErrUnavailable      = "unavailable"
@@ -130,7 +131,7 @@ const (
 // ErrorBody says what went wrong. Known lists what there is, for a key or
 // an ID that names nothing: the sections, or the details a section offers.
 type ErrorBody struct {
-	Code    string   `json:"code" enum:"not_found,method_not_allowed,bad_request,forbidden,busy,internal,unavailable"`
+	Code    string   `json:"code" enum:"not_found,method_not_allowed,bad_request,forbidden,unauthorized,busy,internal,unavailable"`
 	Message string   `json:"message"`
 	Known   []string `json:"known"`
 }

@@ -180,7 +180,9 @@ components:
   responses:
     Error:
       description: |
-        Anything but a 2xx: 400 bad request, 403 a browser's request, 404 a
+        Anything but a 2xx: 400 bad request, 401 a request on the TCP port
+        without its token (spec 115), 403 a browser's request or one on the
+        port naming another host, 404 a
         section or detail that is not there (`known` lists what is), 405 not
         GET, 500 a request that failed, 503 over a limit (with `Retry-After`).
       content:
@@ -200,7 +202,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, method_not_allowed, bad_request, forbidden, busy, internal, unavailable]
+          enum: [not_found, method_not_allowed, bad_request, forbidden, unauthorized, busy, internal, unavailable]
         message: { type: string }
         known:
           description: What there is, for a key or an ID that names nothing.

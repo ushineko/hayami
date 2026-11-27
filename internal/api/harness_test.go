@@ -15,6 +15,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/api"
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
 )
@@ -33,6 +34,12 @@ type harness struct {
 	srv    *api.Server
 	sock   string
 	client *http.Client
+
+	// The TCP port's, when options.tcp (spec 115): its address, its key,
+	// and a client that dials it and adds nothing.
+	tcpAddr   string
+	key       tcpkey.Key
+	tcpClient *http.Client
 }
 
 // options adjust a harness before it serves.
@@ -40,6 +47,8 @@ type options struct {
 	fixedClock bool
 	settings   config.Config
 	tune       func(*api.Hub, *api.Server)
+	// tcp serves the TCP port beside the socket, with a key of the test's.
+	tcp bool
 }
 
 func start(t *testing.T, srcs []panel.Source, o options) *harness {
@@ -74,12 +83,57 @@ func start(t *testing.T, srcs []panel.Source, o options) *harness {
 		o.tune(hub, srv)
 	}
 	hs := srv.HTTP()
-	go func() { _ = hs.Serve(api.Limit(l, api.MaxConns)) }()
+	limiter := api.NewLimiter(api.MaxConns)
+	go func() { _ = hs.Serve(limiter.Wrap(l)) }()
+	h := &harness{hub: hub, srv: srv, sock: sock, client: serviceClient(sock)}
+	var ht *http.Server
+	if o.tcp {
+		var lc net.ListenConfig
+		tl, err := lc.Listen(context.Background(), "tcp4", "127.0.0.1:0")
+		require.NoError(t, err)
+		port := tl.Addr().(*net.TCPAddr).Port
+		h.key, err = tcpkey.Make(filepath.Join(t.TempDir(), tcpkey.FileName), port, false)
+		require.NoError(t, err)
+		h.tcpAddr = tl.Addr().String()
+		h.tcpClient = &http.Client{Timeout: 30 * time.Second}
+		ht = srv.HTTP()
+		ht.Handler = srv.TCPHandler(h.key, port)
+		go func() { _ = ht.Serve(limiter.Wrap(tl)) }()
+	}
 	t.Cleanup(func() {
 		cancel()
 		_ = hs.Close()
+		if ht != nil {
+			_ = ht.Close()
+		}
 	})
-	return &harness{hub: hub, srv: srv, sock: sock, client: serviceClient(sock)}
+	return h
+}
+
+// tcpGet is a GET of path on the TCP port, with headers as given (Host
+// among them): its status, its body, and its headers.
+func (h *harness) tcpGet(t testing.TB, path string, headers map[string]string) (int, []byte, http.Header) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+h.tcpAddr+path, http.NoBody)
+	require.NoError(t, err)
+	for k, v := range headers {
+		if k == "Host" {
+			req.Host = v
+			continue
+		}
+		req.Header.Set(k, v)
+	}
+	resp, err := h.tcpClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, body, resp.Header
+}
+
+// bearer is the header that carries the harness's token.
+func (h *harness) bearer() map[string]string {
+	return map[string]string{"Authorization": "Bearer " + h.key.Token}
 }
 
 // serviceClient is an HTTP client whose every request goes to the service at sock.
