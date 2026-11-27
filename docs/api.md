@@ -66,8 +66,8 @@ asking starts one that is only listening.
 HTTP/1.1 over a socket only the account running the service can open: the
 directory is `0700`, the socket `0600`, and a connection from another account is
 closed without an answer. Where it is set up, the service also listens on a
-loopback TCP port, for a client that cannot open a socket or a pipe; see
-[The TCP port](#the-tcp-port). No other machine reaches either.
+loopback TCP port, for a client that cannot open a socket or a pipe, which
+serves the WebSocket alone; see [The TCP port](#the-tcp-port). No other machine reaches either.
 
 | System | Address |
 |---|---|
@@ -102,13 +102,15 @@ no client from another machine.
 Some clients can open a TCP connection and nothing else: a Herdr mod is one.
 For them the service also listens on `127.0.0.1:47930` (spec 115), on the
 loopback address alone, so no other machine reaches it. Every account on this
-machine, and every local process, can reach a loopback port, so a request there
-proves it comes from one of the account's own programs with a token:
+machine, and every local process, can reach a loopback port, and a program
+of another account could take the port before the service does, so the port
+serves one thing, [the WebSocket](#the-websocket), and its connection begins
+with a mutual challenge-response over a token. The token itself never crosses
+the connection: a program that took the port first learns nothing it can
+use, and a client that checks the service's proof refuses it.
 
 ```console
-$ curl -H "Authorization: Bearer $(jq -r .token ~/.config/hayami/api-tcp.json)" \
-    http://127.0.0.1:47930/v1/sections/cooler
-$ hayami-tui api --tcp get sections/cooler     # the same, the token read for you
+$ hayami-tui api --tcp watch --sections cooler     # the challenge answered for you
 ```
 
 - **The key file.** `api-tcp.json` in hayami's settings directory
@@ -117,25 +119,27 @@ $ hayami-tui api --tcp get sections/cooler     # the same, the token read for yo
   `{"address": "127.0.0.1:47930", "token": "…"}`. It is readable by the account
   alone (`0600`, or an access list granting the account only), and the service
   serves no port from a file anyone else could read. The token is 32 random
-  bytes in base64url.
-- **Every request** carries `Authorization: Bearer <token>`. Without it, or
-  with a wrong one, the answer is 401 with the code `unauthorized` and
-  `WWW-Authenticate: Bearer`, the same whatever was wrong.
+  bytes in base64url. Read it from the file; never put it on a command line,
+  where other accounts can see it in the process list.
 - **The host.** A request whose `Host` is not `127.0.0.1:<port>` or
-  `localhost:<port>` is 403, before the token is looked at, so a web page that
-  points a name of its own at 127.0.0.1 gets nothing. A request with an `Origin`
-  header is 403 here as on the socket.
-- **The limits** are shared with the socket: 64 connections and 16 streams in
-  all.
+  `localhost:<port>` is 403, so a web page that points a name of its own at
+  127.0.0.1 gets nothing. A request with an `Origin` header is 403 here as on
+  the socket. Any path but `/v1/ws` is 404.
+- **The limits.** The port has its own: 16 connections, apart from the
+  socket's 64, so connections to the port from anyone never take the socket's
+  places; and its WebSockets count against the 16 streams.
+- **A new token** (`hayami-tui api-service tcp --new-token`) ends every
+  session the old one let in within two seconds, on every system, and the old
+  one is refused from then on. A key removed lets nobody in.
 - **Setting it up.** The installer's Port page sets the port up with the
   service, on by default; clear its box (`--apitcp=no`) to leave it off.
-  `hayami-tui api-service tcp` sets it up on the installed service, `--port` moves it,
-  `--new-token` replaces the token (a program holding the old one is refused
-  from then on), and `--remove` removes the port and its key. On Linux the port
-  is a socket unit of its own, `hayami-api-tcp.socket`, so a port another
-  program holds fails that unit and not the socket; on macOS it is a second
-  entry in the agent; on Windows each account's service reads its own key when
-  it starts, so two accounts signed in at once each need their own port.
+  `hayami-tui api-service tcp` sets it up on the installed service, `--port`
+  moves it, `--new-token` replaces the token, and `--remove` removes the port
+  and its key. On Linux the port is a socket unit of its own,
+  `hayami-api-tcp.socket`, so a port another program holds fails that unit and
+  not the socket; on macOS it is a second entry in the agent; on Windows each
+  account's service reads its own key when it starts, so two accounts signed
+  in at once each need their own port.
 - `hayami-tui api status` says whether the port is set up, where, and where the
   token is. It never prints the token.
 
@@ -260,6 +264,47 @@ An ID a section does not offer is 404, with `known` listing those it does. A
 process that ended between two readings is a 404 too, or a page with
 `"gone": true`. A process is its PID, name, parent, state, threads, sockets and
 children: never its command line, path or owner.
+
+## The WebSocket
+
+`/v1/ws` carries what `/v1/events` carries, as JSON text messages, each with
+its `type` (specs 115, 116). It suits a client that would rather hold one
+connection and change what it follows than parse an event stream and reopen
+it. On the socket and the pipe it is one more endpoint; on the TCP port it is
+the only one.
+
+| From | Message | What |
+|---|---|---|
+| service | `challenge` | TCP port only, first: `nonce`, 32 random bytes in base64url |
+| client | `auth` | TCP port only, within 5 s: the client's `nonce`, and its `proof` |
+| service | `hello` | `service`, `version`, `api`, `sections`, and on the TCP port the service's `proof`; null elsewhere |
+| client | `subscribe` | `sections` and `details` (each `key/id`, at most 16): replaces what is followed |
+| service | `section`, `detail` | `data`: a `Section` or a `Detail`, the latest at once, then each new one |
+| service | `error` | `data`: an error body, for a subscription refused; the one before it stands |
+
+A proof is HMAC-SHA256, keyed with the token's 32 bytes (decoded from
+base64url), over `label + "\n" + their nonce + "\n" + my nonce`, in base64url
+without padding. The client's label is `hayami-client` and its "their nonce"
+is the challenge's; the service's label is `hayami-server` and its "their
+nonce" is the client's. The client checks the service's proof before it trusts
+anything else; a proof that does not match is not the service. A wrong or
+late `auth` is closed with 4401, and says nothing of why.
+
+```js
+// In a Herdr mod: the token from api-tcp.json, never sent.
+const proof = (label, theirs, mine) => base64url(hmacSha256(tokenBytes, `${label}\n${theirs}\n${mine}`));
+const ws = await WebSocket.connect("ws://127.0.0.1:47930/v1/ws");
+const { nonce: theirs } = JSON.parse(await ws.read());               // challenge
+const mine = base64url(randomBytes(32));
+await ws.write(JSON.stringify({ type: "auth", nonce: mine, proof: proof("hayami-client", theirs, mine) }));
+const hello = JSON.parse(await ws.read());
+if (hello.proof !== proof("hayami-server", mine, theirs)) throw new Error("not the service");
+await ws.write(JSON.stringify({ type: "subscribe", sections: ["cooler"], details: [] }));
+```
+
+A message larger than 4 KiB, a binary one, or one that is not a message here
+closes the connection (1009, 1003). The service pings every 15 s and closes a
+client that leaves its messages unread for 30 s (1008).
 
 ## Errors
 

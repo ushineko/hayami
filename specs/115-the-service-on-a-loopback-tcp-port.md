@@ -21,8 +21,8 @@ the socket is reachable by one account. So a request on the port proves it
 comes from the account's own program with a token that only the account can
 read. The socket and the pipe stay as they are, for other programs.
 
-Spec 116 (#418) adds a WebSocket endpoint on both listeners; this spec is the
-port and its token.
+Spec 116 (#418) is the WebSocket; the review of this spec made the port serve
+nothing else, so both land in one PR.
 
 ## Decisions (operator, 2026-11-27)
 
@@ -63,9 +63,12 @@ port and its token.
 - R4 On Windows each account's instance listens on its own port, from its
   own `api-tcp.json` (R6), once it starts. A port that is already taken is
   logged, and the pipe keeps working.
-- R5 Both listeners serve the same routes, guard and limits (spec 113:
-  GET only, no body, no `Origin`, `MaxConns` together, `MaxStreams`
-  together).
+- R5 The port serves `/v1/ws` alone (spec 116's WebSocket), with the checks
+  every request passes (GET, no body, no `Origin`); any other path is 404.
+  It has its own limit, `MaxTCPConns` (16), apart from the socket's, and its
+  WebSockets count against the 16 streams. A refusal closes its connection.
+  (Changed by the review, F1 and F2, from "both listeners serve the same
+  routes and share the limits".)
 
 ### The token
 
@@ -77,20 +80,31 @@ port and its token.
 - R7 The token is 32 bytes from the system's random source, base64url
   without padding. It is made when the port is set up and kept across
   upgrades. `hayami-tui api-service install --new-token` replaces it.
-- R8 Every request on the port carries `Authorization: Bearer <token>`,
-  except a WebSocket upgrade (spec 116 authenticates in the first message).
-  The token is compared in constant time. A missing or wrong token gets
-  401 with `WWW-Authenticate: Bearer` and the error code `unauthorized`,
-  and the answer is the same whatever was wrong.
+- R8 The port's WebSocket begins with a mutual challenge-response, and the
+  token never crosses the connection: the service sends a nonce; the client
+  answers within 5 s with its own nonce and a proof, HMAC-SHA256 keyed with
+  the token over its label, the service's nonce and its own; the service's
+  hello carries its proof over the client's nonce, which the client checks
+  before it trusts anything. Proofs are compared in constant time. A wrong,
+  late or malformed answer closes the connection with 4401 and sends no
+  reading. (Changed by the review, F1, from a bearer token in every
+  request: a program of another account can take a fixed port first, and a
+  bearer token is sent to whoever holds it. The operator chose this design,
+  2026-11-27.)
 - R9 A request on the port whose `Host` is not `127.0.0.1:<port>` or
-  `localhost:<port>` gets 403 before the token is looked at. This refuses
+  `localhost:<port>` gets 403 before anything else. This refuses
   DNS rebinding, in addition to the `Origin` rule.
 - R10 The token is never logged, printed, put in an error, or written
   anywhere but `api-tcp.json`. `api status` names the file, not its content.
 - R11 The service reads the file when it starts. A file that is missing,
   unreadable, readable by others, or malformed means no TCP listener, and
   says why in the log and in `api status`. The socket and the pipe serve
-  regardless.
+  regardless. A listener handed over on another address or port than the
+  key's is closed (review F5). While it runs the service looks at the key
+  every 2 s: a changed token ends the sessions the old one let in and lets
+  in only the new one's holder; a key removed or refused lets nobody in
+  (review F4). On Windows the port is bound with `SO_EXCLUSIVEADDRUSE`
+  (review F6).
 
 ### Setting it up
 
@@ -116,69 +130,96 @@ port and its token.
 
 ### The contract and the client
 
-- R14 `api/openapi.yaml` gains the TCP server with a bearer security scheme
-  that applies to it alone, and the `unauthorized` error code. The minor
-  version goes up; nothing existing changes.
-- R15 `hayami-tui api` takes `--tcp`, which reads `api-tcp.json` and talks
-  to the port. `api status` reports the port: set up or not, listening or
-  not, and why not. `api check --tcp` runs the whole check over the port.
-- R16 `docs/api.md` describes the port, the token, the file and how to
-  rotate it. The README's service section says the port exists and what it
-  is for. `ARCHITECTURE.md` gains the port.
+- R14 `api/openapi.yaml` gains the TCP server, its challenge-response, the
+  WebSocket and its messages (spec 116). The minor version goes up; nothing
+  existing changes.
+- R15 `hayami-tui api` takes `--tcp`, which reads `api-tcp.json`: `watch`
+  and `check` run over the port's WebSocket through the challenge-response;
+  `get` and `load`, which need the socket's routes, say so. `api status`
+  reports the port: set up or not, listening or not, and why not.
+- R16 `docs/api.md` describes the port, the token, the file, the
+  challenge-response with an example a client in another language can
+  follow, and how to rotate the token. The README's service section says the
+  port exists and what it is for. `ARCHITECTURE.md` gains the port.
 
 ## Acceptance Criteria
 
-Test strategy, for review before tests are written: behaviour through a real
-service on loopback, as spec 113's harness does, not handler unit tests. A
-mock appears only where the platform's activation cannot run in a test, and
-in that case a real systemd or launchd run on the machine covers it.
+Test strategy, approved with the spec: behaviour through a real service on
+loopback, as spec 113's harness does, not handler unit tests; platform
+activation on the real systemd, launchd and Windows.
 
-- [ ] Listener: the harness serves the TCP listener from a real file; a
-      request with the token gets 200, and one without it, with a wrong one,
-      or with a token of another length gets 401 with the same body (R8).
-- [ ] `Host` other than the two allowed gets 403 before the token is checked;
-      a request with `Origin` gets 403 on the port as on the socket (R5, R9).
-- [ ] The port binds `127.0.0.1` only: the listener's address is checked,
-      and a connection to the machine's other addresses is refused (R1).
-- [ ] The token file: made `0600` (Linux, macOS) or account-only (Windows,
-      on the VM); a file readable by others, missing or malformed means no
-      TCP listener, and the socket still serves (R6, R11).
-- [ ] The token appears in no log line, error, `api status` output or
-      `doctor` output across a run that fails authentication (R10); a test
-      greps the captured output for it.
-- [ ] Rotation: `--new-token` replaces it; the old token gets 401 (R7).
-- [ ] Limits are shared: `MaxConns` and `MaxStreams` count both listeners
-      (R5).
+- [ ] Challenge-response: the token holder is let in, hello's proof is the
+      token holder's, and the token is not in anything the client sends
+      (`TestThePortsChallengeLetsTheTokenHolderIn`, R8).
+- [ ] A wrong proof, the token offered as the proof, the service's proof or
+      nonce sent back, a short nonce, no answer, another message first and a
+      binary answer are each closed with 4401 and sent no reading
+      (`TestAClientThatCannotProveItIsClosed`, R8).
+- [ ] The reference client refuses a server that cannot prove it holds the
+      token, having sent it nothing usable (`TestTheClientRefusesAnImpostor`,
+      R8, review F1).
+- [ ] `Host` other than the two allowed and a browser's `Origin` get 403 on
+      the port; `Origin` gets 403 on the socket's WebSocket too (R5, R9).
+- [ ] The port binds `127.0.0.1` only and serves nothing but `/v1/ws`, a
+      bearer header included (`TestTheServiceListensOnItsKeysPortOnLoopbackAlone`,
+      R1, R5).
+- [ ] The key file: made `0600` (Linux, macOS) or account-only (Windows, on
+      the VM); a file readable by others, missing or malformed means no TCP
+      listener, and the socket still serves (R6, R11).
+- [ ] The token appears in no log line across refused sessions, refused keys
+      and a replaced token, nor in `api status` (R10).
+- [ ] Rotation: `--new-token` replaces it; the service ends the old sessions
+      and refuses the old token without a restart (R7, R11, review F4).
+- [ ] The port's connections, more than the socket's whole limit, do not
+      take the socket's places (`TestThePortsConnectionsDoNotTakeTheSockets`,
+      R5, review F2).
 - [ ] Linux, real systemd: `hayami-api-tcp.socket` starts the service on a
-      TCP connection; with the port held by another program the TCP unit
-      fails and the socket still answers (R2).
+      TCP connection; an install over a running service listens anew; with
+      the port held by another program the TCP unit fails and the socket
+      still answers (R2).
 - [ ] macOS, the Mac: launchd starts the agent on a TCP connection (R3).
-- [ ] Windows, the VM: the instance listens on its account's port; a taken
-      port is logged and the pipe answers (R4).
+- [ ] Windows, the VM: the instance listens on its account's port; the key's
+      access list is checked (R4, R6).
 - [ ] Installer: a first install sets up the port; a `--yes` upgrade keeps
-      it or leaves it removed; clearing the box removes the unit and the
-      file (R12, R13).
-- [ ] `api check --tcp` passes against the installed service on each system
-      (R15).
-- [ ] Falsified: dropping the token check, the `Host` check and the
-      permission check on the file each fail a test.
-- [ ] Contract test: the TCP server and `unauthorized` are in the contract,
-      and the existing paths are unchanged (R14).
-- [ ] Adversarial review (B3, and the new surface under B6), as the threat
-      model asks; findings filed or listed under "Checked".
+      it or leaves it removed; clearing the box removes it (R12, R13).
+- [ ] `api --tcp check` passes against the installed service (R15).
+- [ ] Falsified: skipping the client's proof, skipping the service's proof
+      in the client, serving every route on the port, one limit for both
+      listeners, a new key that ends nothing, and listening on every address
+      each fail a test.
+- [ ] Contract test: the TCP server, `/ws` and its messages are in the
+      contract, and every message the tests read conforms (R14).
+- [ ] Adversarial review (B3, B6, and the new surface), with a refutation
+      pass; its findings fixed or listed under "Checked".
 - [ ] `make test`, `make lint`, `make vuln`; changelog line.
+
+## Review (2026-11-27)
+
+One reviewer given the change and seven attackers, then a separate pass that
+tried to refute each finding, with experiments on the desk. All are fixed in
+this PR, and the threat model records them.
+
+| Finding | Severity after refutation | Fix |
+|---|---|---|
+| F1: the client sent its bearer token to whatever held the port; another account can take a fixed port first (before sign-in, after the last sign-out) | Medium | The port serves the WebSocket alone, behind a mutual challenge-response; the token never crosses a connection (R8) |
+| F2: connections to the port could take the socket's connection places | Low to medium | The port's own limit; a refusal closes its connection (R5) |
+| F3: `docs/api.md` showed `curl` with the token on its command line | Low | Removed; the documents say never to put the token on a command line |
+| F4: a replaced token kept working on Windows until the next sign-in | Low to medium | The service follows its key and ends the old sessions (R11) |
+| F5: a port handed over that is not the key's was served | Low | Refused (R11) |
+| F6: Windows' bind was not exclusive | Low (Windows already refuses another account) | `SO_EXCLUSIVEADDRUSE` (R11) |
+| From the refutation: the Linux install restarted the port's socket while the service held it, which fails | Low to medium | The service is stopped first, and starts on the next connection |
 
 ## Threat model delta
 
 - **B3 Credentials**: a new credential, the token, and the file it lives
-  in. Kept by file permission alone. Anything running as the account can
-  read it, as it can already read the account's Claude token.
+  in, kept by file permission alone; it never crosses a connection.
 - **B6 What hayami shows**: the readings, details and drills become
-  reachable over loopback TCP by anyone holding the token. Without it, any
-  local account or process, and any browser page, gets 401 or 403.
-- **New surface**: a listening TCP port. Defences: loopback bind, `Host`
-  allow-list, `Origin` refused, token, read-only routes, the existing
-  limits. `docs/threat-model.md` gains these under B3 and B6.
+  reachable over loopback TCP by a client that proves it holds the token;
+  anyone else, any browser page, and a program that took the port first get
+  nothing.
+- **B7**: a new dependency, `github.com/coder/websocket` (ISC).
+- **New surface**: a listening TCP port. `docs/threat-model.md` gains these
+  under B3 and B6, the review in its history, and what was checked.
 
 ## Risks & Assumptions
 
@@ -202,14 +243,12 @@ in that case a real systemd or launchd run on the machine covers it.
 
 ## E2E Test Plan
 
-- The desk (Linux): install, `hayami-tui api status` shows the port
-  listening; `curl -H "Authorization: Bearer $(jq -r .token …)"
-  http://127.0.0.1:47930/v1/health` answers; without the header, 401.
-  `api check --tcp` passes. (R2, R8, R15)
-- The Mac and the Windows VM: the same with `hayami-tui api --tcp check`.
-  (R3, R4)
-- Herdr, after the herdr-mods change: the block reads over TCP with no
-  `curl` process per read (seen in `ps` over a minute).
+- The desk (Linux): the installed build; `hayami-tui api status` shows the
+  port listening; `hayami-tui api --tcp check` passes; `--new-token` ends a
+  `watch --tcp` session. (R2, R8, R11, R15)
+- The Mac and the Windows VM: `hayami-tui api --tcp check`. (R3, R4)
+- Herdr, after the herdr-mods change: the block reads over the WebSocket with
+  no `curl` process per read (seen in `ps` over a minute).
 
 ### Prod visibility
 

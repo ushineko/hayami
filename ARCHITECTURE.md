@@ -33,7 +33,7 @@ flowchart LR
   C --> core
   S --> core
   K --> core
-  X -- "JSON on a socket only you can open,<br/>or on 127.0.0.1 with a token" --> S
+  X -- "JSON on a socket only you can open,<br/>or a WebSocket on 127.0.0.1<br/>behind a challenge" --> S
   core -- "one-way socket or pipe" --> N
   core -- "one-way pipe" --> H
 ```
@@ -99,8 +99,10 @@ wording. [docs/api.md](docs/api.md) describes it.
 Where it is set up, on by default, the same service also listens on
 `127.0.0.1:47930`, for a client that can open a TCP connection and not a
 socket, such as a Herdr mod (spec 115). Every account on the machine can reach
-a loopback port, so each request there carries the token from `api-tcp.json`,
-a file in the settings directory only the account can read. On Linux the port
+a loopback port, so the port serves only the WebSocket, `/v1/ws`, and each
+connection begins with a challenge-response over the token in
+`api-tcp.json`, a file in the settings directory only the account can read;
+the token never crosses the connection. On Linux the port
 is its own socket unit, `hayami-api-tcp.socket`, starting the same service; on
 macOS a second entry in the agent; on Windows the account's instance listens
 on it itself.

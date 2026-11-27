@@ -252,8 +252,9 @@ adds a table, not a ladder.
   directory, `0600` in a `0700` directory, each connection's peer checked
   against the account. Where it is set up, on by default, it also listens on
   a loopback TCP port (spec 115) for a client that cannot open a socket,
-  each request there carrying the token from a file only the account can
-  read and naming the port as its host. Only `GET`; a request carrying
+  serving only the WebSocket there, behind a mutual challenge-response over
+  a token from a file only the account can read, and only to a request
+  naming the port as its host. Only `GET`; a request carrying
   `Origin` is refused, so a browser reaches nothing. It
   reads what the panel reads and has no right the panel lacks. Installed, it
   is a systemd user socket that starts the service on the first connection;

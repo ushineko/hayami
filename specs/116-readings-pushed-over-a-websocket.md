@@ -19,7 +19,8 @@ redrew, and sent no `Origin`. Herdr refuses an `Authorization` header on the
 handshake, so a client on the TCP port authenticates in its first message.
 
 This spec depends on spec 115 for the TCP port; on the socket and the pipe it
-stands alone.
+stands alone. Both land in one PR: spec 115's review made the port serve the
+WebSocket alone.
 
 ## Decisions (operator, 2026-11-27)
 
@@ -45,18 +46,22 @@ stands alone.
 ### Messages
 
 - R4 Client to service:
-  - `{"type": "auth", "token": "<token>"}`: required first on the TCP port,
-    within 5 s of the upgrade, or the connection is closed with 4401.
-    A WebSocket upgrade there may carry `Authorization: Bearer` instead.
-    On the socket and the pipe it is accepted and ignored.
+  - On the TCP port only, the challenge-response of spec 115 R8: `auth`,
+    with the client's nonce and its proof over the service's challenge,
+    within 5 s, or the connection is closed with 4401. The token is never
+    sent, as a message or a header. (Changed with spec 115's review from
+    "`auth` with the token".)
   - `{"type": "subscribe", "sections": [...], "details": ["key/id", ...]}`:
     replaces what the connection follows, within the bounds `/v1/events`
-    keeps (`MaxStreamDetails`). An unknown section or detail is an `error`
-    message naming it (`known` as in the contract's errors), and the rest
-    of the subscription holds.
+    keeps (`MaxStreamDetails`). A subscription naming a section or detail
+    that is not there is refused whole, with an `error` message naming it
+    and `known` as in the contract's errors, and the one before it stands.
+    (Changed in implementation from "the rest holds": one rule is easier
+    for a client to follow.)
 - R5 Service to client:
-  - `{"type": "hello", "version": "...", "contract": "..."}` once, after
-    authentication.
+  - On the TCP port only, `challenge` first, with the service's nonce.
+  - `hello` once the client is known: `service`, `version`, `api`,
+    `sections`, and on the TCP port the service's proof; null elsewhere.
   - `{"type": "section", "data": Section}` and
     `{"type": "detail", "data": Detail}`: the latest reading at once on
     subscribe, then one per new reading, the same values `/v1/events` sends.
@@ -85,38 +90,33 @@ stands alone.
 
 ## Acceptance Criteria
 
-Test strategy, for review before tests are written: behaviour through a real
-service and a real WebSocket client on loopback (the harness, with the
-library's client). Each message is checked against the contract's schemas,
-as the golden tests check HTTP. No mocked transport.
+Test strategy, approved with the spec: behaviour through a real service and a
+real WebSocket client on loopback; each message checked against the
+contract's schemas; no mocked transport.
 
-- [ ] On the socket: subscribe to two sections and a detail; the latest
-      readings arrive at once, then new ones as they are made, equal to what
-      `/v1/events` sends for the same subscription (R4, R5).
-- [ ] Re-subscribing changes what arrives without reconnecting; dropping a
-      section releases its lease (`Hub.Active`), and closing releases all
-      (R6).
-- [ ] On the TCP port: no `auth` within 5 s closes with 4401; a wrong token
-      closes with 4401 the same way; a right token gets `hello` (R4).
-      `Authorization: Bearer` on the upgrade is accepted in place of `auth`.
-- [ ] Limits: WebSockets and streams share `MaxStreams`, the next upgrade
-      gets 503 (R2); a client that stops reading is closed after
-      `StallLimit` (R7); an oversized, binary or unknown message closes with
-      its code (R3).
-- [ ] An unknown section in a subscription is an `error` message with
-      `known`, and the rest of the subscription holds (R4, R5).
+- [ ] On the socket: hello first with a null proof; a subscription brings
+      the latest reading at once; another replaces it without reconnecting
+      and lets go of what it dropped; closing lets go of everything
+      (`TestTheSocketsWebSocketFollowsSubscriptions`, R4–R6).
+- [ ] A subscription naming a section that is not there is an `error` with
+      `known`, and the subscription before it stands (R4, R5).
+- [ ] On the TCP port: spec 115's challenge-response lets the token holder in
+      and closes everyone else with 4401 (spec 115's tests, R4).
+- [ ] Limits: WebSockets and streams share `MaxStreams`, and the next of
+      either gets 503; an oversized, binary, unknown or over-specified message
+      closes the connection with 1009 or 1003
+      (`TestTheWebSocketKeepsItsLimits`, R2, R3, R7).
 - [ ] `Origin` on the upgrade gets 403, on both listeners (R1).
-- [ ] Contract: every message the service sends in the tests validates
-      against its component (R9).
-- [ ] `api check` and `api watch --ws` pass against the installed service on
-      the desk, the Mac and the Windows VM; `--tcp` on each (R10).
-- [ ] Herdr: a probe mod, or hayami-js once changed, follows readings over
-      `ws://127.0.0.1:<port>/v1/ws` with `auth` in the first message.
-- [ ] Falsified: skipping the `auth` deadline, the lease release and the
-      shared limit each fail a test.
-- [ ] Fuzz: inbound messages (`FuzzWsMessage`) never panic the service and
-      never subscribe past the bounds; 30 s clean.
-- [ ] Adversarial review with spec 115's (B3, B6, B7 for the library).
+- [ ] Contract: the messages the tests read validate against their
+      components (R9).
+- [ ] `api check` checks the WebSocket on the socket, and `api --tcp check`
+      on the port, against the installed service on the desk, the Mac and the
+      Windows VM; `api watch --ws` follows it (R10).
+- [ ] Herdr: hayami-js follows readings over `ws://127.0.0.1:<port>/v1/ws`
+      through the challenge-response, in herdr-mods' own spec.
+- [ ] Falsified: with spec 115's (skipping either proof, the shared limits).
+- [ ] Fuzz: `FuzzWsMessage`, on the socket and the port, 30 s clean.
+- [ ] Adversarial review with spec 115's (B3, B4, B6, B7 for the library).
 - [ ] `make test`, `make lint`, `make vuln`; changelog line.
 
 ## Threat model delta
