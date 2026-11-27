@@ -34,7 +34,7 @@ layers, in one direction:
 | Sources | `internal/panel` | Polling: which readers a section asks, how often, what it remembers between polls (trails, held devices, the last good reading), and turning readings and absences into a `view.Section` | Platform build tags, device protocols, toolkit calls |
 | View | `internal/view` | The section vocabulary (`Section`, `Row`, `Cell`, `Meter`, `Trail`, `Reason`, `Status`), fixed-width formatting, thresholds, the text arrangements | Imports from any other hayami package; any toolkit |
 | Shells | `internal/gui`, `internal/tui`, `internal/cli` | Arranging sections on a surface: the Fyne window, the Bubble Tea pane, `doctor`, `readings` | Deciding what a section says |
-| Service | `internal/api`, `internal/api/contract`, `internal/api/unit` | Serving the sources' readings and raw details to programs of the same account as the contract's JSON (spec 113, `api/openapi.yaml`): the leases that poll a section only while a client reads it, the socket and its peer check, the pipe and its access list; the systemd user units the installer writes and the Windows per-user service it registers (`unit`) | Deciding what a section says; anything `view` has cut, padded or formatted |
+| Service | `internal/api`, `internal/api/contract`, `internal/api/unit` | Serving the sources' readings and raw details to programs of the same account as the contract's JSON (spec 113, `api/openapi.yaml`): the leases that poll a section only while a client reads it, the socket and its peer check, the pipe and its access list, the loopback TCP port and its token (`tcpkey`, spec 115); the systemd user units the installer writes and the Windows per-user service it registers (`unit`) | Deciding what a section says; anything `view` has cut, padded or formatted |
 | Reference client | `internal/api/client` | Reading the service as any program would (spec 113 R29): the address rule written again, the contract held by strict decoding (every field present, null only where the contract has it, enums and dates by the contract types' tags), the stream, `api check` and `api load` | Importing anything of hayami's but `internal/api/contract`, or anything outside the standard library but `golang.org/x/sys`; a test reads its imports |
 | Settings | `internal/config`, `internal/prefs`, `internal/desktop` | The settings file, the preferences window, window placement and the KWin rule | Reading devices or sensors |
 
@@ -250,8 +250,11 @@ adds a table, not a ladder.
 - **A socket for programs of the same account.** `hayami-tui serve` (spec
   113) serves the readings as JSON on a Unix socket in the account's runtime
   directory, `0600` in a `0700` directory, each connection's peer checked
-  against the account. No TCP port, loopback included; only `GET`; a
-  request carrying `Origin` is refused, so a browser reaches nothing. It
+  against the account. Where it is set up, on by default, it also listens on
+  a loopback TCP port (spec 115) for a client that cannot open a socket,
+  each request there carrying the token from a file only the account can
+  read and naming the port as its host. Only `GET`; a request carrying
+  `Origin` is refused, so a browser reaches nothing. It
   reads what the panel reads and has no right the panel lacks. Installed, it
   is a systemd user socket that starts the service on the first connection;
   the installer writes the units as the person, with no administrator.
@@ -342,6 +345,7 @@ These rules apply in addition to CONTRIBUTING.md's.
 | The service installed and started by its socket (systemd user units, the installer's Service page) | 9 | In place | #396 |
 | The service on Windows (a per-user service running a copy in Program Files, the pipe and its owner check) | 5, 9 | In place | #396 |
 | The service on macOS (a launchd agent, the socket handed over without cgo, `LOCAL_PEERCRED`) | 5, 9 | In place, without the installer page | #396 |
+| The service on a loopback TCP port, behind a token in a file only the account reads (`internal/api/tcpkey`, the Port page) | 9 | In place | #417 |
 
 The window draws `row` with the design system's `glance.Lines` (fynedesygn
 spec 057; spec 049): no card headings, no plots, and no detail lines under a

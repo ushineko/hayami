@@ -94,11 +94,14 @@ port and its token.
 
 ### Setting it up
 
-- R12 The installer's Service page, on a first install, sets up the port
-  with the socket service unless "Also on a local TCP port" is cleared.
-  Its parameter follows `api`'s `auto` and `once` rule, so a `--yes`
-  upgrade never brings back a port someone removed. Clearing it removes the
-  unit or plist entry and `api-tcp.json`.
+- R12 The installer's Port page, after the Service page, on a first install
+  sets up the port with the service unless "Also serve on a local TCP port"
+  is cleared (`--apitcp`). Its parameter follows `api`'s `auto` and `once`
+  rule, so a `--yes` upgrade never brings back a port someone removed.
+  Clearing it removes the unit or plist entry and `api-tcp.json`. Without
+  the service there is no port. (Changed in implementation from a second box
+  on the Service page: the wizard's page holds one box, and a page of its
+  own is the same page type, tested the same way.)
 - R13 `hayami-tui api-service tcp` sets up the port (`--port <n>`, the one
   set up already or the default), moves it, replaces its token
   (`--new-token`) or removes it (`--remove`). It runs as the person and

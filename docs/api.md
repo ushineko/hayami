@@ -65,8 +65,9 @@ asking starts one that is only listening.
 
 HTTP/1.1 over a socket only the account running the service can open: the
 directory is `0700`, the socket `0600`, and a connection from another account is
-closed without an answer. There is no TCP port, so no browser page or other
-machine reaches it.
+closed without an answer. Where it is set up, the service also listens on a
+loopback TCP port, for a client that cannot open a socket or a pipe; see
+[The TCP port](#the-tcp-port). No other machine reaches either.
 
 | System | Address |
 |---|---|
@@ -95,6 +96,48 @@ user must be the client's own. The reference client does
 (`SECURITY_SQOS_PRESENT | SECURITY_ANONYMOUS`), so a server that is not the
 service cannot act as the client's account with the connection. A pipe takes
 no client from another machine.
+
+### The TCP port
+
+Some clients can open a TCP connection and nothing else: a Herdr mod is one.
+For them the service also listens on `127.0.0.1:47930` (spec 115), on the
+loopback address alone, so no other machine reaches it. Every account on this
+machine, and every local process, can reach a loopback port, so a request there
+proves it comes from one of the account's own programs with a token:
+
+```console
+$ curl -H "Authorization: Bearer $(jq -r .token ~/.config/hayami/api-tcp.json)" \
+    http://127.0.0.1:47930/v1/sections/cooler
+$ hayami-tui api --tcp get sections/cooler     # the same, the token read for you
+```
+
+- **The key file.** `api-tcp.json` in hayami's settings directory
+  (`~/.config/hayami` on Linux, `~/Library/Application Support/hayami` on
+  macOS, `%APPDATA%\hayami` on Windows) holds the address and the token:
+  `{"address": "127.0.0.1:47930", "token": "…"}`. It is readable by the account
+  alone (`0600`, or an access list granting the account only), and the service
+  serves no port from a file anyone else could read. The token is 32 random
+  bytes in base64url.
+- **Every request** carries `Authorization: Bearer <token>`. Without it, or
+  with a wrong one, the answer is 401 with the code `unauthorized` and
+  `WWW-Authenticate: Bearer`, the same whatever was wrong.
+- **The host.** A request whose `Host` is not `127.0.0.1:<port>` or
+  `localhost:<port>` is 403, before the token is looked at, so a web page that
+  points a name of its own at 127.0.0.1 gets nothing. A request with an `Origin`
+  header is 403 here as on the socket.
+- **The limits** are shared with the socket: 64 connections and 16 streams in
+  all.
+- **Setting it up.** The installer's Port page sets the port up with the
+  service, on by default; clear its box (`--apitcp=no`) to leave it off.
+  `hayami-tui api-service tcp` sets it up on the installed service, `--port` moves it,
+  `--new-token` replaces the token (a program holding the old one is refused
+  from then on), and `--remove` removes the port and its key. On Linux the port
+  is a socket unit of its own, `hayami-api-tcp.socket`, so a port another
+  program holds fails that unit and not the socket; on macOS it is a second
+  entry in the agent; on Windows each account's service reads its own key when
+  it starts, so two accounts signed in at once each need their own port.
+- `hayami-tui api status` says whether the port is set up, where, and where the
+  token is. It never prints the token.
 
 Only `GET`. A request with a body is 400, one with an `Origin` header 403 (a
 browser's), more than 64 connections or 16 streams at once 503 with

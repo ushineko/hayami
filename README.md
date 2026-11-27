@@ -412,8 +412,16 @@ It is set up by default:
 - **Anywhere else**, or without a service manager, run `hayami-tui serve`
   in the foreground.
 
+It can also listen on `127.0.0.1:47930`, for programs that cannot open a
+socket, such as a Herdr panel. Any account on the computer can reach a local
+port, so there every request carries a token from `api-tcp.json` in your
+settings, which only your account can read. The installer's Port page sets it
+up with the service, on by default; `hayami-tui api-service tcp` moves it,
+gives it a new token or removes it.
+
 `hayami-tui api` is its reference client: `status`, `get`, `watch` for a
-stream, and `check`, which holds every answer to the contract.
+stream, and `check`, which holds every answer to the contract; `--tcp` uses the
+port.
 [docs/api.md](https://github.com/ushineko/hayami/blob/main/docs/api.md)
 describes what it serves.
 
@@ -839,6 +847,16 @@ MIT. See
 [LICENSE](https://github.com/ushineko/hayami/blob/main/LICENSE).
 
 ## Changelog
+
+### Unreleased
+
+- **Added**: the service also listens on `127.0.0.1:47930`, for programs that
+  can open a TCP connection but not a socket, such as a Herdr panel. Every
+  request there carries a token from `api-tcp.json` in your settings, which
+  only your account can read, and names the port as its host. The installer's
+  new Port page sets it up with the service, on by default;
+  `hayami-tui api-service tcp` moves it, gives it a new token or removes it,
+  and `hayami-tui api --tcp` reads through it. Contract 1.1 (spec 115, #417).
 
 ### 0.23.2 (2026-11-26)
 

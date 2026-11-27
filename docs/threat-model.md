@@ -31,7 +31,7 @@ written here; it is a private advisory until the release that fixes it.
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service, LocalSystem (the sensor helper, spec 103) or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
 | B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its findings fixed (the advisory in 0.11.12, #244 and #245 since) |
-| B3 Credentials | The Claude and Codex tokens; the shared usage cache; the GitHub and GitLab keys (spec 102) | Assessed 2026-10-31; its findings fixed in 0.11.13 |
+| B3 Credentials | The Claude and Codex tokens; the shared usage cache; the GitHub and GitLab keys (spec 102); the service's TCP token (spec 115) | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Fuzzed (spec 074); sanshoku's decoders open |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
@@ -354,6 +354,24 @@ every section, every detail and the details below them over real sources,
 with a credential file and forge and API keys in the environment, and finds
 none of them in any response (`TestNothingSecretLeaves`).
 
+**The service's TCP port (spec 115).** A new credential: the token that lets
+a program use the loopback port, in `api-tcp.json` in the settings directory
+(`internal/api/tcpkey`). It is kept by the file's permission alone, as the
+Claude token is: `0600` and this account's, refused if it is a link, another
+account's, or readable by the group or others (`openPrivate`,
+`file_unix.go`); on Windows an access list granting the account only, with
+nothing inherited, checked entry by entry on the file opened
+(`file_windows.go`). A file the service may not trust means no port, and
+the socket serves regardless. The token is compared in constant time, and
+never logged, printed or put in an error: `api status` names the file, and
+a test captures the service's log across refused requests and refused keys
+and finds no token (`TestTheServiceListensOnItsKeysPortOnLoopbackAlone`,
+`TestWithoutAGoodKeyThereIsNoPortAndTheSocketServes`, each falsified). It
+is written as the person, never by an elevated step, which on Windows may
+be another account. Anything running as the account can read it, as it can
+read the account's other credentials; root and administrators can read
+anything.
+
 ## B4 What hayami parses
 
 **Assets.** The panel's availability; for the helper protocol, the
@@ -634,14 +652,27 @@ machine, and the reference client asks which process serves a pipe and that
 process's account before it writes, opening it anonymously, so a pipe someone
 else made under the name is refused (`Dial`, `internal/api/client`;
 `TestAPipeOfAnotherAccountIsRefused`, run on the Windows VM with SYSTEM as
-the other account). A browser reaches nothing: there
-is no TCP port, and a request carrying `Origin` is refused. Every string is
+the other account). A browser reaches nothing: a request carrying `Origin` is refused, on the
+socket and on the port. Every string is
 cleaned of control and bidirectional characters (`internal/api/text.go`), and
 one past 4 KiB is cut and the response marked `truncated`, so a hostile
 device name cannot make a response unbounded. Everything `hayami-tui api`
 prints, and its errors, which can carry a key the socket's peer chose, is
 cleaned again before it reaches the terminal, whoever answered (`run` and
 `cleanLines`, `internal/cli/api.go`; `TestTheAPICommandsPrintOnlyPrintableText`).
+
+**The service's TCP port (spec 115).** Where it is set up, on by default, the
+same readings are served on `127.0.0.1:<port>`, which every account and every
+local process can reach. Without the token (B3) the answer is 401, the same
+whatever was wrong, and nothing past it is reached, not even whether a path
+exists. A request whose `Host` is not the port's own name is 403 before the
+token is looked at, which a page that rebinds a name of its own to 127.0.0.1
+cannot get past (`TCPHandler`, `internal/api/tcp.go`; `TestThePortWantsItsOwnName`).
+The port is on 127.0.0.1 alone: one made on any other address, or handed over
+by systemd or launchd on one, is closed (`loopbackOnly`;
+`TestTheServiceListensOnItsKeysPortOnLoopbackAlone`, falsified by listening on
+every address). Its connections and streams count against the socket's limits
+(`Limiter`, `server.go`).
 
 **Not yet known.** The rest of `doctor` and the JSON outputs has not been
 audited for identifiers other than the home path.

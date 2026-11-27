@@ -33,7 +33,7 @@ flowchart LR
   C --> core
   S --> core
   K --> core
-  X -- "JSON on a socket<br/>only you can open" --> S
+  X -- "JSON on a socket only you can open,<br/>or on 127.0.0.1 with a token" --> S
   core -- "one-way socket or pipe" --> N
   core -- "one-way pipe" --> H
 ```
@@ -95,6 +95,15 @@ programs of the same account, as JSON over a socket only that account can
 open, under the contract in [api/openapi.yaml](api/openapi.yaml). A section
 is read only while a client reads it. It serves facts, never the panel's
 wording. [docs/api.md](docs/api.md) describes it.
+
+Where it is set up, on by default, the same service also listens on
+`127.0.0.1:47930`, for a client that can open a TCP connection and not a
+socket, such as a Herdr mod (spec 115). Every account on the machine can reach
+a loopback port, so each request there carries the token from `api-tcp.json`,
+a file in the settings directory only the account can read. On Linux the port
+is its own socket unit, `hayami-api-tcp.socket`, starting the same service; on
+macOS a second entry in the agent; on Windows the account's instance listens
+on it itself.
 
 | Platform | Set up as | Address |
 |---|---|---|
