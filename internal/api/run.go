@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
 )
@@ -28,6 +29,11 @@ type Options struct {
 	// zero is the default, IdleExit when systemd started it by its socket and
 	// never otherwise (R5).
 	Idle time.Duration
+
+	// KeyPath is the TCP port's key (spec 115 R6); empty is its usual place,
+	// api-tcp.json in the settings directory. Without a key the service may
+	// serve with, there is no port.
+	KeyPath string
 
 	Version string
 	Log     *slog.Logger
@@ -69,10 +75,25 @@ func Run(ctx context.Context, o Options) error {
 	hub := NewHub(ctx, panel.Sources(panel.Keys(), env), settings, o.Log)
 	srv := NewServer(hub, o.Version, o.Log)
 	hs := srv.HTTP()
+	limiter := NewLimiter(MaxConns)
 
-	done := make(chan error, 1)
-	go func() { done <- hs.Serve(Limit(l, MaxConns)) }()
+	done := make(chan error, 2)
+	go func() { done <- hs.Serve(limiter.Wrap(l)) }()
 	o.Log.Info("serving", "address", l.Addr().String(), "socket-started", activated)
+
+	// The TCP port, beside the socket, on the same hub and the same limits
+	// (spec 115 R5).
+	var ht *http.Server
+	if tl, key := tcpListener(o.keyPath(), o.Log); tl != nil {
+		auth := newTCPAuth(key)
+		ht = srv.HTTP()
+		ht.Handler = srv.TCPHandler(auth, tcpPort(tl))
+		// Its own limit: connections from another account to the port never
+		// take the socket's places (review F2).
+		go func() { done <- ht.Serve(NewLimiter(MaxTCPConns).Wrap(tl)) }()
+		go followKey(ctx, o.keyPath(), tcpPort(tl), auth, o.Log)
+		o.Log.Info("serving", "address", tl.Addr().String())
+	}
 
 	go followSettings(ctx, o.SettingsPath, hub, o.Log)
 	stop := make(chan struct{})
@@ -94,7 +115,22 @@ func Run(ctx context.Context, o Options) error {
 	defer cancelShutdown()
 	cancel()
 	_ = hs.Shutdown(shutdown)
+	if ht != nil {
+		_ = ht.Shutdown(shutdown)
+	}
 	return nil
+}
+
+// keyPath is the TCP port's key: the one named, or its usual place.
+func (o Options) keyPath() string {
+	if o.KeyPath != "" {
+		return o.KeyPath
+	}
+	p, err := tcpkey.Path()
+	if err != nil {
+		return ""
+	}
+	return p
 }
 
 // listener is the socket named, the one systemd handed over, or the default.

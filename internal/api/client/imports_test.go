@@ -37,7 +37,10 @@ func TestTheClientImportsOnlyTheContract(t *testing.T) {
 				first, _, _ := strings.Cut(path, "/")
 				allowed := !strings.Contains(first, ".") ||
 					path == "github.com/ushineko/hayami/internal/api/contract" ||
-					strings.HasPrefix(path, "golang.org/x/sys/")
+					strings.HasPrefix(path, "golang.org/x/sys/") ||
+					// A WebSocket needs an implementation of the protocol, as
+					// a client in any language would have (specs 115, 116).
+					path == "github.com/coder/websocket"
 				assert.True(t, allowed, "%s imports %s", f, path)
 			}
 		}

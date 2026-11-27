@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/sections/{key}/details/{id...}", s.detail)
 	mux.HandleFunc("/v1/readings", s.readings)
 	mux.HandleFunc("/v1/events", s.events)
+	mux.HandleFunc("/v1/ws", func(w http.ResponseWriter, r *http.Request) { s.ws(w, r, nil) })
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, contract.ErrNotFound, "no such path; every path is under /v1", nil)
 	})
@@ -337,11 +338,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 }
 
 /*
-limitListener answers a connection over MaxConns with a 503 and closes it, so
-a client over the limit is told so rather than left waiting (R31).
+Limiter counts the connections open across every listener it wraps, and
+answers one over its limit with a 503 and closes it, so a client over the
+limit is told so rather than left waiting (spec 113 R31). The socket and the
+TCP port share one (spec 115 R5).
 */
-type limitListener struct {
-	net.Listener
+type Limiter struct {
 	mu    sync.Mutex
 	open  int
 	limit int
@@ -351,9 +353,22 @@ type limitListener struct {
 	refusing chan struct{}
 }
 
+// NewLimiter is a Limiter of limit connections at once.
+func NewLimiter(limit int) *Limiter {
+	return &Limiter{limit: limit, refusing: make(chan struct{}, 16)}
+}
+
+// Wrap is l with its connections counted against the limiter.
+func (lm *Limiter) Wrap(l net.Listener) net.Listener {
+	return &limitListener{Listener: l, lm: lm}
+}
+
 // Limit wraps l so at most limit connections are served at once.
-func Limit(l net.Listener, limit int) net.Listener {
-	return &limitListener{Listener: l, limit: limit, refusing: make(chan struct{}, 16)}
+func Limit(l net.Listener, limit int) net.Listener { return NewLimiter(limit).Wrap(l) }
+
+type limitListener struct {
+	net.Listener
+	lm *Limiter
 }
 
 func (l *limitListener) Accept() (net.Conn, error) {
@@ -362,13 +377,14 @@ func (l *limitListener) Accept() (net.Conn, error) {
 		if err != nil {
 			return nil, err //nolint:wrapcheck // the listener's own error, which http.Server inspects
 		}
-		l.mu.Lock()
-		if l.open >= l.limit {
-			l.mu.Unlock()
+		lm := l.lm
+		lm.mu.Lock()
+		if lm.open >= lm.limit {
+			lm.mu.Unlock()
 			select {
-			case l.refusing <- struct{}{}:
+			case lm.refusing <- struct{}{}:
 				go func() {
-					defer func() { <-l.refusing }()
+					defer func() { <-lm.refusing }()
 					refuse(c)
 				}()
 			default:
@@ -376,16 +392,16 @@ func (l *limitListener) Accept() (net.Conn, error) {
 			}
 			continue
 		}
-		l.open++
-		l.mu.Unlock()
-		return &countedConn{Conn: c, release: l.release}, nil
+		lm.open++
+		lm.mu.Unlock()
+		return &countedConn{Conn: c, release: lm.release}, nil
 	}
 }
 
-func (l *limitListener) release() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.open--
+func (lm *Limiter) release() {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	lm.open--
 }
 
 /*

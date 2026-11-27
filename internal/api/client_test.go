@@ -33,7 +33,7 @@ func TestTheReferenceClientReadsEveryEndpoint(t *testing.T) {
 	assert.True(t, health.OK)
 	index, err := c.Index(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "1.0", index.API)
+	assert.Equal(t, "1.1", index.API)
 	list, err := c.Sections(ctx)
 	require.NoError(t, err)
 	require.Len(t, list.Sections, len(index.Sections))
@@ -132,4 +132,26 @@ func TestTheClientsAddressIsTheServices(t *testing.T) {
 	require.Error(t, err)
 	_, err = client.Address()
 	require.Error(t, err, "a path over the system's limit is refused by both")
+}
+
+// Specs 115, 116 R10. The reference client reads the WebSocket, on the
+// socket and on the TCP port, and the whole WebSocket check passes on both.
+func TestTheClientReadsTheWebSocket(t *testing.T) {
+	h := start(t, sources(fixtures()), options{tcp: true})
+	ctx := context.Background()
+	for name, dial := range map[string]func() (*client.WS, error){
+		"socket": func() (*client.WS, error) { return client.DialWS(ctx, h.sock) },
+		"port":   func() (*client.WS, error) { return client.DialTCPWS(ctx, h.tcpAddr, h.key.Token) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, err := dial()
+			require.NoError(t, err)
+			defer func() { _ = w.Close() }()
+			var out bytes.Buffer
+			r, err := client.CheckWS(ctx, w, &out)
+			require.NoError(t, err, out.String())
+			assert.Equal(t, 5, r.Sections)
+			assert.Positive(t, r.Details)
+		})
+	}
 }

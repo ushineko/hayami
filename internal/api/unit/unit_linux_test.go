@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 )
 
 // manager is a stand-in for the person's service manager: what it was asked,
@@ -27,8 +29,10 @@ func fake(t *testing.T) (*manager, string) {
 	t.Helper()
 	m := &manager{active: map[string]bool{}}
 	units := t.TempDir()
-	wasCtl, wasDir, wasOffered := systemctl, dir, Offered
-	t.Cleanup(func() { systemctl, dir, Offered = wasCtl, wasDir, wasOffered })
+	wasCtl, wasDir, wasOffered, wasKey := systemctl, dir, Offered, keyPath
+	t.Cleanup(func() { systemctl, dir, Offered, keyPath = wasCtl, wasDir, wasOffered, wasKey })
+	key := filepath.Join(t.TempDir(), tcpkey.FileName)
+	keyPath = func() (string, error) { return key, nil }
 	systemctl = func(_ context.Context, args ...string) (string, error) {
 		m.calls = append(m.calls, strings.Join(args, " "))
 		if args[0] == "is-active" {
@@ -198,9 +202,10 @@ func TestSystemdVerifiesTheUnits(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(units, SocketName), []byte(SocketText()), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(units, ServiceName), []byte(service), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(units, TCPSocketName), []byte(TCPSocketText(tcpkey.DefaultPort)), 0o600))
 
 	cmd := exec.CommandContext(context.Background(), analyze, "verify", "--man=no", //nolint:gosec // the test's own files
-		filepath.Join(units, SocketName), filepath.Join(units, ServiceName))
+		filepath.Join(units, SocketName), filepath.Join(units, ServiceName), filepath.Join(units, TCPSocketName))
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "systemd-analyze verify: %s", out)
 	// verify loads the units ours depend on and reports on those too: a CI
@@ -213,4 +218,100 @@ func TestSystemdVerifiesTheUnits(t *testing.T) {
 		}
 	}
 	assert.Empty(t, ours, "verify had something to say about hayami's units:\n%s", out)
+}
+
+// keyAt is the test's key file.
+func keyAt(t *testing.T) string {
+	t.Helper()
+	p, err := keyPath()
+	require.NoError(t, err)
+	return p
+}
+
+/*
+Spec 115 R2, R13. InstallTCP writes the port's key and its socket unit, on
+127.0.0.1 with its descriptor named for the service, and listens; an upgrade
+keeps the port and its token, and renewing replaces the token.
+*/
+func TestInstallTCPWritesThePortsUnitAndItsKey(t *testing.T) {
+	m, units := fake(t)
+	const program = "/opt/hayami/bin/hayami-tui"
+	require.NoError(t, InstallTCP(context.Background(), program, 47931, false))
+
+	key, err := tcpkey.Read(keyAt(t))
+	require.NoError(t, err)
+	assert.Equal(t, 47931, key.Port())
+	body, err := os.ReadFile(filepath.Join(units, TCPSocketName))
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(body), mark+"\n"))
+	for _, line := range []string{"ListenStream=127.0.0.1:47931", "FileDescriptorName=tcp", "Service=" + ServiceName, "WantedBy=sockets.target"} {
+		assert.Contains(t, string(body), "\n"+line+"\n")
+	}
+	assert.NotContains(t, string(body), key.Token, "the unit carried the token")
+	assert.Equal(t, []string{"daemon-reload", "enable --now " + SocketName, "stop " + ServiceName, "enable " + TCPSocketName,
+		"restart " + TCPSocketName}, m.calls, "the service lets go of the port before its socket is listened on anew")
+
+	// An upgrade: the port and its token stay.
+	require.NoError(t, Install(context.Background(), program))
+	again, err := tcpkey.Read(keyAt(t))
+	require.NoError(t, err)
+	assert.Equal(t, key, again)
+	assert.FileExists(t, filepath.Join(units, TCPSocketName))
+
+	require.NoError(t, InstallTCP(context.Background(), program, 47931, true))
+	renewed, err := tcpkey.Read(keyAt(t))
+	require.NoError(t, err)
+	assert.NotEqual(t, key.Token, renewed.Token)
+}
+
+// Spec 115 R13. RemoveTCP takes the port's unit and key and leaves the
+// socket and the service; and the port follows its key, so an install with
+// the key gone takes the unit away.
+func TestThePortGoesWithItsKey(t *testing.T) {
+	m, units := fake(t)
+	const program = "/opt/hayami/bin/hayami-tui"
+	require.NoError(t, InstallTCP(context.Background(), program, tcpkey.DefaultPort, false))
+
+	m.calls = nil
+	require.NoError(t, RemoveTCP(context.Background(), program))
+	assert.Equal(t, []string{"disable --now " + TCPSocketName, "daemon-reload", "try-restart " + ServiceName}, m.calls)
+	assert.NoFileExists(t, filepath.Join(units, TCPSocketName))
+	assert.NoFileExists(t, keyAt(t))
+	assert.FileExists(t, filepath.Join(units, SocketName))
+	assert.FileExists(t, filepath.Join(units, ServiceName))
+
+	require.NoError(t, InstallTCP(context.Background(), program, tcpkey.DefaultPort, false))
+	require.NoError(t, os.Remove(keyAt(t)))
+	require.NoError(t, Install(context.Background(), program))
+	assert.NoFileExists(t, filepath.Join(units, TCPSocketName), "a port without its key was kept")
+
+	require.NoError(t, InstallTCP(context.Background(), program, tcpkey.DefaultPort, false))
+	require.NoError(t, Remove(context.Background()))
+	entries, err := os.ReadDir(units)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "removing the service left the port")
+	assert.NoFileExists(t, keyAt(t))
+}
+
+// Spec 115 R15. Status says whether the port is set up and listening.
+func TestStatusSaysThePort(t *testing.T) {
+	m, _ := fake(t)
+	require.NoError(t, InstallTCP(context.Background(), "/opt/hayami/bin/hayami-tui", tcpkey.DefaultPort, false))
+	m.active[SocketName] = true
+	assert.Equal(t, State{Installed: true, Listening: true, TCP: true}, Status(context.Background()))
+	m.active[TCPSocketName] = true
+	assert.Equal(t, State{Installed: true, Listening: true, TCP: true, TCPListening: true}, Status(context.Background()))
+}
+
+// Spec 115 R13. The installed service's program is read back as it was
+// written, a percent and a space included; nothing installed is ErrNotHere.
+func TestTheInstalledProgramIsReadBack(t *testing.T) {
+	_, _ = fake(t)
+	_, err := InstalledProgram()
+	require.ErrorIs(t, err, ErrNotHere)
+	const program = "/home/someone/My 100% programs/bin/hayami-tui"
+	require.NoError(t, Install(context.Background(), program))
+	got, err := InstalledProgram()
+	require.NoError(t, err)
+	assert.Equal(t, program, got)
 }

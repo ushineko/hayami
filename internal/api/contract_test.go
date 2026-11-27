@@ -104,6 +104,9 @@ var contractTypes = map[string]any{
 	"Forge": contract.Forge{}, "ForgeCount": contract.ForgeCount{}, "ForgeItem": contract.ForgeItem{},
 	"ForgeDay": contract.ForgeDay{}, "ChangePage": contract.ChangePage{}, "Change": contract.Change{},
 	"Commit": contract.Commit{}, "ChangedFile": contract.ChangedFile{},
+	"WsChallenge": contract.WsChallenge{}, "WsAuth": contract.WsAuth{}, "WsHello": contract.WsHello{},
+	"WsSubscribe": contract.WsSubscribe{}, "WsSection": contract.WsSection{}, "WsDetail": contract.WsDetail{},
+	"WsError": contract.WsError{},
 }
 
 // jsonFields are a struct's JSON field names, an embedded struct's included.
@@ -323,5 +326,5 @@ func TestEveryPathIsInTheContract(t *testing.T) {
 		paths = append(paths, p)
 	}
 	slices.Sort(paths)
-	assert.Equal(t, []string{"/", "/events", "/health", "/readings", "/sections", "/sections/{key}", "/sections/{key}/details/{id}"}, paths)
+	assert.Equal(t, []string{"/", "/events", "/health", "/readings", "/sections", "/sections/{key}", "/sections/{key}/details/{id}", "/ws"}, paths)
 }

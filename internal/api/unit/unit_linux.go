@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 )
 
 // mark is each unit's first line, by which a file at the unit's path is
@@ -78,6 +80,30 @@ WantedBy=sockets.target
 }
 
 /*
+TCPSocketText is the loopback TCP port's socket unit (spec 115 R2): on
+127.0.0.1 alone, its descriptor named "tcp" so the service tells it from the
+Unix socket, activating the same service. A unit of its own, so a port
+another program holds fails this unit and not the socket.
+*/
+func TCPSocketText(port int) string {
+	return mark + `
+[Unit]
+Description=hayami's service port: the readings on loopback, for programs of this account holding its token
+
+[Socket]
+ListenStream=` + tcpkey.Address(port) + `
+FileDescriptorName=tcp
+Service=` + ServiceName + `
+
+[Install]
+WantedBy=sockets.target
+`
+}
+
+// keyPath is the port's key. A variable, so a test keeps its own.
+var keyPath = tcpkey.Path
+
+/*
 ServiceText is the service for program: `serve`, started by its socket,
 which it takes as systemd hands it over and gives back after five minutes
 with nobody reading. It runs as the person with no added right. A clean exit
@@ -129,6 +155,15 @@ func paths() (socket, service string, err error) {
 	return filepath.Join(d, SocketName), filepath.Join(d, ServiceName), nil
 }
 
+// tcpPath is the port's socket unit's file.
+func tcpPath() (string, error) {
+	d, err := dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, TCPSocketName), nil
+}
+
 // ours says whether the file at path is hayami's: nil, or why it is not one
 // to touch.
 func ours(path string) error {
@@ -176,11 +211,141 @@ func Install(ctx context.Context, program string) error {
 	if err := write(servicePath, service); err != nil {
 		return err
 	}
-	for _, args := range [][]string{{"daemon-reload"}, {"enable", "--now", SocketName}, {"try-restart", ServiceName}} {
+	// The port follows its key (spec 115): written where there is a key the
+	// service may serve with, and taken away where there is none.
+	key, keyErr := readKey()
+	tcp, err := tcpPath()
+	if err != nil {
+		return err
+	}
+	if keyErr == nil {
+		if err := ours(tcp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := write(tcp, TCPSocketText(key.Port())); err != nil {
+			return err
+		}
+	} else if err := removeTCPUnit(ctx, tcp); err != nil {
+		return err
+	}
+	steps := [][]string{{"daemon-reload"}, {"enable", "--now", SocketName}}
+	if keyErr == nil {
+		// A running service holds a copy of the port's descriptor, so the
+		// port's socket cannot be listened on anew until it lets go (found
+		// by the review of spec 115): the service is stopped first, and the
+		// next connection starts it on the new program with the port as it
+		// is now. restart, not enable alone: a port moved is listened on anew.
+		steps = append(steps, []string{"stop", ServiceName}, []string{"enable", TCPSocketName}, []string{"restart", TCPSocketName})
+	} else {
+		steps = append(steps, []string{"try-restart", ServiceName})
+	}
+	for _, args := range steps {
 		if _, err := systemctl(ctx, args...); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+/*
+InstalledProgram is the program hayami's installed service runs, read back
+from its unit's ExecStart as ServiceText wrote it, so the port can be set up
+on the service the installer put there and not on whatever program asks.
+*/
+func InstalledProgram() (string, error) {
+	_, servicePath, err := paths()
+	if err != nil {
+		return "", err
+	}
+	if err := ours(servicePath); err != nil {
+		return "", fmt.Errorf("%w: the service is not installed", ErrNotHere)
+	}
+	body, err := os.ReadFile(servicePath) //nolint:gosec // a path this file composed
+	if err != nil {
+		return "", fmt.Errorf("reading the service: %w", err)
+	}
+	for line := range strings.Lines(string(body)) {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), `ExecStart="`)
+		if !ok {
+			continue
+		}
+		quoted, ok := strings.CutSuffix(rest, `" serve`)
+		if !ok {
+			break
+		}
+		return strings.ReplaceAll(quoted, "%%", "%"), nil
+	}
+	return "", errors.New("the service's unit names no program hayami wrote")
+}
+
+// readKey is the port's key, if there is one the service may serve with.
+func readKey() (tcpkey.Key, error) {
+	p, err := keyPath()
+	if err != nil {
+		return tcpkey.Key{}, err //nolint:wrapcheck // says what is missing
+	}
+	return tcpkey.Read(p) //nolint:wrapcheck // says what is wrong, without the token
+}
+
+/*
+InstallTCP sets up the loopback port for the service of program (spec 115
+R12, R13): its key, made with a fresh token or keeping the one there unless
+renew, then the units, the port's among them. A running service is restarted
+to serve it.
+*/
+func InstallTCP(ctx context.Context, program string, port int, renew bool) error {
+	if !Offered() {
+		return ErrNotHere
+	}
+	p, err := keyPath()
+	if err != nil {
+		return err //nolint:wrapcheck // says what is missing
+	}
+	if _, err := tcpkey.Make(p, port, renew); err != nil {
+		return err //nolint:wrapcheck // says what failed, without the token
+	}
+	return Install(ctx, program)
+}
+
+// RemoveTCP takes the port away, its unit and its key, and restarts a
+// running service without it. The socket and the service stay. The program
+// is not needed here; it is on macOS, where the agent is written again.
+func RemoveTCP(ctx context.Context, _ string) error {
+	tcp, err := tcpPath()
+	if err != nil {
+		return err
+	}
+	if err := removeTCPUnit(ctx, tcp); err != nil {
+		return err
+	}
+	if err := removeKey(); err != nil {
+		return err
+	}
+	_, reloaded := systemctl(ctx, "daemon-reload")
+	_, restarted := systemctl(ctx, "try-restart", ServiceName)
+	return errors.Join(reloaded, restarted)
+}
+
+func removeKey() error {
+	p, err := keyPath()
+	if err != nil {
+		return err //nolint:wrapcheck // says what is missing
+	}
+	return tcpkey.Remove(p) //nolint:wrapcheck // says what failed
+}
+
+// removeTCPUnit stops the port's socket and removes its unit, where it is
+// hayami's; nothing there is not a failure.
+func removeTCPUnit(ctx context.Context, tcp string) error {
+	tcpOurs, err := mine(tcp)
+	if err != nil || !tcpOurs {
+		return err
+	}
+	_, _ = systemctl(ctx, "disable", "--now", TCPSocketName)
+	if err := os.Remove(tcp); err != nil {
+		return fmt.Errorf("removing %s: %w", TCPSocketName, err)
+	}
+	dropWant(tcp, TCPSocketName)
 	return nil
 }
 
@@ -214,7 +379,7 @@ func Remove(ctx context.Context) error {
 		}
 		// The link enable made, which disable takes when the manager can be
 		// asked, and which would otherwise be left pointing at nothing.
-		dropWant(socketPath)
+		dropWant(socketPath, SocketName)
 	}
 	if serviceOurs {
 		// A service never started is not there to stop, and says so.
@@ -223,7 +388,21 @@ func Remove(ctx context.Context) error {
 			return fmt.Errorf("removing %s: %w", ServiceName, err)
 		}
 	}
-	if !socketOurs && !serviceOurs {
+	tcp, err := tcpPath()
+	if err != nil {
+		return err
+	}
+	tcpOurs, err := mine(tcp)
+	if err != nil {
+		return err
+	}
+	if err := removeTCPUnit(ctx, tcp); err != nil {
+		return err
+	}
+	if err := removeKey(); err != nil {
+		return err
+	}
+	if !socketOurs && !serviceOurs && !tcpOurs {
 		return nil
 	}
 	_, reloaded := systemctl(ctx, "daemon-reload")
@@ -248,10 +427,10 @@ func mine(path string) (bool, error) {
 	}
 }
 
-// dropWant removes sockets.target.wants' link to the socket unit, where it
-// is a link to that unit and nothing else.
-func dropWant(socketPath string) {
-	link := filepath.Join(filepath.Dir(socketPath), "sockets.target.wants", SocketName)
+// dropWant removes sockets.target.wants' link to a socket unit, where it is
+// a link to that unit and nothing else.
+func dropWant(socketPath, name string) {
+	link := filepath.Join(filepath.Dir(socketPath), "sockets.target.wants", name)
 	if target, err := os.Readlink(link); err == nil && target == socketPath {
 		_ = os.Remove(link)
 	}
@@ -269,5 +448,10 @@ func Status(ctx context.Context) State {
 	service, _ := systemctl(ctx, "is-active", ServiceName)
 	s.Listening = socket == "active"
 	s.Running = service == "active"
+	if _, err := readKey(); err == nil {
+		s.TCP = true
+		tcp, _ := systemctl(ctx, "is-active", TCPSocketName)
+		s.TCPListening = tcp == "active"
+	}
 	return s
 }

@@ -41,7 +41,15 @@ func init() { //nolint:gochecknoinits // how fynstall is given a page's window
 			check: func(context.Context) offering { return probeAPI(c) },
 			shown: func() bool { return probeAPI(c).applies() }}
 	})
+	gui.Page(PageAPITCP, func(c *extension.Context) wizard.Page {
+		return &offerPage{c: c, title: "Port", param: ParamAPITCP, checking: CheckingAPITCP,
+			check: func(context.Context) offering { return probeAPITCP(c) },
+			shown: func() bool { return probeAPITCP(c).applies() }}
+	})
 }
+
+// CheckingAPITCP is what the Port page says until the check answers.
+const CheckingAPITCP = "Checking for the service's TCP port…"
 
 // CheckingAPI is what the API page says until the check answers.
 const CheckingAPI = "Checking for the service other programs read…"

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ushineko/hayami/internal/api"
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 	"github.com/ushineko/hayami/internal/config"
 	"github.com/ushineko/hayami/internal/panel"
 )
@@ -33,6 +34,12 @@ type harness struct {
 	srv    *api.Server
 	sock   string
 	client *http.Client
+
+	// The TCP port's, when options.tcp (spec 115): its address, its key,
+	// and what lets sessions in with it.
+	tcpAddr string
+	key     tcpkey.Key
+	auth    *api.TCPAuth
 }
 
 // options adjust a harness before it serves.
@@ -40,9 +47,11 @@ type options struct {
 	fixedClock bool
 	settings   config.Config
 	tune       func(*api.Hub, *api.Server)
+	// tcp serves the TCP port beside the socket, with a key of the test's.
+	tcp bool
 }
 
-func start(t *testing.T, srcs []panel.Source, o options) *harness {
+func start(t testing.TB, srcs []panel.Source, o options) *harness {
 	t.Helper()
 	// Short: a socket's path is capped at 104 bytes on macOS and t.TempDir
 	// is long there.
@@ -74,12 +83,31 @@ func start(t *testing.T, srcs []panel.Source, o options) *harness {
 		o.tune(hub, srv)
 	}
 	hs := srv.HTTP()
-	go func() { _ = hs.Serve(api.Limit(l, api.MaxConns)) }()
+	limiter := api.NewLimiter(api.MaxConns)
+	go func() { _ = hs.Serve(limiter.Wrap(l)) }()
+	h := &harness{hub: hub, srv: srv, sock: sock, client: serviceClient(sock)}
+	var ht *http.Server
+	if o.tcp {
+		var lc net.ListenConfig
+		tl, err := lc.Listen(context.Background(), "tcp4", "127.0.0.1:0")
+		require.NoError(t, err)
+		port := tl.Addr().(*net.TCPAddr).Port
+		h.key, err = tcpkey.Make(filepath.Join(t.TempDir(), tcpkey.FileName), port, false)
+		require.NoError(t, err)
+		h.tcpAddr = tl.Addr().String()
+		h.auth = api.NewTCPAuth(h.key)
+		ht = srv.HTTP()
+		ht.Handler = srv.TCPHandler(h.auth, port)
+		go func() { _ = ht.Serve(api.NewLimiter(api.MaxTCPConns).Wrap(tl)) }()
+	}
 	t.Cleanup(func() {
 		cancel()
 		_ = hs.Close()
+		if ht != nil {
+			_ = ht.Close()
+		}
 	})
-	return &harness{hub: hub, srv: srv, sock: sock, client: serviceClient(sock)}
+	return h
 }
 
 // serviceClient is an HTTP client whose every request goes to the service at sock.

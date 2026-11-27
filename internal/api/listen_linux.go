@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 
 	"golang.org/x/sys/unix"
 )
@@ -28,27 +30,78 @@ func Address() (string, error) {
 }
 
 /*
-Activated is the socket systemd made and handed over (sd_listen_fds): the
-first descriptor after the standard three, when LISTEN_PID is this process.
-ok is false when the service was not started by its socket.
+activation is what systemd handed over (sd_listen_fds), read once: the
+descriptors after the standard three, by their names in LISTEN_FDNAMES, when
+LISTEN_PID is this process. The Unix socket's name is its unit's,
+hayami-api.socket; the TCP port's is "tcp" (its unit's FileDescriptorName,
+spec 115 R2). The variables are cleared, so nothing this process starts
+takes them for its own.
 */
-func Activated(log *slog.Logger) (l net.Listener, ok bool, err error) {
+var activation = sync.OnceValues(func() (map[string]*os.File, bool) {
 	if os.Getenv("LISTEN_PID") != strconv.Itoa(os.Getpid()) {
-		return nil, false, nil
+		return nil, false
 	}
-	if n, _ := strconv.Atoi(os.Getenv("LISTEN_FDS")); n < 1 {
-		return nil, false, nil
+	n, _ := strconv.Atoi(os.Getenv("LISTEN_FDS"))
+	if n < 1 {
+		return nil, false
 	}
+	names := strings.Split(os.Getenv("LISTEN_FDNAMES"), ":")
 	_ = os.Unsetenv("LISTEN_PID")
 	_ = os.Unsetenv("LISTEN_FDS")
 	_ = os.Unsetenv("LISTEN_FDNAMES")
-	f := os.NewFile(3, "hayami-api.socket")
+	files := make(map[string]*os.File, n)
+	for i := range n {
+		name := ""
+		if i < len(names) {
+			name = names[i]
+		}
+		if name != tcpFDName {
+			name = "unix"
+		}
+		if _, dup := files[name]; dup {
+			continue
+		}
+		files[name] = os.NewFile(uintptr(3+i), name)
+	}
+	return files, true
+})
+
+// tcpFDName is the TCP port's descriptor's name, its socket unit's
+// FileDescriptorName.
+const tcpFDName = "tcp"
+
+/*
+Activated is the Unix socket systemd made and handed over. ok is false when
+the service was not started by its sockets.
+*/
+func Activated(log *slog.Logger) (l net.Listener, ok bool, err error) {
+	files, ok := activation()
+	f := files["unix"]
+	if !ok || f == nil {
+		return nil, false, nil
+	}
 	defer func() { _ = f.Close() }()
 	fl, err := net.FileListener(f)
 	if err != nil {
 		return nil, true, fmt.Errorf("taking the socket systemd made: %w", err)
 	}
 	return PeerChecked(fl, log), true, nil
+}
+
+// ActivatedTCP is the TCP port systemd made and handed over, if it did
+// (spec 115 R2).
+func ActivatedTCP() (net.Listener, bool, error) {
+	files, ok := activation()
+	f := files[tcpFDName]
+	if !ok || f == nil {
+		return nil, false, nil
+	}
+	defer func() { _ = f.Close() }()
+	fl, err := net.FileListener(f)
+	if err != nil {
+		return nil, true, fmt.Errorf("taking the port systemd made: %w", err)
+	}
+	return fl, true, nil
 }
 
 // peerUID is the user at the other end of a Unix socket.

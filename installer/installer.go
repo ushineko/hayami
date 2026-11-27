@@ -77,6 +77,10 @@ var Extension = extension.Extension{
 		ID:   PageAPI,
 		Sets: []string{ParamAPI},
 		CLI:  apiCLI,
+	}, {
+		ID:   PageAPITCP,
+		Sets: []string{ParamAPITCP},
+		CLI:  apiTCPCLI,
 	}},
 	AfterInstall:    afterInstall,
 	BeforeUninstall: beforeUninstall,
@@ -187,6 +191,7 @@ func afterInstall(ctx context.Context, c *extension.Context) error {
 	placeRule(ctx, c)
 	placeKeepalive(ctx, c)
 	placeAPI(ctx, c)
+	placeAPITCP(ctx, c)
 	return nil
 }
 
@@ -233,6 +238,7 @@ func beforeUninstall(ctx context.Context, c *extension.Context) error {
 	}
 	dropKeepalive(ctx, c)
 	dropAPI(ctx, c)
+	dropAPITCP(ctx, c)
 	dropCopy(c)
 	return nil
 }

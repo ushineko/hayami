@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 )
 
 // plistValues reads a plist's strings, keys and booleans in order, by XML,
@@ -48,7 +49,7 @@ func plistValues(t *testing.T, text string) []string {
 // booleans are the form launchd reads: `<false/>`, never `<false></false>`,
 // which plutil accepts and launchd refuses with "Input/output error".
 func TestTheAgentIsWhatLaunchdLoads(t *testing.T) {
-	text, err := PlistText("/Users/a/.local/bin/hayami-tui", "/var/folders/x/T/hayami/api.sock")
+	text, err := PlistText("/Users/a/.local/bin/hayami-tui", "/var/folders/x/T/hayami/api.sock", 0)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(text, `<?xml version="1.0" encoding="UTF-8"?>`))
 	assert.Contains(t, text, "<!-- "+mark+" -->")
@@ -70,7 +71,7 @@ func TestTheAgentIsWhatLaunchdLoads(t *testing.T) {
 // add a key is still one string, the whole path.
 func TestAPathCannotAddAKey(t *testing.T) {
 	hostile := `/Users/a/x</string><key>RunAtLoad</key><true/><string>/bin/sh`
-	text, err := PlistText(hostile, "/var/folders/x/T/hayami/api.sock")
+	text, err := PlistText(hostile, "/var/folders/x/T/hayami/api.sock", 0)
 	require.NoError(t, err)
 	values := plistValues(t, text)
 	assert.Contains(t, values, "string="+hostile)
@@ -78,7 +79,7 @@ func TestAPathCannotAddAKey(t *testing.T) {
 	assert.NotContains(t, values, "true")
 
 	for _, bad := range []string{"relative/hayami-tui", "/Users/a/x\nRunAtLoad", "/Users/a/\x00x"} {
-		_, err := PlistText(bad, "/var/folders/x/T/hayami/api.sock")
+		_, err := PlistText(bad, "/var/folders/x/T/hayami/api.sock", 0)
 		require.ErrorIs(t, err, ErrBadProgram, "%q", bad)
 	}
 }
@@ -125,8 +126,10 @@ func TestAProgramOthersCanChangeIsRefused(t *testing.T) {
 func fakeLaunchd(t *testing.T) (*[][]string, string) {
 	t.Helper()
 	agents := t.TempDir()
-	wasCtl, wasDir := launchctl, dir
-	t.Cleanup(func() { launchctl, dir = wasCtl, wasDir })
+	wasCtl, wasDir, wasKey := launchctl, dir, keyPath
+	t.Cleanup(func() { launchctl, dir, keyPath = wasCtl, wasDir, wasKey })
+	key := filepath.Join(t.TempDir(), tcpkey.FileName)
+	keyPath = func() (string, error) { return key, nil }
 	var calls [][]string
 	loaded := false
 	launchctl = func(_ context.Context, args ...string) (string, error) {
@@ -225,4 +228,43 @@ func TestAnAgentHayamiDidNotWriteIsLeftAlone(t *testing.T) {
 	assert.Equal(t, theirs, string(body))
 	assert.Empty(t, *calls, "launchd is not asked about an agent that is not hayami's")
 	assert.False(t, Installed())
+}
+
+// Spec 115 R3, R13. The agent carries the port while its key is there: on
+// 127.0.0.1, IPv4, under its own name; removing the port writes the agent
+// again without it, and takes the key.
+func TestTheAgentCarriesThePortWithItsKey(t *testing.T) {
+	_, agents := fakeLaunchd(t)
+	ctx := context.Background()
+	prog := program(t)
+	require.NoError(t, InstallTCP(ctx, prog, 47931, false))
+	body, err := os.ReadFile(filepath.Join(agents, Label+".plist"))
+	require.NoError(t, err)
+	for _, want := range []string{"<key>" + tcpSockets + "</key>", "<string>127.0.0.1</string>", "<string>47931</string>", "<string>IPv4</string>"} {
+		assert.Contains(t, string(body), want)
+	}
+	p, err := keyPath()
+	require.NoError(t, err)
+	key, err := tcpkey.Read(p)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), key.Token, "the agent carried the token")
+
+	require.NoError(t, RemoveTCP(ctx, prog))
+	body, err = os.ReadFile(filepath.Join(agents, Label+".plist"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "<key>"+tcpSockets+"</key>")
+	assert.NoFileExists(t, p)
+}
+
+// Spec 115 R13. The installed agent's program is read back as it was
+// written.
+func TestTheAgentsProgramIsReadBack(t *testing.T) {
+	_, _ = fakeLaunchd(t)
+	_, err := InstalledProgram()
+	require.ErrorIs(t, err, ErrNotHere)
+	prog := program(t)
+	require.NoError(t, Install(context.Background(), prog))
+	got, err := InstalledProgram()
+	require.NoError(t, err)
+	assert.Equal(t, prog, got)
 }

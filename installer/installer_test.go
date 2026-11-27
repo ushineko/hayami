@@ -177,7 +177,9 @@ func TestTheExtensionKeepsFynstallsRules(t *testing.T) {
 	require.Regexp(t, `(?m)^  - name: `+ParamAPI+`$`, config, "fynstall.yaml does not declare the API page's parameter")
 	require.Regexp(t, `(?m)^  - name: `+ParamAPI+`\n(?:    .*\n)*?    default: "`+Auto+`"\n    once: true$`, config,
 		"the API parameter is auto and once, so --yes never gives back a removed service (spec 113 R25)")
-	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork, ParamKeepalive, ParamAPI}))
+	require.Regexp(t, `(?m)^  - name: `+ParamAPITCP+`\n(?:    .*\n)*?    default: "`+Auto+`"\n    once: true$`, config,
+		"the port's parameter is auto and once, so --yes never gives back a removed port (spec 115 R12)")
+	require.NoError(t, Extension.Check([]string{ParamSensors, ParamNetwork, ParamKeepalive, ParamAPI, ParamAPITCP}))
 	require.NotNil(t, Extension.AfterInstall)
 	require.NotNil(t, Extension.BeforeUninstall)
 }

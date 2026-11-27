@@ -45,6 +45,9 @@ var statuses = []int{
 // Client is a client of the service at one address.
 type Client struct {
 	http *http.Client
+	// base is the URL a path is put after: http://hayami, the socket's,
+	// whose host is ignored.
+	base string
 }
 
 /*
@@ -53,7 +56,7 @@ each call bounds it: the first request for a section the service has not
 read waits for its first poll, up to 15 s, so a deadline is longer than that.
 */
 func New(address string) *Client {
-	return &Client{http: &http.Client{Transport: &http.Transport{
+	return &Client{base: "http://hayami", http: &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return Dial(ctx, address)
 		},
@@ -105,7 +108,7 @@ func (c *Client) Get(ctx context.Context, path string) (*Response, error) {
 }
 
 func (c *Client) do(ctx context.Context, path string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://hayami"+path, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("asking for %s: %w", path, err)
 	}

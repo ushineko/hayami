@@ -72,5 +72,9 @@ func Listen(path string, _ *slog.Logger) (net.Listener, error) {
 // Activated is never: nothing on Windows hands the service a pipe.
 func Activated(*slog.Logger) (net.Listener, bool, error) { return nil, false, nil }
 
+// ActivatedTCP is never: nothing here hands the service a port; it listens
+// on its key's address itself (spec 115 R4).
+func ActivatedTCP() (net.Listener, bool, error) { return nil, false, nil }
+
 // Supported reports whether the service runs on this system.
 func Supported() bool { return true }

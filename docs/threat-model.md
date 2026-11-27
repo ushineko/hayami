@@ -31,7 +31,7 @@ written here; it is a private advisory until the release that fixes it.
 |---|---|---|
 | B1 Privileged helpers | Becoming Local Service, LocalSystem (the sensor helper, spec 103) or a process with kernel capabilities; other accounts' traffic | Assessed 2026-10-31; its finding fixed in 0.11.11 |
 | B2 Installing, upgrading, removing | Code running as root, SYSTEM or an administrator | Assessed 2026-10-31; its findings fixed (the advisory in 0.11.12, #244 and #245 since) |
-| B3 Credentials | The Claude and Codex tokens; the shared usage cache; the GitHub and GitLab keys (spec 102) | Assessed 2026-10-31; its findings fixed in 0.11.13 |
+| B3 Credentials | The Claude and Codex tokens; the shared usage cache; the GitHub and GitLab keys (spec 102); the service's TCP token (spec 115) | Assessed 2026-10-31; its findings fixed in 0.11.13 |
 | B4 What hayami parses | The panel's availability; the helper's input | Fuzzed (spec 074); sanshoku's decoders open |
 | B5 What hayami does outside itself | Ending the wrong process; code run in the compositor | Modelled |
 | B6 What hayami shows and prints | Names, addresses and figures reaching someone they should not | Modelled |
@@ -354,6 +354,31 @@ every section, every detail and the details below them over real sources,
 with a credential file and forge and API keys in the environment, and finds
 none of them in any response (`TestNothingSecretLeaves`).
 
+**The service's TCP port (spec 115).** A new credential: the token that lets
+a program use the loopback port, in `api-tcp.json` in the settings directory
+(`internal/api/tcpkey`). It is kept by the file's permission alone, as the
+Claude token is: `0600` and this account's, refused if it is a link, another
+account's, or readable by the group or others (`openPrivate`,
+`file_unix.go`); on Windows an access list granting the account only, with
+nothing inherited, checked entry by entry on the file opened
+(`file_windows.go`, run on the Windows VM). A file the service may not trust
+means no port, and the socket serves regardless. The token never crosses a
+connection: the port's WebSocket begins with a mutual challenge-response,
+each side's proof an HMAC keyed with the token over the other side's nonce,
+so a program that took the port first is sent nothing it can use, and the
+reference client refuses it (`DialTCPWS`, `ErrImpostor`;
+`TestTheClientRefusesAnImpostor`, falsified). Proofs are compared in constant
+time. The token is never logged, printed or put in an error: `api status`
+names the file, and a test captures the service's log across refused
+sessions, refused keys and a replaced token and finds neither token
+(`TestTheServiceListensOnItsKeysPortOnLoopbackAlone`,
+`TestWithoutAGoodKeyThereIsNoPortAndTheSocketServes`). A replaced token ends
+the sessions the old one let in within two seconds, on every system
+(`followKey`; falsified). It is written as the person, never by an elevated
+step, which on Windows may be another account. Anything running as the
+account can read it, as it can read the account's other credentials; root
+and administrators can read anything.
+
 ## B4 What hayami parses
 
 **Assets.** The panel's availability; for the helper protocol, the
@@ -634,14 +659,35 @@ machine, and the reference client asks which process serves a pipe and that
 process's account before it writes, opening it anonymously, so a pipe someone
 else made under the name is refused (`Dial`, `internal/api/client`;
 `TestAPipeOfAnotherAccountIsRefused`, run on the Windows VM with SYSTEM as
-the other account). A browser reaches nothing: there
-is no TCP port, and a request carrying `Origin` is refused. Every string is
+the other account). A browser reaches nothing: a request carrying `Origin` is refused, on the
+socket and on the port. Every string is
 cleaned of control and bidirectional characters (`internal/api/text.go`), and
 one past 4 KiB is cut and the response marked `truncated`, so a hostile
 device name cannot make a response unbounded. Everything `hayami-tui api`
 prints, and its errors, which can carry a key the socket's peer chose, is
 cleaned again before it reaches the terminal, whoever answered (`run` and
 `cleanLines`, `internal/cli/api.go`; `TestTheAPICommandsPrintOnlyPrintableText`).
+
+**The service's TCP port (spec 115).** Where it is set up, on by default, the
+same readings are served on `127.0.0.1:<port>`, which every account and every
+local process can reach, and which a program of another account can take
+before the service does (before sign-in, or after the last sign-out). So the
+port serves the WebSocket alone, and nothing is sent on it before a client
+has proved, over the service's nonce, that it holds the token (B3); a wrong
+or late answer is closed with 4401 and told nothing
+(`TestAClientThatCannotProveItIsClosed`, falsified). Any other path is 404. A
+request whose `Host` is not the port's own name is 403, which a page that
+rebinds a name of its own to 127.0.0.1 cannot get past (`TCPHandler`,
+`internal/api/tcp.go`; `TestTheWebSocketWantsItsOwnNameAndNoBrowser`), and a
+browser's upgrade is refused for its `Origin`. The port is on 127.0.0.1 and
+the key's port alone: one made on any other address, or handed over by
+systemd or launchd on another address or port, is closed (`loopbackOnly`;
+`TestTheServiceListensOnItsKeysPortOnLoopbackAlone`, falsified by listening
+on every address). It has its own limit of 16 connections and closes what it
+refuses, so connections to it from another account never take the socket's
+places (`TestThePortsConnectionsDoNotTakeTheSockets`, falsified); its
+WebSockets count against the streams. On Windows it is bound with
+`SO_EXCLUSIVEADDRUSE`.
 
 **Not yet known.** The rest of `doctor` and the JSON outputs has not been
 audited for identifiers other than the home path.
@@ -850,6 +896,7 @@ the goal of a working proof of concept.
 | 2026-11-25 | B1, B2, B6, B7 | The adversarial review of spec 113's service on Windows (the pipe, `serve` under the service manager, the client's dial, the per-user template and its copy in Program Files, `api-service`, the installer page and scripts, go-winio; phase 4): one reviewer given the change and the attackers (another account, a same-account program without administrator rights, a pipe squatter, someone writing the install directory during the elevated step, the upgrade and uninstall paths, the supply chain), finding and refuting in one pass, then its one open question tested on the Windows VM. Read-only. | Nothing crossed an account boundary. The open question, whether an administrator's instance runs with the full token, was tested: it runs with the limited one, Medium integrity, as its desktop does. Fixed before merge, each pinned by a test: `api status` read a pipe someone else made as the service running (now it dials with the owner check); an update that failed after stopping the instances left the account without its service until the next sign-in (now they start again on the copy there; `TestAFailedUpdateLeavesTheServiceRunning`, falsified). Accepted: another account taking the pipe's name first keeps the service down (above). Checked: below. |
 | 2026-11-25 | B2, B4, B6 | The adversarial review of spec 113's units and installer page (`internal/api/unit`, the Service page, `install.sh` and `uninstall.sh`; 3c): one reviewer given the change and the attackers (another account, a same-account program or a unit planted in `~/.config/systemd/user`, the program's path, the upgrade and uninstall paths, systemd's hand-over), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary. Fixed before merge, each pinned by a test: a removal that found the service hayami's and the socket someone else's still disabled that socket (now each unit is stopped only when it is hayami's); a removal with no manager to ask left `sockets.target.wants`' link to the socket pointing at nothing (now removed where it is a link to hayami's socket). Checked: below. |
 | 2026-11-25 | B4, B6, B7 | The adversarial review of spec 113's reference client (`internal/api/client`, `hayami-tui api`, the vendored OpenAPI schema; 3b): one reviewer given the change and the attackers (whatever answers on the socket, a hostile string's author, the supply chain), finding and refuting in one pass. Read-only. | Nothing crossed an account boundary: the only peer is the same account, or a path the person names. Fixed before merge, each pinned by a test: text from the socket reaching the terminal uncleaned through `status`, `load`'s report, `watch --json` and error messages (now cleaned once, for every subcommand); an embedded struct's fields read by the wrong index in `check` (it held only while two structs had as many fields); a response cap of 64 MiB, several times that once decoded (now 16 MiB); no deadline on `get` and `check` (now 1 m and 15 m, `--timeout`); a stream reconnecting without a pause; a negative `--streams` panicking. Checked: below. |
+| 2026-11-27 | B3, B6, B7 | The adversarial review of spec 115's TCP port (the key file and its checks, the listener and its activation on each system, the units, `api-service tcp`, the client, the Port page): one reviewer given the change and seven attackers (another account, a browser page, a same-account program without the key, a planted or malformed key, a port squatter, a token leak, Windows' accounts and elevation), then a separate pass that tried to refute each finding, with experiments on the desk. | One finding crossed an account boundary: the client sent its bearer token to whatever held the port, and another account can take a fixed port before the service does. Redesigned before merge: the port serves the WebSocket alone behind a mutual challenge-response, and the token never crosses a connection (`TestTheClientRefusesAnImpostor`). Fixed, each pinned by a test: unauthenticated connections to the port could take the socket's connection places (now the port has its own limit); a replaced token kept working on Windows until sign-in, and on Linux while the service ran (now a changed key ends the old sessions); a handed-over port other than the key's was served; the documented `curl` put the token on a command line; Windows' bind was not exclusive; and the refutation pass found the Linux install restarting the port's socket while the service held it, which failed (now the service is stopped first). |
 | 2026-11-03 | B3 | The adversarial review of spec 082 (the remembered plan, #286): one reviewer given the code and the attackers, then a separate refutation pass. Read-only. | Two paths, both refuted: neither gives an attacker anything the files hayami already reads did not. One part held as a bug without an attacker, a profile named like the plan sharing its caption; fixed before merge. |
 
 ## Checked
@@ -1047,6 +1094,32 @@ stops each. A review starts by reading these.
   the contract types and by `encoding/json`.
 - **A panic in `watch`.** A section or detail event always carries its
   reading; anything else is an error before it is used.
+
+### B3, B6, B7, spec 115's TCP port, 2026-11-27
+
+- Reading the key on Linux and macOS: opened with `O_NOFOLLOW`, then the
+  file opened is checked (regular, this account's, no group or other bits),
+  so there is no window between the look and the read; a key another account
+  planted is refused for its owner.
+- Writing the key: a file beside it made `0600` (on Windows given its access
+  list before a byte is written), synced, and renamed into place; a key that
+  was refused is never reused, its token replaced.
+- A hostile key: the address must be `127.0.0.1` and a canonical port, the
+  token 32 bytes, the file at most 4 KiB, and no error repeats its content; the
+  unit and the plist take the port as a number, so nothing can be written into
+  them through it.
+- Another account binding the port while the service listens: refused on
+  Linux whatever socket options it asks (tried with `SO_REUSEADDR` and
+  `SO_REUSEPORT`); on Windows by its enhanced socket security, and by
+  `SO_EXCLUSIVEADDRUSE`. Taking the port first remains possible; the
+  challenge-response makes it worthless.
+- A browser page: DNS rebinding meets the `Host` check, a cross-site request
+  carrying a credential needs a preflight, which is `OPTIONS` and refused, a
+  WebSocket from a page carries `Origin` and is refused, and nothing on the
+  port answers before the challenge is met.
+- A relayed challenge: the client's proof binds the service's nonce and its
+  own, so a proof taken from one connection opens no other; a program holding
+  the port cannot relay to the service, which is not listening there.
 
 ### B3, spec 102, 2026-11-19
 

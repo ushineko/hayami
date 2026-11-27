@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 )
 
 /*
@@ -123,4 +125,52 @@ func answer(t *testing.T, bodies map[string]string) string {
 	go func() { _ = srv.Serve(l) }()
 	t.Cleanup(func() { _ = srv.Close() })
 	return sock
+}
+
+// configDir points os.UserConfigDir at a directory of the test's, on every
+// system.
+func configDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("AppData", dir)
+	if runtime.GOOS == "darwin" {
+		t.Setenv("HOME", dir)
+	}
+	return dir
+}
+
+/*
+Spec 115 R15. `api --tcp` finds the port in api-tcp.json; the subcommands
+that need the socket's routes say the port serves the WebSocket alone; and
+`api status` says where the port is, and never prints the token.
+*/
+func TestTheAPICommandsUseThePort(t *testing.T) {
+	configDir(t)
+	_, err := run(t, "api", "--tcp", "address")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not set up")
+
+	path, err := tcpkey.Path()
+	require.NoError(t, err)
+	key, err := tcpkey.Make(path, 47931, false)
+	require.NoError(t, err)
+
+	out, err := run(t, "api", "--tcp", "address")
+	require.NoError(t, err)
+	assert.Equal(t, key.Address+"\n", out)
+	for _, sub := range [][]string{{"get", "health"}, {"load", "--duration", "1s"}} {
+		_, err = run(t, append([]string{"api", "--tcp"}, sub...)...)
+		require.Error(t, err, "%v over the port", sub)
+		assert.Contains(t, err.Error(), "WebSocket alone")
+	}
+
+	sock := answer(t, map[string]string{
+		"/v1":          `{"service":"hayami","version":"1","api":"1.1","sections":[]}`,
+		"/v1/sections": `{"sections":[]}`,
+	})
+	out, err = run(t, "api", "--address", sock, "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "tcp        "+key.Address)
+	assert.NotContains(t, out, key.Token, "status printed the token")
 }

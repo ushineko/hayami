@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 	"github.com/ushineko/hayami/internal/nethelper"
 )
 
@@ -98,7 +99,9 @@ func Status(ctx context.Context) State {
 		return State{}
 	}
 	running := ours(ctx)
-	return State{Installed: true, Listening: running, Running: running}
+	// The instance listens on the port itself when its key is there.
+	tcp := tcpSet()
+	return State{Installed: true, Listening: running, Running: running, TCP: tcp, TCPListening: tcp && running}
 }
 
 /*
@@ -300,3 +303,46 @@ func stop(ctx context.Context, s *mgr.Service) (bool, error) {
 		}
 	}
 }
+
+// keyPath is the port's key. A variable, so a test keeps its own.
+var keyPath = tcpkey.Path
+
+/*
+InstallTCP sets up the loopback port for this account (spec 115 R4, R13):
+its key, keeping the token there unless renew. Each account's instance reads
+its own key when it starts, and listens on its port; there is no socket for
+Windows to hold. It must run as the person, not as an administrator: an
+elevated step may be another account, whose settings directory is not
+theirs. The program is not needed here.
+*/
+func InstallTCP(_ context.Context, _ string, port int, renew bool) error {
+	p, err := keyPath()
+	if err != nil {
+		return err //nolint:wrapcheck // says what is missing
+	}
+	_, err = tcpkey.Make(p, port, renew)
+	return err //nolint:wrapcheck // says what failed, without the token
+}
+
+// RemoveTCP takes this account's key away; its instance serves no port from
+// its next start. As the person, as InstallTCP.
+func RemoveTCP(context.Context, string) error {
+	p, err := keyPath()
+	if err != nil {
+		return err //nolint:wrapcheck // says what is missing
+	}
+	return tcpkey.Remove(p) //nolint:wrapcheck // says what failed
+}
+
+// tcpSet is this account's key being one the service may serve with.
+func tcpSet() bool {
+	p, err := keyPath()
+	if err != nil {
+		return false
+	}
+	_, err = tcpkey.Read(p)
+	return err == nil
+}
+
+// InstalledProgram is the service's copy in Program Files.
+func InstalledProgram() (string, error) { return Program(), nil }
