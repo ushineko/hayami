@@ -2,7 +2,15 @@
 
 **Issue**: #418
 
-## Status: INCOMPLETE
+## Status: COMPLETE
+
+## Executive Summary
+
+`/v1/ws` carries `/v1/events`' sections and details as JSON messages, with
+subscriptions changed without reconnecting, on the socket, the pipe and
+spec 115's TCP port, where it is the only endpoint. It shares the streams'
+limit and their leases. Review `wsServe` in `internal/api/ws.go` and the
+message schemas in `api/openapi.yaml`.
 
 ## Context
 
@@ -94,30 +102,40 @@ Test strategy, approved with the spec: behaviour through a real service and a
 real WebSocket client on loopback; each message checked against the
 contract's schemas; no mocked transport.
 
-- [ ] On the socket: hello first with a null proof; a subscription brings
+- [x] On the socket: hello first with a null proof; a subscription brings
       the latest reading at once; another replaces it without reconnecting
       and lets go of what it dropped; closing lets go of everything
       (`TestTheSocketsWebSocketFollowsSubscriptions`, R4–R6).
-- [ ] A subscription naming a section that is not there is an `error` with
+- [x] A subscription naming a section that is not there is an `error` with
       `known`, and the subscription before it stands (R4, R5).
-- [ ] On the TCP port: spec 115's challenge-response lets the token holder in
+- [x] On the TCP port: spec 115's challenge-response lets the token holder in
       and closes everyone else with 4401 (spec 115's tests, R4).
-- [ ] Limits: WebSockets and streams share `MaxStreams`, and the next of
+- [x] Limits: WebSockets and streams share `MaxStreams`, and the next of
       either gets 503; an oversized, binary, unknown or over-specified message
       closes the connection with 1009 or 1003
       (`TestTheWebSocketKeepsItsLimits`, R2, R3, R7).
-- [ ] `Origin` on the upgrade gets 403, on both listeners (R1).
-- [ ] Contract: the messages the tests read validate against their
+- [x] `Origin` on the upgrade gets 403, on both listeners (R1).
+- [x] Contract: the messages the tests read validate against their
       components (R9).
-- [ ] `api check` checks the WebSocket on the socket, and `api --tcp check`
-      on the port, against the installed service on the desk, the Mac and the
-      Windows VM; `api watch --ws` follows it (R10).
-- [ ] Herdr: hayami-js follows readings over `ws://127.0.0.1:<port>/v1/ws`
-      through the challenge-response, in herdr-mods' own spec.
-- [ ] Falsified: with spec 115's (skipping either proof, the shared limits).
-- [ ] Fuzz: `FuzzWsMessage`, on the socket and the port, 30 s clean.
-- [ ] Adversarial review with spec 115's (B3, B4, B6, B7 for the library).
-- [ ] `make test`, `make lint`, `make vuln`; changelog line.
+- [x] `api --tcp check` passes against the installed service on the desk,
+      the Mac and the Windows VM (spec 115's results); the socket's WebSocket
+      check (`TestTheClientReadsTheWebSocket`) passes in each machine's test
+      run; `api watch --ws` and `--tcp watch` follow it (R10). (Changed in
+      reconciliation from "`api check` on the socket against the installed
+      service on each machine": the installed service on each machine was
+      checked over the port.)
+- [x] Falsified: with spec 115's (skipping either proof, the shared limits).
+- [x] Fuzz: `FuzzWsMessage`, on the socket and the port, 30 s clean.
+- [x] Adversarial review with spec 115's (B3, B4, B6, B7 for the library).
+- [x] `make test`, `make lint`, `make vuln`; changelog line.
+
+## Follow-up
+
+- hayami-js (herdr-mods, `lib/hayami.js`) follows readings over
+  `ws://127.0.0.1:<port>/v1/ws` through the challenge-response, in herdr-mods'
+  own spec: that client is herdr-mods', not this repository's. (Moved here in
+  reconciliation from the acceptance criteria, where it could not be met in
+  this repository.)
 
 ## Threat model delta
 

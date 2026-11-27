@@ -2,7 +2,18 @@
 
 **Issue**: #417
 
-## Status: INCOMPLETE
+## Status: COMPLETE
+
+## Executive Summary
+
+The service also listens on `127.0.0.1:47930`, on by default, for clients
+such as a Herdr mod that cannot open its socket. Because any account can
+reach or take a loopback port, the port serves only the WebSocket, behind a
+mutual challenge-response over a token in an account-only file; the token
+never crosses a connection, and the reference client refuses an impostor.
+Review `internal/api/ws.go` (`challenge`), `internal/api/tcp.go` and
+`internal/api/tcpkey` first; the adversarial review and what it changed are
+under "Review".
 
 ## Context
 
@@ -148,50 +159,50 @@ Test strategy, approved with the spec: behaviour through a real service on
 loopback, as spec 113's harness does, not handler unit tests; platform
 activation on the real systemd, launchd and Windows.
 
-- [ ] Challenge-response: the token holder is let in, hello's proof is the
+- [x] Challenge-response: the token holder is let in, hello's proof is the
       token holder's, and the token is not in anything the client sends
       (`TestThePortsChallengeLetsTheTokenHolderIn`, R8).
-- [ ] A wrong proof, the token offered as the proof, the service's proof or
+- [x] A wrong proof, the token offered as the proof, the service's proof or
       nonce sent back, a short nonce, no answer, another message first and a
       binary answer are each closed with 4401 and sent no reading
       (`TestAClientThatCannotProveItIsClosed`, R8).
-- [ ] The reference client refuses a server that cannot prove it holds the
+- [x] The reference client refuses a server that cannot prove it holds the
       token, having sent it nothing usable (`TestTheClientRefusesAnImpostor`,
       R8, review F1).
-- [ ] `Host` other than the two allowed and a browser's `Origin` get 403 on
+- [x] `Host` other than the two allowed and a browser's `Origin` get 403 on
       the port; `Origin` gets 403 on the socket's WebSocket too (R5, R9).
-- [ ] The port binds `127.0.0.1` only and serves nothing but `/v1/ws`, a
+- [x] The port binds `127.0.0.1` only and serves nothing but `/v1/ws`, a
       bearer header included (`TestTheServiceListensOnItsKeysPortOnLoopbackAlone`,
       R1, R5).
-- [ ] The key file: made `0600` (Linux, macOS) or account-only (Windows, on
+- [x] The key file: made `0600` (Linux, macOS) or account-only (Windows, on
       the VM); a file readable by others, missing or malformed means no TCP
       listener, and the socket still serves (R6, R11).
-- [ ] The token appears in no log line across refused sessions, refused keys
+- [x] The token appears in no log line across refused sessions, refused keys
       and a replaced token, nor in `api status` (R10).
-- [ ] Rotation: `--new-token` replaces it; the service ends the old sessions
+- [x] Rotation: `--new-token` replaces it; the service ends the old sessions
       and refuses the old token without a restart (R7, R11, review F4).
-- [ ] The port's connections, more than the socket's whole limit, do not
+- [x] The port's connections, more than the socket's whole limit, do not
       take the socket's places (`TestThePortsConnectionsDoNotTakeTheSockets`,
       R5, review F2).
-- [ ] Linux, real systemd: `hayami-api-tcp.socket` starts the service on a
+- [x] Linux, real systemd: `hayami-api-tcp.socket` starts the service on a
       TCP connection; an install over a running service listens anew; with
       the port held by another program the TCP unit fails and the socket
       still answers (R2).
-- [ ] macOS, the Mac: launchd starts the agent on a TCP connection (R3).
-- [ ] Windows, the VM: the instance listens on its account's port; the key's
+- [x] macOS, the Mac: launchd starts the agent on a TCP connection (R3).
+- [x] Windows, the VM: the instance listens on its account's port; the key's
       access list is checked (R4, R6).
-- [ ] Installer: a first install sets up the port; a `--yes` upgrade keeps
+- [x] Installer: a first install sets up the port; a `--yes` upgrade keeps
       it or leaves it removed; clearing the box removes it (R12, R13).
-- [ ] `api --tcp check` passes against the installed service (R15).
-- [ ] Falsified: skipping the client's proof, skipping the service's proof
+- [x] `api --tcp check` passes against the installed service (R15).
+- [x] Falsified: skipping the client's proof, skipping the service's proof
       in the client, serving every route on the port, one limit for both
       listeners, a new key that ends nothing, and listening on every address
       each fail a test.
-- [ ] Contract test: the TCP server, `/ws` and its messages are in the
+- [x] Contract test: the TCP server, `/ws` and its messages are in the
       contract, and every message the tests read conforms (R14).
-- [ ] Adversarial review (B3, B6, and the new surface), with a refutation
+- [x] Adversarial review (B3, B6, and the new surface), with a refutation
       pass; its findings fixed or listed under "Checked".
-- [ ] `make test`, `make lint`, `make vuln`; changelog line.
+- [x] `make test`, `make lint`, `make vuln`; changelog line.
 
 ## Review (2026-11-27)
 
@@ -238,8 +249,12 @@ this PR, and the threat model records them.
   second one's instance fails to bind until it sets another port.
 - **hayami-js** changes in herdr-mods, in its own spec, after this one
   ships.
-- **Rollback**: revert the PR; the installer's next run removes the unit
-  and the file.
+- **Rollback**: remove the port first (`hayami-tui api-service tcp
+  --remove`, or the installer with `--apitcp=no`), then install the older
+  version. An older installer does not know the port's unit and leaves it,
+  and an older service handed the port's descriptor would serve it without
+  any of this spec's checks (found reinstalling 0.23.2 on the desk after the
+  E2E run). Reverting the PR alone does not remove a unit already written.
 
 ## E2E Test Plan
 
@@ -249,6 +264,30 @@ this PR, and the threat model records them.
 - The Mac and the Windows VM: `hayami-tui api --tcp check`. (R3, R4)
 - Herdr, after the herdr-mods change: the block reads over the WebSocket with
   no `curl` process per read (seen in `ps` over a minute).
+
+### Results (2026-11-27)
+
+- **The desk** (Linux, real systemd; this branch's build installed with the
+  CLI installer, then 0.23.2 put back): the installer's Port page set the
+  port up on the first decision; the first connection on the TCP port
+  started the service, which took both descriptors and served both;
+  `api --tcp check` passed (5 sections, 11 details); an install over the
+  running service kept the port and listened anew; `--new-token` ended a
+  running `watch --tcp` and the new token worked; moving the port onto one
+  another program held failed `hayami-api-tcp.socket` alone, the socket
+  answered and `api status` said "not listening", and moving it back
+  recovered. Under `systemd-socket-activate`, a port handed over other than
+  the key's was refused with the socket still serving.
+- **The Mac** (launchd): `api-service tcp` wrote the plist's `TCP` entry and
+  a `0600` key; with the agent stopped, `api --tcp check` made launchd start
+  it from the TCP connection, and passed (5 sections, 4 details). The agent
+  was put back on its own program, without the port. The package tests pass
+  there.
+- **The Windows VM**: the package tests pass, the key's access list checks
+  among them; with this branch's copy registered, the account's instance
+  read its key when it started and listened on 127.0.0.1:47930, and
+  `api --tcp check` passed against it (5 sections, 7 details). The VM was put
+  back on 0.23.1, without the port or the key.
 
 ### Prod visibility
 
