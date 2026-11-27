@@ -6,7 +6,7 @@ reading.
 
 It is the installer's: there is no `api install` command, and the installer
 links this package without the service itself. It imports the standard
-library alone.
+library alone, and tcpkey for the loopback port's key (spec 115).
 */
 package unit
 
@@ -16,6 +16,8 @@ import "errors"
 const (
 	SocketName  = "hayami-api.socket"
 	ServiceName = "hayami-api.service"
+	// TCPSocketName is the loopback TCP port's socket unit (spec 115 R2).
+	TCPSocketName = "hayami-api-tcp.socket"
 )
 
 // OfferWhy is what the installer says the service is for, on every system;
@@ -43,4 +45,9 @@ type State struct {
 	Listening bool
 	// Running is the service running now, not only its socket.
 	Running bool
+
+	// TCP is the loopback port set up: its key there (spec 115).
+	TCP bool
+	// TCPListening is the port's socket active, where the system has one.
+	TCPListening bool
 }

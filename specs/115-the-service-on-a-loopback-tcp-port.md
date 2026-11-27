@@ -99,10 +99,17 @@ port and its token.
   Its parameter follows `api`'s `auto` and `once` rule, so a `--yes`
   upgrade never brings back a port someone removed. Clearing it removes the
   unit or plist entry and `api-tcp.json`.
-- R13 `hayami-tui api-service install --tcp-port <n>` sets or moves the
-  port; `--tcp=false` removes it. On Linux it writes the socket unit, on
-  macOS the plist entry, and on Windows `api-tcp.json` only. Uninstalling
-  hayami removes all of them.
+- R13 `hayami-tui api-service tcp` sets up the port (`--port <n>`, the one
+  set up already or the default), moves it, replaces its token
+  (`--new-token`) or removes it (`--remove`). It runs as the person and
+  never elevates: on Linux and macOS it writes the installed service again,
+  with that service's own program and the port's socket unit or plist entry;
+  on Windows it writes `api-tcp.json` only. On macOS, where
+  `api-service install` is the installer's route, a first install sets up
+  the port too unless `--tcp=false`. Uninstalling hayami removes all of it.
+  (Changed in implementation from `api-service install --tcp-port`: spec
+  113 keeps `api-service install` the installer's step on Linux, so that a
+  unit never names whatever program ran the command.)
 
 ### The contract and the client
 
@@ -178,6 +185,11 @@ in that case a real systemd or launchd run on the machine covers it.
 - **Port collisions**: another program may already use 47930. The TCP unit
   fails on its own and `api status` says so; the person moves the port with
   `--tcp-port`.
+- **The settings directory the service sees**: the key is found through
+  `os.UserConfigDir`, so `XDG_CONFIG_HOME` set in a shell but not in the
+  systemd user manager's environment would put the key where the service
+  does not look. Seen with `systemd-socket-activate`, which passes no
+  environment; the units rely on the default, `~/.config`.
 - **Two accounts on one Windows machine** both default to 47930, and the
   second one's instance fails to bind until it sets another port.
 - **hayami-js** changes in herdr-mods, in its own spec, after this one

@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 )
 
 // Label is the launchd agent's label (R7), and its plist's name.
@@ -25,6 +26,13 @@ const Label = "io.ushineko.hayami.api"
 // sockets is the agent's socket's name in its plist's Sockets dictionary,
 // which the service asks launchd for (api.LaunchdSockets).
 const sockets = "Listeners"
+
+// tcpSockets is the loopback port's name in the same dictionary
+// (api.LaunchdTCP, spec 115 R3).
+const tcpSockets = "TCP"
+
+// keyPath is the port's key. A variable, so a test keeps its own.
+var keyPath = tcpkey.Path
 
 // mark is a comment in the plist, by which a file at the plist's path is known
 // to be hayami's own and so hayami's to replace or remove.
@@ -100,7 +108,7 @@ key; the tags are the writer's own. It writes an empty boolean as `<false/>`,
 since launchd refuses `<false></false>`, which plutil accepts and
 encoding/xml would write (found on the Mac).
 */
-func PlistText(program, socket string) (string, error) {
+func PlistText(program, socket string, tcpPort int) (string, error) {
 	if err := checkPath(program); err != nil {
 		return "", err
 	}
@@ -129,6 +137,21 @@ func PlistText(program, socket string) (string, error) {
 	w.key("SockPathMode")
 	w.integer(0o600)
 	w.close("dict")
+	if tcpPort > 0 {
+		// The loopback port (spec 115 R3): 127.0.0.1 alone, IPv4, by its
+		// own name so the service tells it from the socket.
+		w.key(tcpSockets)
+		w.open("dict")
+		w.key("SockNodeName")
+		w.str(tcpkey.Host)
+		w.key("SockServiceName")
+		w.str(strconv.Itoa(tcpPort))
+		w.key("SockFamily")
+		w.str("IPv4")
+		w.key("SockType")
+		w.str("stream")
+		w.close("dict")
+	}
 	w.close("dict")
 	w.key("KeepAlive")
 	w.open("dict")
@@ -227,7 +250,13 @@ func Install(ctx context.Context, program string) error {
 	if err != nil {
 		return err //nolint:wrapcheck // says what is missing
 	}
-	text, err := PlistText(program, socket)
+	// The port follows its key (spec 115): in the agent where there is a key
+	// the service may serve with.
+	port := 0
+	if key, err := readKey(); err == nil {
+		port = key.Port()
+	}
+	text, err := PlistText(program, socket, port)
 	if err != nil {
 		return err
 	}
@@ -254,6 +283,86 @@ func Install(ctx context.Context, program string) error {
 	// until then a client is refused (found on the Mac): done is when it
 	// answers.
 	return waitAnswer(ctx, socket)
+}
+
+/*
+InstalledProgram is the program the installed agent runs: the first of its
+ProgramArguments, read back from the plist PlistText wrote.
+*/
+func InstalledProgram() (string, error) {
+	path, err := plistPath()
+	if err != nil {
+		return "", err
+	}
+	if err := ours(path); err != nil {
+		return "", fmt.Errorf("%w: the agent is not installed", ErrNotHere)
+	}
+	body, err := os.ReadFile(path) //nolint:gosec // a path this file composed
+	if err != nil {
+		return "", fmt.Errorf("reading the agent: %w", err)
+	}
+	_, rest, ok := strings.Cut(string(body), "<key>ProgramArguments</key>")
+	if !ok {
+		return "", errors.New("the agent names no program")
+	}
+	_, rest, ok = strings.Cut(rest, "<string>")
+	value, _, ok2 := strings.Cut(rest, "</string>")
+	if !ok || !ok2 {
+		return "", errors.New("the agent names no program")
+	}
+	d := xml.NewDecoder(strings.NewReader("<s>" + value + "</s>"))
+	var s struct {
+		V string `xml:",chardata"`
+	}
+	if err := d.Decode(&s); err != nil {
+		return "", fmt.Errorf("reading the agent's program: %w", err)
+	}
+	return s.V, nil
+}
+
+// readKey is the port's key, if there is one the service may serve with.
+func readKey() (tcpkey.Key, error) {
+	p, err := keyPath()
+	if err != nil {
+		return tcpkey.Key{}, err //nolint:wrapcheck // says what is missing
+	}
+	return tcpkey.Read(p) //nolint:wrapcheck // says what is wrong, without the token
+}
+
+/*
+InstallTCP sets up the loopback port for the agent of program (spec 115
+R13): its key, keeping the token there unless renew, then the agent written
+and loaded again with the port in it.
+*/
+func InstallTCP(ctx context.Context, program string, port int, renew bool) error {
+	p, err := keyPath()
+	if err != nil {
+		return err //nolint:wrapcheck // says what is missing
+	}
+	if _, err := tcpkey.Make(p, port, renew); err != nil {
+		return err //nolint:wrapcheck // says what failed, without the token
+	}
+	return Install(ctx, program)
+}
+
+// RemoveTCP takes the port's key away and, where the agent is installed,
+// writes and loads it again without the port.
+func RemoveTCP(ctx context.Context, program string) error {
+	if err := removeKey(); err != nil {
+		return err
+	}
+	if !Installed() {
+		return nil
+	}
+	return Install(ctx, program)
+}
+
+func removeKey() error {
+	p, err := keyPath()
+	if err != nil {
+		return err //nolint:wrapcheck // says what is missing
+	}
+	return tcpkey.Remove(p) //nolint:wrapcheck // says what failed
 }
 
 // unloaded waits until launchd no longer has the agent.
@@ -372,6 +481,9 @@ func Remove(ctx context.Context) error {
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("removing the agent: %w", err)
 	}
+	if err := removeKey(); err != nil {
+		return err
+	}
 	// launchd leaves the socket's file; a removal leaves none.
 	if socket, err := client.Address(); err == nil {
 		if info, err := os.Lstat(socket); err == nil && info.Mode()&os.ModeSocket != 0 {
@@ -404,6 +516,10 @@ func Status(ctx context.Context) State {
 		if strings.TrimSpace(line) == "state = running" {
 			s.Running = true
 		}
+	}
+	if _, err := readKey(); err == nil {
+		// launchd holds the port with the agent: loaded is listening.
+		s.TCP, s.TCPListening = true, s.Listening
 	}
 	return s
 }
