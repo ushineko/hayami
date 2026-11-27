@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/tcpkey"
 	"github.com/ushineko/hayami/internal/api/unit"
 	"github.com/ushineko/hayami/internal/safetext"
 )
@@ -36,6 +37,7 @@ func apiCmd() *cobra.Command {
 			"allow is an error naming the field.",
 	}
 	cmd.PersistentFlags().StringVar(&f.address, "address", "", "the service's socket, in place of the default address")
+	cmd.PersistentFlags().BoolVar(&f.tcp, "tcp", false, "use the service's loopback TCP port, with the token from "+tcpkey.FileName+" (spec 115)")
 	cmd.PersistentFlags().DurationVar(&f.timeout, "timeout", 0,
 		"give up after this long (default: 1m for status and get, 15m for check, none for watch and load)")
 	cmd.AddCommand(apiAddressCmd(f), apiStatusCmd(f), apiGetCmd(f), apiWatchCmd(f), apiCheckCmd(f), apiLoadCmd(f))
@@ -46,14 +48,46 @@ func apiCmd() *cobra.Command {
 type apiFlags struct {
 	address string
 	timeout time.Duration
+	tcp     bool
 }
 
 func (f *apiFlags) dial() (*client.Client, error) {
+	if f.tcp {
+		key, err := tcpKey()
+		if err != nil {
+			return nil, err
+		}
+		return client.NewTCP(key.Address, key.Token), nil
+	}
 	addr, err := apiAddress(f.address)
 	if err != nil {
 		return nil, err
 	}
 	return client.New(addr), nil
+}
+
+// tcpKey is the TCP port's key, or why there is none to use. The error never
+// carries the token.
+func tcpKey() (tcpkey.Key, error) {
+	path, err := tcpkey.Path()
+	if err != nil {
+		return tcpkey.Key{}, err //nolint:wrapcheck // says what is missing
+	}
+	key, err := tcpkey.Read(path)
+	if errors.Is(err, tcpkey.ErrNoFile) {
+		return tcpkey.Key{}, errors.New("the TCP port is not set up; hayami-tui api-service tcp sets it up") //nolint:err113 // said plainly
+	}
+	return key, err //nolint:wrapcheck // says what is wrong with the key
+}
+
+// endpoint is what a subcommand talks to: the socket, or the TCP port with
+// --tcp.
+func (f *apiFlags) endpoint() (string, error) {
+	if f.tcp {
+		key, err := tcpKey()
+		return key.Address, err
+	}
+	return apiAddress(f.address)
 }
 
 /*
@@ -96,7 +130,7 @@ func apiAddressCmd(f *apiFlags) *cobra.Command {
 		Use: "address", Short: "Print the service's address", Args: cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			addr, err := apiAddress(f.address)
+			addr, err := f.endpoint()
 			if err != nil {
 				return err
 			}
@@ -121,8 +155,10 @@ func apiStatusCmd(f *apiFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			state := unit.Status(ctx)
 			_, _ = fmt.Fprintf(out, "address    %s\n", addr)
-			_, _ = fmt.Fprintf(out, "installed  %s\n", installedLine(unit.Status(ctx)))
+			_, _ = fmt.Fprintf(out, "installed  %s\n", installedLine(state))
+			_, _ = fmt.Fprintf(out, "tcp        %s\n", tcpLine(state))
 			c, err := f.dial()
 			if err != nil {
 				return err
@@ -162,6 +198,27 @@ func installedLine(s unit.State) string {
 		return "yes, listening: the next program to connect starts it"
 	default:
 		return unit.NotRunning
+	}
+}
+
+/*
+tcpLine is the TCP port in a line (spec 115 R15): set up or not, where,
+whether its socket is listening, and where its token is. Never the token.
+*/
+func tcpLine(s unit.State) string {
+	path, _ := tcpkey.Path()
+	key, err := tcpkey.Read(path)
+	switch {
+	case errors.Is(err, tcpkey.ErrNoFile):
+		return "no: not set up; hayami-tui api-service tcp sets it up"
+	case err != nil:
+		return "no: " + err.Error()
+	case !s.Installed:
+		return key.Address + ", but the service is not installed"
+	case s.TCPListening:
+		return key.Address + ", listening; token in " + path
+	default:
+		return key.Address + ", not listening; token in " + path
 	}
 }
 
@@ -348,6 +405,13 @@ func apiLoadCmd(f *apiFlags) *cobra.Command {
 				}
 			}
 			o.Address = addr
+			if f.tcp {
+				key, err := tcpKey()
+				if err != nil {
+					return err
+				}
+				o.Address, o.Token = key.Address, key.Token
+			}
 			r, err := client.Load(ctx, o)
 			if err != nil {
 				return err

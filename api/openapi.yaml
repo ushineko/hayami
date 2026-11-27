@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: hayami
-  version: "1.0"
+  version: "1.1"
   summary: The readings of a hayami panel, for programs of the same account.
   description: |
     hayami's readings, their details and drills, as JSON (spec 113). The
@@ -11,7 +11,8 @@ info:
     ## Where it is
 
     HTTP/1.1 over a local socket that only the account running the service
-    can open. There is no TCP port.
+    can open, and, where it is set up (spec 115, contract 1.1), on a
+    loopback TCP port as well.
 
     - Linux: the Unix socket `$XDG_RUNTIME_DIR/hayami/api.sock`.
     - Windows: the named pipe `\\.\pipe\hayami-api-<SID>`, the SID being the
@@ -22,6 +23,19 @@ info:
     A path longer than the system's socket path (108 bytes on Linux, 104 on
     macOS) is never cut short; `hayami-tui api address` prints the address.
     The host part of a URL is ignored: `http://hayami/v1`.
+
+    ## The TCP port
+
+    For a client that cannot open a socket or a pipe. It is on 127.0.0.1
+    alone, 47930 unless moved, and every account on the machine can reach
+    it, so every request there carries a token: `Authorization: Bearer
+    <token>`. The address and the token are in `api-tcp.json` in hayami's
+    settings directory (`~/.config/hayami` on Linux, `~/Library/Application
+    Support/hayami` on macOS, `%APPDATA%\hayami` on Windows), readable by the
+    account alone. A request without the token, or with another, is 401
+    with the code `unauthorized`, the same whatever was wrong. A request
+    whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` is 403,
+    before the token is looked at. Everything else is as on the socket.
 
     ## Rules every response keeps
 
@@ -48,6 +62,12 @@ info:
 servers:
   - url: http://hayami/v1
     description: The local socket; see the description for its path.
+  - url: http://127.0.0.1:47930/v1
+    description: |
+      The loopback TCP port, where it is set up (spec 115), at its default;
+      the port in use is the one in api-tcp.json's address. Every request
+      carries the bearer token from api-tcp.json (the tcpToken scheme); the
+      socket needs none.
 paths:
   /:
     get:
@@ -170,6 +190,14 @@ paths:
         "503": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
 components:
+  securitySchemes:
+    tcpToken:
+      type: http
+      scheme: bearer
+      description: |
+        The token from api-tcp.json, on the TCP port alone. On the socket and
+        the pipe the account is known from the connection, and no token is
+        sent.
   parameters:
     Key:
       name: key

@@ -38,13 +38,20 @@ const MaxBody = 16 << 20
 
 // statuses are the statuses the contract documents for an error.
 var statuses = []int{
-	http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound,
+	http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound,
 	http.StatusMethodNotAllowed, http.StatusInternalServerError, http.StatusServiceUnavailable,
 }
 
 // Client is a client of the service at one address.
 type Client struct {
 	http *http.Client
+	// base is the URL a path is put after: http://hayami on the socket,
+	// whose host is ignored, and the port's own address on TCP, whose host
+	// the service checks (spec 115 R9).
+	base string
+	// token is the TCP port's, sent with every request there; empty on the
+	// socket.
+	token string
 }
 
 /*
@@ -53,12 +60,34 @@ each call bounds it: the first request for a section the service has not
 read waits for its first poll, up to 15 s, so a deadline is longer than that.
 */
 func New(address string) *Client {
-	return &Client{http: &http.Client{Transport: &http.Transport{
+	return &Client{base: "http://hayami", http: &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return Dial(ctx, address)
 		},
 		MaxIdleConnsPerHost: 4,
 	}}}
+}
+
+/*
+NewTCP is a client of the service's loopback TCP port at address
+("127.0.0.1:<port>"), sending token with every request (spec 115 R8). The
+address and the token are in api-tcp.json in hayami's settings directory;
+reading it is the caller's, so this package needs nothing but the contract.
+The client does not follow a redirect, which would carry the token
+elsewhere.
+*/
+func NewTCP(address, token string) *Client {
+	return &Client{base: "http://" + address, token: token, http: &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "tcp", address) //nolint:wrapcheck // the dialer's error names the address
+			},
+			MaxIdleConnsPerHost: 4,
+			Proxy:               nil,
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}}
 }
 
 // Close lets go of the connections the client keeps for its next request.
@@ -105,9 +134,12 @@ func (c *Client) Get(ctx context.Context, path string) (*Response, error) {
 }
 
 func (c *Client) do(ctx context.Context, path string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://hayami"+path, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("asking for %s: %w", path, err)
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

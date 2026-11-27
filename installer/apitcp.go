@@ -128,7 +128,7 @@ var (
 	removeAPITCP    = removeAPITCPHere
 	markTCPAsked    = func(c *extension.Context) error { return writeMarker(tcpAskedMarker(c)) }
 	unmarkTCPAsked  = func(c *extension.Context) { _ = os.Remove(tcpAskedMarker(c)) }
-	apiTCPInstalled = func() bool { return unit.Installed() }
+	apiTCPInstalled = unit.Installed
 )
 
 // setUpAPITCPHere sets the port up on the installed service, as the person.

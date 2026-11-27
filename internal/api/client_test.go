@@ -33,7 +33,7 @@ func TestTheReferenceClientReadsEveryEndpoint(t *testing.T) {
 	assert.True(t, health.OK)
 	index, err := c.Index(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "1.0", index.API)
+	assert.Equal(t, "1.1", index.API)
 	list, err := c.Sections(ctx)
 	require.NoError(t, err)
 	require.Len(t, list.Sections, len(index.Sections))
@@ -132,4 +132,24 @@ func TestTheClientsAddressIsTheServices(t *testing.T) {
 	require.Error(t, err)
 	_, err = client.Address()
 	require.Error(t, err, "a path over the system's limit is refused by both")
+}
+
+// Spec 115 R15. The reference client reads the TCP port with its token: the
+// whole check passes over it, and a wrong token is a 401 the client types.
+func TestTheClientReadsThePort(t *testing.T) {
+	h := start(t, sources(fixtures()), options{tcp: true})
+	var out bytes.Buffer
+	r, err := client.Check(context.Background(), client.NewTCP(h.tcpAddr, h.key.Token), client.CheckOptions{Depth: 3, Out: &out})
+	require.NoError(t, err, out.String())
+	assert.Equal(t, 5, r.Sections)
+	assert.Equal(t, 5, r.Events, "the stream was read over the port")
+
+	_, err = client.NewTCP(h.tcpAddr, "wrong").Health(context.Background())
+	require.Error(t, err)
+	assert.True(t, client.IsStatus(err, http.StatusUnauthorized), "got %v", err)
+	assert.NotContains(t, err.Error(), h.key.Token)
+
+	lr, err := client.Load(context.Background(), client.LoadOptions{Clients: 2, Streams: 1, Duration: time.Second, Address: h.tcpAddr, Token: h.key.Token})
+	require.NoError(t, err)
+	assert.True(t, lr.OK(), "load over the port saw errors")
 }

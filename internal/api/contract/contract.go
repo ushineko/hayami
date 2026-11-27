@@ -19,7 +19,7 @@ package contract
 import "time"
 
 // Version is the contract's version, info.version in the document (R27).
-const Version = "1.0"
+const Version = "1.1"
 
 // MaxText is the longest string a response carries, in bytes (R13).
 const MaxText = 4096
