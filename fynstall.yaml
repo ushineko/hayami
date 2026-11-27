@@ -90,6 +90,15 @@ parameters:
     description: "yes sets up hayami's service, which serves the readings to programs of your account over a local socket; no removes it; auto sets it up on a first install"
     default: "auto"
     once: true
+  # Set by the Port page (spec 115 R12). On the command line: --apitcp=yes or
+  # --apitcp=no. "auto" sets the service's loopback TCP port up on a first
+  # install and leaves an upgrade as it found it, as for api. The port is the
+  # service's: without the service, there is none.
+  - name: apitcp
+    label: Serve on a local TCP port as well
+    description: "yes also serves the readings on 127.0.0.1, to programs of your account holding the token in api-tcp.json; no removes the port; auto sets it up on a first install"
+    default: "auto"
+    once: true
 
 ui:
   launch: bin/hayami{exe}
