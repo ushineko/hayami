@@ -36,10 +36,10 @@ type harness struct {
 	client *http.Client
 
 	// The TCP port's, when options.tcp (spec 115): its address, its key,
-	// and a client that dials it and adds nothing.
-	tcpAddr   string
-	key       tcpkey.Key
-	tcpClient *http.Client
+	// and what lets sessions in with it.
+	tcpAddr string
+	key     tcpkey.Key
+	auth    *api.TCPAuth
 }
 
 // options adjust a harness before it serves.
@@ -51,7 +51,7 @@ type options struct {
 	tcp bool
 }
 
-func start(t *testing.T, srcs []panel.Source, o options) *harness {
+func start(t testing.TB, srcs []panel.Source, o options) *harness {
 	t.Helper()
 	// Short: a socket's path is capped at 104 bytes on macOS and t.TempDir
 	// is long there.
@@ -95,10 +95,10 @@ func start(t *testing.T, srcs []panel.Source, o options) *harness {
 		h.key, err = tcpkey.Make(filepath.Join(t.TempDir(), tcpkey.FileName), port, false)
 		require.NoError(t, err)
 		h.tcpAddr = tl.Addr().String()
-		h.tcpClient = &http.Client{Timeout: 30 * time.Second}
+		h.auth = api.NewTCPAuth(h.key)
 		ht = srv.HTTP()
-		ht.Handler = srv.TCPHandler(h.key, port)
-		go func() { _ = ht.Serve(limiter.Wrap(tl)) }()
+		ht.Handler = srv.TCPHandler(h.auth, port)
+		go func() { _ = ht.Serve(api.NewLimiter(api.MaxTCPConns).Wrap(tl)) }()
 	}
 	t.Cleanup(func() {
 		cancel()
@@ -108,32 +108,6 @@ func start(t *testing.T, srcs []panel.Source, o options) *harness {
 		}
 	})
 	return h
-}
-
-// tcpGet is a GET of path on the TCP port, with headers as given (Host
-// among them): its status, its body, and its headers.
-func (h *harness) tcpGet(t testing.TB, path string, headers map[string]string) (int, []byte, http.Header) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+h.tcpAddr+path, http.NoBody)
-	require.NoError(t, err)
-	for k, v := range headers {
-		if k == "Host" {
-			req.Host = v
-			continue
-		}
-		req.Header.Set(k, v)
-	}
-	resp, err := h.tcpClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return resp.StatusCode, body, resp.Header
-}
-
-// bearer is the header that carries the harness's token.
-func (h *harness) bearer() map[string]string {
-	return map[string]string{"Authorization": "Bearer " + h.key.Token}
 }
 
 // serviceClient is an HTTP client whose every request goes to the service at sock.

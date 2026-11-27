@@ -24,9 +24,6 @@ type LoadOptions struct {
 	// Address is the socket: each client is its own Client, with its own
 	// connections, as many programs would be.
 	Address string
-	// Token, where it is set, makes Address the TCP port's and is sent with
-	// every request (spec 115).
-	Token string
 }
 
 // LoadReport is what a load run saw.
@@ -98,17 +95,17 @@ func Load(ctx context.Context, o LoadOptions) (LoadReport, error) {
 	}
 	ctx, stop := context.WithTimeout(ctx, o.Duration)
 	defer stop()
-	targets, keys, details, err := discover(ctx, o.newClient())
+	targets, keys, details, err := discover(ctx, New(o.Address))
 	if err != nil {
 		return LoadReport{}, err
 	}
 	l := &loader{report: LoadReport{Statuses: map[int]int{}, Events: make([]int, o.Streams)}}
 	var wg sync.WaitGroup
 	for range o.Clients {
-		wg.Go(func() { l.client(ctx, o.newClient(), targets) })
+		wg.Go(func() { l.client(ctx, New(o.Address), targets) })
 	}
 	for i := range o.Streams {
-		wg.Go(func() { l.stream(ctx, o.newClient(), i, keys, details) })
+		wg.Go(func() { l.stream(ctx, New(o.Address), i, keys, details) })
 	}
 	wg.Wait()
 	slices.Sort(l.latencies)
@@ -274,12 +271,4 @@ func sleep(ctx context.Context, d time.Duration) {
 	case <-ctx.Done():
 	case <-time.After(max(d, 100*time.Millisecond)):
 	}
-}
-
-// newClient is a client of the service at the options' address.
-func (o LoadOptions) newClient() *Client {
-	if o.Token != "" {
-		return NewTCP(o.Address, o.Token)
-	}
-	return New(o.Address)
 }

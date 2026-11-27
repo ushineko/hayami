@@ -28,14 +28,13 @@ info:
 
     For a client that cannot open a socket or a pipe. It is on 127.0.0.1
     alone, 47930 unless moved, and every account on the machine can reach
-    it, so every request there carries a token: `Authorization: Bearer
-    <token>`. The address and the token are in `api-tcp.json` in hayami's
-    settings directory (`~/.config/hayami` on Linux, `~/Library/Application
-    Support/hayami` on macOS, `%APPDATA%\hayami` on Windows), readable by the
-    account alone. A request without the token, or with another, is 401
-    with the code `unauthorized`, the same whatever was wrong. A request
-    whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>` is 403,
-    before the token is looked at. Everything else is as on the socket.
+    it, so it serves only `/v1/ws`, whose connection begins with a mutual
+    challenge-response over the token in `api-tcp.json` in hayami's
+    settings directory (`~/.config/hayami` on Linux,
+    `~/Library/Application Support/hayami` on macOS, `%APPDATA%\hayami` on
+    Windows), readable by the account alone. The token never crosses the
+    connection. A request whose `Host` is not `127.0.0.1:<port>` or
+    `localhost:<port>` is 403; any other path is 404.
 
     ## Rules every response keeps
 
@@ -65,9 +64,8 @@ servers:
   - url: http://127.0.0.1:47930/v1
     description: |
       The loopback TCP port, where it is set up (spec 115), at its default;
-      the port in use is the one in api-tcp.json's address. Every request
-      carries the bearer token from api-tcp.json (the tcpToken scheme); the
-      socket needs none.
+      the port in use is the one in api-tcp.json's address. It serves /ws
+      alone, behind the challenge-response /ws describes.
 paths:
   /:
     get:
@@ -189,15 +187,52 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
         default: { $ref: "#/components/responses/Error" }
-components:
-  securitySchemes:
-    tcpToken:
-      type: http
-      scheme: bearer
+  /ws:
+    get:
+      operationId: ws
+      summary: Readings pushed over a WebSocket (specs 115, 116)
       description: |
-        The token from api-tcp.json, on the TCP port alone. On the socket and
-        the pipe the account is known from the connection, and no token is
-        sent.
+        A WebSocket carrying the events `/events` carries, as JSON text
+        messages, each with its `type`. The client sends `subscribe` to say
+        what it follows, and again to change it; the service sends `section`
+        and `detail` messages, the latest reading at once and then one for
+        each new one, and `error` for a subscription it refused in part.
+
+        On the TCP port, and only there, the connection begins with a mutual
+        challenge-response, and the port serves nothing else. The service
+        sends `challenge` with a nonce; the client answers within 5 s with
+        `auth`: its proof over that nonce and a nonce of its own; the
+        service, if the proof is right, sends `hello` with its proof over the
+        client's nonce, which the client checks before it trusts anything
+        else. The token itself never crosses the connection, so a program
+        that took the port first learns nothing it can use. A proof is
+        HMAC-SHA256 keyed with the token's 32 bytes over
+        `label + "\n" + their nonce + "\n" + my nonce`, base64url without
+        padding; the label is `hayami-client` or `hayami-server`. A nonce is
+        32 random bytes in base64url. A wrong or late `auth` closes the
+        connection with 4401.
+
+        On the socket and the pipe there is no challenge: `hello`, with a
+        null `proof`, comes first. A message larger than 4 KiB, a binary one,
+        or one that is not a message here closes the connection (1009,
+        1003). The service pings every 15 s and closes a client that leaves
+        its messages unread for 30 s (1008). A WebSocket counts against the
+        16 streams; over that the upgrade is 503 with `Retry-After`.
+      responses:
+        "101":
+          description: The WebSocket.
+          x-messages:
+            challenge: { $ref: "#/components/schemas/WsChallenge" }
+            auth: { $ref: "#/components/schemas/WsAuth" }
+            hello: { $ref: "#/components/schemas/WsHello" }
+            subscribe: { $ref: "#/components/schemas/WsSubscribe" }
+            section: { $ref: "#/components/schemas/WsSection" }
+            detail: { $ref: "#/components/schemas/WsDetail" }
+            error: { $ref: "#/components/schemas/WsError" }
+        "403": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+components:
   parameters:
     Key:
       name: key
@@ -208,15 +243,71 @@ components:
   responses:
     Error:
       description: |
-        Anything but a 2xx: 400 bad request, 401 a request on the TCP port
-        without its token (spec 115), 403 a browser's request or one on the
-        port naming another host, 404 a
+        Anything but a 2xx: 400 bad request, 403 a browser's request or one
+        on the TCP port naming another host, 404 a
         section or detail that is not there (`known` lists what is), 405 not
         GET, 500 a request that failed, 503 over a limit (with `Retry-After`).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
   schemas:
+    WsChallenge:
+      type: object
+      additionalProperties: false
+      required: [type, nonce]
+      properties:
+        type: { type: string, const: challenge }
+        nonce: { type: string, description: 32 random bytes in base64url. }
+    WsAuth:
+      type: object
+      additionalProperties: false
+      required: [type, nonce, proof]
+      properties:
+        type: { type: string, const: auth }
+        nonce: { type: string, description: The client's nonce, 32 random bytes in base64url. }
+        proof: { type: string, description: "The client's proof: label hayami-client, over the service's nonce, then the client's." }
+    WsHello:
+      type: object
+      additionalProperties: false
+      required: [type, service, version, api, sections, proof]
+      properties:
+        type: { type: string, const: hello }
+        service: { type: string, const: hayami }
+        version: { type: string }
+        api: { type: string }
+        sections: { type: array, items: { type: string } }
+        proof:
+          type: [string, "null"]
+          description: "On the TCP port, the service's proof: label hayami-server, over the client's nonce, then the service's. Null on the socket and the pipe."
+    WsSubscribe:
+      type: object
+      additionalProperties: false
+      required: [type, sections, details]
+      properties:
+        type: { type: string, const: subscribe }
+        sections: { type: array, items: { type: string } }
+        details: { type: array, items: { type: string }, description: "Each key/id, at most 16." }
+    WsSection:
+      type: object
+      additionalProperties: false
+      required: [type, data]
+      properties:
+        type: { type: string, const: section }
+        data: { $ref: "#/components/schemas/Section" }
+    WsDetail:
+      type: object
+      additionalProperties: false
+      required: [type, data]
+      properties:
+        type: { type: string, const: detail }
+        data: { $ref: "#/components/schemas/Detail" }
+    WsError:
+      type: object
+      additionalProperties: false
+      required: [type, data]
+      properties:
+        type: { type: string, const: error }
+        data: { $ref: "#/components/schemas/ErrorBody" }
     Error:
       type: object
       additionalProperties: false
@@ -230,7 +321,7 @@ components:
       properties:
         code:
           type: string
-          enum: [not_found, method_not_allowed, bad_request, forbidden, unauthorized, busy, internal, unavailable]
+          enum: [not_found, method_not_allowed, bad_request, forbidden, busy, internal, unavailable]
         message: { type: string }
         known:
           description: What there is, for a key or an ID that names nothing.

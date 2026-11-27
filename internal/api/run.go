@@ -85,9 +85,13 @@ func Run(ctx context.Context, o Options) error {
 	// (spec 115 R5).
 	var ht *http.Server
 	if tl, key := tcpListener(o.keyPath(), o.Log); tl != nil {
+		auth := newTCPAuth(key)
 		ht = srv.HTTP()
-		ht.Handler = srv.TCPHandler(key, tcpPort(tl))
-		go func() { done <- ht.Serve(limiter.Wrap(tl)) }()
+		ht.Handler = srv.TCPHandler(auth, tcpPort(tl))
+		// Its own limit: connections from another account to the port never
+		// take the socket's places (review F2).
+		go func() { done <- ht.Serve(NewLimiter(MaxTCPConns).Wrap(tl)) }()
+		go followKey(ctx, o.keyPath(), tcpPort(tl), auth, o.Log)
 		o.Log.Info("serving", "address", tl.Addr().String())
 	}
 

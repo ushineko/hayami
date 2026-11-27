@@ -11,7 +11,7 @@ import (
 )
 
 // testAddress is a socket's path in a directory of the test's.
-func testAddress(t *testing.T) string {
+func testAddress(t testing.TB) string {
 	t.Helper()
 	// Short: a socket's path is capped at 104 bytes on macOS and t.TempDir
 	// is long there.

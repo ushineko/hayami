@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/sections/{key}/details/{id...}", s.detail)
 	mux.HandleFunc("/v1/readings", s.readings)
 	mux.HandleFunc("/v1/events", s.events)
+	mux.HandleFunc("/v1/ws", func(w http.ResponseWriter, r *http.Request) { s.ws(w, r, nil) })
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, contract.ErrNotFound, "no such path; every path is under /v1", nil)
 	})

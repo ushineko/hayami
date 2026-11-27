@@ -18,95 +18,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ushineko/hayami/internal/api"
+	"github.com/ushineko/hayami/internal/api/client"
 	"github.com/ushineko/hayami/internal/api/tcpkey"
 )
-
-// Spec 115 R8. A request on the port without the token, with another scheme,
-// with a wrong token or a cut one is refused, each with the same answer; with
-// the token it reaches the routes.
-func TestThePortWantsTheToken(t *testing.T) {
-	h := start(t, sources(fixtures()), options{tcp: true})
-	host := map[string]string{}
-
-	refusals := map[string]map[string]string{
-		"no token":       host,
-		"basic":          {"Authorization": "Basic " + h.key.Token},
-		"no scheme":      {"Authorization": h.key.Token},
-		"wrong token":    {"Authorization": "Bearer " + strings.Repeat("A", len(h.key.Token))},
-		"cut token":      {"Authorization": "Bearer " + h.key.Token[:20]},
-		"token and more": {"Authorization": "Bearer " + h.key.Token + "x"},
-		"lower scheme":   {"Authorization": "bearer " + h.key.Token},
-	}
-	var first []byte
-	for name, hdr := range refusals {
-		status, body, header := h.tcpGet(t, "/v1/health", hdr)
-		assert.Equal(t, http.StatusUnauthorized, status, name)
-		assert.Equal(t, `Bearer realm="hayami"`, header.Get("WWW-Authenticate"), name)
-		conforms(t, "Error", body)
-		assert.Contains(t, string(body), `"unauthorized"`, name)
-		if first == nil {
-			first = body
-		}
-		assert.Equal(t, string(first), string(body), "%s was answered differently", name)
-	}
-
-	status, body, _ := h.tcpGet(t, "/v1/health", h.bearer())
-	assert.Equal(t, http.StatusOK, status, string(body))
-	status, body, _ = h.tcpGet(t, "/v1/sections/cooler", h.bearer())
-	assert.Equal(t, http.StatusOK, status, string(body))
-	conforms(t, "Section", body)
-
-	// A path that is not there is not told to a client without the token.
-	status, _, _ = h.tcpGet(t, "/nowhere", nil)
-	assert.Equal(t, http.StatusUnauthorized, status)
-}
-
-// Spec 115 R9, R5. A request on the port must name the port as its host,
-// whatever token it carries; a browser's is refused there as on the socket.
-func TestThePortWantsItsOwnName(t *testing.T) {
-	h := start(t, sources(fixtures()), options{tcp: true})
-	_, port, err := net.SplitHostPort(h.tcpAddr)
-	require.NoError(t, err)
-
-	for _, host := range []string{"evil.example:" + port, "evil.example", "127.0.0.1", "127.0.0.1:1", "localhost:1", "[::1]:" + port, "hayami"} {
-		hdr := h.bearer()
-		hdr["Host"] = host
-		status, body, _ := h.tcpGet(t, "/v1/health", hdr)
-		assert.Equal(t, http.StatusForbidden, status, "host %q", host)
-		conforms(t, "Error", body)
-	}
-	// The host is looked at before the token: a rebound page learns nothing
-	// of whether its guess was right.
-	status, _, _ := h.tcpGet(t, "/v1/health", map[string]string{"Host": "evil.example:" + port})
-	assert.Equal(t, http.StatusForbidden, status)
-
-	for _, host := range []string{"127.0.0.1:" + port, "localhost:" + port, "LOCALHOST:" + port} {
-		hdr := h.bearer()
-		hdr["Host"] = host
-		status, body, _ := h.tcpGet(t, "/v1/health", hdr)
-		assert.Equal(t, http.StatusOK, status, "host %q: %s", host, body)
-	}
-
-	hdr := h.bearer()
-	hdr["Origin"] = "http://127.0.0.1:" + port
-	status, body, _ := h.tcpGet(t, "/v1/health", hdr)
-	assert.Equal(t, http.StatusForbidden, status, "a browser's request with the token was served")
-	conforms(t, "Error", body)
-}
-
-// Spec 115 R5. The socket and the port share the limits: event streams open
-// on one count against the other.
-func TestThePortAndTheSocketShareTheStreams(t *testing.T) {
-	h := start(t, sources(fixtures()), options{tcp: true})
-	for range api.MaxStreams {
-		_, status := openStream(t, h, "sections=clock")
-		require.Equal(t, http.StatusOK, status)
-	}
-	status, body, header := h.tcpGet(t, "/v1/events?sections=clock", h.bearer())
-	assert.Equal(t, http.StatusServiceUnavailable, status, "a stream past the limit opened on the port")
-	assert.NotEmpty(t, header.Get("Retry-After"))
-	conforms(t, "Error", body)
-}
 
 // Spec 115 R5. One limiter counts the connections of every listener it
 // wraps: past its limit, a connection to the other listener is answered 503.
@@ -242,19 +156,46 @@ func TestTheServiceListensOnItsKeysPortOnLoopbackAlone(t *testing.T) {
 		_ = c.Close()
 		return true
 	})
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+addr+"/v1/health", http.NoBody)
+	ctx := context.Background()
+	w, err := client.DialTCPWS(ctx, addr, key.Token)
+	require.NoError(t, err, "the challenge-response with the key's token failed")
+	assert.Equal(t, "1.2.3", w.Hello.Version)
+
+	_, err = client.DialTCPWS(ctx, addr, mustToken(t))
+	require.Error(t, err, "a wrong token was let in")
+
+	// The port serves nothing else, with the token as a header or without.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/v1/health", http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+key.Token)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "the port answered something but the WebSocket")
 
-	req.Header.Set("Authorization", "Bearer wrong")
-	resp, err = http.DefaultClient.Do(req)
+	// Review F4: a new token ends the session the old one let in, and the old
+	// one is refused from then on, with nothing restarting the service.
+	renewed, err := tcpkey.Make(keyPath, port, true)
 	require.NoError(t, err)
-	_ = resp.Body.Close()
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	readEnd := make(chan error, 1)
+	go func() {
+		for {
+			if _, err := w.Next(ctx); err != nil {
+				readEnd <- err
+				return
+			}
+		}
+	}()
+	select {
+	case <-readEnd:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the session the old token let in was not ended")
+	}
+	_, err = client.DialTCPWS(ctx, addr, key.Token)
+	require.Error(t, err, "the old token was let in after it was replaced")
+	w2, err := client.DialTCPWS(ctx, addr, renewed.Token)
+	require.NoError(t, err, "the new token was refused")
+	_ = w2.Close()
 
 	// The port is on loopback alone: the machine's other addresses refuse.
 	for _, ip := range otherAddresses(t) {
@@ -267,6 +208,15 @@ func TestTheServiceListensOnItsKeysPortOnLoopbackAlone(t *testing.T) {
 		}
 	}
 	assert.NotContains(t, log.String(), key.Token, "the log carried the token")
+	assert.NotContains(t, log.String(), renewed.Token, "the log carried the token")
+}
+
+// mustToken is a token nobody holds.
+func mustToken(t *testing.T) string {
+	t.Helper()
+	tok, err := tcpkey.NewToken()
+	require.NoError(t, err)
+	return tok
 }
 
 // otherAddresses are this machine's IPv4 addresses that are not loopback.
@@ -307,7 +257,9 @@ func TestWithoutAGoodKeyThereIsNoPortAndTheSocketServes(t *testing.T) {
 			require.NoError(t, err)
 			_ = resp.Body.Close()
 			assert.Equal(t, http.StatusOK, resp.StatusCode, "the socket did not serve")
-			assert.Contains(t, log.String(), "no TCP port")
+			// The port is looked at once the socket serves, so its line can
+			// come after the socket answers (seen on the Windows VM).
+			waitFor(t, "the log to say why there is no port", func() bool { return strings.Contains(log.String(), "no TCP port") })
 			assert.NotContains(t, log.String(), tok, "the log carried the token")
 		})
 	}

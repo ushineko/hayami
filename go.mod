@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/cilium/ebpf v0.22.0
+	github.com/coder/websocket v1.8.15
 	github.com/fyne-io/oksvg v0.2.1-0.20260918172519-a9af55fa95d9
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/go-github/v93 v93.0.0

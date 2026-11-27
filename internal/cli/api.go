@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ushineko/hayami/internal/api/client"
+	"github.com/ushineko/hayami/internal/api/contract"
 	"github.com/ushineko/hayami/internal/api/tcpkey"
 	"github.com/ushineko/hayami/internal/api/unit"
 	"github.com/ushineko/hayami/internal/safetext"
@@ -51,13 +52,13 @@ type apiFlags struct {
 	tcp     bool
 }
 
+// errTCPWebSocketOnly is a subcommand that needs the socket asked for over
+// the TCP port, which serves the WebSocket alone (spec 115).
+var errTCPWebSocketOnly = errors.New("the TCP port serves the WebSocket alone: watch and check take --tcp; get and load use the socket")
+
 func (f *apiFlags) dial() (*client.Client, error) {
 	if f.tcp {
-		key, err := tcpKey()
-		if err != nil {
-			return nil, err
-		}
-		return client.NewTCP(key.Address, key.Token), nil
+		return nil, errTCPWebSocketOnly
 	}
 	addr, err := apiAddress(f.address)
 	if err != nil {
@@ -78,6 +79,26 @@ func tcpKey() (tcpkey.Key, error) {
 		return tcpkey.Key{}, errors.New("the TCP port is not set up; hayami-tui api-service tcp sets it up") //nolint:err113 // said plainly
 	}
 	return key, err //nolint:wrapcheck // says what is wrong with the key
+}
+
+/*
+dialWS opens the WebSocket: on the TCP port with --tcp, through the
+challenge-response with the key's token, which never crosses the
+connection; on the socket otherwise.
+*/
+func (f *apiFlags) dialWS(ctx context.Context) (*client.WS, error) {
+	if f.tcp {
+		key, err := tcpKey()
+		if err != nil {
+			return nil, err
+		}
+		return client.DialTCPWS(ctx, key.Address, key.Token) //nolint:wrapcheck // says what failed
+	}
+	addr, err := apiAddress(f.address)
+	if err != nil {
+		return nil, err
+	}
+	return client.DialWS(ctx, addr) //nolint:wrapcheck // says what failed
 }
 
 // endpoint is what a subcommand talks to: the socket, or the TCP port with
@@ -259,7 +280,7 @@ func apiGetCmd(f *apiFlags) *cobra.Command {
 
 func apiWatchCmd(f *apiFlags) *cobra.Command {
 	var sections, details []string
-	var full bool
+	var full, overWS bool
 	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: "Print a stream's events as they come, until interrupted",
@@ -268,6 +289,17 @@ func apiWatchCmd(f *apiFlags) *cobra.Command {
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: f.run(0, func(ctx context.Context, cmd *cobra.Command, _ []string) error {
+			if f.tcp || overWS {
+				w, err := f.dialWS(ctx)
+				if err != nil {
+					return err
+				}
+				defer func() { _ = w.Close() }()
+				if err := w.Subscribe(ctx, sections, details); err != nil {
+					return err
+				}
+				return watchWS(ctx, w, cmd.OutOrStdout(), full)
+			}
 			c, err := f.dial()
 			if err != nil {
 				return err
@@ -284,7 +316,34 @@ func apiWatchCmd(f *apiFlags) *cobra.Command {
 	cmd.Flags().StringSliceVar(&sections, "sections", nil, "sections to watch, by key")
 	cmd.Flags().StringSliceVar(&details, "details", nil, "details to watch, each key/id")
 	cmd.Flags().BoolVar(&full, "json", false, "print each reading as JSON after its line")
+	cmd.Flags().BoolVar(&overWS, "ws", false, "follow over the WebSocket, not the event stream (--tcp always does)")
 	return cmd
+}
+
+// watchWS prints the WebSocket's messages as watchEvents prints a stream's.
+func watchWS(ctx context.Context, w *client.WS, out io.Writer, full bool) error {
+	for {
+		m, err := w.Next(ctx)
+		if err != nil {
+			return streamEnd(ctx, err)
+		}
+		now := time.Now().Format(time.TimeOnly)
+		var name, what string
+		var data any
+		switch x := m.(type) {
+		case contract.WsSection:
+			name, what, data = x.Type, x.Data.Key, x.Data
+		case contract.WsDetail:
+			name, what, data = x.Type, x.Data.Section+"/"+x.Data.ID, x.Data
+		case contract.WsError:
+			name, what = x.Type, x.Data.Code+": "+x.Data.Message
+		}
+		_, _ = fmt.Fprintf(out, "%s  %-8s %s\n", now, name, what)
+		if full && data != nil {
+			b, _ := json.Marshal(data)
+			_, _ = fmt.Fprintf(out, "%s\n", b)
+		}
+	}
 }
 
 /*
@@ -359,20 +418,34 @@ func apiCheckCmd(f *apiFlags) *cobra.Command {
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: f.run(15*time.Minute, func(ctx context.Context, cmd *cobra.Command, _ []string) error {
-			c, err := f.dial()
-			if err != nil {
-				return err
-			}
-			defer c.Close()
 			if !quiet {
 				o.Out = cmd.OutOrStdout()
 			}
-			r, err := client.Check(ctx, c, o)
+			if !f.tcp {
+				c, err := f.dial()
+				if err != nil {
+					return err
+				}
+				defer c.Close()
+				r, err := client.Check(ctx, c, o)
+				if err != nil {
+					return fmt.Errorf("check failed: %w", err)
+				}
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "passed: %d requests, %d sections, %d details, %d events, %d gone before asked\n",
+					r.Requests, r.Sections, r.Details, r.Events, r.Gone)
+			}
+			// The WebSocket, on the socket, or on the TCP port with --tcp
+			// (specs 115, 116).
+			w, err := f.dialWS(ctx)
 			if err != nil {
 				return fmt.Errorf("check failed: %w", err)
 			}
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "passed: %d requests, %d sections, %d details, %d events, %d gone before asked\n",
-				r.Requests, r.Sections, r.Details, r.Events, r.Gone)
+			defer func() { _ = w.Close() }()
+			wr, err := client.CheckWS(ctx, w, o.Out)
+			if err != nil {
+				return fmt.Errorf("check failed on the WebSocket: %w", err)
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "passed on the WebSocket: %d sections, %d details\n", wr.Sections, wr.Details)
 			return nil
 		}),
 	}
@@ -404,14 +477,10 @@ func apiLoadCmd(f *apiFlags) *cobra.Command {
 					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "running at the usual priority:", err)
 				}
 			}
-			o.Address = addr
 			if f.tcp {
-				key, err := tcpKey()
-				if err != nil {
-					return err
-				}
-				o.Address, o.Token = key.Address, key.Token
+				return errTCPWebSocketOnly
 			}
+			o.Address = addr
 			r, err := client.Load(ctx, o)
 			if err != nil {
 				return err

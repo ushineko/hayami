@@ -230,10 +230,15 @@ func Install(ctx context.Context, program string) error {
 	}
 	steps := [][]string{{"daemon-reload"}, {"enable", "--now", SocketName}}
 	if keyErr == nil {
-		// restart, not enable alone: a port moved is listened on anew.
-		steps = append(steps, []string{"enable", TCPSocketName}, []string{"restart", TCPSocketName})
+		// A running service holds a copy of the port's descriptor, so the
+		// port's socket cannot be listened on anew until it lets go (found
+		// by the review of spec 115): the service is stopped first, and the
+		// next connection starts it on the new program with the port as it
+		// is now. restart, not enable alone: a port moved is listened on anew.
+		steps = append(steps, []string{"stop", ServiceName}, []string{"enable", TCPSocketName}, []string{"restart", TCPSocketName})
+	} else {
+		steps = append(steps, []string{"try-restart", ServiceName})
 	}
-	steps = append(steps, []string{"try-restart", ServiceName})
 	for _, args := range steps {
 		if _, err := systemctl(ctx, args...); err != nil {
 			return err

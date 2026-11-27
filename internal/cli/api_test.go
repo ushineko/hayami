@@ -141,9 +141,9 @@ func configDir(t *testing.T) string {
 }
 
 /*
-Spec 115 R15. `api --tcp` finds the port and its token in api-tcp.json and
-sends the token, naming the port as its host; `api status` says where the
-port is and where its token is, and never prints the token.
+Spec 115 R15. `api --tcp` finds the port in api-tcp.json; the subcommands
+that need the socket's routes say the port serves the WebSocket alone; and
+`api status` says where the port is, and never prints the token.
 */
 func TestTheAPICommandsUseThePort(t *testing.T) {
 	configDir(t)
@@ -151,31 +151,19 @@ func TestTheAPICommandsUseThePort(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not set up")
 
-	var lc net.ListenConfig
-	l, err := lc.Listen(context.Background(), "tcp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := l.Addr().(*net.TCPAddr).Port
 	path, err := tcpkey.Path()
 	require.NoError(t, err)
-	key, err := tcpkey.Make(path, port, false)
+	key, err := tcpkey.Make(path, 47931, false)
 	require.NoError(t, err)
-	srv := &http.Server{ReadHeaderTimeout: time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+key.Token || r.Host != key.Address {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	})}
-	go func() { _ = srv.Serve(l) }()
-	t.Cleanup(func() { _ = srv.Close() })
 
 	out, err := run(t, "api", "--tcp", "address")
 	require.NoError(t, err)
 	assert.Equal(t, key.Address+"\n", out)
-	out, err = run(t, "api", "--tcp", "get", "health")
-	require.NoError(t, err, out)
-	assert.Contains(t, out, `"ok": true`)
+	for _, sub := range [][]string{{"get", "health"}, {"load", "--duration", "1s"}} {
+		_, err = run(t, append([]string{"api", "--tcp"}, sub...)...)
+		require.Error(t, err, "%v over the port", sub)
+		assert.Contains(t, err.Error(), "WebSocket alone")
+	}
 
 	sock := answer(t, map[string]string{
 		"/v1":          `{"service":"hayami","version":"1","api":"1.1","sections":[]}`,

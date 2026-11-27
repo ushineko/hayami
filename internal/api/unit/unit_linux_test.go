@@ -248,8 +248,8 @@ func TestInstallTCPWritesThePortsUnitAndItsKey(t *testing.T) {
 		assert.Contains(t, string(body), "\n"+line+"\n")
 	}
 	assert.NotContains(t, string(body), key.Token, "the unit carried the token")
-	assert.Equal(t, []string{"daemon-reload", "enable --now " + SocketName, "enable " + TCPSocketName,
-		"restart " + TCPSocketName, "try-restart " + ServiceName}, m.calls)
+	assert.Equal(t, []string{"daemon-reload", "enable --now " + SocketName, "stop " + ServiceName, "enable " + TCPSocketName,
+		"restart " + TCPSocketName}, m.calls, "the service lets go of the port before its socket is listened on anew")
 
 	// An upgrade: the port and its token stay.
 	require.NoError(t, Install(context.Background(), program))

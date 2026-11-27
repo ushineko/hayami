@@ -122,7 +122,6 @@ const (
 	ErrMethodNotAllowed = "method_not_allowed"
 	ErrBadRequest       = "bad_request"
 	ErrForbidden        = "forbidden"
-	ErrUnauthorized     = "unauthorized"
 	ErrBusy             = "busy"
 	ErrInternal         = "internal"
 	ErrUnavailable      = "unavailable"
@@ -131,7 +130,7 @@ const (
 // ErrorBody says what went wrong. Known lists what there is, for a key or
 // an ID that names nothing: the sections, or the details a section offers.
 type ErrorBody struct {
-	Code    string   `json:"code" enum:"not_found,method_not_allowed,bad_request,forbidden,unauthorized,busy,internal,unavailable"`
+	Code    string   `json:"code" enum:"not_found,method_not_allowed,bad_request,forbidden,busy,internal,unavailable"`
 	Message string   `json:"message"`
 	Known   []string `json:"known"`
 }
@@ -278,4 +277,89 @@ type Device struct {
 	Stale    bool    `json:"stale"`
 	// LastSeen is when it last answered.
 	LastSeen *time.Time `json:"last_seen"`
+}
+
+/*
+The WebSocket's messages (specs 115, 116): JSON text frames on /v1/ws, each
+with its type. On the TCP port the first three are a mutual
+challenge-response, so the token never crosses the connection: the service
+sends a challenge, the client answers with a proof over it and a challenge
+of its own, and the service's hello carries its proof over the client's. On
+the socket and the pipe the account is known from the connection, there is
+no challenge, and hello's proof is null.
+
+A proof is HMAC-SHA256 keyed with the token's 32 bytes, over the label, a
+newline, the nonce the other side sent, a newline, and the prover's own
+nonce, in base64url without padding (WsProof).
+*/
+const (
+	WsTypeChallenge = "challenge"
+	WsTypeAuth      = "auth"
+	WsTypeHello     = "hello"
+	WsTypeSubscribe = "subscribe"
+	WsTypeSection   = "section"
+	WsTypeDetail    = "detail"
+	WsTypeError     = "error"
+)
+
+// The labels proofs are made over, one for each side, so a client's proof
+// is never a service's.
+const (
+	WsClientLabel = "hayami-client"
+	WsServerLabel = "hayami-server"
+)
+
+// WsMessage is any message, read for its type before the rest.
+type WsMessage struct {
+	Type string `json:"type"`
+}
+
+// WsChallenge is the service's first message on the TCP port.
+type WsChallenge struct {
+	Type  string `json:"type"`
+	Nonce string `json:"nonce"`
+}
+
+// WsAuth is the client's answer: its proof over the service's nonce, and a
+// nonce of its own for the service to prove itself over.
+type WsAuth struct {
+	Type  string `json:"type"`
+	Nonce string `json:"nonce"`
+	Proof string `json:"proof"`
+}
+
+// WsHello is the service's greeting once the client is known, with the
+// service's proof over the client's nonce on the TCP port; null elsewhere.
+type WsHello struct {
+	Type     string   `json:"type"`
+	Service  string   `json:"service"`
+	Version  string   `json:"version"`
+	API      string   `json:"api"`
+	Sections []string `json:"sections"`
+	Proof    *string  `json:"proof"`
+}
+
+// WsSubscribe replaces what the connection follows.
+type WsSubscribe struct {
+	Type     string   `json:"type"`
+	Sections []string `json:"sections"`
+	Details  []string `json:"details"`
+}
+
+// WsSection is a section's reading, as /v1/events' section event.
+type WsSection struct {
+	Type string  `json:"type"`
+	Data Section `json:"data"`
+}
+
+// WsDetail is a detail, as /v1/events' detail event.
+type WsDetail struct {
+	Type string `json:"type"`
+	Data Detail `json:"data"`
+}
+
+// WsError is a subscription refused, in part or whole.
+type WsError struct {
+	Type string    `json:"type"`
+	Data ErrorBody `json:"data"`
 }

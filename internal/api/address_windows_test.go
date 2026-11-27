@@ -6,4 +6,4 @@ import (
 )
 
 // testAddress is a pipe of a name the test's own.
-func testAddress(*testing.T) string { return `\\.\pipe\hayami-test-` + rand.Text() }
+func testAddress(testing.TB) string { return `\\.\pipe\hayami-test-` + rand.Text() }
