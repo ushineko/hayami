@@ -62,6 +62,17 @@ After 0.24.1 is installed (the desk runs 0.24.0 until the release):
   Herdr reloads it; the old build's connection is gone within about 105 s,
   and one connection remains (R1, R4).
 
+### Results (2026-11-27, 0.24.1 installed)
+
+- The desk: a client opened through hayami-js's library (node's WebSocket,
+  which answers pings itself and sends nothing, as Herdr does for a replaced
+  build) subscribed once and fell silent; the installed 0.24.1 service closed
+  it after 90 s with 1008, "the client sent nothing", having sent it 91
+  readings. hayami-js resends its subscription every 30 s, so a live block is
+  never closed for it.
+- The desk, the Mac and the Windows VM run 0.24.1 (contract 1.2), each with
+  `api --tcp check` passing.
+
 ### Prod visibility
 
 Not applicable: a desktop program with no telemetry.
