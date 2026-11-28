@@ -2,10 +2,12 @@ package api_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,8 +57,18 @@ func TestThePipeIsThisAccountsAlone(t *testing.T) {
 		}
 	}()
 
-	sd, err := windows.GetNamedSecurityInfo(addr, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
-	require.NoError(t, err)
+	// Until the goroutine is waiting on the pipe, opening it answers "all pipe
+	// instances are busy" (#422): asked again, not taken for a failure.
+	var sd *windows.SECURITY_DESCRIPTOR
+	var err2 error
+	for range 50 {
+		sd, err2 = windows.GetNamedSecurityInfo(addr, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+		if !errors.Is(err2, windows.ERROR_PIPE_BUSY) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	require.NoError(t, err2)
 	// Windows writes a well-known account by its alias (the built-in
 	// Administrator is LA), so the access list is compared with the one
 	// expected, written by Windows the same way.
