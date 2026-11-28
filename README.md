@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.24.0
+**Version**: 0.24.1
 
 *a chart you read at a glance*
 
@@ -853,7 +853,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.24.1 (2026-11-27)
 
 - **Fixed**: on Windows the TCP port is served as soon as its key is written,
   by the installer or `hayami-tui api-service tcp`, instead of from the next
