@@ -683,7 +683,10 @@ browser's upgrade is refused for its `Origin`. The port is on 127.0.0.1 and
 the key's port alone: one made on any other address, or handed over by
 systemd or launchd on another address or port, is closed (`loopbackOnly`;
 `TestTheServiceListensOnItsKeysPortOnLoopbackAlone`, falsified by listening
-on every address). It has its own limit of 16 connections and closes what it
+on every address). A WebSocket client that sends nothing for 90 s is closed, so a connection
+held open by a client that is gone, or a program idling on a place, keeps no
+stream's place or lease for ever (spec 118). It has its own limit of 16
+connections and closes what it
 refuses, so connections to it from another account never take the socket's
 places (`TestThePortsConnectionsDoNotTakeTheSockets`, falsified); its
 WebSockets count against the streams. On Windows it is bound with

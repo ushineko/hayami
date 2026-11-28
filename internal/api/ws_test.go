@@ -408,3 +408,58 @@ func TestANewKeyEndsTheOldSessions(t *testing.T) {
 	_, err = client.DialTCPWS(ctx, h.tcpAddr, next.Token)
 	require.Error(t, err, "a port without a key let someone in")
 }
+
+// Spec 118 (#424). A client that sends nothing for ClientIdle is closed with
+// 1008, whatever answers the pings; one that resends its subscription stays.
+func TestASilentClientIsClosed(t *testing.T) {
+	h := start(t, sources(fixtures()), options{tune: func(_ *api.Hub, srv *api.Server) {
+		srv.KeepAlive, srv.ClientIdle = 20*time.Millisecond, 300*time.Millisecond
+	}})
+	ctx := context.Background()
+	open := func() *websocket.Conn {
+		c, resp, err := websocket.Dial(ctx, "ws://hayami/v1/ws", &websocket.DialOptions{HTTPClient: serviceClient(h.sock)})
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = c.CloseNow() })
+		var hello contract.WsHello
+		readMsg(t, c, contract.WsTypeHello, &hello)
+		send(t, c, contract.WsSubscribe{Type: contract.WsTypeSubscribe, Sections: []string{"clock"}, Details: []string{}})
+		return c
+	}
+
+	silent := open()
+	start := time.Now()
+	assert.Equal(t, websocket.StatusPolicyViolation, closedAnyhow(t, silent), "a silent client was not closed for it")
+	assert.Less(t, time.Since(start), 3*time.Second)
+
+	talking := open()
+	readCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	defer cancel()
+	go func() {
+		for readCtx.Err() == nil {
+			time.Sleep(100 * time.Millisecond)
+			_ = talking.Write(readCtx, websocket.MessageText, []byte(`{"type":"subscribe","sections":["clock"],"details":[]}`))
+		}
+	}()
+	for {
+		_, _, err := talking.Read(readCtx)
+		if err != nil {
+			require.ErrorIs(t, readCtx.Err(), context.DeadlineExceeded, "a client that kept resubscribing was closed: %v", err)
+			break
+		}
+	}
+}
+
+// closedAnyhow reads until the connection ends, readings included, and says how.
+func closedAnyhow(t *testing.T, c *websocket.Conn) websocket.StatusCode {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for {
+		if _, _, err := c.Read(ctx); err != nil {
+			return websocket.CloseStatus(err)
+		}
+	}
+}

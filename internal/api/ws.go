@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -22,6 +23,15 @@ const MaxWsMessage = 4096
 // AuthWait is how long a client on the TCP port has to answer the challenge
 // (spec 115).
 var AuthWait = 5 * time.Second
+
+/*
+ClientIdle is how long a client may send nothing before its WebSocket is
+closed (spec 118, #424). The service's pings do not show a client is alive:
+Herdr answers them for a mod whose build was replaced, and that connection
+would otherwise stay open, read by nobody, its sections leased. A client
+resends its subscription well within it.
+*/
+const ClientIdle = 90 * time.Second
 
 // StatusUnauthorized is the close code for a client that did not prove it
 // holds the token, in time or at all.
@@ -191,9 +201,12 @@ func (s *Server) challenge(ws wsSession, auth *TCPAuth) (string, bool) {
 func (s *Server) wsServe(ws wsSession) {
 	subs := make(chan contract.WsSubscribe)
 	readErr := make(chan error, 1)
+	var heard atomic.Int64
+	heard.Store(time.Now().UnixNano())
 	go func() {
 		for {
 			m, data, err := ws.read(0)
+			heard.Store(time.Now().UnixNano())
 			if err == nil && m.Type != contract.WsTypeSubscribe {
 				err = errNotAMessage
 			}
@@ -260,6 +273,10 @@ func (s *Server) wsServe(ws wsSession) {
 				}
 			}
 		case <-tick.C:
+			if time.Since(time.Unix(0, heard.Load())) > s.ClientIdle {
+				_ = ws.c.Close(websocket.StatusPolicyViolation, "the client sent nothing")
+				return
+			}
 			go func() {
 				ctx, cancel := context.WithTimeout(ws.ctx, StallLimit)
 				defer cancel()

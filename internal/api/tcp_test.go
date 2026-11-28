@@ -264,3 +264,32 @@ func TestWithoutAGoodKeyThereIsNoPortAndTheSocketServes(t *testing.T) {
 		})
 	}
 }
+
+// Spec 117 (#423). A service nothing handed its sockets to starts without a
+// key and serves the port once one is written, with no restart: the Windows
+// instance starts before the installer writes the key.
+func TestAKeyWrittenAfterTheStartIsServed(t *testing.T) {
+	if !api.Supported() {
+		t.Skip("the service does not run here")
+	}
+	port := freePort(t)
+	keyPath := filepath.Join(t.TempDir(), tcpkey.FileName)
+	_, log := runService(t, keyPath)
+	waitFor(t, "the log to say there is no port", func() bool { return strings.Contains(log.String(), "no TCP port") })
+
+	key, err := tcpkey.Make(keyPath, port, false)
+	require.NoError(t, err)
+	ctx := context.Background()
+	var w *client.WS
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if w, err = client.DialTCPWS(ctx, tcpkey.Address(port), key.Token); err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	require.NoError(t, err, "the port was not served after its key was written")
+	_ = w.Close()
+	assert.Contains(t, log.String(), "the TCP port's key appeared")
+	assert.NotContains(t, log.String(), key.Token)
+}

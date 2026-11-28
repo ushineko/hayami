@@ -306,6 +306,13 @@ A message larger than 4 KiB, a binary one, or one that is not a message here
 closes the connection (1009, 1003). The service pings every 15 s and closes a
 client that leaves its messages unread for 30 s (1008).
 
+**Send something at least every 90 s.** A client that sends nothing for 90 s
+is closed (1008), because answering the service's pings does not show it is
+still there: Herdr answers them for a mod whose build a reload replaced, and
+that connection would stay open, read by nobody, its sections still polled.
+Resending the same subscription changes nothing and will do; every 30 s is
+plenty (contract 1.2, spec 118). `hayami-tui api watch` does.
+
 ## Errors
 
 Anything but a 200 is `{"error": {"code", "message", "known"}}`:
