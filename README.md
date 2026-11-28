@@ -853,6 +853,16 @@ MIT. See
 
 ## Changelog
 
+### Unreleased
+
+- **Fixed**: on Windows the TCP port is served as soon as its key is written,
+  by the installer or `hayami-tui api-service tcp`, instead of from the next
+  sign-in (spec 117, #423).
+- **Fixed**: a WebSocket whose client has sent nothing for 90 s is closed, so a
+  Herdr mod reload no longer leaves its old connection open with its sections
+  still polled. A client resends its subscription to stay; `hayami-tui api
+  watch` does it every 30 s. Contract 1.2 (spec 118, #424).
+
 ### 0.24.0 (2026-11-27)
 
 - **Added**: the service's readings over a WebSocket, `/v1/ws`: the event

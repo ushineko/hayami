@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: hayami
-  version: "1.1"
+  version: "1.2"
   summary: The readings of a hayami panel, for programs of the same account.
   description: |
     hayami's readings, their details and drills, as JSON (spec 113). The
@@ -216,7 +216,11 @@ paths:
         null `proof`, comes first. A message larger than 4 KiB, a binary one,
         or one that is not a message here closes the connection (1009,
         1003). The service pings every 15 s and closes a client that leaves
-        its messages unread for 30 s (1008). A WebSocket counts against the
+        its messages unread for 30 s (1008). A client sends a message at
+        least every 90 s, or is closed (1008): resending its subscription,
+        which changes nothing, will do; every 30 s is plenty (contract 1.2,
+        spec 118). Answering pings is not enough: a runtime may answer them
+        for a client that is gone. A WebSocket counts against the
         16 streams; over that the upgrade is 503 with `Retry-After`.
       responses:
         "101":

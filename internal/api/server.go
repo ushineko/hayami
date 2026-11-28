@@ -55,6 +55,9 @@ type Server struct {
 
 	// KeepAlive is the comment interval on a stream; a test shortens it.
 	KeepAlive time.Duration
+	// ClientIdle is how long a WebSocket's client may send nothing before it
+	// is closed (spec 118); ClientIdle by default, shorter in a test.
+	ClientIdle time.Duration
 
 	mu      sync.Mutex
 	streams int
@@ -62,7 +65,7 @@ type Server struct {
 
 // NewServer serves hub, saying it is version.
 func NewServer(hub *Hub, version string, log *slog.Logger) *Server {
-	return &Server{hub: hub, version: version, log: log, KeepAlive: KeepAlive}
+	return &Server{hub: hub, version: version, log: log, KeepAlive: KeepAlive, ClientIdle: ClientIdle}
 }
 
 // HTTP is the server for a listener: its limits, its routes.

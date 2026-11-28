@@ -125,9 +125,6 @@ func apiTCPCmd() *cobra.Command {
 			}
 			path, _ := tcpkey.Path()
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "The service listens on %s; its token is in %s.\n", tcpkey.Address(port), path)
-			if runtime.GOOS == "windows" {
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Your service instance serves it from its next start: sign out and in again.")
-			}
 			return nil
 		},
 	}

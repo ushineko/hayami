@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ushineko/hayami/internal/api/tcpkey"
@@ -82,17 +83,15 @@ func Run(ctx context.Context, o Options) error {
 	o.Log.Info("serving", "address", l.Addr().String(), "socket-started", activated)
 
 	// The TCP port, beside the socket, on the same hub and the same limits
-	// (spec 115 R5).
-	var ht *http.Server
+	// (spec 115 R5). A service nothing handed its sockets to -- the Windows
+	// instance, or serve run by hand -- watches for a key to appear and
+	// serves the port from then on (#423, spec 117): the key is written after
+	// the instance has started.
+	tcp := &tcpServer{srv: srv, done: done, log: o.Log}
 	if tl, key := tcpListener(o.keyPath(), o.Log); tl != nil {
-		auth := newTCPAuth(key)
-		ht = srv.HTTP()
-		ht.Handler = srv.TCPHandler(auth, tcpPort(tl))
-		// Its own limit: connections from another account to the port never
-		// take the socket's places (review F2).
-		go func() { done <- ht.Serve(NewLimiter(MaxTCPConns).Wrap(tl)) }()
-		go followKey(ctx, o.keyPath(), tcpPort(tl), auth, o.Log)
-		o.Log.Info("serving", "address", tl.Addr().String())
+		tcp.start(ctx, tl, key, o.keyPath())
+	} else if !activated {
+		go tcp.waitForKey(ctx, o.keyPath())
 	}
 
 	go followSettings(ctx, o.SettingsPath, hub, o.Log)
@@ -115,10 +114,86 @@ func Run(ctx context.Context, o Options) error {
 	defer cancelShutdown()
 	cancel()
 	_ = hs.Shutdown(shutdown)
-	if ht != nil {
-		_ = ht.Shutdown(shutdown)
-	}
+	tcp.shutdown(shutdown)
 	return nil
+}
+
+// tcpServer is the TCP port's server, once there is one.
+type tcpServer struct {
+	srv  *Server
+	done chan error
+	log  *slog.Logger
+
+	mu sync.Mutex
+	ht *http.Server
+}
+
+// start serves the port on tl with key, and follows the key from then on.
+func (t *tcpServer) start(ctx context.Context, tl net.Listener, key tcpkey.Key, keyPath string) {
+	auth := newTCPAuth(key)
+	ht := t.srv.HTTP()
+	ht.Handler = t.srv.TCPHandler(auth, tcpPort(tl))
+	t.mu.Lock()
+	t.ht = ht
+	t.mu.Unlock()
+	// Its own limit: connections from another account to the port never
+	// take the socket's places (review F2).
+	go func() { t.done <- ht.Serve(NewLimiter(MaxTCPConns).Wrap(tl)) }()
+	go followKey(ctx, keyPath, tcpPort(tl), auth, t.log)
+	t.log.Info("serving", "address", tl.Addr().String())
+}
+
+/*
+waitForKey looks at the key every keyLook until there is one the service may
+serve with and its port can be listened on, then serves it (spec 117). A
+refusal is logged once for each reason, not at every look.
+*/
+func (t *tcpServer) waitForKey(ctx context.Context, keyPath string) {
+	tick := time.NewTicker(keyLook)
+	defer tick.Stop()
+	said := ""
+	say := func(msg string, args ...any) {
+		if line := fmt.Sprint(msg, args); line != said {
+			said = line
+			t.log.Info(msg, args...)
+		}
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+		key, err := tcpkey.Read(keyPath)
+		if err != nil {
+			if !errors.Is(err, tcpkey.ErrNoFile) {
+				say("no TCP port yet: its key is refused", "error", err)
+			}
+			continue
+		}
+		tl, err := listenTCP(key.Address)
+		if err != nil {
+			say("no TCP port yet: it could not be listened on", "address", key.Address, "error", err)
+			continue
+		}
+		if err := loopbackOnly(tl); err != nil {
+			_ = tl.Close()
+			say("no TCP port yet", "error", err)
+			continue
+		}
+		t.log.Info("the TCP port's key appeared; serving the port")
+		t.start(ctx, tl, key, keyPath)
+		return
+	}
+}
+
+func (t *tcpServer) shutdown(ctx context.Context) {
+	t.mu.Lock()
+	ht := t.ht
+	t.mu.Unlock()
+	if ht != nil {
+		_ = ht.Shutdown(ctx)
+	}
 }
 
 // keyPath is the TCP port's key: the one named, or its usual place.

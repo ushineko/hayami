@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/coder/websocket"
 
@@ -129,6 +130,11 @@ func (w *WS) readHello(ctx context.Context, want *string) error {
 	w.Hello = h
 	return nil
 }
+
+// ResubscribeEvery is how often a client that holds a WebSocket resends its
+// subscription, well within the service's 90 s for a client that sends
+// nothing (spec 118).
+const ResubscribeEvery = 30 * time.Second
 
 // Subscribe replaces what the connection follows.
 func (w *WS) Subscribe(ctx context.Context, sections, details []string) error {

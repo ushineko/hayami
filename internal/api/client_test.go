@@ -33,7 +33,7 @@ func TestTheReferenceClientReadsEveryEndpoint(t *testing.T) {
 	assert.True(t, health.OK)
 	index, err := c.Index(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "1.1", index.API)
+	assert.Equal(t, "1.2", index.API)
 	list, err := c.Sections(ctx)
 	require.NoError(t, err)
 	require.Len(t, list.Sections, len(index.Sections))

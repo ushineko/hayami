@@ -298,6 +298,22 @@ func apiWatchCmd(f *apiFlags) *cobra.Command {
 				if err := w.Subscribe(ctx, sections, details); err != nil {
 					return err
 				}
+				// The service closes a client that sends nothing for 90 s
+				// (spec 118): the same subscription, again, keeps it.
+				go func() {
+					t := time.NewTicker(client.ResubscribeEvery)
+					defer t.Stop()
+					for {
+						select {
+						case <-ctx.Done():
+							return
+						case <-t.C:
+							if w.Subscribe(ctx, sections, details) != nil {
+								return
+							}
+						}
+					}
+				}()
 				return watchWS(ctx, w, cmd.OutOrStdout(), full)
 			}
 			c, err := f.dial()
