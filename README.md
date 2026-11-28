@@ -1,6 +1,6 @@
 # hayami (早見)
 
-**Version**: 0.23.2
+**Version**: 0.24.0
 
 *a chart you read at a glance*
 
@@ -853,7 +853,7 @@ MIT. See
 
 ## Changelog
 
-### Unreleased
+### 0.24.0 (2026-11-27)
 
 - **Added**: the service's readings over a WebSocket, `/v1/ws`: the event
   stream's sections and details as messages, and a subscription changed
@@ -867,6 +867,10 @@ MIT. See
   default; `hayami-tui api-service tcp` moves it, gives it a new token or
   removes it, and `hayami-tui api --tcp watch` and `check` read through it.
   Contract 1.1 (spec 115, #417).
+- **Note**: to go back to an older version, remove the port first
+  (`hayami-tui api-service tcp --remove`, or the installer with
+  `--apitcp=no`). An older installer leaves the port's socket unit, and an
+  older service handed that port would serve it without these checks.
 
 ### 0.23.2 (2026-11-26)
 
